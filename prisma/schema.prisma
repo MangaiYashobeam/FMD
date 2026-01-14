@@ -27,6 +27,12 @@ model User {
   updatedAt     DateTime @updatedAt @map("updated_at")
   lastLoginAt   DateTime? @map("last_login_at")
 
+  // Personal Facebook Marketplace Credentials (for Chrome Extension)
+  fbUsername    String?  @map("fb_username")
+  fbPassword    String?  @map("fb_password") // Encrypted
+  fb2faCodes    String[] @map("fb_2fa_codes") // Array of backup codes
+  fbLastSync    DateTime? @map("fb_last_sync")
+
   // Relations
   accountUsers    AccountUser[]
   facebookProfiles FacebookProfile[]

@@ -10,6 +10,7 @@ import vehicleRoutes from '@/routes/vehicle.routes';
 import accountRoutes from '@/routes/account.routes';
 import facebookRoutes from '@/routes/facebook.routes';
 import syncRoutes from '@/routes/sync.routes';
+import userCredentialsRoutes from '@/routes/userCredentials.routes';
 import { initializeQueueProcessor } from '@/jobs/queueProcessor';
 
 dotenv.config();
@@ -100,6 +101,7 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/facebook', facebookRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/users/me', userCredentialsRoutes);
 
 // ============================================
 // 404 Handler
