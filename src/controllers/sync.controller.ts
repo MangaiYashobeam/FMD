@@ -67,7 +67,7 @@ export class SyncController {
     const { jobId } = req.params;
 
     const syncJob = await prisma.syncJob.findUnique({
-      where: { id: jobId },
+      where: { id: jobId as string },
       include: {
         account: {
           select: {
@@ -169,13 +169,17 @@ export class SyncController {
 
       // Connect to FTP and download CSV
       const ftpService = new FTPService();
-      const csvContent = await ftpService.downloadFile({
+      await ftpService.connect({
         host: account.ftpHost!,
         port: account.ftpPort!,
-        user: account.ftpUsername!,
+        username: account.ftpUsername!,
         password: account.ftpPassword!,
         path: account.csvPath!,
+        protocol: 'ftp',
       });
+
+      const tempPath = `/tmp/sync_${syncJobId}.csv`;
+      const csvContent = await ftpService.downloadFile(account.csvPath!, tempPath);
 
       // Parse CSV
       const csvParser = new CSVParserService();

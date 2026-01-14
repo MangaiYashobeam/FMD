@@ -51,7 +51,7 @@ export class FacebookController {
     }
 
     // Decode state
-    const { accountId, userId } = JSON.parse(Buffer.from(state, 'base64').toString());
+    const { accountId } = JSON.parse(Buffer.from(state, 'base64').toString());
 
     // Exchange code for access token
     const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
@@ -83,10 +83,13 @@ export class FacebookController {
           },
         },
         create: {
+          facebookUserId: page.id,
           accountId,
+          userId: req.user!.id,
           pageId: page.id,
           pageName: page.name,
           accessToken: page.access_token,
+          tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
           category: page.category || 'UNKNOWN',
         },
         update: {
@@ -238,7 +241,7 @@ export class FacebookController {
     const { id } = req.params;
 
     const post = await prisma.facebookPost.findUnique({
-      where: { id },
+      where: { id: id as string },
       include: {
         vehicle: true,
         profile: true,
@@ -274,7 +277,7 @@ export class FacebookController {
 
       // Update status in database
       await prisma.facebookPost.update({
-        where: { id },
+        where: { id: id as string },
         data: { status: 'DELETED', deletedAt: new Date() },
       });
 

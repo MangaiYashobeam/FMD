@@ -50,7 +50,7 @@ export class AccountController {
     const accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: id,
+        accountId: id as string,
       },
       include: {
         account: {
@@ -83,10 +83,7 @@ export class AccountController {
 
     res.json({
       success: true,
-      data: {
-        ...accountUser.account,
-        userRole: accountUser.role,
-      },
+      data: accountUser.account,
     });
   }
 
@@ -101,7 +98,7 @@ export class AccountController {
     const accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: id,
+        accountId: id as string,
         role: { in: ['OWNER', 'ADMIN'] },
       },
     });
@@ -111,7 +108,7 @@ export class AccountController {
     }
 
     const updated = await prisma.account.update({
-      where: { id },
+      where: { id: id as string },
       data: {
         ftpHost,
         ftpPort,
@@ -142,7 +139,7 @@ export class AccountController {
     const accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: id,
+        accountId: id as string,
         role: { in: ['OWNER', 'ADMIN'] },
       },
     });
@@ -164,7 +161,7 @@ export class AccountController {
     const existing = await prisma.accountUser.findFirst({
       where: {
         userId: invitedUser.id,
-        accountId: id,
+        accountId: id as string,
       },
     });
 
@@ -175,7 +172,7 @@ export class AccountController {
     const newMember = await prisma.accountUser.create({
       data: {
         userId: invitedUser.id,
-        accountId: id,
+        accountId: id as string,
         role,
       },
     });
@@ -199,7 +196,7 @@ export class AccountController {
     const accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: id,
+        accountId: id as string,
         role: { in: ['OWNER', 'ADMIN'] },
       },
     });
@@ -215,8 +212,8 @@ export class AccountController {
 
     await prisma.accountUser.deleteMany({
       where: {
-        userId,
-        accountId: id,
+        userId: userId as string,
+        accountId: id as string,
       },
     });
 

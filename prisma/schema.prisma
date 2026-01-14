@@ -52,6 +52,18 @@ model Account {
   subscriptionTier String  @default("basic") @map("subscription_tier") // basic, pro, enterprise
   maxVehicles     Int      @default(100) @map("max_vehicles")
   maxUsers        Int      @default(5) @map("max_users")
+  
+  // FTP Configuration
+  ftpHost         String?  @map("ftp_host")
+  ftpPort         Int?     @map("ftp_port") @default(21)
+  ftpUsername     String?  @map("ftp_username")
+  ftpPassword     String?  @map("ftp_password") // Encrypted
+  csvPath         String?  @map("csv_path")
+  
+  // Sync Settings
+  autoSync        Boolean  @default(true) @map("auto_sync")
+  syncInterval    Int      @default(3) @map("sync_interval") // hours
+  
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -112,6 +124,9 @@ model FacebookProfile {
   id                String   @id @default(uuid())
   accountId         String   @map("account_id")
   userId            String   @map("user_id")
+  pageId            String   @map("page_id") // Facebook Page ID
+  pageName          String   @map("page_name")
+  category          String   @default("Automotive") // Page category
   facebookUserId    String   @map("facebook_user_id")
   facebookUserName  String?  @map("facebook_user_name")
   accessToken       String   @map("access_token") @db.Text
@@ -123,33 +138,35 @@ model FacebookProfile {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   // Relations
-  account       Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  facebookPosts FacebookPost[]
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts   FacebookPost[]
 
-  @@unique([accountId, facebookUserId])
+  @@unique([accountId, pageId])
   @@map("facebook_profiles")
 }
 
 model FacebookPost {
   id                String   @id @default(uuid())
   vehicleId         String   @map("vehicle_id")
-  facebookProfileId String   @map("facebook_profile_id")
-  facebookPostId    String?  @map("facebook_post_id")
-  status            String   @default("pending") @map("status") // pending, posted, failed, deleted
+  profileId         String   @map("profile_id")
+  postId            String?  @map("post_id") // Facebook post ID
+  message           String?  @db.Text
+  status            String   @default("pending") // PENDING, ACTIVE, FAILED, DELETED
   errorMessage      String?  @map("error_message") @db.Text
   postUrl           String?  @map("post_url")
   postedAt          DateTime? @map("posted_at")
+  deletedAt         DateTime? @map("deleted_at")
   lastUpdatedAt     DateTime? @map("last_updated_at")
   retryCount        Int      @default(0) @map("retry_count")
   createdAt         DateTime @default(now()) @map("created_at")
 
   // Relations
-  vehicle         Vehicle         @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  facebookProfile FacebookProfile @relation(fields: [facebookProfileId], references: [id], onDelete: Cascade)
+  vehicle Vehicle         @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  profile FacebookProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([vehicleId])
-  @@index([facebookProfileId])
+  @@index([profileId])
   @@map("facebook_posts")
 }
 
@@ -175,6 +192,7 @@ model Vehicle {
   bodyType            String?  @map("body_type")
   
   // Pricing
+  price               Decimal? @db.Decimal(10, 2) // Primary price field
   listPrice           Decimal? @map("list_price") @db.Decimal(10, 2)
   specialPrice        Decimal? @map("special_price") @db.Decimal(10, 2)
   costPrice           Decimal? @map("cost_price") @db.Decimal(10, 2)
@@ -216,6 +234,8 @@ model Vehicle {
   instockDate         DateTime? @map("instock_date")
   lastModifiedDate    DateTime? @map("last_modified_date")
   videoUrl            String?   @map("video_url")
+  imageUrls           String[]  @default([]) @map("image_urls") // Array of image URLs
+  source              String    @default("MANUAL") // MANUAL, FTP, API
   
   // Tracking
   lastSyncedAt        DateTime? @map("last_synced_at")
@@ -275,17 +295,21 @@ model FtpConfiguration {
 }
 
 model SyncJob {
-  id              String   @id @default(uuid())
-  accountId       String   @map("account_id")
-  status          String   @default("pending") // pending, running, completed, failed
-  type            String   @default("auto") // auto, manual
-  vehiclesAdded   Int      @default(0) @map("vehicles_added")
-  vehiclesUpdated Int      @default(0) @map("vehicles_updated")
-  vehiclesMarkedSold Int   @default(0) @map("vehicles_marked_sold")
-  errorMessage    String?  @map("error_message") @db.Text
-  startedAt       DateTime? @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  accountId        String   @map("account_id")
+  triggeredBy      String?  @map("triggered_by") // User ID who triggered manual sync
+  status           String   @default("pending") // PENDING, PROCESSING, COMPLETED, FAILED
+  type             String   @default("auto") // auto, manual
+  recordsImported  Int      @default(0) @map("records_imported")
+  recordsUpdated   Int      @default(0) @map("records_updated")
+  recordsFailed    Int      @default(0) @map("records_failed")
+  vehiclesAdded    Int      @default(0) @map("vehicles_added")
+  vehiclesUpdated  Int      @default(0) @map("vehicles_updated")
+  vehiclesMarkedSold Int    @default(0) @map("vehicles_marked_sold")
+  errorMessage     String?  @map("error_message") @db.Text
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)

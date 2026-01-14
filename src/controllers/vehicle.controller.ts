@@ -69,7 +69,7 @@ export class VehicleController {
     const { id } = req.params;
 
     const vehicle = await prisma.vehicle.findUnique({
-      where: { id },
+      where: { id: id as string },
       include: {
         account: {
           select: {
@@ -169,7 +169,7 @@ export class VehicleController {
     const updates = req.body;
 
     const vehicle = await prisma.vehicle.findUnique({
-      where: { id },
+      where: { id: id as string },
     });
 
     if (!vehicle) {
@@ -190,7 +190,7 @@ export class VehicleController {
     }
 
     const updated = await prisma.vehicle.update({
-      where: { id },
+      where: { id: id as string },
       data: {
         ...updates,
         updatedAt: new Date(),
@@ -212,7 +212,7 @@ export class VehicleController {
     const { id } = req.params;
 
     const vehicle = await prisma.vehicle.findUnique({
-      where: { id },
+      where: { id: id as string },
     });
 
     if (!vehicle) {
@@ -233,7 +233,7 @@ export class VehicleController {
     }
 
     await prisma.vehicle.delete({
-      where: { id },
+      where: { id: id as string },
     });
 
     logger.info(`Vehicle deleted: ${id} by user ${req.user!.id}`);
