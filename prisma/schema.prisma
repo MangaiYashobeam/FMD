@@ -55,9 +55,15 @@ model Account {
   website         String?
   logoUrl         String?  @map("logo_url")
   isActive        Boolean  @default(true) @map("is_active")
-  subscriptionTier String  @default("basic") @map("subscription_tier") // basic, pro, enterprise
-  maxVehicles     Int      @default(100) @map("max_vehicles")
-  maxUsers        Int      @default(5) @map("max_users")
+  // Billing & Subscription
+  stripeCustomerId String?  @unique @map("stripe_customer_id")
+  subscriptionPlanId String? @map("subscription_plan_id")
+  subscriptionStatus String  @default("trial") @map("subscription_status") // trial, active, past_due, canceled, paused
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  trialEndsAt        DateTime? @map("trial_ends_at")
+  activeUserCount    Int      @default(0) @map("active_user_count")
+  extraUserCharge    Decimal  @default(0) @map("extra_user_charge") @db.Decimal(10, 2)
   
   // FTP Configuration
   ftpHost         String?  @map("ftp_host")
@@ -80,6 +86,9 @@ model Account {
   syncJobs          SyncJob[]
   facebookProfiles  FacebookProfile[]
   settings          AccountSettings?
+  subscriptionPlan  SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
+  payments          Payment[]
+  invoices          Invoice[]
 
   @@map("accounts")
 }
@@ -376,4 +385,110 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+// ============================================
+// Subscription & Billing Management
+// ============================================
+
+model SubscriptionPlan {
+  id                String   @id @default(uuid())
+  name              String   @unique // "Starter", "Growth", "Pro", "Enterprise Lifetime"
+  stripePriceId     String?  @unique @map("stripe_price_id")
+  stripeProductId   String?  @map("stripe_product_id")
+  basePrice         Decimal  @map("base_price") @db.Decimal(10, 2) // Monthly price
+  billingInterval   String   @map("billing_interval") // "monthly", "lifetime"
+  includedUsers     Int      @map("included_users") // 10, 25, unlimited (-1)
+  extraUserPrice    Decimal  @map("extra_user_price") @db.Decimal(10, 2) // Price per extra user
+  maxVehicles       Int      @default(-1) @map("max_vehicles") // -1 = unlimited
+  features          Json?    // JSON array of features
+  isActive          Boolean  @default(true) @map("is_active")
+  displayOrder      Int      @default(0) @map("display_order")
+  
+  // Lifetime plan specifics
+  lifetimeDuration  Int?     @map("lifetime_duration") // In years (e.g., 4)
+  renewalPrice      Decimal? @map("renewal_price") @db.Decimal(10, 2) // Price to renew lifetime
+  revertToPlanId    String?  @map("revert_to_plan_id") // Plan ID to revert after lifetime expires
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  accounts          Account[]
+  revertPlan        SubscriptionPlan? @relation("PlanReversion", fields: [revertToPlanId], references: [id])
+  revertedPlans     SubscriptionPlan[] @relation("PlanReversion")
+
+  @@map("subscription_plans")
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  accountId         String   @map("account_id")
+  stripePaymentId   String   @unique @map("stripe_payment_id")
+  stripeInvoiceId   String?  @map("stripe_invoice_id")
+  amount            Decimal  @db.Decimal(10, 2)
+  currency          String   @default("usd")
+  status            String   // succeeded, pending, failed, refunded
+  paymentMethod     String?  @map("payment_method") // card, bank_transfer, etc.
+  description       String?  @db.Text
+  metadata          Json?    // Extra data from Stripe
+  paidAt            DateTime? @map("paid_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invoice Invoice? @relation(fields: [stripeInvoiceId], references: [stripeInvoiceId])
+
+  @@index([accountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+model Invoice {
+  id              String   @id @default(uuid())
+  accountId       String   @map("account_id")
+  stripeInvoiceId String   @unique @map("stripe_invoice_id")
+  invoiceNumber   String?  @unique @map("invoice_number")
+  amountDue       Decimal  @map("amount_due") @db.Decimal(10, 2)
+  amountPaid      Decimal  @map("amount_paid") @db.Decimal(10, 2)
+  currency        String   @default("usd")
+  status          String   // draft, open, paid, void, uncollectible
+  hostedUrl       String?  @map("hosted_url") @db.Text
+  pdfUrl          String?  @map("pdf_url") @db.Text
+  
+  // Line items breakdown
+  baseCharge      Decimal  @default(0) @map("base_charge") @db.Decimal(10, 2)
+  extraUserCharge Decimal  @default(0) @map("extra_user_charge") @db.Decimal(10, 2)
+  extraUserCount  Int      @default(0) @map("extra_user_count")
+  
+  periodStart     DateTime @map("period_start")
+  periodEnd       DateTime @map("period_end")
+  dueDate         DateTime? @map("due_date")
+  paidAt          DateTime? @map("paid_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([accountId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model SubscriptionHistory {
+  id              String   @id @default(uuid())
+  accountId       String   @map("account_id")
+  planId          String?  @map("plan_id")
+  planName        String   @map("plan_name")
+  action          String   // created, upgraded, downgraded, canceled, renewed, expired
+  previousPlan    String?  @map("previous_plan")
+  newPlan         String?  @map("new_plan")
+  amount          Decimal? @db.Decimal(10, 2)
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@index([createdAt])
+  @@map("subscription_history")
 }
