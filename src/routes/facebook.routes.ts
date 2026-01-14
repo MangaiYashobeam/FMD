@@ -43,4 +43,11 @@ router.post('/post', asyncHandler(controller.createPost.bind(controller)));
  */
 router.delete('/post/:id', asyncHandler(controller.deletePost.bind(controller)));
 
+/**
+ * @route   POST /api/facebook/marketplace/confirm
+ * @desc    Confirm marketplace post from Chrome extension
+ * @access  Private
+ */
+router.post('/marketplace/confirm', asyncHandler(controller.confirmMarketplacePost.bind(controller)));
+
 export default router;

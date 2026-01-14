@@ -292,4 +292,81 @@ export class FacebookController {
       throw new AppError('Failed to delete Facebook post', 500);
     }
   }
+
+  /**
+   * Confirm marketplace post from Chrome extension
+   */
+  async confirmMarketplacePost(req: AuthRequest, res: Response) {
+    const { vehicleId, postUrl, postedAt } = req.body;
+
+    if (!vehicleId || !postUrl) {
+      throw new AppError('Vehicle ID and post URL are required', 400);
+    }
+
+    // Verify vehicle exists and user has access
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: vehicleId },
+      include: {
+        account: {
+          include: {
+            accountUsers: true,
+            facebookProfiles: true,
+          },
+        },
+      },
+    });
+
+    if (!vehicle) {
+      throw new AppError('Vehicle not found', 404);
+    }
+
+    const hasAccess = vehicle.account.accountUsers.some(
+      (au) => au.userId === req.user!.id
+    );
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
+    // Use first available Facebook profile or create a placeholder
+    let profileId = vehicle.account.facebookProfiles[0]?.id;
+
+    if (!profileId) {
+      // Create a placeholder profile for personal marketplace posts
+      const placeholderProfile = await prisma.facebookProfile.create({
+        data: {
+          facebookUserId: 'marketplace-personal',
+          accountId: vehicle.accountId,
+          userId: req.user!.id,
+          pageId: 'personal-marketplace',
+          pageName: 'Personal Marketplace',
+          accessToken: 'personal-token',
+          tokenExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          category: 'PERSONAL',
+        },
+      });
+      profileId = placeholderProfile.id;
+    }
+
+    // Create marketplace post record
+    const post = await prisma.facebookPost.create({
+      data: {
+        vehicleId,
+        profileId,
+        postId: postUrl,
+        message: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+        status: 'PUBLISHED',
+        createdAt: postedAt ? new Date(postedAt) : new Date(),
+      },
+    });
+
+    logger.info(`Marketplace post confirmed: ${post.id} for vehicle ${vehicleId}`);
+
+    res.json({
+      success: true,
+      data: post,
+      message: 'Marketplace post confirmed successfully',
+    });
+  }
 }
+
