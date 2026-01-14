@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { authenticate } from '@/middleware/auth';
+import { AccountController } from '@/controllers/account.controller';
+import { asyncHandler } from '@/utils/asyncHandler';
 
 const router = Router();
+const controller = new AccountController();
 
 router.use(authenticate);
 
@@ -10,26 +13,34 @@ router.use(authenticate);
  * @desc    Get user's accounts
  * @access  Private
  */
-router.get('/', (_req, res) => {
-  res.json({ success: true, data: [], message: 'Account routes - coming soon' });
-});
+router.get('/', asyncHandler(controller.getAccounts.bind(controller)));
 
 /**
  * @route   GET /api/accounts/:id
  * @desc    Get account details
  * @access  Private
  */
-router.get('/:id', (_req, res) => {
-  res.json({ success: true, data: null });
-});
+router.get('/:id', asyncHandler(controller.getAccount.bind(controller)));
 
 /**
  * @route   PUT /api/accounts/:id/settings
  * @desc    Update account settings
  * @access  Private
  */
-router.put('/:id/settings', (_req, res) => {
-  res.json({ success: true, data: null });
-});
+router.put('/:id/settings', asyncHandler(controller.updateSettings.bind(controller)));
+
+/**
+ * @route   POST /api/accounts/:id/invite
+ * @desc    Invite user to account
+ * @access  Private
+ */
+router.post('/:id/invite', asyncHandler(controller.inviteUser.bind(controller)));
+
+/**
+ * @route   DELETE /api/accounts/:id/users/:userId
+ * @desc    Remove user from account
+ * @access  Private
+ */
+router.delete('/:id/users/:userId', asyncHandler(controller.removeUser.bind(controller)));
 
 export default router;

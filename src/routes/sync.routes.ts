@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { authenticate } from '@/middleware/auth';
+import { SyncController } from '@/controllers/sync.controller';
+import { asyncHandler } from '@/utils/asyncHandler';
 
 const router = Router();
+const controller = new SyncController();
 
 router.use(authenticate);
 
@@ -10,26 +13,20 @@ router.use(authenticate);
  * @desc    Trigger manual sync
  * @access  Private
  */
-router.post('/manual', (_req, res) => {
-  res.json({ success: true, message: 'Sync triggered', data: { jobId: 'temp-id' } });
-});
+router.post('/manual', asyncHandler(controller.triggerSync.bind(controller)));
 
 /**
  * @route   GET /api/sync/status/:jobId
  * @desc    Get sync job status
  * @access  Private
  */
-router.get('/status/:jobId', (_req, res) => {
-  res.json({ success: true, data: { status: 'pending' } });
-});
+router.get('/status/:jobId', asyncHandler(controller.getStatus.bind(controller)));
 
 /**
  * @route   GET /api/sync/history
  * @desc    Get sync history
  * @access  Private
  */
-router.get('/history', (_req, res) => {
-  res.json({ success: true, data: [] });
-});
+router.get('/history', asyncHandler(controller.getHistory.bind(controller)));
 
 export default router;

@@ -1,6 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { logger } from '@/utils/logger';
+import { SyncController } from '@/controllers/sync.controller';
 
 const connection = new IORedis({
   host: process.env.REDIS_HOST || 'localhost',
@@ -24,11 +25,11 @@ export const initializeQueueProcessor = async () => {
     'sync',
     async (job) => {
       logger.info(`Processing sync job: ${job.id}`);
-      // TODO: Implement sync logic
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const { syncJobId } = job.data;
+      await SyncController.processSyncJob(syncJobId);
       return { success: true };
     },
-    { connection }
+    { connection, concurrency: 2 }
   );
 
   syncWorker.on('completed', (job) => {
@@ -48,7 +49,7 @@ export const initializeQueueProcessor = async () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       return { success: true };
     },
-    { connection }
+    { connection, concurrency: 5 }
   );
 
   facebookWorker.on('completed', (job) => {

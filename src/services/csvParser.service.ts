@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { Readable } from 'stream';
 import csv from 'csv-parser';
 import { logger } from '@/utils/logger';
 
@@ -280,3 +281,34 @@ const isValidVehicle = (vehicle: ParsedVehicle): boolean => {
 
   return true;
 };
+
+export class CSVParserService {
+  /**
+   * Parse CSV content from string
+   */
+  async parseCSVContent(content: string): Promise<ParsedVehicle[]> {
+    return new Promise((resolve, reject) => {
+      const vehicles: ParsedVehicle[] = [];
+      const stream = Readable.from([content]);
+
+      stream
+        .pipe(csv())
+        .on('data', (row: VehicleCSVRow) => {
+          try {
+            const vehicle = parseVehicleRow(row);
+            if (vehicle && isValidVehicle(vehicle)) {
+              vehicles.push(vehicle);
+            }
+          } catch (error) {
+            logger.warn('Failed to parse CSV row:', error);
+          }
+        })
+        .on('end', () => {
+          logger.info(`Parsed ${vehicles.length} vehicles from CSV content`);
+          resolve(vehicles);
+        })
+        .on('error', reject);
+    });
+  }
+}
+
