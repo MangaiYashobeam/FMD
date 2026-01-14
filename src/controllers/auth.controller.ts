@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { AppError } from '@/middleware/errorHandler';
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
@@ -84,16 +84,21 @@ export class AuthController {
     });
 
     // Generate tokens
+    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'refresh-secret';
+    const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
+    const refreshTokenOptions: SignOptions = { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any };
+
     const accessToken = jwt.sign(
       { id: result.user.id, email: result.user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+      jwtSecret,
+      accessTokenOptions
     );
 
     const refreshToken = jwt.sign(
       { id: result.user.id },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+      jwtRefreshSecret,
+      refreshTokenOptions
     );
 
     // Save refresh token
@@ -161,16 +166,21 @@ export class AuthController {
     }
 
     // Generate tokens
+    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'refresh-secret';
+    const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
+    const refreshTokenOptions: SignOptions = { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any };
+
     const accessToken = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+      jwtSecret,
+      accessTokenOptions
     );
 
     const refreshToken = jwt.sign(
       { id: user.id },
-      process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+      jwtRefreshSecret,
+      refreshTokenOptions
     );
 
     // Save refresh token
@@ -233,9 +243,9 @@ export class AuthController {
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(
+    jwt.verify(
       refreshToken,
-      process.env.JWT_REFRESH_SECRET!
+      process.env.JWT_REFRESH_SECRET || 'refresh-secret'
     ) as { id: string };
 
     // Check if token exists in database
@@ -249,10 +259,13 @@ export class AuthController {
     }
 
     // Generate new access token
+    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
+
     const accessToken = jwt.sign(
       { id: tokenRecord.user.id, email: tokenRecord.user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+      jwtSecret,
+      accessTokenOptions
     );
 
     res.json({
@@ -342,10 +355,11 @@ export class AuthController {
 
     if (!user) {
       // Don't reveal if user exists
-      return res.json({
+      res.json({
         success: true,
         message: 'If the email exists, a reset link has been sent',
       });
+      return;
     }
 
     // TODO: Generate reset token and send email
@@ -363,8 +377,11 @@ export class AuthController {
    */
   async resetPassword(req: Request, res: Response) {
     const { token, password } = req.body;
-
-    // TODO: Verify reset token
+    
+    // TODO: Verify reset token and update password
+    logger.info(`Password reset attempt with token: ${token?.substring(0, 10)}...`);
+    logger.info(`New password length: ${password?.length}`);
+    
     // For now, just return success
     res.json({
       success: true,

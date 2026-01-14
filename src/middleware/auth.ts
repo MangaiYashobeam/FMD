@@ -13,7 +13,7 @@ export interface AuthRequest extends Request {
 
 export const authenticate = async (
   req: AuthRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) => {
   try {
@@ -77,7 +77,7 @@ export const authenticate = async (
 };
 
 export const authorize = (...roles: string[]) => {
-  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+  return async (req: AuthRequest, _res: Response, next: NextFunction) => {
     try {
       const accountId = req.params.accountId || req.body.accountId;
 

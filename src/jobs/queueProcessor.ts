@@ -1,4 +1,4 @@
-import { Queue, Worker, QueueEvents } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { logger } from '@/utils/logger';
 

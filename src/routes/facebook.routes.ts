@@ -10,7 +10,7 @@ router.use(authenticate);
  * @desc    Get Facebook OAuth URL
  * @access  Private
  */
-router.get('/auth-url', (req, res) => {
+router.get('/auth-url', (_req, res) => {
   res.json({ success: true, data: { url: '#' }, message: 'Facebook routes - coming soon' });
 });
 
@@ -19,7 +19,7 @@ router.get('/auth-url', (req, res) => {
  * @desc    Handle Facebook OAuth callback
  * @access  Private
  */
-router.post('/callback', (req, res) => {
+router.post('/callback', (_req, res) => {
   res.json({ success: true, data: null });
 });
 
@@ -28,7 +28,7 @@ router.post('/callback', (req, res) => {
  * @desc    Get connected Facebook profiles
  * @access  Private
  */
-router.get('/profiles', (req, res) => {
+router.get('/profiles', (_req, res) => {
   res.json({ success: true, data: [] });
 });
 
@@ -37,7 +37,7 @@ router.get('/profiles', (req, res) => {
  * @desc    Create Facebook Marketplace post
  * @access  Private
  */
-router.post('/post', (req, res) => {
+router.post('/post', (_req, res) => {
   res.json({ success: true, data: null });
 });
 

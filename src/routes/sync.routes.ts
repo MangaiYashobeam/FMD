@@ -10,7 +10,7 @@ router.use(authenticate);
  * @desc    Trigger manual sync
  * @access  Private
  */
-router.post('/manual', (req, res) => {
+router.post('/manual', (_req, res) => {
   res.json({ success: true, message: 'Sync triggered', data: { jobId: 'temp-id' } });
 });
 
@@ -19,7 +19,7 @@ router.post('/manual', (req, res) => {
  * @desc    Get sync job status
  * @access  Private
  */
-router.get('/status/:jobId', (req, res) => {
+router.get('/status/:jobId', (_req, res) => {
   res.json({ success: true, data: { status: 'pending' } });
 });
 
@@ -28,7 +28,7 @@ router.get('/status/:jobId', (req, res) => {
  * @desc    Get sync history
  * @access  Private
  */
-router.get('/history', (req, res) => {
+router.get('/history', (_req, res) => {
   res.json({ success: true, data: [] });
 });
 

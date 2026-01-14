@@ -159,12 +159,12 @@ const parseVehicleRow = (row: VehicleCSVRow): ParsedVehicle | null => {
   const lastModifiedDate = row.LastModifiedDate ? parseDate(row.LastModifiedDate) : undefined;
 
   const vehicle: ParsedVehicle = {
-    vin: sanitizeString(row.VIN),
+    vin: sanitizeString(row.VIN) || '',
     dealerId: sanitizeString(row.DealerID),
     stockNumber: sanitizeString(row.Stock),
     year: parseInt(row.Year, 10),
-    make: sanitizeString(row.Make),
-    model: sanitizeString(row.Model),
+    make: sanitizeString(row.Make) || '',
+    model: sanitizeString(row.Model) || '',
     trim: sanitizeString(row.Trim),
     bodyStyle: sanitizeString(row.BodyStyle),
     bodyType: sanitizeString(row.BodyType),

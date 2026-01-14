@@ -11,7 +11,7 @@ router.use(authenticate);
  * @desc    Get all vehicles for account
  * @access  Private
  */
-router.get('/', (req, res) => {
+router.get('/', (_req, res) => {
   // TODO: Implement
   res.json({ success: true, data: [], message: 'Vehicle routes - coming soon' });
 });
@@ -21,7 +21,7 @@ router.get('/', (req, res) => {
  * @desc    Get single vehicle
  * @access  Private
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', (_req, res) => {
   res.json({ success: true, data: null });
 });
 
@@ -30,7 +30,7 @@ router.get('/:id', (req, res) => {
  * @desc    Create vehicle
  * @access  Private
  */
-router.post('/', (req, res) => {
+router.post('/', (_req, res) => {
   res.json({ success: true, data: null });
 });
 
@@ -39,7 +39,7 @@ router.post('/', (req, res) => {
  * @desc    Update vehicle
  * @access  Private
  */
-router.put('/:id', (req, res) => {
+router.put('/:id', (_req, res) => {
   res.json({ success: true, data: null });
 });
 
@@ -48,7 +48,7 @@ router.put('/:id', (req, res) => {
  * @desc    Delete vehicle
  * @access  Private
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', (_req, res) => {
   res.json({ success: true, message: 'Deleted' });
 });
 

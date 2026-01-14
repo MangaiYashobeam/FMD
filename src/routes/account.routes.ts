@@ -10,7 +10,7 @@ router.use(authenticate);
  * @desc    Get user's accounts
  * @access  Private
  */
-router.get('/', (req, res) => {
+router.get('/', (_req, res) => {
   res.json({ success: true, data: [], message: 'Account routes - coming soon' });
 });
 
@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
  * @desc    Get account details
  * @access  Private
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', (_req, res) => {
   res.json({ success: true, data: null });
 });
 
@@ -28,7 +28,7 @@ router.get('/:id', (req, res) => {
  * @desc    Update account settings
  * @access  Private
  */
-router.put('/:id/settings', (req, res) => {
+router.put('/:id/settings', (_req, res) => {
   res.json({ success: true, data: null });
 });
 
