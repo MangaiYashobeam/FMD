@@ -12,6 +12,7 @@ import facebookRoutes from '@/routes/facebook.routes';
 import syncRoutes from '@/routes/sync.routes';
 import userCredentialsRoutes from '@/routes/userCredentials.routes';
 import { initializeQueueProcessor } from '@/jobs/queueProcessor';
+import { schedulerService } from '@/services/scheduler.service';
 
 dotenv.config();
 
@@ -125,13 +126,17 @@ const startServer = async () => {
   try {
     // Initialize background job processor
     await initializeQueueProcessor();
-    logger.info('Queue processor initialized');
+    logger.info('✅ Queue processor initialized');
+
+    // Initialize auto-sync scheduler
+    schedulerService.initialize();
+    logger.info('✅ Auto-sync scheduler initialized');
 
     app.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+      logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
     });
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
@@ -139,11 +144,13 @@ const startServer = async () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  schedulerService.shutdown();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
+  schedulerService.shutdown();
   process.exit(0);
 });
 

@@ -29,4 +29,11 @@ router.get('/status/:jobId', asyncHandler(controller.getStatus.bind(controller))
  */
 router.get('/history', asyncHandler(controller.getHistory.bind(controller)));
 
+/**
+ * @route   GET /api/sync/scheduler/status
+ * @desc    Get scheduler status
+ * @access  Private
+ */
+router.get('/scheduler/status', asyncHandler(controller.getSchedulerStatus.bind(controller)));
+
 export default router;

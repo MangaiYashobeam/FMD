@@ -6,6 +6,7 @@ import { logger } from '@/utils/logger';
 import { syncQueue } from '@/jobs/queueProcessor';
 import { FTPService } from '@/services/ftp.service';
 import { CSVParserService } from '@/services/csvParser.service';
+import { schedulerService } from '@/services/scheduler.service';
 
 export class SyncController {
   /**
@@ -249,6 +250,19 @@ export class SyncController {
         },
       });
       throw error;
+    }
+  }
+
+  /**
+   * Get scheduler status
+   */
+  async getSchedulerStatus(_req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const status = schedulerService.getStatus();
+      res.json(status);
+    } catch (error) {
+      logger.error('Error getting scheduler status:', error);
+      throw new AppError('Failed to get scheduler status', 500);
     }
   }
 }
