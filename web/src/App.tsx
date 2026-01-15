@@ -25,6 +25,7 @@ import UsersPage from './pages/admin/UsersPage';
 import PaymentsPage from './pages/admin/PaymentsPage';
 import EmailLogsPage from './pages/admin/EmailLogsPage';
 import AuditLogsPage from './pages/admin/AuditLogsPage';
+import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -86,7 +87,7 @@ function App() {
               <Route path="payments" element={<PaymentsPage />} />
               <Route path="emails" element={<EmailLogsPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
-              <Route path="settings" element={<div className="p-6">System Settings (Coming Soon)</div>} />
+              <Route path="settings" element={<SystemSettingsPage />} />
             </Route>
 
             {/* Catch all - redirect to dashboard */}

@@ -218,6 +218,37 @@ export const adminApi = {
     api.post('/api/email/test', data),
   
   resendEmail: (logId: string) => api.post(`/api/email/resend/${logId}`),
+
+  // System Settings
+  getSystemSettings: () => api.get('/api/admin/system-settings'),
+  
+  updateSystemSettings: (data: { type: string; settings: any }) =>
+    api.put('/api/admin/system-settings', data),
+  
+  testEmailConfiguration: (config: any) =>
+    api.post('/api/admin/system-settings/test-email', config),
+
+  // Subscription Plans Management
+  getSubscriptionPlans: () => api.get('/api/admin/subscription-plans'),
+  
+  createSubscriptionPlan: (data: any) => api.post('/api/admin/subscription-plans', data),
+  
+  updateSubscriptionPlan: (planId: string, data: any) =>
+    api.put(`/api/admin/subscription-plans/${planId}`, data),
+  
+  deleteSubscriptionPlan: (planId: string) =>
+    api.delete(`/api/admin/subscription-plans/${planId}`),
+
+  // Email Templates Management
+  getEmailTemplates: () => api.get('/api/admin/email-templates'),
+  
+  createEmailTemplate: (data: any) => api.post('/api/admin/email-templates', data),
+  
+  updateEmailTemplate: (templateId: string, data: any) =>
+    api.put(`/api/admin/email-templates/${templateId}`, data),
+  
+  deleteEmailTemplate: (templateId: string) =>
+    api.delete(`/api/admin/email-templates/${templateId}`),
 };
 
 // Leads API

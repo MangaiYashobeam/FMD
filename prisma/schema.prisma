@@ -445,15 +445,19 @@ model Notification {
 model SubscriptionPlan {
   id                String   @id @default(uuid())
   name              String   @unique // "Starter", "Growth", "Pro", "Enterprise Lifetime"
+  slug              String   @unique @default("") // URL-friendly identifier
+  description       String?  @db.Text // Plan description
   stripePriceId     String?  @unique @map("stripe_price_id")
   stripeProductId   String?  @map("stripe_product_id")
   basePrice         Decimal  @map("base_price") @db.Decimal(10, 2) // Monthly price
-  billingInterval   String   @map("billing_interval") // "monthly", "lifetime"
+  billingInterval   String   @map("billing_interval") // "monthly", "yearly", "lifetime"
   includedUsers     Int      @map("included_users") // 10, 25, unlimited (-1)
   extraUserPrice    Decimal  @map("extra_user_price") @db.Decimal(10, 2) // Price per extra user
   maxVehicles       Int      @default(-1) @map("max_vehicles") // -1 = unlimited
-  features          Json?    // JSON array of features
+  maxPosts          Int      @default(-1) @map("max_posts") // -1 = unlimited posts per month
+  features          Json?    // JSON array of feature strings
   isActive          Boolean  @default(true) @map("is_active")
+  isPopular         Boolean  @default(false) @map("is_popular") // Highlight as popular plan
   displayOrder      Int      @default(0) @map("display_order")
   
   // Lifetime plan specifics
@@ -559,4 +563,35 @@ model EmailLog {
   @@index([status])
   @@index([createdAt])
   @@map("email_logs")
+}
+
+// ============================================
+// System Settings (Super Admin)
+// ============================================
+
+model SystemSettings {
+  id                       String   @id @default(uuid())
+  key                      String   @unique // general, email, security, integrations
+  value                    Json     // JSON object with all settings for this category
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model EmailTemplate {
+  id            String   @id @default(uuid())
+  name          String   // Human readable name
+  slug          String   @unique // welcome, password-reset, sync-complete, new-lead
+  subject       String
+  htmlContent   String   @map("html_content") @db.Text
+  textContent   String?  @map("text_content") @db.Text
+  variables     String[] @default([]) // Available template variables like firstName, siteName
+  description   String?  @db.Text // Template usage description
+  isActive      Boolean  @default(true) @map("is_active")
+  isSystem      Boolean  @default(false) @map("is_system") // System templates can't be deleted
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("email_templates")
 }
