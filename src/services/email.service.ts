@@ -57,7 +57,6 @@ export class EmailService {
   private transporter!: nodemailer.Transporter;
   private fromEmail: string;
   private fromName: string;
-  private systemDomain: string;
 
   constructor() {
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -66,7 +65,6 @@ export class EmailService {
     const smtpPass = process.env.SMTP_PASSWORD;
 
     // Use dealersface.com as default system domain
-    this.systemDomain = SYSTEM_DOMAIN;
     this.fromEmail = process.env.EMAIL_FROM || SYSTEM_FROM_EMAIL;
     this.fromName = process.env.EMAIL_FROM_NAME || SYSTEM_FROM_NAME;
 
@@ -525,9 +523,9 @@ export class EmailService {
             recipient: Array.isArray(options.to) ? options.to.join(', ') : options.to,
             subject,
             status: 'SENT',
-            provider: 'smtp',
             metadata: {
               type: 'composed',
+              provider: 'smtp',
               templateSlug: options.templateSlug || null,
               sentBy: senderId || 'system',
             },

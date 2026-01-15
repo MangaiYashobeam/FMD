@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { emailService, SYSTEM_DOMAIN, SYSTEM_FROM_EMAIL, SYSTEM_SUPPORT_EMAIL } from '@/services/email.service';
+import { emailService } from '@/services/email.service';
 import { queueEmail } from '@/queues/email.queue';
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
@@ -688,7 +688,7 @@ export async function updateEmailConfig(req: Request, res: Response) {
     const existingValue = (existing?.value as Record<string, any>) || {};
 
     // Merge settings (don't overwrite password with empty value)
-    const newSettings = {
+    const newSettings: Record<string, any> = {
       ...existingValue,
       smtpHost: smtpHost || existingValue.smtpHost,
       smtpPort: smtpPort || existingValue.smtpPort,
@@ -1191,7 +1191,7 @@ export async function deleteTemplate(req: Request, res: Response) {
         userId: authReq.user?.id,
         action: 'EMAIL_TEMPLATE_DELETE',
         entityType: 'email_template',
-        entityId: templateId,
+        entityId: String(templateId),
         metadata: { templateName: existing.name },
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
