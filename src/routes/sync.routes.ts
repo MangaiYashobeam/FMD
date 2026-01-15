@@ -83,9 +83,9 @@ router.post(
   upload.single('file'),
   validate([
     body('accountId').isUUID().withMessage('Invalid account ID'),
-    body('skipHeader').optional().isBoolean(),
-    body('updateExisting').optional().isBoolean(),
-    body('markMissingSold').optional().isBoolean(),
+    body('skipHeader').optional().isString(),
+    body('updateExisting').optional().isString(),
+    body('markMissingSold').optional().isString(),
     body('delimiter').optional().isIn(['comma', 'semicolon', 'tab', 'pipe']),
   ]),
   asyncHandler(controller.uploadInventoryFile.bind(controller))

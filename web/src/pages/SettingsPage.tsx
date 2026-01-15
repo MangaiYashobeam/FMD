@@ -142,8 +142,14 @@ export default function SettingsPage() {
   // File upload mutation
   const uploadFileMutation = useMutation({
     mutationFn: async (file: File) => {
+      const accountId = user?.accounts?.[0]?.id;
+      if (!accountId) {
+        throw new Error('No account found. Please contact support.');
+      }
+
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('accountId', accountId);
       formData.append('skipHeader', String(uploadSettings.skipHeader));
       formData.append('updateExisting', String(uploadSettings.updateExisting));
       formData.append('markMissingSold', String(uploadSettings.markMissingSold));

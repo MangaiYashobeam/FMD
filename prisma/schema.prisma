@@ -41,6 +41,9 @@ model User {
   refreshTokens      RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   apiKeys            ApiKey[]
+  assignedLeads      Lead[] @relation("AssignedLeads")
+  salesRepMappings   SalesRepMapping[]
+  leadActivities     LeadActivity[]
 
   @@map("users")
 }
@@ -92,6 +95,8 @@ model Account {
   payments          Payment[]
   invoices          Invoice[]
   apiKeys           ApiKey[]
+  adfConfiguration  ADFConfiguration?
+  leads             Lead[]
 
   @@map("accounts")
 }
@@ -275,6 +280,7 @@ model Vehicle {
   account       Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
   photos        VehiclePhoto[]
   facebookPosts FacebookPost[]
+  leads         Lead[]
 
   @@unique([accountId, vin])
   @@index([accountId, status])
@@ -594,4 +600,351 @@ model EmailTemplate {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("email_templates")
+}
+
+// ============================================
+// ADF (Auto-Lead Data Format) Lead Management
+// ============================================
+
+// Lead Status Enum
+enum LeadStatus {
+  NEW           // Just received, unassigned
+  ASSIGNED      // Assigned to a sales rep
+  CONTACTED     // Initial contact made
+  QUALIFIED     // Lead is qualified/interested
+  APPOINTMENT   // Appointment scheduled
+  NEGOTIATING   // In price negotiation
+  WON           // Sale completed
+  LOST          // Lead lost to competitor/no interest
+  ARCHIVED      // Old lead archived
+}
+
+// Lead Source Enum
+enum LeadSource {
+  FACEBOOK_MARKETPLACE
+  FACEBOOK_PAGE
+  WEBSITE
+  WALK_IN
+  PHONE
+  EMAIL
+  REFERRAL
+  THIRD_PARTY
+  ADF_IMPORT
+  MANUAL
+}
+
+// Lead Priority Enum
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model ADFConfiguration {
+  id                    String   @id @default(uuid())
+  accountId             String   @unique @map("account_id")
+  
+  // DMS Integration Settings
+  dmsProvider           String?  @map("dms_provider") // DealerSocket, CDK, Reynolds, etc.
+  dmsEndpoint           String?  @map("dms_endpoint") // ADF submission URL
+  dmsUsername           String?  @map("dms_username")
+  dmsPassword           String?  @map("dms_password") // Encrypted
+  dmsApiKey             String?  @map("dms_api_key") // Encrypted
+  
+  // Email Settings for ADF
+  adfEmailEnabled       Boolean  @default(true) @map("adf_email_enabled")
+  adfEmailRecipients    String[] @default([]) @map("adf_email_recipients")
+  adfEmailSender        String?  @map("adf_email_sender") // Verified sender email
+  adfEmailSubjectPrefix String   @default("[New Lead]") @map("adf_email_subject_prefix")
+  
+  // Auto Assignment Rules
+  autoAssignEnabled     Boolean  @default(true) @map("auto_assign_enabled")
+  roundRobinEnabled     Boolean  @default(false) @map("round_robin_enabled")
+  defaultAssigneeId     String?  @map("default_assignee_id") // User ID for default assignment
+  
+  // AI Communication Settings
+  aiAssistantEnabled    Boolean  @default(false) @map("ai_assistant_enabled")
+  aiResponseTemplate    String?  @map("ai_response_template") @db.Text
+  aiAutoResponse        Boolean  @default(false) @map("ai_auto_response")
+  aiDelayMinutes        Int      @default(5) @map("ai_delay_minutes") // Delay before AI responds
+  
+  // Lead Processing
+  duplicateCheckEnabled Boolean  @default(true) @map("duplicate_check_enabled")
+  duplicateWindowHours  Int      @default(24) @map("duplicate_window_hours")
+  
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account               Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  salesRepMappings      SalesRepMapping[]
+
+  @@map("adf_configurations")
+}
+
+// Sales Rep Mapping - Maps Facebook usernames to DMS sales rep IDs
+model SalesRepMapping {
+  id                    String   @id @default(uuid())
+  configurationId       String   @map("configuration_id")
+  userId                String   @map("user_id") // Internal user ID
+  
+  // Facebook Identifiers
+  facebookUsername      String?  @map("facebook_username")
+  facebookUserId        String?  @map("facebook_user_id")
+  facebookDisplayName   String?  @map("facebook_display_name")
+  
+  // DMS Identifiers
+  dmsRepId              String?  @map("dms_rep_id") // Sales rep ID in DMS
+  dmsRepName            String?  @map("dms_rep_name")
+  dmsRepEmail           String?  @map("dms_rep_email")
+  
+  // Assignment Settings
+  isActive              Boolean  @default(true) @map("is_active")
+  maxLeadsPerDay        Int?     @map("max_leads_per_day")
+  leadCount             Int      @default(0) @map("lead_count")
+  lastAssignedAt        DateTime? @map("last_assigned_at")
+  
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  configuration         ADFConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([configurationId, userId])
+  @@map("sales_rep_mappings")
+}
+
+// Lead - Main lead entity
+model Lead {
+  id                    String      @id @default(uuid())
+  accountId             String      @map("account_id")
+  
+  // Lead Identification
+  leadNumber            String      @unique @map("lead_number") // Auto-generated lead ID
+  externalLeadId        String?     @map("external_lead_id") // ID from external source
+  
+  // Status & Priority
+  status                LeadStatus  @default(NEW)
+  priority              LeadPriority @default(MEDIUM)
+  source                LeadSource  @default(MANUAL)
+  
+  // Assignment
+  assignedToId          String?     @map("assigned_to_id") // User ID of assigned sales rep
+  assignedAt            DateTime?   @map("assigned_at")
+  
+  // Customer Information
+  firstName             String?     @map("first_name")
+  lastName              String?     @map("last_name")
+  fullName              String?     @map("full_name")
+  email                 String?
+  phone                 String?
+  altPhone              String?     @map("alt_phone")
+  address               String?
+  city                  String?
+  state                 String?
+  zip                   String?
+  country               String?     @default("US")
+  
+  // Facebook Information
+  facebookUserId        String?     @map("facebook_user_id")
+  facebookUsername      String?     @map("facebook_username")
+  facebookDisplayName   String?     @map("facebook_display_name")
+  facebookProfileUrl    String?     @map("facebook_profile_url")
+  facebookMessengerUrl  String?     @map("facebook_messenger_url")
+  
+  // Vehicle Interest
+  vehicleId             String?     @map("vehicle_id") // Link to interested vehicle
+  interestedVehicle     String?     @map("interested_vehicle") // Text description
+  interestedYear        Int?        @map("interested_year")
+  interestedMake        String?     @map("interested_make")
+  interestedModel       String?     @map("interested_model")
+  interestedVin         String?     @map("interested_vin")
+  interestedStockNumber String?     @map("interested_stock_number")
+  
+  // Trade-In Information
+  hasTradeIn            Boolean     @default(false) @map("has_trade_in")
+  tradeYear             Int?        @map("trade_year")
+  tradeMake             String?     @map("trade_make")
+  tradeModel            String?     @map("trade_model")
+  tradeVin              String?     @map("trade_vin")
+  tradeMileage          Int?        @map("trade_mileage")
+  tradePayoff           Decimal?    @map("trade_payoff") @db.Decimal(10, 2)
+  
+  // Financial
+  budgetMin             Decimal?    @map("budget_min") @db.Decimal(10, 2)
+  budgetMax             Decimal?    @map("budget_max") @db.Decimal(10, 2)
+  creditRating          String?     @map("credit_rating")
+  preApproved           Boolean     @default(false) @map("pre_approved")
+  
+  // Comments & Notes
+  customerComments      String?     @map("customer_comments") @db.Text
+  internalNotes         String?     @map("internal_notes") @db.Text
+  
+  // ADF Tracking
+  adfSent               Boolean     @default(false) @map("adf_sent")
+  adfSentAt             DateTime?   @map("adf_sent_at")
+  adfMessageId          String?     @map("adf_message_id")
+  adfDeliveryStatus     String?     @map("adf_delivery_status") // PENDING, SENT, DELIVERED, FAILED
+  adfErrorMessage       String?     @map("adf_error_message") @db.Text
+  
+  // Tracking
+  lastContactedAt       DateTime?   @map("last_contacted_at")
+  nextFollowUpAt        DateTime?   @map("next_follow_up_at")
+  appointmentAt         DateTime?   @map("appointment_at")
+  closedAt              DateTime?   @map("closed_at")
+  closedReason          String?     @map("closed_reason")
+  
+  // Metadata
+  rawAdfXml             String?     @map("raw_adf_xml") @db.Text // Original ADF XML
+  metadata              Json?       // Additional data
+  
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  account               Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  assignedTo            User?       @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  vehicle               Vehicle?    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  communications        LeadCommunication[]
+  activities            LeadActivity[]
+  adfSubmissions        ADFSubmission[]
+
+  @@index([accountId, status])
+  @@index([assignedToId])
+  @@index([email])
+  @@index([phone])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+// Lead Communication - Track all communications
+model LeadCommunication {
+  id                    String   @id @default(uuid())
+  leadId                String   @map("lead_id")
+  
+  // Communication Type
+  type                  String   // EMAIL, SMS, PHONE, FACEBOOK_MESSAGE, AI_RESPONSE
+  direction             String   // INBOUND, OUTBOUND
+  
+  // Content
+  subject               String?
+  content               String   @db.Text
+  contentHtml           String?  @map("content_html") @db.Text
+  
+  // Metadata
+  senderId              String?  @map("sender_id") // User ID or system
+  senderName            String?  @map("sender_name")
+  recipientEmail        String?  @map("recipient_email")
+  recipientPhone        String?  @map("recipient_phone")
+  
+  // Delivery Status
+  status                String   @default("PENDING") // PENDING, SENT, DELIVERED, READ, FAILED
+  sentAt                DateTime? @map("sent_at")
+  deliveredAt           DateTime? @map("delivered_at")
+  readAt                DateTime? @map("read_at")
+  errorMessage          String?  @map("error_message") @db.Text
+  
+  // AI Generated
+  isAiGenerated         Boolean  @default(false) @map("is_ai_generated")
+  aiModel               String?  @map("ai_model")
+  aiPrompt              String?  @map("ai_prompt") @db.Text
+  
+  // External References
+  externalMessageId     String?  @map("external_message_id")
+  facebookMessageId     String?  @map("facebook_message_id")
+  
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  // Relations
+  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("lead_communications")
+}
+
+// Lead Activity - Track all lead activities
+model LeadActivity {
+  id                    String   @id @default(uuid())
+  leadId                String   @map("lead_id")
+  userId                String?  @map("user_id")
+  
+  // Activity Type
+  type                  String   // STATUS_CHANGE, ASSIGNED, NOTE_ADDED, COMMUNICATION, ADF_SENT, etc.
+  title                 String
+  description           String?  @db.Text
+  
+  // Change Tracking
+  previousValue         String?  @map("previous_value")
+  newValue              String?  @map("new_value")
+  
+  // Metadata
+  metadata              Json?
+  isSystem              Boolean  @default(false) @map("is_system")
+  
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  // Relations
+  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("lead_activities")
+}
+
+// ADF Submission - Track ADF sends to DMS
+model ADFSubmission {
+  id                    String   @id @default(uuid())
+  leadId                String   @map("lead_id")
+  accountId             String   @map("account_id")
+  
+  // Submission Type
+  method                String   // EMAIL, API, HTTP_POST
+  endpoint              String?  // DMS endpoint URL
+  
+  // ADF Content
+  adfXml                String   @map("adf_xml") @db.Text
+  adfVersion            String   @default("1.0") @map("adf_version")
+  
+  // Delivery Status
+  status                String   @default("PENDING") // PENDING, SENT, DELIVERED, ACKNOWLEDGED, FAILED
+  statusMessage         String?  @map("status_message") @db.Text
+  
+  // Response
+  responseCode          Int?     @map("response_code")
+  responseBody          String?  @map("response_body") @db.Text
+  dmsLeadId             String?  @map("dms_lead_id") // Lead ID returned by DMS
+  
+  // Email Specific
+  emailTo               String[] @default([]) @map("email_to")
+  emailMessageId        String?  @map("email_message_id")
+  emailDeliveryStatus   String?  @map("email_delivery_status")
+  
+  // Retry
+  retryCount            Int      @default(0) @map("retry_count")
+  maxRetries            Int      @default(3) @map("max_retries")
+  nextRetryAt           DateTime? @map("next_retry_at")
+  
+  // Timestamps
+  sentAt                DateTime? @map("sent_at")
+  deliveredAt           DateTime? @map("delivered_at")
+  acknowledgedAt        DateTime? @map("acknowledged_at")
+  failedAt              DateTime? @map("failed_at")
+  
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([accountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("adf_submissions")
 }

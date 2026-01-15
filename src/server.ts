@@ -193,6 +193,7 @@ app.use('/api/users/me/api-keys', require('./routes/apiKey.routes').default);
 app.use('/api/subscriptions', require('./routes/subscription.routes').default);
 app.use('/api/admin', require('./routes/admin.routes').default);
 app.use('/api/email', emailRoutes);
+app.use('/api/leads', require('./routes/lead.routes').default);
 
 // ============================================
 // Serve React Frontend (Static Files)
