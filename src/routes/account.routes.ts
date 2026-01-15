@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { param } from 'express-validator';
+import { param, body } from 'express-validator';
 import { authenticate } from '@/middleware/auth';
 import { AccountController } from '@/controllers/account.controller';
 import { asyncHandler } from '@/utils/asyncHandler';
@@ -9,6 +9,29 @@ const router = Router();
 const controller = new AccountController();
 
 router.use(authenticate);
+
+/**
+ * @route   GET /api/accounts/current
+ * @desc    Get current user's primary account
+ * @access  Private
+ */
+router.get('/current', asyncHandler(controller.getCurrentAccount.bind(controller)));
+
+/**
+ * @route   POST /api/accounts/test-ftp
+ * @desc    Test FTP connection with provided credentials
+ * @access  Private
+ */
+router.post(
+  '/test-ftp',
+  validate([
+    body('host').isString().notEmpty().withMessage('FTP host is required'),
+    body('username').isString().notEmpty().withMessage('FTP username is required'),
+    body('password').isString().notEmpty().withMessage('FTP password is required'),
+    body('path').optional().isString(),
+  ]),
+  asyncHandler(controller.testFtpConnection.bind(controller))
+);
 
 /**
  * @route   GET /api/accounts

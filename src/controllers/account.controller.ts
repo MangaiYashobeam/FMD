@@ -3,8 +3,95 @@ import { AuthRequest } from '@/middleware/auth';
 import prisma from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
+import { FTPService } from '@/services/ftp.service';
 
 export class AccountController {
+  /**
+   * Get current user's primary account
+   */
+  async getCurrentAccount(req: AuthRequest, res: Response) {
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+      },
+      include: {
+        account: {
+          include: {
+            _count: {
+              select: {
+                vehicles: true,
+                facebookProfiles: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc', // Return the oldest (first) account
+      },
+    });
+
+    if (!accountUser) {
+      throw new AppError('No account found for user', 404);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: accountUser.account.id,
+        name: accountUser.account.name,
+        dealershipName: accountUser.account.dealershipName,
+        ftpHost: accountUser.account.ftpHost,
+        ftpPort: accountUser.account.ftpPort,
+        ftpUsername: accountUser.account.ftpUsername,
+        csvPath: accountUser.account.csvPath,
+        autoSync: accountUser.account.autoSync,
+        syncInterval: accountUser.account.syncInterval,
+        role: accountUser.role,
+        vehicleCount: accountUser.account._count.vehicles,
+        facebookProfileCount: accountUser.account._count.facebookProfiles,
+        createdAt: accountUser.account.createdAt,
+      },
+    });
+  }
+
+  /**
+   * Test FTP connection
+   */
+  async testFtpConnection(req: AuthRequest, res: Response) {
+    const { host, username, password, path } = req.body;
+
+    if (!host || !username || !password) {
+      throw new AppError('Missing required FTP credentials', 400);
+    }
+
+    const ftpService = new FTPService();
+    
+    try {
+      const success = await ftpService.testConnection({
+        host,
+        port: 21,
+        username,
+        password,
+        path: path || '/',
+        protocol: 'ftp',
+      });
+
+      if (success) {
+        logger.info(`FTP connection test successful for ${host} by user ${req.user!.id}`);
+        res.json({
+          success: true,
+          message: 'FTP connection successful',
+        });
+      } else {
+        throw new AppError('FTP connection failed', 400);
+      }
+    } catch (error: any) {
+      logger.error(`FTP connection test failed for ${host}:`, error);
+      throw new AppError(error.message || 'FTP connection failed', 400);
+    }
+  }
+
   /**
    * Get user's accounts
    */
