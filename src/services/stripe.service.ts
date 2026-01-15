@@ -30,7 +30,7 @@ export class StripeService {
       where: { id: accountId },
       include: {
         accountUsers: {
-          where: { role: 'owner' },
+          where: { role: 'ACCOUNT_OWNER' },
           include: { user: true },
         },
       },
@@ -184,7 +184,7 @@ export class StripeService {
       where: { id: accountId },
       include: {
         subscriptionPlan: true,
-        accountUsers: { where: { role: { in: ['owner', 'admin', 'member'] } } },
+        accountUsers: { where: { role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] } } },
       },
     });
 
@@ -502,7 +502,7 @@ export class StripeService {
     // Create notification
     const account = await prisma.account.findUnique({
       where: { id: accountId },
-      include: { accountUsers: { where: { role: 'owner' }, include: { user: true } } },
+      include: { accountUsers: { where: { role: 'ACCOUNT_OWNER' }, include: { user: true } } },
     });
 
     if (account) {

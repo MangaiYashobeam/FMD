@@ -99,7 +99,7 @@ export class AccountController {
       where: {
         userId: req.user!.id,
         accountId: id as string,
-        role: { in: ['OWNER', 'ADMIN'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 
@@ -140,7 +140,7 @@ export class AccountController {
       where: {
         userId: req.user!.id,
         accountId: id as string,
-        role: { in: ['OWNER', 'ADMIN'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 
@@ -197,7 +197,7 @@ export class AccountController {
       where: {
         userId: req.user!.id,
         accountId: id as string,
-        role: { in: ['OWNER', 'ADMIN'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 

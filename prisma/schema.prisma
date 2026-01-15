@@ -93,12 +93,23 @@ model Account {
   @@map("accounts")
 }
 
+// Role enum for AccountUser
+enum UserRole {
+  SUPER_ADMIN  // Company owner - full system access
+  ACCOUNT_OWNER // Dealership owner - full account access
+  ADMIN         // Account admin - manage users, settings, templates
+  SALES_REP     // Sales representative - personal posting only
+  VIEWER        // Read-only access
+}
+
 model AccountUser {
   id        String   @id @default(uuid())
   accountId String   @map("account_id")
   userId    String   @map("user_id")
-  role      String   @default("member") // owner, admin, member, viewer
+  role      UserRole @default(SALES_REP)
+  permissions Json?  // Custom permissions override
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)

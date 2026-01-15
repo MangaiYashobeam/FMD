@@ -30,7 +30,7 @@ export class SubscriptionController {
       include: {
         subscriptionPlan: true,
         accountUsers: {
-          where: { role: { in: ['owner', 'admin', 'member'] } },
+          where: { role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] } },
           include: { user: true },
         },
       },

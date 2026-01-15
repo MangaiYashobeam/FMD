@@ -116,7 +116,7 @@ export class VehicleController {
       where: {
         userId: req.user!.id,
         accountId,
-        role: { in: ['OWNER', 'ADMIN'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 
@@ -181,7 +181,7 @@ export class VehicleController {
       where: {
         userId: req.user!.id,
         accountId: vehicle.accountId,
-        role: { in: ['OWNER', 'ADMIN', 'EDITOR'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
       },
     });
 
@@ -224,7 +224,7 @@ export class VehicleController {
       where: {
         userId: req.user!.id,
         accountId: vehicle.accountId,
-        role: { in: ['OWNER', 'ADMIN'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 
@@ -255,7 +255,7 @@ export class VehicleController {
       where: {
         userId: req.user!.id,
         accountId,
-        role: { in: ['OWNER', 'ADMIN', 'EDITOR'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
       },
     });
 

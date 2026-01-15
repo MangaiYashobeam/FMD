@@ -104,6 +104,7 @@ app.use('/api/facebook', facebookRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/users/me', userCredentialsRoutes);
 app.use('/api/subscriptions', require('./routes/subscription.routes').default);
+app.use('/api/admin', require('./routes/admin.routes').default);
 
 // ============================================
 // 404 Handler

@@ -55,7 +55,7 @@ export class AuthController {
         data: {
           userId: user.id,
           accountId: account.id,
-          role: 'owner',
+          role: 'ACCOUNT_OWNER',
         },
       });
 

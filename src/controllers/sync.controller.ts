@@ -20,7 +20,7 @@ export class SyncController {
       where: {
         userId: req.user!.id,
         accountId,
-        role: { in: ['OWNER', 'ADMIN', 'EDITOR'] },
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
       },
     });
 

@@ -2,13 +2,16 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AppError } from '@/middleware/errorHandler';
 import prisma from '@/config/database';
+import { UserRole } from './rbac';
 
 export interface AuthRequest extends Request {
   user?: {
     id: string;
     email: string;
     accountIds: string[];
+    role?: UserRole; // Global role (SUPER_ADMIN if applicable)
   };
+  userRole?: UserRole; // Context-specific role within an account
 }
 
 export const authenticate = async (
@@ -51,6 +54,9 @@ export const authenticate = async (
       throw new AppError('User not found or inactive', 401);
     }
 
+    // Check if user is super admin (has SUPER_ADMIN role in any account)
+    const isSuperAdmin = user.accountUsers.some(au => au.role === 'SUPER_ADMIN');
+
     // Update last login
     await prisma.user.update({
       where: { id: user.id },
@@ -62,6 +68,7 @@ export const authenticate = async (
       id: user.id,
       email: user.email,
       accountIds: user.accountUsers.map((au) => au.accountId),
+      role: isSuperAdmin ? UserRole.SUPER_ADMIN : undefined,
     };
 
     next();
