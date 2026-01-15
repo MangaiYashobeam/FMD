@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { accountsApi } from '../lib/api';
+import { accountsApi, api } from '../lib/api';
+import { sanitizeString } from '../lib/sanitize';
 import {
   Building2,
   User,
@@ -13,11 +14,30 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
+  Plus,
+  Trash2,
+  Copy,
+  AlertTriangle,
+  Shield,
+  Clock,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
-type SettingsTab = 'profile' | 'dealership' | 'ftp' | 'notifications' | 'billing' | 'security';
+type SettingsTab = 'profile' | 'dealership' | 'ftp' | 'notifications' | 'billing' | 'security' | 'apikeys';
+
+// API Key types
+interface ApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  permissions: string[];
+  lastUsedAt?: string;
+  expiresAt?: string;
+  createdAt: string;
+  isActive: boolean;
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -25,6 +45,13 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [showPassword, setShowPassword] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // API Keys state
+  const [showNewKeyModal, setShowNewKeyModal] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyPermissions, setNewKeyPermissions] = useState<string[]>(['read:vehicles']);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
 
   // Form states
   const [profileForm, setProfileForm] = useState({
@@ -101,7 +128,100 @@ export default function SettingsPage() {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'security', label: 'Security', icon: Key },
+    { id: 'apikeys', label: 'API Keys', icon: Shield },
   ];
+
+  // Fetch API Keys
+  const { data: apiKeysData, isLoading: apiKeysLoading } = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: async () => {
+      const response = await api.get('/api/api-keys');
+      return response.data;
+    },
+    enabled: activeTab === 'apikeys',
+  });
+
+  // Mock API keys for demo
+  const mockApiKeys: ApiKey[] = [
+    {
+      id: '1',
+      name: 'Chrome Extension',
+      keyPrefix: 'fmd_ext_',
+      permissions: ['read:vehicles', 'write:vehicles', 'read:facebook'],
+      lastUsedAt: new Date().toISOString(),
+      createdAt: new Date(Date.now() - 604800000).toISOString(),
+      isActive: true,
+    },
+    {
+      id: '2',
+      name: 'Inventory Sync',
+      keyPrefix: 'fmd_sync_',
+      permissions: ['read:vehicles', 'write:vehicles'],
+      lastUsedAt: new Date(Date.now() - 3600000).toISOString(),
+      expiresAt: new Date(Date.now() + 2592000000).toISOString(),
+      createdAt: new Date(Date.now() - 2592000000).toISOString(),
+      isActive: true,
+    },
+  ];
+
+  const apiKeys: ApiKey[] = apiKeysData?.data?.keys || mockApiKeys;
+
+  // Create API Key mutation
+  const createKeyMutation = useMutation({
+    mutationFn: async (data: { name: string; permissions: string[] }) => {
+      const response = await api.post('/api/api-keys', data);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setGeneratedKey(data.data?.key || 'fmd_demo_key_xxxxxxxxxxxxx');
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+    },
+  });
+
+  // Revoke API Key mutation
+  const revokeKeyMutation = useMutation({
+    mutationFn: async (keyId: string) => {
+      return api.delete(`/api/api-keys/${keyId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+    },
+  });
+
+  const handleCreateKey = () => {
+    const sanitizedName = sanitizeString(newKeyName, { maxLength: 50 });
+    if (!sanitizedName) return;
+    createKeyMutation.mutate({ name: sanitizedName, permissions: newKeyPermissions });
+  };
+
+  const handleCopyKey = (key: string) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
+
+  const availablePermissions = [
+    { value: 'read:vehicles', label: 'Read Vehicles', desc: 'View inventory listings' },
+    { value: 'write:vehicles', label: 'Write Vehicles', desc: 'Create and update listings' },
+    { value: 'read:facebook', label: 'Read Facebook', desc: 'View Facebook data' },
+    { value: 'write:facebook', label: 'Write Facebook', desc: 'Post to Facebook' },
+    { value: 'read:leads', label: 'Read Leads', desc: 'View lead information' },
+    { value: 'write:leads', label: 'Write Leads', desc: 'Update lead status' },
+  ];
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'Never';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
 
   const handleSave = () => {
     const data = {
@@ -569,6 +689,250 @@ export default function SettingsPage() {
                 <button className="mt-4 text-red-600 text-sm hover:underline">
                   Sign out of all other sessions
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* API Keys Tab */}
+          {activeTab === 'apikeys' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">API Keys</h2>
+                  <p className="text-sm text-gray-500">Manage API keys for Chrome Extension and integrations</p>
+                </div>
+                <button
+                  onClick={() => setShowNewKeyModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create New Key
+                </button>
+              </div>
+
+              {/* Warning Banner */}
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-800">Keep your API keys secure</p>
+                  <p className="text-sm text-amber-700 mt-1">
+                    API keys provide full access to your account. Never share them publicly or commit them to version control.
+                  </p>
+                </div>
+              </div>
+
+              {/* API Keys List */}
+              {apiKeysLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                </div>
+              ) : apiKeys.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-lg">
+                  <Key className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No API Keys</h3>
+                  <p className="text-gray-500 mb-4">Create an API key to use the Chrome Extension or other integrations</p>
+                  <button
+                    onClick={() => setShowNewKeyModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create Your First Key
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {apiKeys.map((key) => (
+                    <div key={key.id} className="p-4 bg-white border border-gray-200 rounded-lg">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-semibold text-gray-900">{key.name}</h3>
+                            <span className={cn(
+                              'px-2 py-0.5 text-xs font-medium rounded-full',
+                              key.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                            )}>
+                              {key.isActive ? 'Active' : 'Revoked'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <code className="px-2 py-1 bg-gray-100 rounded text-sm font-mono text-gray-700">
+                              {key.keyPrefix}{'•'.repeat(20)}
+                            </code>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {key.permissions.map((perm) => (
+                              <span key={perm} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded">
+                                {perm}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Created: {formatDate(key.createdAt)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <RefreshCw className="w-3 h-3" />
+                              Last used: {formatDate(key.lastUsedAt)}
+                            </span>
+                            {key.expiresAt && (
+                              <span className="text-amber-600">
+                                Expires: {new Date(key.expiresAt).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (confirm('Are you sure you want to revoke this API key? This action cannot be undone.')) {
+                              revokeKeyMutation.mutate(key.id);
+                            }
+                          }}
+                          disabled={!key.isActive || revokeKeyMutation.isPending}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="Revoke Key"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Usage Guide */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-medium text-gray-900 mb-3">How to use API Keys</h3>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <p><strong>Chrome Extension:</strong> Enter your API key in the extension settings popup.</p>
+                  <p><strong>API Requests:</strong> Include the key in the <code className="px-1 bg-gray-200 rounded">X-API-Key</code> header.</p>
+                </div>
+                <div className="mt-3 p-3 bg-gray-900 rounded-lg">
+                  <code className="text-green-400 text-xs">
+                    curl -H "X-API-Key: fmd_your_key_here" \<br />
+                    &nbsp;&nbsp;https://fmd-production.up.railway.app/api/vehicles
+                  </code>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Create Key Modal */}
+          {showNewKeyModal && (
+            <div className="fixed inset-0 z-50 overflow-y-auto">
+              <div className="flex items-center justify-center min-h-screen px-4">
+                <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => {
+                  if (!generatedKey) {
+                    setShowNewKeyModal(false);
+                    setNewKeyName('');
+                    setNewKeyPermissions(['read:vehicles']);
+                  }
+                }} />
+                <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
+                  {generatedKey ? (
+                    <>
+                      <div className="text-center mb-6">
+                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <CheckCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900">API Key Created!</h3>
+                        <p className="text-sm text-gray-500 mt-2">
+                          Make sure to copy your key now. You won't be able to see it again.
+                        </p>
+                      </div>
+                      <div className="mb-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Your API Key</label>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 px-3 py-2 bg-gray-100 rounded-lg font-mono text-sm break-all">
+                            {generatedKey}
+                          </code>
+                          <button
+                            onClick={() => handleCopyKey(generatedKey)}
+                            className={cn(
+                              'p-2 rounded-lg transition-colors',
+                              copiedKey ? 'bg-green-100 text-green-600' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                            )}
+                          >
+                            {copiedKey ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                          </button>
+                        </div>
+                        {copiedKey && <p className="text-sm text-green-600 mt-2">Copied to clipboard!</p>}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowNewKeyModal(false);
+                          setGeneratedKey(null);
+                          setNewKeyName('');
+                          setNewKeyPermissions(['read:vehicles']);
+                        }}
+                        className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Done
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-xl font-bold text-gray-900 mb-6">Create New API Key</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Key Name</label>
+                          <input
+                            type="text"
+                            value={newKeyName}
+                            onChange={(e) => setNewKeyName(sanitizeString(e.target.value, { maxLength: 50 }))}
+                            placeholder="e.g., Chrome Extension, Inventory Sync"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Permissions</label>
+                          <div className="space-y-2">
+                            {availablePermissions.map((perm) => (
+                              <label key={perm.value} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+                                <input
+                                  type="checkbox"
+                                  checked={newKeyPermissions.includes(perm.value)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setNewKeyPermissions([...newKeyPermissions, perm.value]);
+                                    } else {
+                                      setNewKeyPermissions(newKeyPermissions.filter(p => p !== perm.value));
+                                    }
+                                  }}
+                                  className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div>
+                                  <p className="font-medium text-gray-900">{perm.label}</p>
+                                  <p className="text-sm text-gray-500">{perm.desc}</p>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-3 mt-6">
+                        <button
+                          onClick={() => {
+                            setShowNewKeyModal(false);
+                            setNewKeyName('');
+                            setNewKeyPermissions(['read:vehicles']);
+                          }}
+                          className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleCreateKey}
+                          disabled={!newKeyName.trim() || newKeyPermissions.length === 0 || createKeyMutation.isPending}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {createKeyMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                          Create Key
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}

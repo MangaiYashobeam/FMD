@@ -15,12 +15,18 @@ import {
   X,
   Bell,
   Shield,
+  UserCheck,
+  MessageCircle,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Inventory', href: '/inventory', icon: Package },
+  { name: 'Leads', href: '/leads', icon: UserCheck },
+  { name: 'Messages', href: '/messages', icon: MessageCircle },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Facebook', href: '/facebook', icon: Facebook },
   { name: 'Sync', href: '/sync', icon: RefreshCw },
   { name: 'Team', href: '/team', icon: Users },

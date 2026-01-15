@@ -194,5 +194,236 @@ export const adminApi = {
   resendEmail: (logId: string) => api.post(`/api/email/resend/${logId}`),
 };
 
+// Leads API
+export const leadsApi = {
+  getAll: (params?: { 
+    page?: number; 
+    limit?: number; 
+    search?: string; 
+    status?: string; 
+    source?: string;
+    starred?: boolean;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/api/leads', { params }),
+  
+  getById: (id: string) => api.get(`/api/leads/${id}`),
+  
+  create: (data: {
+    firstName: string;
+    lastName: string;
+    email?: string;
+    phone?: string;
+    source: string;
+    vehicleId?: string;
+    notes?: string;
+  }) => api.post('/api/leads', data),
+  
+  update: (id: string, data: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    status?: string;
+    notes?: string;
+    isStarred?: boolean;
+  }) => api.put(`/api/leads/${id}`, data),
+  
+  updateStatus: (id: string, status: string) => 
+    api.patch(`/api/leads/${id}/status`, { status }),
+  
+  toggleStar: (id: string) => api.patch(`/api/leads/${id}/star`),
+  
+  delete: (id: string) => api.delete(`/api/leads/${id}`),
+  
+  bulkDelete: (ids: string[]) => api.post('/api/leads/bulk-delete', { ids }),
+  
+  export: (params?: { format?: 'csv' | 'xlsx'; status?: string }) =>
+    api.get('/api/leads/export', { params, responseType: 'blob' }),
+  
+  getStats: () => api.get('/api/leads/stats'),
+};
+
+// Messages API
+export const messagesApi = {
+  getConversations: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    unreadOnly?: boolean;
+    starred?: boolean;
+    archived?: boolean;
+  }) => api.get('/api/messages/conversations', { params }),
+  
+  getConversation: (conversationId: string) => 
+    api.get(`/api/messages/conversations/${conversationId}`),
+  
+  getMessages: (conversationId: string, params?: { 
+    page?: number; 
+    limit?: number; 
+    before?: string;
+  }) => api.get(`/api/messages/conversations/${conversationId}/messages`, { params }),
+  
+  sendMessage: (conversationId: string, data: { 
+    content: string; 
+    attachments?: string[];
+  }) => api.post(`/api/messages/conversations/${conversationId}/messages`, data),
+  
+  markAsRead: (conversationId: string) => 
+    api.patch(`/api/messages/conversations/${conversationId}/read`),
+  
+  toggleStar: (conversationId: string) => 
+    api.patch(`/api/messages/conversations/${conversationId}/star`),
+  
+  archive: (conversationId: string) => 
+    api.patch(`/api/messages/conversations/${conversationId}/archive`),
+  
+  unarchive: (conversationId: string) => 
+    api.patch(`/api/messages/conversations/${conversationId}/unarchive`),
+  
+  getUnreadCount: () => api.get('/api/messages/unread-count'),
+  
+  syncFromFacebook: () => api.post('/api/messages/sync'),
+};
+
+// Analytics API
+export const analyticsApi = {
+  getOverview: (params?: { 
+    startDate?: string; 
+    endDate?: string; 
+    period?: 'day' | 'week' | 'month';
+  }) => api.get('/api/analytics/overview', { params }),
+  
+  getLeadsTrend: (params?: { 
+    startDate?: string; 
+    endDate?: string;
+    groupBy?: 'day' | 'week' | 'month';
+  }) => api.get('/api/analytics/leads-trend', { params }),
+  
+  getViewsTrend: (params?: { 
+    startDate?: string; 
+    endDate?: string;
+    groupBy?: 'day' | 'week' | 'month';
+  }) => api.get('/api/analytics/views-trend', { params }),
+  
+  getLeadSources: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/api/analytics/lead-sources', { params }),
+  
+  getTopVehicles: (params?: { 
+    limit?: number; 
+    sortBy?: 'views' | 'leads' | 'conversions';
+    startDate?: string; 
+    endDate?: string;
+  }) => api.get('/api/analytics/top-vehicles', { params }),
+  
+  getKeyMetrics: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/api/analytics/metrics', { params }),
+  
+  getActivityFeed: (params?: { limit?: number }) =>
+    api.get('/api/analytics/activity', { params }),
+  
+  export: (params?: { 
+    format?: 'csv' | 'pdf'; 
+    startDate?: string; 
+    endDate?: string;
+    sections?: string[];
+  }) => api.get('/api/analytics/export', { params, responseType: 'blob' }),
+};
+
+// API Keys API
+export const apiKeysApi = {
+  getAll: () => api.get('/api/api-keys'),
+  
+  create: (data: { 
+    name: string; 
+    permissions: string[];
+    expiresIn?: number; // days
+  }) => api.post('/api/api-keys', data),
+  
+  revoke: (id: string) => api.delete(`/api/api-keys/${id}`),
+  
+  regenerate: (id: string) => api.post(`/api/api-keys/${id}/regenerate`),
+  
+  getUsage: (id: string, params?: { startDate?: string; endDate?: string }) =>
+    api.get(`/api/api-keys/${id}/usage`, { params }),
+};
+
+// Team/Users API (for dealership team management)
+export const teamApi = {
+  getMembers: (params?: { page?: number; limit?: number; role?: string }) =>
+    api.get('/api/team/members', { params }),
+  
+  invite: (data: { 
+    email: string; 
+    firstName: string; 
+    lastName: string; 
+    role: string;
+  }) => api.post('/api/team/invite', data),
+  
+  updateMember: (userId: string, data: { role?: string; isActive?: boolean }) =>
+    api.put(`/api/team/members/${userId}`, data),
+  
+  removeMember: (userId: string) => api.delete(`/api/team/members/${userId}`),
+  
+  resendInvite: (userId: string) => api.post(`/api/team/members/${userId}/resend-invite`),
+  
+  getPendingInvites: () => api.get('/api/team/invites'),
+  
+  cancelInvite: (inviteId: string) => api.delete(`/api/team/invites/${inviteId}`),
+};
+
+// Subscription API
+export const subscriptionApi = {
+  getCurrent: () => api.get('/api/subscription'),
+  
+  getPlans: () => api.get('/api/subscription/plans'),
+  
+  subscribe: (planId: string, paymentMethodId?: string) =>
+    api.post('/api/subscription/subscribe', { planId, paymentMethodId }),
+  
+  updatePlan: (planId: string) => api.put('/api/subscription/plan', { planId }),
+  
+  cancel: (immediately?: boolean) => 
+    api.post('/api/subscription/cancel', { immediately }),
+  
+  resume: () => api.post('/api/subscription/resume'),
+  
+  getBillingHistory: (params?: { page?: number; limit?: number }) =>
+    api.get('/api/subscription/billing-history', { params }),
+  
+  updatePaymentMethod: (paymentMethodId: string) =>
+    api.put('/api/subscription/payment-method', { paymentMethodId }),
+  
+  getInvoices: (params?: { page?: number; limit?: number }) =>
+    api.get('/api/subscription/invoices', { params }),
+  
+  downloadInvoice: (invoiceId: string) =>
+    api.get(`/api/subscription/invoices/${invoiceId}/download`, { responseType: 'blob' }),
+};
+
+// Notifications API
+export const notificationsApi = {
+  getAll: (params?: { page?: number; limit?: number; unreadOnly?: boolean }) =>
+    api.get('/api/notifications', { params }),
+  
+  markAsRead: (id: string) => api.patch(`/api/notifications/${id}/read`),
+  
+  markAllAsRead: () => api.patch('/api/notifications/read-all'),
+  
+  getPreferences: () => api.get('/api/notifications/preferences'),
+  
+  updatePreferences: (data: {
+    emailNotifications?: boolean;
+    pushNotifications?: boolean;
+    newLeadNotifications?: boolean;
+    syncStatusNotifications?: boolean;
+    weeklyReportNotifications?: boolean;
+  }) => api.put('/api/notifications/preferences', data),
+  
+  delete: (id: string) => api.delete(`/api/notifications/${id}`),
+  
+  deleteAll: () => api.delete('/api/notifications'),
+};
+
 export default api;
 

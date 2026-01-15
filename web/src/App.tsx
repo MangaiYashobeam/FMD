@@ -15,6 +15,9 @@ import FacebookPage from './pages/FacebookPage';
 import SyncPage from './pages/SyncPage';
 import SettingsPage from './pages/SettingsPage';
 import TeamPage from './pages/TeamPage';
+import LeadsPage from './pages/LeadsPage';
+import MessagesPage from './pages/MessagesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 // Admin Pages
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AccountsPage from './pages/admin/AccountsPage';
@@ -61,6 +64,9 @@ function App() {
               <Route path="inventory" element={<InventoryPage />} />
               <Route path="facebook" element={<FacebookPage />} />
               <Route path="sync" element={<SyncPage />} />
+              <Route path="leads" element={<LeadsPage />} />
+              <Route path="messages" element={<MessagesPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="team" element={<TeamPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
