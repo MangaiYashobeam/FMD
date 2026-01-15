@@ -181,12 +181,12 @@ export class AccountController {
     const { id } = req.params;
     const { ftpHost, ftpPort, ftpUsername, ftpPassword, csvPath, autoSync, syncInterval } = req.body;
 
-    // Verify user is owner or admin
+    // Verify user is owner, admin, or super admin
     const accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
         accountId: id as string,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
+        role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 
@@ -222,12 +222,12 @@ export class AccountController {
     const { id } = req.params;
     const { email, role } = req.body;
 
-    // Verify user is owner or admin
+    // Verify user is owner, admin, or super admin
     const accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
         accountId: id as string,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
+        role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 
@@ -279,12 +279,12 @@ export class AccountController {
   async removeUser(req: AuthRequest, res: Response) {
     const { id, userId } = req.params;
 
-    // Verify user is owner or admin
+    // Verify user is owner, admin, or super admin
     const accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
         accountId: id as string,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
+        role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
       },
     });
 
