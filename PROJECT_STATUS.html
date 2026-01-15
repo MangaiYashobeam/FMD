@@ -566,7 +566,7 @@
                 <div class="label">Security Hardened</div>
             </div>
             <div class="stat-card warning">
-                <div class="number">70%</div>
+                <div class="number">75%</div>
                 <div class="label">Chrome Extension</div>
             </div>
         </div>
@@ -615,11 +615,11 @@
                 
                 <div class="link-card">
                     <h3>🧩 Chrome Extension</h3>
-                    <p>Facebook Marketplace scraper</p>
+                    <p>Facebook Marketplace scraper + API Key auth</p>
                     <a href="chrome://extensions" target="_blank">Load Extension</a>
-                    <span class="url">Local: /2.5_0/ folder</span>
+                    <span class="url">Local: /chrome-extension/ folder</span>
                     <div style="margin-top: 10px;">
-                        <span class="status-badge dev">IN DEV</span>
+                        <span class="status-badge dev">75% READY</span>
                     </div>
                 </div>
                 
@@ -918,7 +918,8 @@
                     <li><s style="color: var(--success);">Complete Facebook queue processor job logic</s> ✅ DONE</li>
                     <li><s style="color: var(--success);">Backend Security Hardening (validation, rate limiting, injection guards)</s> ✅ DONE</li>
                     <li><s style="color: var(--success);">API Key Authentication System for Chrome Extension</s> ✅ DONE</li>
-                    <li>Complete Chrome Extension API integration (API key system ready - needs testing)</li>
+                    <li><s style="color: var(--success);">Chrome Extension API key login UI</s> ✅ DONE (popup with tabs)</li>
+                    <li>Test Chrome Extension posting flow end-to-end</li>
                     <li>Facebook OAuth integration for marketplace posting (backend ready, needs FB_APP_ID config)</li>
                     <li>Implement Stripe payment processing (backend ready, add STRIPE_SECRET_KEY)</li>
                 </ul>
@@ -927,10 +928,11 @@
             <div style="background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid var(--warning); border-radius: 12px; padding: 25px; margin: 20px 0;">
                 <h4 style="color: #b45309;">🟡 Medium Priority</h4>
                 <ul class="todo-list">
-                    <li><s style="color: var(--success);">Add more reusable UI components</s> ✅ DONE (8 components: Button, Input, Card, Modal, Table, Alert, Badge, Loading)</li>
-                    <li><s style="color: var(--success);">Create custom hooks folder</s> ✅ DONE (5 hooks: useApi, useFetch, useDebounce, useForm, useStorage)</li>
-                    <li><s style="color: var(--success);">Configure Chrome Extension icons</s> ✅ DONE (SVG icons created)</li>
+                    <li><s style="color: var(--success);">Add more reusable UI components</s> ✅ DONE (10 components: Button, Input, Card, Modal, Table, Alert, Badge, Loading + index)</li>
+                    <li><s style="color: var(--success);">Create custom hooks folder</s> ✅ DONE (5 hooks: useApi, useDebounce, useForm, useStorage + index)</li>
+                    <li><s style="color: var(--success);">Configure Chrome Extension icons</s> ✅ DONE (SVG icons: 16px, 48px, 128px)</li>
                     <li><s style="color: var(--success);">Add Toast notification system</s> ✅ DONE (ToastContext with provider)</li>
+                    <li><s style="color: var(--success);">Chrome Extension API Key login</s> ✅ DONE (dual auth: JWT + API key)</li>
                     <li>Complete Team Management page functionality</li>
                     <li>Add Leads/Messages pages for Facebook integration</li>
                     <li>Add Analytics/Charts dashboard (react-chartjs-2)</li>
@@ -1333,6 +1335,20 @@ railway shell
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">errorHandler.ts</span><span class="desc">Global error handling</span></div>
                     </div>
                     
+                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Backend Controllers (10 files)</h3>
+                    <div class="api-endpoints">
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">auth.controller.ts</span><span class="desc">Login, register, tokens</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">account.controller.ts</span><span class="desc">Account CRUD</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">vehicle.controller.ts</span><span class="desc">Vehicle CRUD</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin.controller.ts</span><span class="desc">System admin</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">facebook.controller.ts</span><span class="desc">FB OAuth & posts</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">sync.controller.ts</span><span class="desc">FTP sync</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">email.controller.ts</span><span class="desc">Email operations</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">subscription.controller.ts</span><span class="desc">Stripe billing</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">userCredentials.controller.ts</span><span class="desc">User settings</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">apiKey.controller.ts</span><span class="desc">API key mgmt</span></div>
+                    </div>
+                    
                     <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Backend Services (6 files)</h3>
                     <div class="api-endpoints">
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">csvParser.service.ts</span><span class="desc">Parse CSV inventory</span></div>
@@ -1345,10 +1361,12 @@ railway shell
                 </div>
                 
                 <div>
-                    <h3 style="margin-bottom: 15px; color: var(--gray-700);">Frontend Pages (14 total)</h3>
+                    <h3 style="margin-bottom: 15px; color: var(--gray-700);">Frontend Pages (16 total)</h3>
                     <div class="api-endpoints">
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">LoginPage.tsx</span><span class="desc">User authentication</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">RegisterPage.tsx</span><span class="desc">Account creation</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">ForgotPasswordPage.tsx</span><span class="desc">Password reset request</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">ResetPasswordPage.tsx</span><span class="desc">Password reset</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">DashboardPage.tsx</span><span class="desc">Main dashboard</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">InventoryPage.tsx</span><span class="desc">Vehicle listings</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">FacebookPage.tsx</span><span class="desc">FB integration</span></div>
@@ -1363,7 +1381,7 @@ railway shell
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/AuditLogsPage.tsx</span><span class="desc">Audit trail</span></div>
                     </div>
                     
-                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Frontend Components (9 UI components)</h3>
+                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Frontend Components (10 files)</h3>
                     <div class="api-endpoints">
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">ProtectedRoute.tsx</span><span class="desc">Auth guard</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">ui/Button.tsx</span><span class="desc">Reusable button</span></div>
@@ -1374,11 +1392,33 @@ railway shell
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">ui/Alert.tsx</span><span class="desc">Alert messages</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">ui/Badge.tsx</span><span class="desc">Status badges</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">ui/Loading.tsx</span><span class="desc">Loading spinner</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">ui/index.ts</span><span class="desc">Barrel export</span></div>
+                    </div>
+                    
+                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Frontend Hooks (5 files)</h3>
+                    <div class="api-endpoints">
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">useApi.ts</span><span class="desc">API client hook</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">useDebounce.ts</span><span class="desc">Debounce utility</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">useForm.ts</span><span class="desc">Form handling</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">useStorage.ts</span><span class="desc">LocalStorage hook</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">index.ts</span><span class="desc">Barrel export</span></div>
+                    </div>
+                    
+                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Frontend Contexts (2 files)</h3>
+                    <div class="api-endpoints">
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">AuthContext.tsx</span><span class="desc">Auth state provider</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">ToastContext.tsx</span><span class="desc">Toast notifications</span></div>
+                    </div>
+                    
+                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Frontend Layouts (2 files)</h3>
+                    <div class="api-endpoints">
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">DashboardLayout.tsx</span><span class="desc">User dashboard</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">AdminLayout.tsx</span><span class="desc">Admin panel</span></div>
                     </div>
                 </div>
             </div>
             
-            <h3 style="margin: 30px 0 15px; color: var(--gray-700);">Database Schema (18 models in Prisma)</h3>
+            <h3 style="margin: 30px 0 15px; color: var(--gray-700);">Database Schema (20 models in Prisma)</h3>
             <div class="tech-stack">
                 <span class="tech-badge backend">User</span>
                 <span class="tech-badge backend">Account</span>
@@ -1393,21 +1433,24 @@ railway shell
                 <span class="tech-badge database">SubscriptionPlan</span>
                 <span class="tech-badge database">Payment</span>
                 <span class="tech-badge database">Invoice</span>
+                <span class="tech-badge database">SubscriptionHistory</span>
                 <span class="tech-badge database">AuditLog</span>
                 <span class="tech-badge database">EmailLog</span>
                 <span class="tech-badge database">Notification</span>
                 <span class="tech-badge database">RefreshToken</span>
-                <span class="tech-badge" style="background: linear-gradient(135deg, #22c55e, #16a34a);">ApiKey (NEW)</span>
+                <span class="tech-badge database">PasswordResetToken</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #22c55e, #16a34a);">ApiKey</span>
             </div>
             
-            <h3 style="margin: 30px 0 15px; color: var(--gray-700);">Chrome Extension Files</h3>
+            <h3 style="margin: 30px 0 15px; color: var(--gray-700);">Chrome Extension Files (7 files)</h3>
             <div class="tech-stack">
                 <span class="tech-badge hosting">manifest.json ✅</span>
                 <span class="tech-badge hosting">background.js ✅</span>
                 <span class="tech-badge hosting">content.js ✅</span>
                 <span class="tech-badge hosting">popup.html ✅</span>
                 <span class="tech-badge hosting">popup.js ✅</span>
-                <span class="tech-badge" style="background: var(--warning);">icons/ ⚠️ need icons</span>
+                <span class="tech-badge hosting">README.md ✅</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #22c55e, #16a34a);">icons/ ✅ (SVG)</span>
             </div>
         </section>
     </div>
