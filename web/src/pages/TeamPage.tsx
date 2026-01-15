@@ -73,6 +73,9 @@ export default function TeamPage() {
       setShowInviteModal(false);
       setInviteForm({ email: '', name: '', role: 'sales' });
     },
+    onError: (error: any) => {
+      console.error('Invite member failed:', error?.response?.data || error.message);
+    },
   });
 
   // Delete member mutation
@@ -82,6 +85,9 @@ export default function TeamPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-members'] });
+    },
+    onError: (error: any) => {
+      console.error('Delete member failed:', error?.response?.data || error.message);
     },
   });
 

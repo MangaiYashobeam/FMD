@@ -158,6 +158,9 @@ export default function LeadsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
     },
+    onError: (error: any) => {
+      console.error('Update status failed:', error?.response?.data || error.message);
+    },
   });
 
   // Toggle star mutation
@@ -167,6 +170,9 @@ export default function LeadsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+    onError: (error: any) => {
+      console.error('Toggle star failed:', error?.response?.data || error.message);
     },
   });
 

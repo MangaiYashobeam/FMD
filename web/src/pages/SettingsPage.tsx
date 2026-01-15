@@ -18,6 +18,8 @@ import {
   Trash2,
   Copy,
   AlertTriangle,
+  AlertCircle,
+  X,
   Shield,
   Clock,
   RefreshCw,
@@ -100,24 +102,58 @@ export default function SettingsPage() {
   // Test FTP connection
   const testFtpMutation = useMutation({
     mutationFn: async () => {
+      const sanitizedHost = sanitizeString(ftpForm.host, { maxLength: 255 });
+      const sanitizedUsername = sanitizeString(ftpForm.username, { maxLength: 255 });
+      const sanitizedPath = sanitizeString(ftpForm.path, { maxLength: 500 });
+      
       return accountsApi.testFtp({
-        host: ftpForm.host,
-        username: ftpForm.username,
-        password: ftpForm.password,
-        path: ftpForm.path,
+        host: sanitizedHost,
+        username: sanitizedUsername,
+        password: ftpForm.password, // Don't sanitize passwords
+        path: sanitizedPath,
       });
+    },
+    onError: (error: any) => {
+      console.error('FTP test failed:', error?.response?.data || error.message);
+      // Don't let 401 errors cause logout for this mutation
     },
   });
 
-  // Save settings
+  // State for error messages
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Save settings - now properly formats data for FTP
   const saveMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return accountsApi.update(user?.accounts?.[0]?.id || '', data);
+    mutationFn: async () => {
+      const accountId = user?.accounts?.[0]?.id;
+      if (!accountId) {
+        throw new Error('No account found');
+      }
+      
+      // Sanitize and format FTP settings for the API
+      const ftpSettings = {
+        ftpHost: sanitizeString(ftpForm.host, { maxLength: 255 }),
+        ftpPort: parseInt(ftpForm.port, 10) || 21,
+        ftpUsername: sanitizeString(ftpForm.username, { maxLength: 255 }),
+        ftpPassword: ftpForm.password, // Don't sanitize passwords
+        csvPath: sanitizeString(ftpForm.path, { maxLength: 500 }),
+        autoSync: ftpForm.autoSync,
+        syncInterval: parseInt(ftpForm.syncInterval, 10) || 60,
+      };
+      
+      return accountsApi.updateSettings(accountId, ftpSettings);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account-settings'] });
       setSaveSuccess(true);
+      setSaveError(null);
       setTimeout(() => setSaveSuccess(false), 3000);
+    },
+    onError: (error: any) => {
+      console.error('Save settings failed:', error?.response?.data || error.message);
+      const message = error?.response?.data?.message || error?.response?.data?.error || 'Failed to save settings. Please try again.';
+      setSaveError(message);
+      // Don't redirect to login on save errors
     },
   });
 
@@ -223,14 +259,10 @@ export default function SettingsPage() {
     return date.toLocaleDateString();
   };
 
+  // Handle save based on active tab
   const handleSave = () => {
-    const data = {
-      profile: profileForm,
-      dealership: dealershipForm,
-      ftp: ftpForm,
-      notifications: notificationSettings,
-    };
-    saveMutation.mutate(data);
+    setSaveError(null);
+    saveMutation.mutate();
   };
 
   return (
@@ -256,6 +288,23 @@ export default function SettingsPage() {
           {saveSuccess ? 'Saved!' : 'Save Changes'}
         </button>
       </div>
+
+      {/* Error message display */}
+      {saveError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="font-medium text-red-800">Failed to save settings</h3>
+            <p className="text-sm text-red-600 mt-1">{saveError}</p>
+          </div>
+          <button
+            onClick={() => setSaveError(null)}
+            className="ml-auto text-red-400 hover:text-red-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-6">
         {/* Sidebar */}

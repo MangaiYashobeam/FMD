@@ -48,14 +48,22 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed - logout user
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
+        // Refresh failed - only logout if we're not already on auth pages
+        // This prevents redirect loops and allows proper error handling
+        const isAuthPage = window.location.pathname.includes('/login') || 
+                          window.location.pathname.includes('/register') ||
+                          window.location.pathname.includes('/forgot-password');
+        
+        if (!isAuthPage) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
 
+    // For non-401 errors or retry failures, reject and let the caller handle it
     return Promise.reject(error);
   }
 );
@@ -106,9 +114,27 @@ export const accountsApi = {
   
   getCurrent: () => api.get('/api/accounts/current'),
   
-  update: (id: string, data: any) => api.put(`/api/accounts/${id}`, data),
+  getById: (id: string) => api.get(`/api/accounts/${id}`),
   
-  updateSettings: (id: string, data: any) => api.put(`/api/accounts/${id}/settings`, data),
+  update: (id: string, data: {
+    ftpHost?: string;
+    ftpPort?: number;
+    ftpUsername?: string;
+    ftpPassword?: string;
+    csvPath?: string;
+    autoSync?: boolean;
+    syncInterval?: number;
+  }) => api.put(`/api/accounts/${id}/settings`, data),
+  
+  updateSettings: (id: string, data: {
+    ftpHost?: string;
+    ftpPort?: number;
+    ftpUsername?: string;
+    ftpPassword?: string;
+    csvPath?: string;
+    autoSync?: boolean;
+    syncInterval?: number;
+  }) => api.put(`/api/accounts/${id}/settings`, data),
   
   testFtp: (data: { host: string; username: string; password: string; path: string }) =>
     api.post('/api/accounts/test-ftp', data),

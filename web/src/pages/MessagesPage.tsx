@@ -215,6 +215,9 @@ export default function MessagesPage() {
       queryClient.invalidateQueries({ queryKey: ['messages', selectedConversation?.id] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
+    onError: (error: any) => {
+      console.error('Send message failed:', error?.response?.data || error.message);
+    },
   });
 
   // Archive conversation mutation
@@ -225,6 +228,9 @@ export default function MessagesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
+    onError: (error: any) => {
+      console.error('Archive conversation failed:', error?.response?.data || error.message);
+    },
   });
 
   // Star conversation mutation
@@ -234,6 +240,9 @@ export default function MessagesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+    onError: (error: any) => {
+      console.error('Star conversation failed:', error?.response?.data || error.message);
     },
   });
 

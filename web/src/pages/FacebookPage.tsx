@@ -134,6 +134,9 @@ export default function FacebookPage() {
       setShowAddGroupModal(false);
       setNewGroupUrl('');
     },
+    onError: (error: any) => {
+      console.error('Add group failed:', error?.response?.data || error.message);
+    },
   });
 
   // Remove group mutation
@@ -143,6 +146,9 @@ export default function FacebookPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facebook-groups'] });
+    },
+    onError: (error: any) => {
+      console.error('Remove group failed:', error?.response?.data || error.message);
     },
   });
 
