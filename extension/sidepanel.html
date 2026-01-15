@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaceMyDealer</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Login View -->
+    <div id="login-view" class="view">
+      <div class="logo">
+        <div class="logo-icon">🚗</div>
+        <h1>FaceMyDealer</h1>
+      </div>
+      <p class="tagline">Post vehicles to Facebook Marketplace</p>
+      
+      <form id="login-form" class="form">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="you@dealership.com" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="••••••••" required>
+        </div>
+        <div id="login-error" class="error hidden"></div>
+        <button type="submit" class="btn btn-primary" id="login-btn">
+          <span class="btn-text">Sign In</span>
+          <span class="btn-loading hidden">
+            <span class="spinner"></span>
+          </span>
+        </button>
+      </form>
+      
+      <div class="footer-links">
+        <a href="https://facemydealer.com/register" target="_blank">Create account</a>
+        <span>•</span>
+        <a href="https://facemydealer.com/forgot-password" target="_blank">Forgot password?</a>
+      </div>
+    </div>
+
+    <!-- Main Dashboard View -->
+    <div id="dashboard-view" class="view hidden">
+      <header class="header">
+        <div class="header-left">
+          <span class="logo-small">🚗</span>
+          <span class="header-title">FaceMyDealer</span>
+        </div>
+        <div class="header-right">
+          <button id="refresh-btn" class="icon-btn" title="Refresh">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+          <button id="logout-btn" class="icon-btn" title="Logout">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- User Info -->
+      <div class="user-info">
+        <div class="user-avatar" id="user-avatar">JD</div>
+        <div class="user-details">
+          <span class="user-name" id="user-name">John Doe</span>
+          <span class="user-dealership" id="user-dealership">ABC Motors</span>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="stat-card">
+          <span class="stat-value" id="stat-vehicles">0</span>
+          <span class="stat-label">Vehicles</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-posted">0</span>
+          <span class="stat-label">Posted</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-pending">0</span>
+          <span class="stat-label">Pending</span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="vehicles">Vehicles</button>
+        <button class="tab" data-tab="queue">Queue</button>
+        <button class="tab" data-tab="groups">Groups</button>
+      </div>
+
+      <!-- Vehicles Tab -->
+      <div id="vehicles-tab" class="tab-content active">
+        <div class="search-bar">
+          <input type="text" id="search-vehicles" placeholder="Search vehicles...">
+        </div>
+        <div id="vehicles-list" class="list">
+          <div class="loading">
+            <span class="spinner"></span>
+            Loading vehicles...
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Tab -->
+      <div id="queue-tab" class="tab-content hidden">
+        <div id="queue-list" class="list">
+          <div class="empty-state">
+            <span class="empty-icon">📋</span>
+            <p>No vehicles in queue</p>
+          </div>
+        </div>
+        <div class="queue-actions">
+          <button class="btn btn-primary" id="post-queue-btn" disabled>
+            Post All to Facebook
+          </button>
+        </div>
+      </div>
+
+      <!-- Groups Tab -->
+      <div id="groups-tab" class="tab-content hidden">
+        <div id="groups-list" class="list">
+          <div class="loading">
+            <span class="spinner"></span>
+            Loading groups...
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="add-group-btn">
+          + Add Facebook Group
+        </button>
+      </div>
+    </div>
+
+    <!-- Post Vehicle Modal -->
+    <div id="post-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Post to Facebook</h3>
+          <button class="close-btn" id="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="modal-vehicle-info"></div>
+          <div class="form-group">
+            <label>Select Groups</label>
+            <div id="modal-groups-list" class="checkbox-list"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancel-post">Cancel</button>
+          <button class="btn btn-primary" id="confirm-post">Post Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

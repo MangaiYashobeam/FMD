@@ -13,6 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seeds/subscriptionPlans.seed.ts",
+    "db:seed:admin": "tsx prisma/seeds/rootAdmin.seed.ts",
+    "db:seed:all": "tsx prisma/seeds/subscriptionPlans.seed.ts && tsx prisma/seeds/rootAdmin.seed.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
