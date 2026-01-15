@@ -1,5 +1,8 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
+
+# Install OpenSSL for Prisma
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -27,7 +30,10 @@ RUN npx tsc && npx tsc-alias
 RUN cd web && npm run build
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:20-slim AS production
+
+# Install OpenSSL for Prisma
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
