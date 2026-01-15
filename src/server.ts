@@ -129,13 +129,23 @@ app.use(errorHandler);
 // ============================================
 const startServer = async () => {
   try {
-    // Initialize background job processor
-    await initializeQueueProcessor();
-    logger.info('✅ Queue processor initialized');
+    // Initialize background job processor (optional - gracefully handle Redis unavailability)
+    try {
+      await initializeQueueProcessor();
+      logger.info('✅ Queue processor initialized');
+    } catch (error) {
+      logger.warn('⚠️  Queue processor initialization failed (Redis may not be available):', error);
+      logger.info('Continuing without background job processing...');
+    }
 
-    // Initialize auto-sync scheduler
-    schedulerService.initialize();
-    logger.info('✅ Auto-sync scheduler initialized');
+    // Initialize auto-sync scheduler (optional)
+    try {
+      schedulerService.initialize();
+      logger.info('✅ Auto-sync scheduler initialized');
+    } catch (error) {
+      logger.warn('⚠️  Auto-sync scheduler initialization failed:', error);
+      logger.info('Continuing without auto-sync...');
+    }
 
     app.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);

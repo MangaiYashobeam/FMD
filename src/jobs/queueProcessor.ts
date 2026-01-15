@@ -1,24 +1,37 @@
 import { Queue, Worker } from 'bullmq';
-import IORedis from 'ioredis';
+import { getRedisConnection } from '@/config/redis';
 import { logger } from '@/utils/logger';
 import { SyncController } from '@/controllers/sync.controller';
 
-const connection = new IORedis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  maxRetriesPerRequest: null,
-});
+// Queue instances (only available if Redis is connected)
+let syncQueue: Queue | null = null;
+let facebookQueue: Queue | null = null;
 
-// Define queues
-export const syncQueue = new Queue('sync', { connection });
-export const facebookQueue = new Queue('facebook', { connection });
+/**
+ * Get sync queue instance
+ */
+export const getSyncQueue = () => syncQueue;
+
+/**
+ * Get facebook queue instance
+ */
+export const getFacebookQueue = () => facebookQueue;
 
 /**
  * Initialize queue processors
  */
 export const initializeQueueProcessor = async () => {
   logger.info('Initializing queue processors...');
+
+  const connection = getRedisConnection();
+  
+  if (!connection) {
+    throw new Error('Redis connection unavailable. Cannot initialize queue processors.');
+  }
+
+  // Define queues
+  syncQueue = new Queue('sync', { connection });
+  facebookQueue = new Queue('facebook', { connection });
 
   // Sync worker
   const syncWorker = new Worker(

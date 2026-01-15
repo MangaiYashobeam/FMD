@@ -3,7 +3,7 @@ import { AuthRequest } from '@/middleware/auth';
 import prisma from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
-import { syncQueue } from '@/jobs/queueProcessor';
+import { getSyncQueue } from '@/jobs/queueProcessor';
 import { FTPService } from '@/services/ftp.service';
 import { CSVParserService } from '@/services/csvParser.service';
 import { schedulerService } from '@/services/scheduler.service';
@@ -47,10 +47,15 @@ export class SyncController {
     });
 
     // Queue the sync job
-    await syncQueue.add('sync-inventory', {
-      syncJobId: syncJob.id,
-      accountId,
-    });
+    const queue = getSyncQueue();
+    if (queue) {
+      await queue.add('sync-inventory', {
+        syncJobId: syncJob.id,
+        accountId,
+      });
+    } else {
+      logger.warn('Redis not available - sync job created but not queued for background processing');
+    }
 
     logger.info(`Manual sync triggered: ${syncJob.id} for account ${accountId}`);
 

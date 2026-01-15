@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
-import { syncQueue } from '@/jobs/queueProcessor';
+import { getSyncQueue } from '@/jobs/queueProcessor';
 
 /**
  * Auto-Sync Scheduler Service
@@ -131,12 +131,16 @@ export class SchedulerService {
       });
 
       // Add to queue
-      await syncQueue.add('sync-inventory', {
-        jobId: syncJob.id,
-        accountId: account.id,
-      });
-
-      logger.info(`📋 Auto-sync job ${syncJob.id} queued for "${account.name}"`);
+      const queue = getSyncQueue();
+      if (queue) {
+        await queue.add('sync-inventory', {
+          jobId: syncJob.id,
+          accountId: account.id,
+        });
+        logger.info(`📋 Auto-sync job ${syncJob.id} queued for "${account.name}"`);
+      } else {
+        logger.warn(`⚠️ Redis not available - sync job ${syncJob.id} created but not queued for "${account.name}"`);
+      }
     } catch (error) {
       logger.error(`❌ Error queueing sync for account ${account.id}:`, error);
     }
@@ -175,13 +179,17 @@ export class SchedulerService {
       });
 
       // Add to queue
-      await syncQueue.add('sync-inventory', {
-        jobId: syncJob.id,
-        accountId,
-        userId,
-      });
-
-      logger.info(`📋 Manual sync job ${syncJob.id} triggered by user ${userId}`);
+      const queue = getSyncQueue();
+      if (queue) {
+        await queue.add('sync-inventory', {
+          jobId: syncJob.id,
+          accountId,
+          userId,
+        });
+        logger.info(`📋 Manual sync job ${syncJob.id} triggered by user ${userId}`);
+      } else {
+        logger.warn(`⚠️ Redis not available - sync job ${syncJob.id} created but not queued`);
+      }
 
       return syncJob;
     } catch (error) {
