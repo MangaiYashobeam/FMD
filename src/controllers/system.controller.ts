@@ -14,9 +14,9 @@ interface SystemSettingsRecord {
 // Default system settings
 const defaultSettings = {
   general: {
-    siteName: 'FaceMyDealer',
-    siteUrl: 'https://facemydealer.com',
-    supportEmail: 'support@facemydealer.com',
+    siteName: 'DealersFace',
+    siteUrl: 'https://dealersface.com',
+    supportEmail: 'support@dealersface.com',
     maintenanceMode: false,
     allowRegistration: true,
     requireEmailVerification: true,
@@ -30,8 +30,8 @@ const defaultSettings = {
     smtpUser: process.env.SMTP_USER || '',
     smtpPassword: '', // Never return password
     smtpSecure: process.env.SMTP_SECURE === 'true',
-    fromEmail: process.env.SMTP_FROM || 'noreply@facemydealer.com',
-    fromName: process.env.SMTP_FROM_NAME || 'FaceMyDealer',
+    fromEmail: process.env.SMTP_FROM || 'fb-api@dealersface.com',
+    fromName: process.env.SMTP_FROM_NAME || 'DealersFace',
   },
   security: {
     twoFactorRequired: false,

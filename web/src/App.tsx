@@ -24,6 +24,8 @@ import AccountsPage from './pages/admin/AccountsPage';
 import UsersPage from './pages/admin/UsersPage';
 import PaymentsPage from './pages/admin/PaymentsPage';
 import EmailLogsPage from './pages/admin/EmailLogsPage';
+import EmailTemplatesPage from './pages/admin/EmailTemplatesPage';
+import EmailComposerPage from './pages/admin/EmailComposerPage';
 import AuditLogsPage from './pages/admin/AuditLogsPage';
 import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import './index.css';
@@ -86,6 +88,8 @@ function App() {
               <Route path="users" element={<UsersPage />} />
               <Route path="payments" element={<PaymentsPage />} />
               <Route path="emails" element={<EmailLogsPage />} />
+              <Route path="email-templates" element={<EmailTemplatesPage />} />
+              <Route path="email-composer" element={<EmailComposerPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="settings" element={<SystemSettingsPage />} />
             </Route>

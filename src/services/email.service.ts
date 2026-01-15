@@ -5,7 +5,16 @@ import prisma from '@/config/database';
 /**
  * Email Service
  * Handles all email sending with template support and queuing
+ * Default Domain: dealersface.com
+ * System Sender: fb-api@dealersface.com
  */
+
+// System email defaults
+const SYSTEM_DOMAIN = 'dealersface.com';
+const SYSTEM_FROM_EMAIL = `fb-api@${SYSTEM_DOMAIN}`;
+const SYSTEM_FROM_NAME = 'DealersFace';
+const SYSTEM_SUPPORT_EMAIL = `support@${SYSTEM_DOMAIN}`;
+const SYSTEM_NOREPLY_EMAIL = `noreply@${SYSTEM_DOMAIN}`;
 
 export interface EmailOptions {
   to: string | string[];
@@ -15,6 +24,8 @@ export interface EmailOptions {
   cc?: string | string[];
   bcc?: string | string[];
   replyTo?: string;
+  from?: string; // Optional override for from address
+  fromName?: string; // Optional override for from name
   attachments?: Array<{
     filename: string;
     content?: Buffer;
@@ -29,10 +40,24 @@ export interface EmailTemplate {
   text?: string;
 }
 
+export interface ComposeEmailOptions {
+  to: string | string[];
+  subject: string;
+  body: string; // HTML body
+  templateSlug?: string; // Optional template to use
+  variables?: Record<string, any>; // Template variables
+  cc?: string[];
+  bcc?: string[];
+  replyTo?: string;
+  scheduledAt?: Date; // For scheduled sending
+  attachments?: Array<{ filename: string; content?: Buffer; path?: string }>;
+}
+
 export class EmailService {
   private transporter!: nodemailer.Transporter;
   private fromEmail: string;
   private fromName: string;
+  private systemDomain: string;
 
   constructor() {
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -40,8 +65,10 @@ export class EmailService {
     const smtpUser = process.env.SMTP_USER || process.env.EMAIL_FROM;
     const smtpPass = process.env.SMTP_PASSWORD;
 
-    this.fromEmail = process.env.EMAIL_FROM || 'noreply@facemydealer.com';
-    this.fromName = process.env.EMAIL_FROM_NAME || 'FaceMyDealer';
+    // Use dealersface.com as default system domain
+    this.systemDomain = SYSTEM_DOMAIN;
+    this.fromEmail = process.env.EMAIL_FROM || SYSTEM_FROM_EMAIL;
+    this.fromName = process.env.EMAIL_FROM_NAME || SYSTEM_FROM_NAME;
 
     if (!smtpPass) {
       logger.warn('SMTP_PASSWORD not configured - email service disabled');
@@ -94,8 +121,11 @@ export class EmailService {
    */
   async sendEmail(options: EmailOptions): Promise<boolean> {
     try {
+      const fromEmail = options.from || this.fromEmail;
+      const fromName = options.fromName || this.fromName;
+      
       const info = await this.transporter.sendMail({
-        from: `"${this.fromName}" <${this.fromEmail}>`,
+        from: `"${fromName}" <${fromEmail}>`,
         to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
         subject: options.subject,
         text: options.text,
@@ -448,6 +478,249 @@ export class EmailService {
 
     return this.sendTemplateEmail(template, userEmail, stats);
   }
+
+  /**
+   * Compose and send custom email (Super Admin feature)
+   */
+  async composeAndSend(options: ComposeEmailOptions, senderId?: string): Promise<{
+    success: boolean;
+    messageId?: string;
+    error?: string;
+  }> {
+    try {
+      let htmlContent = options.body;
+      let subject = options.subject;
+
+      // If template is specified, load and use it
+      if (options.templateSlug) {
+        const template = await prisma.emailTemplate.findUnique({
+          where: { slug: options.templateSlug },
+        });
+        
+        if (template && template.isActive) {
+          htmlContent = this.replaceVariables(template.htmlContent, options.variables || {});
+          subject = this.replaceVariables(template.subject, options.variables || {});
+        }
+      }
+
+      // Wrap body in system email template if not using a template
+      if (!options.templateSlug) {
+        htmlContent = this.wrapInSystemTemplate(subject, htmlContent);
+      }
+
+      const success = await this.sendEmail({
+        to: options.to,
+        subject,
+        html: htmlContent,
+        cc: options.cc?.join(', '),
+        bcc: options.bcc?.join(', '),
+        replyTo: options.replyTo,
+        attachments: options.attachments,
+      });
+
+      // Log the composed email
+      if (success) {
+        await prisma.emailLog.create({
+          data: {
+            recipient: Array.isArray(options.to) ? options.to.join(', ') : options.to,
+            subject,
+            status: 'SENT',
+            provider: 'smtp',
+            metadata: {
+              type: 'composed',
+              templateSlug: options.templateSlug || null,
+              sentBy: senderId || 'system',
+            },
+          },
+        });
+      }
+
+      return { success, messageId: success ? 'sent' : undefined };
+    } catch (error: any) {
+      logger.error('Failed to compose and send email:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send email using database template
+   */
+  async sendWithDbTemplate(
+    templateSlug: string,
+    to: string | string[],
+    variables: Record<string, any> = {}
+  ): Promise<boolean> {
+    try {
+      const template = await prisma.emailTemplate.findUnique({
+        where: { slug: templateSlug },
+      });
+
+      if (!template) {
+        logger.error(`Email template not found: ${templateSlug}`);
+        return false;
+      }
+
+      if (!template.isActive) {
+        logger.warn(`Email template is inactive: ${templateSlug}`);
+        return false;
+      }
+
+      const html = this.replaceVariables(template.htmlContent, variables);
+      const text = template.textContent ? this.replaceVariables(template.textContent, variables) : undefined;
+      const subject = this.replaceVariables(template.subject, variables);
+
+      return this.sendEmail({
+        to,
+        subject,
+        html: this.wrapInSystemTemplate(subject, html),
+        text,
+      });
+    } catch (error) {
+      logger.error('Failed to send template email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Wrap email content in system template
+   */
+  private wrapInSystemTemplate(title: string, content: string): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f4f4f5;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f5;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 30px 40px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: bold;">
+                🚗 DealersFace
+              </h1>
+              <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">
+                Facebook Marketplace Automation
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              ${content}
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 30px 40px; border-top: 1px solid #e5e7eb;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <td style="text-align: center;">
+                    <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">
+                      This email was sent by DealersFace
+                    </p>
+                    <p style="margin: 0 0 10px 0; color: #9ca3af; font-size: 12px;">
+                      Powered by GAD Productions LLC
+                    </p>
+                    <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                      <a href="https://${SYSTEM_DOMAIN}" style="color: #2563eb; text-decoration: none;">dealersface.com</a> |
+                      <a href="mailto:${SYSTEM_SUPPORT_EMAIL}" style="color: #2563eb; text-decoration: none;">Contact Support</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        
+        <!-- Unsubscribe -->
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: 20px auto 0;">
+          <tr>
+            <td style="text-align: center; color: #9ca3af; font-size: 11px;">
+              <p style="margin: 0;">
+                You received this email because you are a registered user of DealersFace.<br>
+                © ${new Date().getFullYear()} GAD Productions LLC. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Get system email configuration
+   */
+  getSystemConfig() {
+    return {
+      domain: SYSTEM_DOMAIN,
+      fromEmail: this.fromEmail,
+      fromName: this.fromName,
+      supportEmail: SYSTEM_SUPPORT_EMAIL,
+      noreplyEmail: SYSTEM_NOREPLY_EMAIL,
+    };
+  }
+
+  /**
+   * Send bulk emails (for announcements, newsletters)
+   */
+  async sendBulkEmails(
+    recipients: string[],
+    subject: string,
+    htmlContent: string,
+    options?: {
+      delayMs?: number;
+      batchSize?: number;
+    }
+  ): Promise<{ sent: number; failed: number; errors: string[] }> {
+    const results = { sent: 0, failed: 0, errors: [] as string[] };
+    const batchSize = options?.batchSize || 50;
+    const delayMs = options?.delayMs || 100;
+
+    const wrappedHtml = this.wrapInSystemTemplate(subject, htmlContent);
+
+    for (let i = 0; i < recipients.length; i += batchSize) {
+      const batch = recipients.slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (email) => {
+        try {
+          const success = await this.sendEmail({
+            to: email,
+            subject,
+            html: wrappedHtml,
+          });
+          if (success) {
+            results.sent++;
+          } else {
+            results.failed++;
+            results.errors.push(`Failed to send to ${email}`);
+          }
+        } catch (error: any) {
+          results.failed++;
+          results.errors.push(`${email}: ${error.message}`);
+        }
+      }));
+
+      // Delay between batches to avoid rate limiting
+      if (i + batchSize < recipients.length && delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+
+    return results;
+  }
 }
 
 export const emailService = new EmailService();
+export { SYSTEM_DOMAIN, SYSTEM_FROM_EMAIL, SYSTEM_FROM_NAME, SYSTEM_SUPPORT_EMAIL, SYSTEM_NOREPLY_EMAIL };
