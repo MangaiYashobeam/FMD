@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 
 // Load environment variables first
 dotenv.config();
@@ -159,12 +160,32 @@ app.use('/api/admin', require('./routes/admin.routes').default);
 app.use('/api/email', emailRoutes);
 
 // ============================================
-// 404 Handler
+// Serve React Frontend (Static Files)
 // ============================================
-app.use('*', (_req, res) => {
+const webDistPath = path.join(__dirname, '../web/dist');
+app.use(express.static(webDistPath));
+
+// SPA fallback - serve index.html for all non-API routes
+app.get('*', (req, res, next) => {
+  // Skip API routes
+  if (req.path.startsWith('/api/') || req.path === '/health') {
+    return next();
+  }
+  res.sendFile(path.join(webDistPath, 'index.html'), (err) => {
+    if (err) {
+      // If web/dist doesn't exist, fall through to 404
+      next();
+    }
+  });
+});
+
+// ============================================
+// 404 Handler (for API routes only now)
+// ============================================
+app.use('/api/*', (_req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found',
+    message: 'API route not found',
   });
 });
 
