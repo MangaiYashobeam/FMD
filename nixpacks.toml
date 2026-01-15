@@ -1,0 +1,18 @@
+# nixpacks.toml - Control Railway Nixpacks build process
+
+[phases.setup]
+nixPkgs = ['nodejs_20', 'npm-9_x', 'openssl']
+
+[phases.install]
+cmds = ['npm ci']
+
+[phases.build]
+cmds = [
+  'npx prisma generate',
+  'npx tsc',
+  'npx tsc-alias',
+  'cd web && npm ci && npm run build'
+]
+
+[start]
+cmd = 'npm run start'
