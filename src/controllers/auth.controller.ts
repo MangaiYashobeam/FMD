@@ -6,6 +6,7 @@ import { AppError } from '@/middleware/errorHandler';
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
 import { AuthRequest } from '@/middleware/auth';
+import { emailService } from '@/services/email.service';
 
 export class AuthController {
   /**
@@ -111,6 +112,12 @@ export class AuthController {
     });
 
     logger.info(`User registered: ${result.user.email}`);
+
+    // Send welcome email (async, don't wait)
+    emailService.sendWelcomeEmail(
+      result.user.email,
+      result.user.firstName || 'User'
+    ).catch(err => logger.error('Failed to send welcome email:', err));
 
     res.status(201).json({
       success: true,

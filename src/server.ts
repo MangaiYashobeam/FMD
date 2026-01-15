@@ -11,8 +11,10 @@ import accountRoutes from '@/routes/account.routes';
 import facebookRoutes from '@/routes/facebook.routes';
 import syncRoutes from '@/routes/sync.routes';
 import userCredentialsRoutes from '@/routes/userCredentials.routes';
+import emailRoutes from '@/routes/email.routes';
 import { initializeQueueProcessor } from '@/jobs/queueProcessor';
 import { schedulerService } from '@/services/scheduler.service';
+import { shutdownEmailQueue } from '@/queues/email.queue';
 
 dotenv.config();
 
@@ -105,6 +107,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/users/me', userCredentialsRoutes);
 app.use('/api/subscriptions', require('./routes/subscription.routes').default);
 app.use('/api/admin', require('./routes/admin.routes').default);
+app.use('/api/email', emailRoutes);
 
 // ============================================
 // 404 Handler
@@ -144,15 +147,17 @@ const startServer = async () => {
 };
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   schedulerService.shutdown();
+  await shutdownEmailQueue();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   schedulerService.shutdown();
+  await shutdownEmailQueue();
   process.exit(0);
 });
 

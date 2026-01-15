@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
+import { emailService } from '@/services/email.service';
 
 /**
  * Stripe Payment Service
@@ -487,6 +488,26 @@ export class StripeService {
       },
     });
 
+    // Send payment receipt email
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: {
+        accountUsers: {
+          where: { role: 'ACCOUNT_OWNER' },
+          include: { user: true },
+        },
+      },
+    });
+
+    if (account && account.accountUsers[0]?.user) {
+      emailService.sendPaymentReceiptEmail(
+        account.accountUsers[0].user.email,
+        invoice.amount_paid / 100,
+        invoice.hosted_invoice_url || '',
+        account.name
+      ).catch(err => logger.error('Failed to send payment receipt:', err));
+    }
+
     logger.info(`Invoice paid for account ${accountId}: ${invoice.id}`);
   }
 
@@ -516,6 +537,13 @@ export class StripeService {
             metadata: { invoiceId: invoice.id },
           },
         });
+
+        // Send payment failure email
+        emailService.sendPaymentFailedEmail(
+          accountUser.user.email,
+          invoice.amount_due / 100,
+          invoice.last_finalization_error?.message || 'Payment method declined'
+        ).catch(err => logger.error('Failed to send payment failed email:', err));
       }
     }
 

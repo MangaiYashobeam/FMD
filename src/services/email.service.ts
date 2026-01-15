@@ -1,0 +1,453 @@
+import nodemailer from 'nodemailer';
+import { logger } from '@/utils/logger';
+import prisma from '@/config/database';
+
+/**
+ * Email Service
+ * Handles all email sending with template support and queuing
+ */
+
+export interface EmailOptions {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+  cc?: string | string[];
+  bcc?: string | string[];
+  replyTo?: string;
+  attachments?: Array<{
+    filename: string;
+    content?: Buffer;
+    path?: string;
+  }>;
+}
+
+export interface EmailTemplate {
+  name: string;
+  subject: string;
+  html: string;
+  text?: string;
+}
+
+export class EmailService {
+  private transporter!: nodemailer.Transporter;
+  private fromEmail: string;
+  private fromName: string;
+
+  constructor() {
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_FROM;
+    const smtpPass = process.env.SMTP_PASSWORD;
+
+    this.fromEmail = process.env.EMAIL_FROM || 'noreply@facemydealer.com';
+    this.fromName = process.env.EMAIL_FROM_NAME || 'FaceMyDealer';
+
+    if (!smtpPass) {
+      logger.warn('SMTP_PASSWORD not configured - email service disabled');
+      // Create a test account for development
+      this.createTestAccount();
+    } else {
+      this.transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      });
+
+      this.verifyConnection();
+    }
+  }
+
+  private async createTestAccount() {
+    try {
+      const testAccount = await nodemailer.createTestAccount();
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      logger.info(`📧 Email test account created: ${testAccount.user}`);
+    } catch (error) {
+      logger.error('Failed to create email test account:', error);
+    }
+  }
+
+  private async verifyConnection() {
+    try {
+      await this.transporter.verify();
+      logger.info('✅ Email service connected successfully');
+    } catch (error) {
+      logger.error('❌ Email service connection failed:', error);
+    }
+  }
+
+  /**
+   * Send email
+   */
+  async sendEmail(options: EmailOptions): Promise<boolean> {
+    try {
+      const info = await this.transporter.sendMail({
+        from: `"${this.fromName}" <${this.fromEmail}>`,
+        to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
+        subject: options.subject,
+        text: options.text,
+        html: options.html,
+        cc: options.cc,
+        bcc: options.bcc,
+        replyTo: options.replyTo,
+        attachments: options.attachments,
+      });
+
+      logger.info(`📧 Email sent: ${info.messageId} to ${options.to}`);
+      
+      // Log preview URL for test accounts
+      if (process.env.NODE_ENV === 'development') {
+        const previewUrl = nodemailer.getTestMessageUrl(info);
+        if (previewUrl) {
+          logger.info(`📧 Preview URL: ${previewUrl}`);
+        }
+      }
+
+      // Save to database
+      await this.logEmail(options, 'SENT', info.messageId);
+
+      return true;
+    } catch (error) {
+      logger.error('Failed to send email:', error);
+      await this.logEmail(options, 'FAILED', undefined, error);
+      return false;
+    }
+  }
+
+  /**
+   * Send email using template
+   */
+  async sendTemplateEmail(
+    template: EmailTemplate,
+    to: string | string[],
+    variables: Record<string, any> = {}
+  ): Promise<boolean> {
+    const html = this.replaceVariables(template.html, variables);
+    const text = template.text ? this.replaceVariables(template.text, variables) : undefined;
+    const subject = this.replaceVariables(template.subject, variables);
+
+    return this.sendEmail({
+      to,
+      subject,
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Replace variables in template
+   */
+  private replaceVariables(template: string, variables: Record<string, any>): string {
+    let result = template;
+    for (const [key, value] of Object.entries(variables)) {
+      const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+      result = result.replace(regex, String(value));
+    }
+    return result;
+  }
+
+  /**
+   * Log email to database
+   */
+  private async logEmail(
+    options: EmailOptions,
+    status: string,
+    messageId?: string,
+    error?: any
+  ) {
+    try {
+      await prisma.emailLog.create({
+        data: {
+          recipient: Array.isArray(options.to) ? options.to.join(', ') : options.to,
+          subject: options.subject,
+          status,
+          messageId,
+          errorMessage: error ? JSON.stringify(error) : null,
+        },
+      });
+    } catch (err) {
+      logger.error('Failed to log email:', err);
+    }
+  }
+
+  /**
+   * Welcome email for new users
+   */
+  async sendWelcomeEmail(userEmail: string, userName: string, tempPassword?: string) {
+    const template: EmailTemplate = {
+      name: 'welcome',
+      subject: 'Welcome to FaceMyDealer! 🚗',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #2563eb;">Welcome to FaceMyDealer!</h1>
+          <p>Hi ${userName},</p>
+          <p>Thank you for joining FaceMyDealer - your automated Facebook Marketplace solution for auto dealerships.</p>
+          
+          ${tempPassword ? `
+            <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Your Login Credentials</h3>
+              <p><strong>Email:</strong> ${userEmail}</p>
+              <p><strong>Temporary Password:</strong> <code style="background: #e5e7eb; padding: 4px 8px; border-radius: 4px;">${tempPassword}</code></p>
+              <p style="color: #dc2626; font-size: 14px;">⚠️ Please change your password after first login</p>
+            </div>
+          ` : ''}
+          
+          <h3>What's Next?</h3>
+          <ul>
+            <li>Complete your profile setup</li>
+            <li>Configure your FTP sync settings</li>
+            <li>Connect your Facebook account</li>
+            <li>Start posting vehicles to Marketplace</li>
+          </ul>
+          
+          <p>If you have any questions, our support team is here to help!</p>
+          
+          <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <p style="color: #6b7280; font-size: 12px;">
+              This is an automated message from FaceMyDealer. Please do not reply to this email.
+            </p>
+          </div>
+        </div>
+      `,
+    };
+
+    return this.sendTemplateEmail(template, userEmail, { userName, userEmail, tempPassword });
+  }
+
+  /**
+   * Password reset email
+   */
+  async sendPasswordResetEmail(userEmail: string, resetToken: string, userName: string) {
+    const resetUrl = `${process.env.API_URL}/reset-password?token=${resetToken}`;
+
+    const template: EmailTemplate = {
+      name: 'password-reset',
+      subject: 'Reset Your Password - FaceMyDealer',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #2563eb;">Password Reset Request</h1>
+          <p>Hi ${userName},</p>
+          <p>We received a request to reset your password for your FaceMyDealer account.</p>
+          
+          <div style="margin: 30px 0;">
+            <a href="${resetUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Reset Password
+            </a>
+          </div>
+          
+          <p style="color: #6b7280; font-size: 14px;">
+            Or copy and paste this link into your browser:<br>
+            <a href="${resetUrl}">${resetUrl}</a>
+          </p>
+          
+          <p style="color: #dc2626; font-size: 14px;">
+            ⚠️ This link will expire in 1 hour
+          </p>
+          
+          <p>If you didn't request this, please ignore this email or contact support if you have concerns.</p>
+        </div>
+      `,
+    };
+
+    return this.sendTemplateEmail(template, userEmail, { userName, resetUrl });
+  }
+
+  /**
+   * Sync completion notification
+   */
+  async sendSyncCompletionEmail(
+    userEmail: string,
+    accountName: string,
+    stats: { imported: number; updated: number; failed: number }
+  ) {
+    const template: EmailTemplate = {
+      name: 'sync-complete',
+      subject: `Inventory Sync Complete - ${accountName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #16a34a;">✅ Sync Completed Successfully</h1>
+          <p>Your inventory sync for <strong>${accountName}</strong> has been completed.</p>
+          
+          <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #16a34a;">Sync Results</h3>
+            <table style="width: 100%;">
+              <tr>
+                <td><strong>New Vehicles:</strong></td>
+                <td style="text-align: right;">${stats.imported}</td>
+              </tr>
+              <tr>
+                <td><strong>Updated:</strong></td>
+                <td style="text-align: right;">${stats.updated}</td>
+              </tr>
+              <tr>
+                <td><strong>Failed:</strong></td>
+                <td style="text-align: right; color: ${stats.failed > 0 ? '#dc2626' : '#6b7280'};">${stats.failed}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <p>Your vehicles are now ready to be posted to Facebook Marketplace!</p>
+        </div>
+      `,
+    };
+
+    return this.sendTemplateEmail(template, userEmail, { accountName, ...stats });
+  }
+
+  /**
+   * Payment receipt email
+   */
+  async sendPaymentReceiptEmail(
+    userEmail: string,
+    amount: number,
+    invoiceUrl: string,
+    accountName: string
+  ) {
+    const template: EmailTemplate = {
+      name: 'payment-receipt',
+      subject: `Payment Receipt - $${amount.toFixed(2)}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #2563eb;">Payment Received</h1>
+          <p>Thank you for your payment!</p>
+          
+          <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0;">Payment Details</h3>
+            <table style="width: 100%;">
+              <tr>
+                <td><strong>Account:</strong></td>
+                <td style="text-align: right;">${accountName}</td>
+              </tr>
+              <tr>
+                <td><strong>Amount Paid:</strong></td>
+                <td style="text-align: right; font-size: 18px; color: #16a34a;"><strong>$${amount.toFixed(2)}</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Date:</strong></td>
+                <td style="text-align: right;">${new Date().toLocaleDateString()}</td>
+              </tr>
+            </table>
+          </div>
+          
+          <div style="margin: 30px 0;">
+            <a href="${invoiceUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              View Invoice
+            </a>
+          </div>
+          
+          <p style="color: #6b7280; font-size: 14px;">
+            Keep this email for your records. You can access your invoice anytime from your dashboard.
+          </p>
+        </div>
+      `,
+    };
+
+    return this.sendTemplateEmail(template, userEmail, { accountName, amount, invoiceUrl });
+  }
+
+  /**
+   * Payment failure notification
+   */
+  async sendPaymentFailedEmail(userEmail: string, amount: number, reason: string) {
+    const template: EmailTemplate = {
+      name: 'payment-failed',
+      subject: '⚠️ Payment Failed - Action Required',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #dc2626;">Payment Failed</h1>
+          <p>We were unable to process your payment of <strong>$${amount.toFixed(2)}</strong>.</p>
+          
+          <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <h3 style="margin-top: 0; color: #dc2626;">Reason</h3>
+            <p>${reason}</p>
+          </div>
+          
+          <h3>What to do next:</h3>
+          <ol>
+            <li>Check your payment method is valid and has sufficient funds</li>
+            <li>Update your payment information in your dashboard</li>
+            <li>Contact your bank if you need assistance</li>
+          </ol>
+          
+          <div style="margin: 30px 0;">
+            <a href="${process.env.API_URL}/dashboard/billing" style="background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Update Payment Method
+            </a>
+          </div>
+          
+          <p style="color: #6b7280; font-size: 14px;">
+            Your account will be suspended if payment is not received within 7 days.
+          </p>
+        </div>
+      `,
+    };
+
+    return this.sendTemplateEmail(template, userEmail, { amount, reason });
+  }
+
+  /**
+   * Daily digest email
+   */
+  async sendDailyDigest(
+    userEmail: string,
+    stats: {
+      newPosts: number;
+      totalViews: number;
+      messages: number;
+      syncStatus: string;
+    }
+  ) {
+    const template: EmailTemplate = {
+      name: 'daily-digest',
+      subject: '📊 Your Daily FaceMyDealer Report',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #2563eb;">Your Daily Report</h1>
+          <p>Here's what happened in the last 24 hours:</p>
+          
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0;">
+            <div style="background: #eff6ff; padding: 15px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 32px; font-weight: bold; color: #2563eb;">${stats.newPosts}</div>
+              <div style="color: #6b7280;">New Posts</div>
+            </div>
+            <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 32px; font-weight: bold; color: #16a34a;">${stats.totalViews}</div>
+              <div style="color: #6b7280;">Total Views</div>
+            </div>
+            <div style="background: #fef3c7; padding: 15px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 32px; font-weight: bold; color: #d97706;">${stats.messages}</div>
+              <div style="color: #6b7280;">Messages</div>
+            </div>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; font-weight: bold; color: #4b5563;">${stats.syncStatus}</div>
+              <div style="color: #6b7280;">Last Sync</div>
+            </div>
+          </div>
+          
+          <div style="margin: 30px 0;">
+            <a href="${process.env.API_URL}/dashboard" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              View Full Dashboard
+            </a>
+          </div>
+        </div>
+      `,
+    };
+
+    return this.sendTemplateEmail(template, userEmail, stats);
+  }
+}
+
+export const emailService = new EmailService();

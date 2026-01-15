@@ -503,3 +503,19 @@ model SubscriptionHistory {
   @@index([createdAt])
   @@map("subscription_history")
 }
+
+model EmailLog {
+  id            String   @id @default(uuid())
+  recipient     String
+  subject       String
+  status        String   // SENT, FAILED, QUEUED, BOUNCED
+  messageId     String?  @map("message_id")
+  errorMessage  String?  @map("error_message") @db.Text
+  metadata      Json?    // Additional data like template name, variables
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([recipient])
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_logs")
+}
