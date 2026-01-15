@@ -36,7 +36,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         try {
           const response = await authApi.getProfile();
-          setUser(response.data.data.user);
+          // The profile endpoint returns user data directly in data (not data.user)
+          const userData = response.data.data;
+          setUser({
+            id: userData.id,
+            email: userData.email,
+            name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+            role: userData.accounts?.[0]?.role || 'USER',
+            accounts: userData.accounts || [],
+          });
         } catch (error) {
           // Token invalid - clear storage
           localStorage.removeItem('accessToken');
@@ -51,20 +59,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const response = await authApi.login(email, password);
-    const { accessToken, refreshToken, user: userData } = response.data.data;
+    const { accessToken, refreshToken, user: userData, accounts } = response.data.data;
     
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-    setUser(userData);
+    // Construct user object with accounts
+    setUser({
+      id: userData.id,
+      email: userData.email,
+      name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+      role: accounts?.[0]?.role || 'USER',
+      accounts: accounts || [],
+    });
   };
 
   const register = async (data: { email: string; password: string; firstName: string; lastName: string; accountName?: string }) => {
     const response = await authApi.register(data);
-    const { accessToken, refreshToken, user: userData } = response.data.data;
+    const { accessToken, refreshToken, user: userData, account } = response.data.data;
     
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-    setUser(userData);
+    // Construct user object with single account
+    setUser({
+      id: userData.id,
+      email: userData.email,
+      name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+      role: 'ACCOUNT_OWNER',
+      accounts: account ? [{ id: account.id, name: account.name, role: 'ACCOUNT_OWNER' }] : [],
+    });
   };
 
   const logout = async () => {
