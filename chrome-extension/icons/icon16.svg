@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="16" height="16" rx="3" fill="url(#grad)"/>
+  <g fill="white" transform="translate(2,3) scale(0.75)">
+    <!-- Car icon simplified -->
+    <path d="M14 8h-1l-1.5-4.5A1 1 0 0 0 10.5 3h-5a1 1 0 0 0-.95.68L3 8H2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1a2 2 0 0 0 4 0h2a2 2 0 0 0 4 0h1a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1zM4.5 12a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm7 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+  </g>
+</svg>

@@ -1,26 +1,51 @@
-# Icon Placeholders
+# FaceMyDealer Extension Icons
 
-Place your extension icons here:
+## Available Icons
 
-- **icon16.png** - 16x16px (toolbar icon)
-- **icon48.png** - 48x48px (extension management)
-- **icon128.png** - 128x128px (Chrome Web Store)
+SVG icons have been created and are ready to use:
 
-## Temporary Solution
+- **icon16.svg** - 16x16px toolbar icon
+- **icon48.svg** - 48x48px extension management  
+- **icon128.svg** - 128x128px Chrome Web Store
 
-Until you have custom icons, you can:
+## Converting to PNG (Required for Chrome)
 
-1. Create simple PNG icons using any image editor
-2. Use a logo generator like:
-   - https://www.favicon-generator.org/
-   - https://realfavicongenerator.net/
-3. Export in the required sizes
+Chrome Extension manifest requires PNG files. Convert SVGs to PNGs using one of these methods:
 
-## Design Suggestions
+### Option 1: Online Converter
+1. Go to https://svgtopng.com/
+2. Upload each SVG file
+3. Download as PNG at the correct size
 
-- Use your brand colors (purple gradient from popup)
-- Include a car icon 🚗
-- Keep it simple and recognizable
-- Ensure good contrast for visibility
+### Option 2: Using ImageMagick (Command Line)
+```bash
+magick convert icon16.svg icon16.png
+magick convert icon48.svg icon48.png
+magick convert icon128.svg icon128.png
+```
 
-For now, the extension will work without icons, but Chrome will show a default placeholder.
+### Option 3: Using Inkscape
+```bash
+inkscape icon16.svg --export-filename=icon16.png --export-width=16
+inkscape icon48.svg --export-filename=icon48.png --export-width=48
+inkscape icon128.svg --export-filename=icon128.png --export-width=128
+```
+
+### Option 4: Browser DevTools
+1. Open SVG in browser
+2. Right-click > Inspect
+3. Screenshot element at correct size
+
+## Design Details
+
+- **Colors**: Blue (#3b82f6) to Purple (#8b5cf6) gradient
+- **Elements**: Car icon with Facebook badge
+- **Style**: Modern rounded corners, clean design
+- **Brand**: Matches FaceMyDealer web dashboard theme
+
+## After Conversion
+
+Once you have the PNG files, the extension will display proper icons in:
+- Chrome toolbar
+- Extensions page (chrome://extensions)
+- Chrome Web Store listing

@@ -34,11 +34,12 @@ model User {
   fbLastSync    DateTime? @map("fb_last_sync")
 
   // Relations
-  accountUsers    AccountUser[]
-  facebookProfiles FacebookProfile[]
-  auditLogs       AuditLog[]
-  notifications   Notification[]
-  refreshTokens   RefreshToken[]
+  accountUsers       AccountUser[]
+  facebookProfiles   FacebookProfile[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -359,6 +360,22 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model AuditLog {

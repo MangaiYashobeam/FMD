@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
+import crypto from 'crypto';
 import { AppError } from '@/middleware/errorHandler';
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
@@ -361,7 +362,8 @@ export class AuthController {
     });
 
     if (!user) {
-      // Don't reveal if user exists
+      // Don't reveal if user exists - but still log for debugging
+      logger.info(`Password reset requested for non-existent email: ${email}`);
       res.json({
         success: true,
         message: 'If the email exists, a reset link has been sent',
@@ -369,9 +371,52 @@ export class AuthController {
       return;
     }
 
-    // TODO: Generate reset token and send email
-    // For now, just log
-    logger.info(`Password reset requested for: ${user.email}`);
+    // Invalidate any existing reset tokens for this user
+    await prisma.passwordResetToken.updateMany({
+      where: { 
+        userId: user.id,
+        usedAt: null,
+      },
+      data: { usedAt: new Date() },
+    });
+
+    // Generate secure reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    // Save reset token (expires in 1 hour)
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        token: tokenHash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+      },
+    });
+
+    // Send password reset email
+    const emailSent = await emailService.sendPasswordResetEmail(
+      user.email,
+      resetToken, // Send unhashed token in email
+      user.firstName || 'User'
+    );
+
+    if (emailSent) {
+      logger.info(`Password reset email sent to: ${user.email}`);
+    } else {
+      logger.warn(`Failed to send password reset email to: ${user.email}`);
+    }
+
+    // Log the action
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: 'PASSWORD_RESET_REQUESTED',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      },
+    });
 
     res.json({
       success: true,
@@ -380,19 +425,70 @@ export class AuthController {
   }
 
   /**
-   * Reset password
+   * Reset password with token
    */
   async resetPassword(req: Request, res: Response) {
     const { token, password } = req.body;
-    
-    // TODO: Verify reset token and update password
-    logger.info(`Password reset attempt with token: ${token?.substring(0, 10)}...`);
-    logger.info(`New password length: ${password?.length}`);
-    
-    // For now, just return success
+
+    if (!token || !password) {
+      throw new AppError('Token and new password are required', 400);
+    }
+
+    if (password.length < 8) {
+      throw new AppError('Password must be at least 8 characters', 400);
+    }
+
+    // Hash the provided token to compare with stored hash
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find valid reset token
+    const resetToken = await prisma.passwordResetToken.findFirst({
+      where: {
+        token: tokenHash,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      include: { user: true },
+    });
+
+    if (!resetToken) {
+      throw new AppError('Invalid or expired reset token', 400);
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // Update password and mark token as used (transaction)
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      }),
+      prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      }),
+      // Invalidate all refresh tokens for security
+      prisma.refreshToken.deleteMany({
+        where: { userId: resetToken.userId },
+      }),
+      prisma.auditLog.create({
+        data: {
+          userId: resetToken.userId,
+          action: 'PASSWORD_RESET_COMPLETED',
+          entityType: 'user',
+          entityId: resetToken.userId,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        },
+      }),
+    ]);
+
+    logger.info(`Password reset completed for user: ${resetToken.user.email}`);
+
     res.json({
       success: true,
-      message: 'Password reset successfully',
+      message: 'Password reset successfully. Please login with your new password.',
     });
   }
 }
