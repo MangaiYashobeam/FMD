@@ -10,23 +10,41 @@ import { emailService } from '@/services/email.service';
  */
 
 export class StripeService {
-  private stripe: Stripe;
+  private stripe: Stripe | null = null;
+  private isConfigured: boolean = false;
 
   constructor() {
     const apiKey = process.env.STRIPE_SECRET_KEY;
     if (!apiKey) {
-      throw new Error('STRIPE_SECRET_KEY not configured');
+      logger.warn('⚠️  STRIPE_SECRET_KEY not configured - payment features will be disabled');
+      this.isConfigured = false;
+      return;
     }
 
-    this.stripe = new Stripe(apiKey, {
-      apiVersion: '2025-02-24.acacia',
-    });
+    try {
+      this.stripe = new Stripe(apiKey, {
+        apiVersion: '2025-02-24.acacia',
+      });
+      this.isConfigured = true;
+      logger.info('✅ Stripe service initialized');
+    } catch (error) {
+      logger.error('Failed to initialize Stripe:', error);
+      this.isConfigured = false;
+    }
+  }
+
+  private ensureConfigured() {
+    if (!this.isConfigured || !this.stripe) {
+      throw new AppError('Stripe is not configured. Please configure STRIPE_SECRET_KEY to enable payment features.', 503);
+    }
   }
 
   /**
    * Create or retrieve Stripe customer for account
    */
   async getOrCreateCustomer(accountId: string) {
+    this.ensureConfigured();
+    
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       include: {
@@ -43,12 +61,12 @@ export class StripeService {
 
     // Return existing customer
     if (account.stripeCustomerId) {
-      return await this.stripe.customers.retrieve(account.stripeCustomerId);
+      return await this.stripe!.customers.retrieve(account.stripeCustomerId);
     }
 
     // Create new customer
     const ownerUser = account.accountUsers[0]?.user;
-    const customer = await this.stripe.customers.create({
+    const customer = await this.stripe!.customers.create({
       email: ownerUser?.email,
       name: account.dealershipName || account.name,
       phone: account.phone || undefined,
@@ -72,6 +90,7 @@ export class StripeService {
    * Create subscription for account
    */
   async createSubscription(accountId: string, planId: string) {
+    this.ensureConfigured();
     const customer = await this.getOrCreateCustomer(accountId);
     
     const plan = await prisma.subscriptionPlan.findUnique({
@@ -88,7 +107,7 @@ export class StripeService {
     }
 
     // Create monthly subscription
-    const subscription = await this.stripe.subscriptions.create({
+    const subscription = await this.stripe!.subscriptions.create({
       customer: customer.id as string,
       items: [{ price: plan.stripePriceId! }],
       metadata: {
@@ -134,7 +153,7 @@ export class StripeService {
     const customer = await this.getOrCreateCustomer(accountId);
 
     // Create one-time payment intent
-    const paymentIntent = await this.stripe.paymentIntents.create({
+    const paymentIntent = await this.stripe!.paymentIntents.create({
       amount: Math.round(parseFloat(plan.basePrice.toString()) * 100), // Convert to cents
       currency: 'usd',
       customer: customer.id as string,
@@ -181,6 +200,7 @@ export class StripeService {
    * Calculate extra user charges
    */
   async calculateExtraUserCharges(accountId: string) {
+    this.ensureConfigured();
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       include: {
@@ -211,6 +231,7 @@ export class StripeService {
    * Update subscription with extra user charges
    */
   async updateSubscriptionUsage(accountId: string) {
+    this.ensureConfigured();
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       include: { 
@@ -236,7 +257,7 @@ export class StripeService {
 
     // If there are extra users, log for billing
     if (extraUsers > 0 && account.subscriptionPlan?.stripePriceId) {
-      const subscriptions = await this.stripe.subscriptions.list({
+      const subscriptions = await this.stripe!.subscriptions.list({
         customer: account.stripeCustomerId,
         status: 'active',
         limit: 1,
@@ -255,6 +276,7 @@ export class StripeService {
    * Change subscription plan (upgrade/downgrade)
    */
   async changeSubscription(accountId: string, newPlanId: string) {
+    this.ensureConfigured();
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       include: { subscriptionPlan: true },
@@ -273,7 +295,7 @@ export class StripeService {
     }
 
     // Get current subscription
-    const subscriptions = await this.stripe.subscriptions.list({
+    const subscriptions = await this.stripe!.subscriptions.list({
       customer: account.stripeCustomerId,
       status: 'active',
       limit: 1,
@@ -286,7 +308,7 @@ export class StripeService {
     const subscription = subscriptions.data[0];
 
     // Update subscription
-    const updatedSubscription = await this.stripe.subscriptions.update(subscription.id, {
+    const updatedSubscription = await this.stripe!.subscriptions.update(subscription.id, {
       items: [
         {
           id: subscription.items.data[0].id,
@@ -333,6 +355,7 @@ export class StripeService {
    * Cancel subscription
    */
   async cancelSubscription(accountId: string, immediately = false) {
+    this.ensureConfigured();
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       include: { subscriptionPlan: true },
@@ -342,7 +365,7 @@ export class StripeService {
       throw new AppError('Account not found', 404);
     }
 
-    const subscriptions = await this.stripe.subscriptions.list({
+    const subscriptions = await this.stripe!.subscriptions.list({
       customer: account.stripeCustomerId,
       status: 'active',
       limit: 1,
@@ -355,7 +378,7 @@ export class StripeService {
     const subscription = subscriptions.data[0];
 
     if (immediately) {
-      await this.stripe.subscriptions.cancel(subscription.id);
+      await this.stripe!.subscriptions.cancel(subscription.id);
       
       await prisma.account.update({
         where: { id: accountId },
@@ -363,7 +386,7 @@ export class StripeService {
       });
     } else {
       // Cancel at period end
-      await this.stripe.subscriptions.update(subscription.id, {
+      await this.stripe!.subscriptions.update(subscription.id, {
         cancel_at_period_end: true,
       });
     }
@@ -387,6 +410,7 @@ export class StripeService {
    * Handle webhook events from Stripe
    */
   async handleWebhook(event: Stripe.Event) {
+    this.ensureConfigured();
     logger.info(`Stripe webhook received: ${event.type}`);
 
     switch (event.type) {
@@ -575,6 +599,7 @@ export class StripeService {
    * Check and handle lifetime subscription expirations
    */
   async checkLifetimeExpirations() {
+    // No need for Stripe - this just checks database
     const expiredAccounts = await prisma.account.findMany({
       where: {
         subscriptionStatus: 'active',
