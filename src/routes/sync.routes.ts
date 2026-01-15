@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { param, query } from 'express-validator';
+import { param, query, body } from 'express-validator';
+import multer from 'multer';
+import path from 'path';
 import { authenticate } from '@/middleware/auth';
 import { SyncController } from '@/controllers/sync.controller';
 import { asyncHandler } from '@/utils/asyncHandler';
@@ -7,6 +9,24 @@ import { validate, syncValidators } from '@/middleware/validation';
 
 const router = Router();
 const controller = new SyncController();
+
+// Configure multer for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+  },
+  fileFilter: (_req, file, cb) => {
+    const allowedExtensions = ['.csv', '.xlsx', '.xls', '.xml'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Allowed: CSV, Excel (.xlsx, .xls), XML'));
+    }
+  },
+});
 
 router.use(authenticate);
 
@@ -52,5 +72,23 @@ router.get(
  * @access  Private
  */
 router.get('/scheduler/status', asyncHandler(controller.getSchedulerStatus.bind(controller)));
+
+/**
+ * @route   POST /api/sync/upload
+ * @desc    Upload inventory file (CSV, Excel, XML)
+ * @access  Private
+ */
+router.post(
+  '/upload',
+  upload.single('file'),
+  validate([
+    body('accountId').isUUID().withMessage('Invalid account ID'),
+    body('skipHeader').optional().isBoolean(),
+    body('updateExisting').optional().isBoolean(),
+    body('markMissingSold').optional().isBoolean(),
+    body('delimiter').optional().isIn(['comma', 'semicolon', 'tab', 'pipe']),
+  ]),
+  asyncHandler(controller.uploadInventoryFile.bind(controller))
+);
 
 export default router;

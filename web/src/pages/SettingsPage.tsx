@@ -23,6 +23,11 @@ import {
   Shield,
   Clock,
   RefreshCw,
+  Upload,
+  FileSpreadsheet,
+  CloudUpload,
+  FileText,
+  Info,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -83,6 +88,20 @@ export default function SettingsPage() {
     syncInterval: '6',
   });
 
+  // File upload state
+  const [dataFeedMethod, setDataFeedMethod] = useState<'ftp' | 'upload'>('ftp');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadSettings, setUploadSettings] = useState({
+    skipHeader: true,
+    updateExisting: true,
+    markMissingSold: false,
+    delimiter: 'comma',
+  });
+
   const [notificationSettings, setNotificationSettings] = useState({
     emailSyncComplete: true,
     emailSyncError: true,
@@ -119,6 +138,94 @@ export default function SettingsPage() {
       // Don't let 401 errors cause logout for this mutation
     },
   });
+
+  // File upload mutation
+  const uploadFileMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('skipHeader', String(uploadSettings.skipHeader));
+      formData.append('updateExisting', String(uploadSettings.updateExisting));
+      formData.append('markMissingSold', String(uploadSettings.markMissingSold));
+      formData.append('delimiter', uploadSettings.delimiter);
+
+      return api.post('/api/sync/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          const progress = progressEvent.total
+            ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+            : 0;
+          setUploadProgress(progress);
+        },
+      });
+    },
+    onMutate: () => {
+      setUploadStatus('uploading');
+      setUploadProgress(0);
+      setUploadError(null);
+    },
+    onSuccess: () => {
+      setUploadStatus('success');
+      setUploadProgress(100);
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['sync-status'] });
+      // Reset after success
+      setTimeout(() => {
+        setUploadFile(null);
+        setUploadStatus('idle');
+        setUploadProgress(0);
+      }, 3000);
+    },
+    onError: (error: any) => {
+      setUploadStatus('error');
+      setUploadError(error?.response?.data?.message || 'Failed to upload file. Please try again.');
+    },
+  });
+
+  // Handle file selection
+  const handleFileSelect = (file: File) => {
+    const allowedTypes = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/xml',
+      'application/xml',
+    ];
+    const allowedExtensions = ['.csv', '.xlsx', '.xls', '.xml'];
+    const fileExt = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExt)) {
+      setUploadError('Please upload a CSV, Excel, or XML file');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) { // 50MB limit
+      setUploadError('File size must be less than 50MB');
+      return;
+    }
+
+    setUploadFile(file);
+    setUploadError(null);
+    setUploadStatus('idle');
+  };
+
+  // Handle drag and drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  };
 
   // State for error messages
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -470,126 +577,369 @@ export default function SettingsPage() {
           {/* FTP Tab */}
           {activeTab === 'ftp' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">FTP/Data Feed Settings</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Data Feed Settings</h2>
+                <p className="text-sm text-gray-500 mt-1">Import your inventory via FTP connection or file upload</p>
+              </div>
+
+              {/* Data Feed Method Selector */}
+              <div className="flex gap-3 p-1 bg-gray-100 rounded-lg w-fit">
                 <button
-                  onClick={() => testFtpMutation.mutate()}
-                  disabled={testFtpMutation.isPending}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                  onClick={() => setDataFeedMethod('ftp')}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all',
+                    dataFeedMethod === 'ftp'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  )}
                 >
-                  {testFtpMutation.isPending ? 'Testing...' : 'Test Connection'}
+                  <Server className="w-4 h-4" />
+                  FTP Connection
+                </button>
+                <button
+                  onClick={() => setDataFeedMethod('upload')}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all',
+                    dataFeedMethod === 'upload'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  )}
+                >
+                  <Upload className="w-4 h-4" />
+                  File Upload
                 </button>
               </div>
-              
-              {testFtpMutation.isSuccess && (
-                <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm">
-                  ✓ Connection successful!
-                </div>
-              )}
-              {testFtpMutation.isError && (
-                <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                  ✗ Connection failed. Please check your credentials.
+
+              {/* FTP Connection Section */}
+              {dataFeedMethod === 'ftp' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900">FTP Server Configuration</h3>
+                    <button
+                      onClick={() => testFtpMutation.mutate()}
+                      disabled={testFtpMutation.isPending}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      {testFtpMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                      {testFtpMutation.isPending ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  </div>
+                  
+                  {testFtpMutation.isSuccess && (
+                    <div className="p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4" />
+                      Connection successful! Your FTP settings are working correctly.
+                    </div>
+                  )}
+                  {testFtpMutation.isError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      Connection failed. Please verify your credentials and try again.
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        FTP Host
+                      </label>
+                      <input
+                        type="text"
+                        value={ftpForm.host}
+                        onChange={(e) => setFtpForm({ ...ftpForm, host: e.target.value })}
+                        placeholder="ftp.example.com"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                      <input
+                        type="text"
+                        value={ftpForm.port}
+                        onChange={(e) => setFtpForm({ ...ftpForm, port: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                      <input
+                        type="text"
+                        value={ftpForm.username}
+                        onChange={(e) => setFtpForm({ ...ftpForm, username: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={ftpForm.password}
+                          onChange={(e) => setFtpForm({ ...ftpForm, password: e.target.value })}
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        File Path
+                      </label>
+                      <input
+                        type="text"
+                        value={ftpForm.path}
+                        onChange={(e) => setFtpForm({ ...ftpForm, path: e.target.value })}
+                        placeholder="/inventory/feed.csv"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Path to your inventory feed file on the FTP server</p>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-6">
+                    <h3 className="font-medium text-gray-900 mb-4">Auto-Sync Settings</h3>
+                    <div className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium text-gray-700">Enable Auto-Sync</p>
+                        <p className="text-sm text-gray-500">Automatically sync inventory on schedule</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ftpForm.autoSync}
+                          onChange={(e) => setFtpForm({ ...ftpForm, autoSync: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                        <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Sync Interval
+                      </label>
+                      <select
+                        value={ftpForm.syncInterval}
+                        onChange={(e) => setFtpForm({ ...ftpForm, syncInterval: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="1">Every hour</option>
+                        <option value="3">Every 3 hours</option>
+                        <option value="6">Every 6 hours</option>
+                        <option value="12">Every 12 hours</option>
+                        <option value="24">Once per day</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    FTP Host
-                  </label>
-                  <input
-                    type="text"
-                    value={ftpForm.host}
-                    onChange={(e) => setFtpForm({ ...ftpForm, host: e.target.value })}
-                    placeholder="ftp.example.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
-                  <input
-                    type="text"
-                    value={ftpForm.port}
-                    onChange={(e) => setFtpForm({ ...ftpForm, port: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                  <input
-                    type="text"
-                    value={ftpForm.username}
-                    onChange={(e) => setFtpForm({ ...ftpForm, username: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                  <div className="relative">
+              {/* File Upload Section */}
+              {dataFeedMethod === 'upload' && (
+                <div className="space-y-6">
+                  {/* Upload Area */}
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={cn(
+                      'relative border-2 border-dashed rounded-xl p-8 transition-all',
+                      isDragging
+                        ? 'border-blue-500 bg-blue-50'
+                        : uploadFile
+                        ? 'border-green-300 bg-green-50'
+                        : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+                    )}
+                  >
                     <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={ftpForm.password}
-                      onChange={(e) => setFtpForm({ ...ftpForm, password: e.target.value })}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      type="file"
+                      accept=".csv,.xlsx,.xls,.xml"
+                      onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
+                    
+                    <div className="text-center">
+                      {uploadFile ? (
+                        <>
+                          <div className="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
+                            <FileSpreadsheet className="w-8 h-8 text-green-600" />
+                          </div>
+                          <p className="text-lg font-medium text-gray-900">{uploadFile.name}</p>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setUploadFile(null);
+                              setUploadStatus('idle');
+                              setUploadError(null);
+                            }}
+                            className="mt-3 text-sm text-red-600 hover:text-red-700 font-medium"
+                          >
+                            Remove file
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
+                            <CloudUpload className="w-8 h-8 text-blue-600" />
+                          </div>
+                          <p className="text-lg font-medium text-gray-900">
+                            {isDragging ? 'Drop your file here' : 'Drag & drop your inventory file'}
+                          </p>
+                          <p className="text-sm text-gray-500 mt-2">or click to browse</p>
+                          <div className="flex items-center justify-center gap-3 mt-4">
+                            <span className="px-2 py-1 bg-white rounded text-xs font-medium text-gray-600 border">CSV</span>
+                            <span className="px-2 py-1 bg-white rounded text-xs font-medium text-gray-600 border">Excel</span>
+                            <span className="px-2 py-1 bg-white rounded text-xs font-medium text-gray-600 border">XML</span>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-3">Maximum file size: 50MB</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Upload Error */}
+                  {uploadError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {/* Upload Progress */}
+                  {uploadStatus === 'uploading' && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-blue-700">Uploading...</span>
+                        <span className="text-sm text-blue-600">{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Upload Success */}
+                  {uploadStatus === 'success' && (
+                    <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5" />
+                      <div>
+                        <p className="font-medium">Upload successful!</p>
+                        <p className="text-sm text-green-600">Your inventory is being processed.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Import Settings */}
+                  <div className="border-t pt-6">
+                    <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Import Settings
+                    </h3>
+                    
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            File Delimiter
+                          </label>
+                          <select
+                            value={uploadSettings.delimiter}
+                            onChange={(e) => setUploadSettings({ ...uploadSettings, delimiter: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="comma">Comma (,)</option>
+                            <option value="semicolon">Semicolon (;)</option>
+                            <option value="tab">Tab</option>
+                            <option value="pipe">Pipe (|)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={uploadSettings.skipHeader}
+                            onChange={(e) => setUploadSettings({ ...uploadSettings, skipHeader: e.target.checked })}
+                            className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <div>
+                            <p className="font-medium text-gray-700 text-sm">Skip first row (header)</p>
+                            <p className="text-xs text-gray-500">Enable if your file has column headers in the first row</p>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={uploadSettings.updateExisting}
+                            onChange={(e) => setUploadSettings({ ...uploadSettings, updateExisting: e.target.checked })}
+                            className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <div>
+                            <p className="font-medium text-gray-700 text-sm">Update existing vehicles</p>
+                            <p className="text-xs text-gray-500">Match by VIN and update existing records with new data</p>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={uploadSettings.markMissingSold}
+                            onChange={(e) => setUploadSettings({ ...uploadSettings, markMissingSold: e.target.checked })}
+                            className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <div>
+                            <p className="font-medium text-gray-700 text-sm">Mark missing vehicles as sold</p>
+                            <p className="text-xs text-gray-500">Vehicles not in the file will be marked as sold</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Upload Button */}
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Info className="w-4 h-4" />
+                      <span>Supported formats: CSV, Excel (.xlsx, .xls), XML</span>
+                    </div>
                     <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      onClick={() => uploadFile && uploadFileMutation.mutate(uploadFile)}
+                      disabled={!uploadFile || uploadStatus === 'uploading'}
+                      className={cn(
+                        'inline-flex items-center gap-2 px-6 py-2.5 font-medium rounded-lg transition-all',
+                        uploadFile && uploadStatus !== 'uploading'
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      )}
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {uploadStatus === 'uploading' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                      {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload & Import'}
                     </button>
                   </div>
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    File Path
-                  </label>
-                  <input
-                    type="text"
-                    value={ftpForm.path}
-                    onChange={(e) => setFtpForm({ ...ftpForm, path: e.target.value })}
-                    placeholder="/inventory/feed.xml"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="border-t pt-6">
-                <h3 className="font-medium text-gray-900 mb-4">Auto-Sync Settings</h3>
-                <div className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="font-medium text-gray-700">Enable Auto-Sync</p>
-                    <p className="text-sm text-gray-500">Automatically sync inventory on schedule</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={ftpForm.autoSync}
-                      onChange={(e) => setFtpForm({ ...ftpForm, autoSync: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
-                    <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
-                  </label>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sync Interval
-                  </label>
-                  <select
-                    value={ftpForm.syncInterval}
-                    onChange={(e) => setFtpForm({ ...ftpForm, syncInterval: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="1">Every hour</option>
-                    <option value="3">Every 3 hours</option>
-                    <option value="6">Every 6 hours</option>
-                    <option value="12">Every 12 hours</option>
-                    <option value="24">Once per day</option>
-                  </select>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
