@@ -13,6 +13,7 @@ import {
   RefreshCw,
   AlertCircle,
 } from 'lucide-react';
+import { api } from '../../../lib/api';
 
 interface EmailTemplate {
   id: string;
@@ -80,10 +81,8 @@ export default function EmailTemplatesTab() {
   const loadTemplates = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/admin/email-templates', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      const data = await response.json();
+      const response = await api.get('/api/admin/email-templates');
+      const data = response.data;
       if (data.success) {
         setTemplates(data.data?.templates || []);
       }
@@ -171,16 +170,11 @@ export default function EmailTemplatesTab() {
         ? `/api/admin/email-templates/${selectedTemplate.id}`
         : '/api/admin/email-templates';
 
-      const response = await fetch(url, {
-        method: selectedTemplate ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = selectedTemplate
+        ? await api.put(url, payload)
+        : await api.post(url, payload);
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success) {
         setShowEditor(false);
@@ -205,11 +199,8 @@ export default function EmailTemplatesTab() {
     if (!confirm(`Delete template "${template.name}"?`)) return;
 
     try {
-      const response = await fetch(`/api/admin/email-templates/${template.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      const data = await response.json();
+      const response = await api.delete(`/api/admin/email-templates/${template.id}`);
+      const data = response.data;
 
       if (data.success) {
         loadTemplates();
@@ -262,14 +253,8 @@ export default function EmailTemplatesTab() {
 
     try {
       setIsSeeding(true);
-      const response = await fetch('/api/email/templates/seed-defaults', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await response.json();
+      const response = await api.post('/api/email/templates/seed-defaults');
+      const data = response.data;
 
       if (data.success) {
         alert(data.message || 'Default templates created successfully');

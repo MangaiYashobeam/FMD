@@ -11,6 +11,7 @@ import {
   Mail,
   Shield,
 } from 'lucide-react';
+import { api } from '../../../lib/api';
 
 interface EmailConfig {
   smtpHost: string;
@@ -53,10 +54,8 @@ export default function EmailSettingsTab() {
   const loadConfig = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/email/config', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      const data = await response.json();
+      const response = await api.get('/api/email/config');
+      const data = response.data;
       
       if (data.success && data.data) {
         setConfig({
@@ -102,16 +101,8 @@ export default function EmailSettingsTab() {
         return;
       }
 
-      const response = await fetch('/api/email/config', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(sanitizedConfig),
-      });
-
-      const data = await response.json();
+      const response = await api.put('/api/email/config', sanitizedConfig);
+      const data = response.data;
 
       if (data.success) {
         setSaveResult({ success: true, message: 'Email configuration saved successfully' });
@@ -120,9 +111,10 @@ export default function EmailSettingsTab() {
       } else {
         setSaveResult({ success: false, message: data.error || 'Failed to save configuration' });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to save config:', error);
-      setSaveResult({ success: false, message: 'Failed to save configuration' });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save configuration';
+      setSaveResult({ success: false, message: errorMessage });
     } finally {
       setIsSaving(false);
     }
@@ -138,38 +130,32 @@ export default function EmailSettingsTab() {
       setIsTesting(true);
       setTestResult(null);
 
-      const response = await fetch('/api/email/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          to: testEmail.trim().toLowerCase(),
-          subject: 'DealersFace - SMTP Test Email',
-          body: `
-            <h2>SMTP Configuration Test</h2>
-            <p>This is a test email from DealersFace to verify your SMTP configuration is working correctly.</p>
-            <p><strong>Sent at:</strong> ${new Date().toLocaleString()}</p>
-            <p><strong>From:</strong> ${config.fromEmail}</p>
-            <hr>
-            <p style="color: #6b7280; font-size: 12px;">
-              If you received this email, your SMTP settings are configured correctly.
-            </p>
-          `,
-        }),
+      const response = await api.post('/api/email/test', {
+        to: testEmail.trim().toLowerCase(),
+        subject: 'DealersFace - SMTP Test Email',
+        body: `
+          <h2>SMTP Configuration Test</h2>
+          <p>This is a test email from DealersFace to verify your SMTP configuration is working correctly.</p>
+          <p><strong>Sent at:</strong> ${new Date().toLocaleString()}</p>
+          <p><strong>From:</strong> ${config.fromEmail}</p>
+          <hr>
+          <p style="color: #6b7280; font-size: 12px;">
+            If you received this email, your SMTP settings are configured correctly.
+          </p>
+        `,
       });
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success) {
         setTestResult({ success: true, message: `Test email sent successfully to ${testEmail}` });
       } else {
         setTestResult({ success: false, message: data.error || 'Failed to send test email' });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to test connection:', error);
-      setTestResult({ success: false, message: 'Failed to send test email. Check SMTP configuration.' });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send test email. Check SMTP configuration.';
+      setTestResult({ success: false, message: errorMessage });
     } finally {
       setIsTesting(false);
     }

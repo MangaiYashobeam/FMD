@@ -14,6 +14,7 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react';
+import { api } from '../../../lib/api';
 
 interface EmailLog {
   id: string;
@@ -69,10 +70,8 @@ export default function EmailLogsTab() {
         params.append('status', statusFilter);
       }
 
-      const response = await fetch(`/api/email/logs?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      const data = await response.json();
+      const response = await api.get(`/api/email/logs?${params}`);
+      const data = response.data;
       
       if (data.success) {
         setEmails(data.data?.logs || []);
@@ -91,11 +90,8 @@ export default function EmailLogsTab() {
 
   const handleResend = async (emailId: string) => {
     try {
-      const response = await fetch(`/api/email/resend/${emailId}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      const data = await response.json();
+      const response = await api.post(`/api/email/resend/${emailId}`);
+      const data = response.data;
       
       if (data.success) {
         loadEmails();
@@ -135,20 +131,13 @@ export default function EmailLogsTab() {
     try {
       setIsSendingTest(true);
 
-      const response = await fetch('/api/email/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          to: trimmedTo,
-          subject: trimmedSubject,
-          body: trimmedBody,
-        }),
+      const response = await api.post('/api/email/test', {
+        to: trimmedTo,
+        subject: trimmedSubject,
+        body: trimmedBody,
       });
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success) {
         setTestResult({ success: true, message: `Test email sent successfully to ${trimmedTo}` });

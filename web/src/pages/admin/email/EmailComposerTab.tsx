@@ -12,6 +12,7 @@ import {
   Plus,
   Mail,
 } from 'lucide-react';
+import { api } from '../../../lib/api';
 
 interface Recipient {
   id: string;
@@ -90,13 +91,10 @@ export default function EmailComposerTab() {
     if (recipientSearch.length < 2) return;
     
     try {
-      const response = await fetch(
-        `/api/email/recipients?type=${recipientType}&search=${encodeURIComponent(recipientSearch)}`,
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        }
+      const response = await api.get(
+        `/api/email/recipients?type=${recipientType}&search=${encodeURIComponent(recipientSearch)}`
       );
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success) {
         const allRecipients: Recipient[] = [
@@ -137,18 +135,14 @@ export default function EmailComposerTab() {
     try {
       setIsLoading(true);
       const [configRes, templatesRes] = await Promise.all([
-        fetch('/api/email/config', {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        }).then((r) => r.json()),
-        fetch('/api/admin/email-templates', {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        }).then((r) => r.json()),
+        api.get('/api/email/config'),
+        api.get('/api/admin/email-templates'),
       ]);
 
-      if (configRes.success) {
-        setEmailConfig(configRes.data);
+      if (configRes.data.success) {
+        setEmailConfig(configRes.data.data);
       }
-      setTemplates(templatesRes.data?.templates || []);
+      setTemplates(templatesRes.data.data?.templates || []);
     } catch (error) {
       console.error('Failed to load initial data:', error);
     } finally {
@@ -276,24 +270,17 @@ export default function EmailComposerTab() {
       setIsSending(true);
       setSendResult(null);
 
-      const response = await fetch('/api/email/compose', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          to: selectedRecipients.map((r) => r.email),
-          subject: composeData.subject.trim(),
-          body: composeData.body, // HTML content - sanitization handled server-side
-          cc: composeData.cc ? composeData.cc.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean) : undefined,
-          bcc: composeData.bcc ? composeData.bcc.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean) : undefined,
-          templateSlug: composeData.templateSlug || undefined,
-          replyTo: composeData.replyTo.trim() || undefined,
-        }),
+      const response = await api.post('/api/email/compose', {
+        to: selectedRecipients.map((r) => r.email),
+        subject: composeData.subject.trim(),
+        body: composeData.body, // HTML content - sanitization handled server-side
+        cc: composeData.cc ? composeData.cc.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean) : undefined,
+        bcc: composeData.bcc ? composeData.bcc.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean) : undefined,
+        templateSlug: composeData.templateSlug || undefined,
+        replyTo: composeData.replyTo.trim() || undefined,
       });
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.success) {
         setSendResult({ success: true, message: data.message || 'Email sent successfully!' });
