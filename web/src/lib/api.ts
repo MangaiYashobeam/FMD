@@ -136,7 +136,7 @@ export const accountsApi = {
     syncInterval?: number;
   }) => api.put(`/api/accounts/${id}/settings`, data),
   
-  testFtp: (data: { host: string; username: string; password: string; path: string }) =>
+  testFtp: (data: { host: string; port?: number; username: string; password: string; path: string }) =>
     api.post('/api/accounts/test-ftp', data),
 };
 

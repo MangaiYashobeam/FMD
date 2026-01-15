@@ -108,6 +108,7 @@ export default function SettingsPage() {
       
       return accountsApi.testFtp({
         host: sanitizedHost,
+        port: parseInt(ftpForm.port, 10) || 21,
         username: sanitizedUsername,
         password: ftpForm.password, // Don't sanitize passwords
         path: sanitizedPath,

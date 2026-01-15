@@ -59,7 +59,7 @@ export class AccountController {
    * Test FTP connection
    */
   async testFtpConnection(req: AuthRequest, res: Response) {
-    const { host, username, password, path } = req.body;
+    const { host, port, username, password, path } = req.body;
 
     if (!host || !username || !password) {
       throw new AppError('Missing required FTP credentials', 400);
@@ -70,7 +70,7 @@ export class AccountController {
     try {
       const success = await ftpService.testConnection({
         host,
-        port: 21,
+        port: port || 21,
         username,
         password,
         path: path || '/',
