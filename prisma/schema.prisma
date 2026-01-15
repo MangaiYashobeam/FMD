@@ -40,6 +40,7 @@ model User {
   notifications      Notification[]
   refreshTokens      RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  apiKeys            ApiKey[]
 
   @@map("users")
 }
@@ -90,6 +91,7 @@ model Account {
   subscriptionPlan  SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
   payments          Payment[]
   invoices          Invoice[]
+  apiKeys           ApiKey[]
 
   @@map("accounts")
 }
@@ -376,6 +378,28 @@ model PasswordResetToken {
   @@index([token])
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  name        String   // Key identifier (e.g., "Chrome Extension - Desktop")
+  keyHash     String   @unique @map("key_hash") // SHA256 hash of the key
+  userId      String   @map("user_id")
+  accountId   String   @map("account_id")
+  permissions String[] @default([]) // Array of permissions
+  isActive    Boolean  @default(true) @map("is_active")
+  expiresAt   DateTime? @map("expires_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accountId])
+  @@map("api_keys")
 }
 
 model AuditLog {

@@ -2,7 +2,6 @@ import express, { Application } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
 import path from 'path';
 
 // Load environment variables first
@@ -15,6 +14,16 @@ console.log('🔵 Port:', process.env.PORT || 3000);
 console.log('🔵 Loading modules...');
 
 import { errorHandler } from '@/middleware/errorHandler';
+import { 
+  securityHeaders, 
+  sanitizeRequest, 
+  injectionGuard, 
+  ipFilter,
+  suspiciousActivityTracker,
+  generalLimiter,
+  authLimiter,
+  passwordResetLimiter,
+} from '@/middleware/security';
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
 import authRoutes from '@/routes/auth.routes';
@@ -53,6 +62,12 @@ process.on('unhandledRejection', (reason, promise) => {
 // ============================================
 // Security Middleware
 // ============================================
+
+// IP Filtering and suspicious activity tracking (first line of defense)
+app.use(ipFilter);
+app.use(suspiciousActivityTracker);
+
+// Helmet for security headers
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -60,6 +75,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://graph.facebook.com"],
     },
   },
   hsts: {
@@ -67,41 +83,59 @@ app.use(helmet({
     includeSubDomains: true,
     preload: true,
   },
+  crossOriginEmbedderPolicy: false, // Allow embedding for OAuth flows
 }));
+
+// Additional security headers
+app.use(securityHeaders);
 
 // ============================================
 // CORS Configuration
 // ============================================
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173', // Vite dev server
+  ...(process.env.ALLOWED_ORIGINS?.split(',') || []),
+  process.env.API_URL,
+].filter(Boolean) as string[];
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      logger.warn('CORS blocked request from origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  maxAge: 86400, // 24 hours
 }));
 
 // ============================================
 // Rate Limiting
 // ============================================
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use('/api/', limiter);
+app.use('/api/', generalLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', passwordResetLimiter);
 
 // ============================================
 // Body Parsing
 // ============================================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ============================================
+// Request Sanitization (after body parsing)
+// ============================================
+app.use(sanitizeRequest);
+app.use(injectionGuard);
 
 // ============================================
 // Request Logging
@@ -155,6 +189,7 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/facebook', facebookRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/users/me', userCredentialsRoutes);
+app.use('/api/users/me/api-keys', require('./routes/apiKey.routes').default);
 app.use('/api/subscriptions', require('./routes/subscription.routes').default);
 app.use('/api/admin', require('./routes/admin.routes').default);
 app.use('/api/email', emailRoutes);

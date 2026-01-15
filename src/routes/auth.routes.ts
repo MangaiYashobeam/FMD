@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { AuthController } from '@/controllers/auth.controller';
 import { authenticate } from '@/middleware/auth';
+import { validate, authValidators } from '@/middleware/validation';
 
 const router = Router();
 const authController = new AuthController();
@@ -18,13 +18,7 @@ const authController = new AuthController();
  */
 router.post(
   '/register',
-  [
-    body('email').isEmail().normalizeEmail(),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-    body('firstName').trim().notEmpty(),
-    body('lastName').trim().notEmpty(),
-    body('accountName').trim().notEmpty(),
-  ],
+  validate(authValidators.register),
   asyncHandler(authController.register)
 );
 
@@ -35,10 +29,7 @@ router.post(
  */
 router.post(
   '/login',
-  [
-    body('email').isEmail().normalizeEmail(),
-    body('password').notEmpty(),
-  ],
+  validate(authValidators.login),
   asyncHandler(authController.login)
 );
 
@@ -49,7 +40,7 @@ router.post(
  */
 router.post(
   '/refresh-token',
-  [body('refreshToken').notEmpty()],
+  validate(authValidators.refreshToken),
   asyncHandler(authController.refreshToken)
 );
 
@@ -74,7 +65,7 @@ router.get('/me', authenticate, asyncHandler(authController.getCurrentUser));
  */
 router.post(
   '/forgot-password',
-  [body('email').isEmail().normalizeEmail()],
+  validate(authValidators.forgotPassword),
   asyncHandler(authController.forgotPassword)
 );
 
@@ -85,10 +76,7 @@ router.post(
  */
 router.post(
   '/reset-password',
-  [
-    body('token').notEmpty(),
-    body('password').isLength({ min: 8 }),
-  ],
+  validate(authValidators.resetPassword),
   asyncHandler(authController.resetPassword)
 );
 
