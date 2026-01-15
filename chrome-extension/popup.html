@@ -205,6 +205,37 @@
     .hidden {
       display: none !important;
     }
+
+    .login-tabs {
+      display: flex;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #e9ecef;
+    }
+
+    .login-tabs .tab {
+      flex: 1;
+      padding: 10px;
+      font-size: 12px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .login-tabs .tab.active {
+      background: white;
+      color: #667eea;
+      font-weight: 600;
+    }
+
+    .help-text {
+      font-size: 11px;
+      color: #666;
+      margin: -10px 0 15px 0;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -217,7 +248,7 @@
     <!-- Login Form -->
     <div class="login-form active" id="loginForm">
       <div class="status info">
-        Please log in to your FaceMyDealer account
+        Log in with your credentials or API key
       </div>
 
       <div class="form-group">
@@ -228,17 +259,36 @@
         </select>
       </div>
 
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" placeholder="your@email.com" required>
+      <!-- Login Method Tabs -->
+      <div class="login-tabs">
+        <button type="button" class="tab active" id="tabPassword">Email/Password</button>
+        <button type="button" class="tab" id="tabApiKey">API Key</button>
       </div>
 
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" placeholder="Enter your password" required>
+      <!-- Password Login -->
+      <div id="passwordLogin">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="your@email.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Enter your password" required>
+        </div>
+
+        <button id="loginBtn">Log In</button>
       </div>
 
-      <button id="loginBtn">Log In</button>
+      <!-- API Key Login -->
+      <div id="apiKeyLogin" class="hidden">
+        <div class="form-group">
+          <label for="apiKey">API Key</label>
+          <input type="text" id="apiKey" placeholder="fmd_..." required>
+        </div>
+        <p class="help-text">Get your API key from Dashboard → Settings → API Keys</p>
+        <button id="apiKeyLoginBtn">Connect with API Key</button>
+      </div>
 
       <div id="loginError" class="status error hidden"></div>
     </div>

@@ -1,18 +1,39 @@
 // Background service worker for FaceMyDealer Chrome Extension
 
-let apiUrl = 'http://localhost:3000/api';
+let apiUrl = 'https://fmd-production.up.railway.app/api';
 let authToken = null;
+let apiKey = null; // API key for extension auth
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(() => {
   console.log('FaceMyDealer extension installed');
   
   // Load saved settings
-  chrome.storage.local.get(['apiUrl', 'authToken'], (result) => {
+  chrome.storage.local.get(['apiUrl', 'authToken', 'apiKey'], (result) => {
     if (result.apiUrl) apiUrl = result.apiUrl;
     if (result.authToken) authToken = result.authToken;
+    if (result.apiKey) apiKey = result.apiKey;
   });
 });
+
+// Helper to get auth headers (supports both JWT and API key)
+function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  
+  // Prefer API key for extension operations
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  } else if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  
+  return headers;
+}
+
+// Check if authenticated (either method)
+function isAuthenticated() {
+  return !!(authToken || apiKey);
+}
 
 // Listen for messages from popup or content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -25,6 +46,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true; // Keep channel open for async response
 
+    case 'loginWithApiKey':
+      handleApiKeyLogin(request.data)
+        .then(sendResponse)
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+
     case 'logout':
       handleLogout()
         .then(sendResponse)
@@ -33,6 +60,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'getCredentials':
       getFacebookCredentials()
+        .then(sendResponse)
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+
+    case 'getVehicles':
+      getVehicles(request.accountId)
         .then(sendResponse)
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
@@ -49,12 +82,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
 
+    case 'checkAuth':
+      sendResponse({ 
+        success: true, 
+        authenticated: isAuthenticated(),
+        method: apiKey ? 'apiKey' : (authToken ? 'jwt' : null)
+      });
+      return false;
+
     default:
       sendResponse({ success: false, error: 'Unknown action' });
   }
 });
 
-// Handle user login
+// Handle user login with email/password (JWT)
 async function handleLogin({ email, password, apiEndpoint }) {
   try {
     if (apiEndpoint) {
@@ -84,25 +125,59 @@ async function handleLogin({ email, password, apiEndpoint }) {
   }
 }
 
+// Handle login with API key (simpler, no JWT refresh needed)
+async function handleApiKeyLogin({ key, apiEndpoint }) {
+  try {
+    if (apiEndpoint) {
+      apiUrl = apiEndpoint;
+      await chrome.storage.local.set({ apiUrl });
+    }
+
+    // Validate the API key by making a test request
+    const response = await fetch(`${apiUrl}/vehicles?limit=1`, {
+      headers: {
+        'X-API-Key': key,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.message || 'Invalid API key');
+    }
+
+    // Store the API key
+    apiKey = key;
+    await chrome.storage.local.set({ apiKey });
+    
+    // Clear JWT if switching to API key
+    authToken = null;
+    await chrome.storage.local.remove(['authToken']);
+
+    return { success: true, method: 'apiKey' };
+  } catch (error) {
+    console.error('API key login error:', error);
+    throw error;
+  }
+}
+
 // Handle logout
 async function handleLogout() {
   authToken = null;
-  await chrome.storage.local.remove(['authToken']);
+  apiKey = null;
+  await chrome.storage.local.remove(['authToken', 'apiKey']);
   return { success: true };
 }
 
 // Get Facebook credentials from backend
 async function getFacebookCredentials() {
   try {
-    if (!authToken) {
+    if (!isAuthenticated()) {
       throw new Error('Not authenticated');
     }
 
     const response = await fetch(`${apiUrl}/users/me/facebook-credentials`, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      }
+      headers: getAuthHeaders()
     });
 
     const data = await response.json();
@@ -114,6 +189,34 @@ async function getFacebookCredentials() {
     return { success: true, credentials: data.data };
   } catch (error) {
     console.error('Get credentials error:', error);
+    throw error;
+  }
+}
+
+// Get vehicles for the account
+async function getVehicles(accountId) {
+  try {
+    if (!isAuthenticated()) {
+      throw new Error('Not authenticated');
+    }
+
+    const url = accountId 
+      ? `${apiUrl}/vehicles?accountId=${accountId}`
+      : `${apiUrl}/vehicles`;
+
+    const response = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to get vehicles');
+    }
+
+    return { success: true, vehicles: data.data };
+  } catch (error) {
+    console.error('Get vehicles error:', error);
     throw error;
   }
 }
@@ -156,16 +259,13 @@ async function initiateMarketplacePost(vehicleData) {
 // Confirm successful post to backend
 async function confirmPostSuccess({ vehicleId, postUrl, screenshot }) {
   try {
-    if (!authToken) {
+    if (!isAuthenticated()) {
       throw new Error('Not authenticated');
     }
 
     const response = await fetch(`${apiUrl}/facebook/marketplace/confirm`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         vehicleId,
         postUrl,

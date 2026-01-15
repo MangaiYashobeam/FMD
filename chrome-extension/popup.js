@@ -4,10 +4,18 @@ const loginForm = document.getElementById('loginForm');
 const mainContent = document.getElementById('mainContent');
 const loader = document.getElementById('loader');
 
+// Login method tabs
+const tabPassword = document.getElementById('tabPassword');
+const tabApiKey = document.getElementById('tabApiKey');
+const passwordLogin = document.getElementById('passwordLogin');
+const apiKeyLogin = document.getElementById('apiKeyLogin');
+
 const apiUrlSelect = document.getElementById('apiUrl');
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const loginBtn = document.getElementById('loginBtn');
+const apiKeyInput = document.getElementById('apiKey');
+const apiKeyLoginBtn = document.getElementById('apiKeyLoginBtn');
 const loginError = document.getElementById('loginError');
 
 const userInfo = document.getElementById('userInfo');
@@ -22,10 +30,30 @@ const viewVehiclesBtn = document.getElementById('viewVehicles');
 const checkCredentialsBtn = document.getElementById('checkCredentials');
 const settingsBtn = document.getElementById('settings');
 
+// Tab switching
+tabPassword.addEventListener('click', () => {
+  tabPassword.classList.add('active');
+  tabApiKey.classList.remove('active');
+  passwordLogin.classList.remove('hidden');
+  apiKeyLogin.classList.add('hidden');
+  hideError();
+});
+
+tabApiKey.addEventListener('click', () => {
+  tabApiKey.classList.add('active');
+  tabPassword.classList.remove('active');
+  apiKeyLogin.classList.remove('hidden');
+  passwordLogin.classList.add('hidden');
+  hideError();
+});
+
 // Check if user is already logged in
-chrome.storage.local.get(['authToken', 'user', 'apiUrl'], (result) => {
-  if (result.authToken && result.user) {
+chrome.storage.local.get(['authToken', 'apiKey', 'user', 'apiUrl'], (result) => {
+  if ((result.authToken || result.apiKey) && result.user) {
     showMainContent(result.user);
+  } else if (result.apiKey) {
+    // API key auth - show simple connected state
+    showMainContent({ firstName: 'API Key', lastName: 'User', email: 'Connected via API' });
   }
   
   if (result.apiUrl) {
@@ -33,7 +61,7 @@ chrome.storage.local.get(['authToken', 'user', 'apiUrl'], (result) => {
   }
 });
 
-// Login handler
+// Login handler (email/password)
 loginBtn.addEventListener('click', async () => {
   const email = emailInput.value.trim();
   const password = passwordInput.value;
@@ -66,6 +94,47 @@ loginBtn.addEventListener('click', async () => {
   } finally {
     showLoader(false);
     loginBtn.disabled = false;
+  }
+});
+
+// API Key login handler
+apiKeyLoginBtn.addEventListener('click', async () => {
+  const key = apiKeyInput.value.trim();
+  const apiEndpoint = apiUrlSelect.value;
+
+  if (!key) {
+    showError('Please enter your API key');
+    return;
+  }
+
+  if (!key.startsWith('fmd_')) {
+    showError('Invalid API key format (should start with fmd_)');
+    return;
+  }
+
+  showLoader(true);
+  apiKeyLoginBtn.disabled = true;
+  hideError();
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'loginWithApiKey',
+      data: { key, apiEndpoint }
+    });
+
+    if (response.success) {
+      const user = { firstName: 'API Key', lastName: 'Connection', email: 'Connected via API Key' };
+      await chrome.storage.local.set({ user });
+      showMainContent(user);
+      showStatus('Connected with API key!', 'success');
+    } else {
+      showError(response.error || 'API key validation failed');
+    }
+  } catch (error) {
+    showError(error.message || 'Connection failed');
+  } finally {
+    showLoader(false);
+    apiKeyLoginBtn.disabled = false;
   }
 });
 
