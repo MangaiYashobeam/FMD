@@ -1322,3 +1322,574 @@ export async function seedDefaultTemplates(req: Request, res: Response) {
     });
   }
 }
+
+// ============================================
+// B2B System Email Triggers
+// Automatic emails triggered by system events
+// ============================================
+
+/**
+ * Send welcome email to new user
+ * POST /api/email/trigger/welcome
+ */
+export async function triggerWelcomeEmail(req: Request, res: Response) {
+  try {
+    const { userId, tempPassword } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID is required',
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      });
+    }
+
+    const loginUrl = `${process.env.FRONTEND_URL || 'https://dealersface.com'}/login`;
+    const userName = user.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user.email.split('@')[0];
+
+    const result = await emailService.sendWithDbTemplate('welcome', user.email, {
+      userName,
+      userEmail: user.email,
+      tempPassword: tempPassword || null,
+      loginUrl,
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: user.email,
+        subject: 'Welcome to DealersFace! 🚗',
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'welcome',
+          triggeredBy: 'registration',
+          userId: user.id,
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Welcome email sent' : 'Failed to send welcome email',
+    });
+  } catch (error) {
+    logger.error('Trigger welcome email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send welcome email',
+    });
+  }
+}
+
+/**
+ * Send password reset email
+ * POST /api/email/trigger/password-reset
+ */
+export async function triggerPasswordResetEmail(req: Request, res: Response) {
+  try {
+    const { userId, resetToken } = req.body;
+
+    if (!userId || !resetToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID and reset token are required',
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      });
+    }
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'https://dealersface.com'}/reset-password?token=${resetToken}`;
+    const userName = user.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user.email.split('@')[0];
+
+    const result = await emailService.sendWithDbTemplate('password-reset', user.email, {
+      userName,
+      resetUrl,
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: user.email,
+        subject: 'Reset Your Password - DealersFace',
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'password-reset',
+          triggeredBy: 'password_reset_request',
+          userId: user.id,
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Password reset email sent' : 'Failed to send password reset email',
+    });
+  } catch (error) {
+    logger.error('Trigger password reset email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send password reset email',
+    });
+  }
+}
+
+/**
+ * Send account invitation email
+ * POST /api/email/trigger/invitation
+ */
+export async function triggerInvitationEmail(req: Request, res: Response) {
+  try {
+    const { inviteeEmail, inviterName, accountName, role, inviteToken } = req.body;
+
+    if (!inviteeEmail || !accountName || !inviteToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invitee email, account name, and invite token are required',
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteeEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email format',
+      });
+    }
+
+    const inviteUrl = `${process.env.FRONTEND_URL || 'https://dealersface.com'}/accept-invite?token=${inviteToken}`;
+
+    const result = await emailService.sendWithDbTemplate('account-invitation', inviteeEmail, {
+      inviterName: inviterName || 'A team member',
+      accountName,
+      role: role || 'Team Member',
+      inviteUrl,
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: inviteeEmail,
+        subject: `📨 You've been invited to ${accountName} on DealersFace`,
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'account-invitation',
+          triggeredBy: 'team_invitation',
+          accountName,
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Invitation email sent' : 'Failed to send invitation email',
+    });
+  } catch (error) {
+    logger.error('Trigger invitation email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send invitation email',
+    });
+  }
+}
+
+/**
+ * Send new lead notification email
+ * POST /api/email/trigger/new-lead
+ */
+export async function triggerNewLeadEmail(req: Request, res: Response) {
+  try {
+    const { recipientEmail, customerName, customerEmail, customerPhone, vehicleInfo, source, leadId } = req.body;
+
+    if (!recipientEmail || !customerName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Recipient email and customer name are required',
+      });
+    }
+
+    const leadUrl = `${process.env.FRONTEND_URL || 'https://dealersface.com'}/leads${leadId ? `/${leadId}` : ''}`;
+
+    const result = await emailService.sendWithDbTemplate('new-lead', recipientEmail, {
+      customerName,
+      customerEmail: customerEmail || 'Not provided',
+      customerPhone: customerPhone || 'Not provided',
+      vehicleInfo: vehicleInfo || 'General inquiry',
+      source: source || 'Website',
+      leadUrl,
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: recipientEmail,
+        subject: `🔔 New Lead: ${customerName} - ${vehicleInfo || 'General inquiry'}`,
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'new-lead',
+          triggeredBy: 'new_lead_received',
+          leadId,
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Lead notification sent' : 'Failed to send lead notification',
+    });
+  } catch (error) {
+    logger.error('Trigger new lead email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send lead notification email',
+    });
+  }
+}
+
+/**
+ * Send sync completion email
+ * POST /api/email/trigger/sync-complete
+ */
+export async function triggerSyncCompleteEmail(req: Request, res: Response) {
+  try {
+    const { recipientEmail, accountName, imported, updated, failed } = req.body;
+
+    if (!recipientEmail || !accountName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Recipient email and account name are required',
+      });
+    }
+
+    const dashboardUrl = `${process.env.FRONTEND_URL || 'https://dealersface.com'}/inventory`;
+
+    const result = await emailService.sendWithDbTemplate('sync-complete', recipientEmail, {
+      accountName,
+      imported: imported || 0,
+      updated: updated || 0,
+      failed: failed || 0,
+      dashboardUrl,
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: recipientEmail,
+        subject: `✅ Inventory Sync Complete - ${accountName}`,
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'sync-complete',
+          triggeredBy: 'inventory_sync',
+          syncResults: { imported, updated, failed },
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Sync notification sent' : 'Failed to send sync notification',
+    });
+  } catch (error) {
+    logger.error('Trigger sync complete email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send sync completion email',
+    });
+  }
+}
+
+/**
+ * Send payment receipt email
+ * POST /api/email/trigger/payment-receipt
+ */
+export async function triggerPaymentReceiptEmail(req: Request, res: Response) {
+  try {
+    const { recipientEmail, accountName, amount, invoiceId, paymentDate } = req.body;
+
+    if (!recipientEmail || !accountName || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Recipient email, account name, and amount are required',
+      });
+    }
+
+    const invoiceUrl = `${process.env.FRONTEND_URL || 'https://dealersface.com'}/settings/billing${invoiceId ? `?invoice=${invoiceId}` : ''}`;
+
+    const result = await emailService.sendWithDbTemplate('payment-receipt', recipientEmail, {
+      accountName,
+      amount: typeof amount === 'number' ? amount.toFixed(2) : amount,
+      invoiceUrl,
+      paymentDate: paymentDate || new Date().toLocaleDateString(),
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: recipientEmail,
+        subject: `💳 Payment Receipt - $${typeof amount === 'number' ? amount.toFixed(2) : amount}`,
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'payment-receipt',
+          triggeredBy: 'payment_success',
+          amount,
+          invoiceId,
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Payment receipt sent' : 'Failed to send payment receipt',
+    });
+  } catch (error) {
+    logger.error('Trigger payment receipt email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send payment receipt email',
+    });
+  }
+}
+
+/**
+ * Send payment failed email
+ * POST /api/email/trigger/payment-failed
+ */
+export async function triggerPaymentFailedEmail(req: Request, res: Response) {
+  try {
+    const { recipientEmail, amount, reason } = req.body;
+
+    if (!recipientEmail || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Recipient email and amount are required',
+      });
+    }
+
+    const billingUrl = `${process.env.FRONTEND_URL || 'https://dealersface.com'}/settings/billing`;
+
+    const result = await emailService.sendWithDbTemplate('payment-failed', recipientEmail, {
+      amount: typeof amount === 'number' ? amount.toFixed(2) : amount,
+      reason: reason || 'Payment could not be processed',
+      billingUrl,
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: recipientEmail,
+        subject: '⚠️ Payment Failed - Action Required',
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'payment-failed',
+          triggeredBy: 'payment_failure',
+          amount,
+          reason,
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Payment failed notification sent' : 'Failed to send notification',
+    });
+  } catch (error) {
+    logger.error('Trigger payment failed email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send payment failed email',
+    });
+  }
+}
+
+/**
+ * Send account suspended email
+ * POST /api/email/trigger/account-suspended
+ */
+export async function triggerAccountSuspendedEmail(req: Request, res: Response) {
+  try {
+    const { recipientEmail, accountName, reason } = req.body;
+
+    if (!recipientEmail || !accountName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Recipient email and account name are required',
+      });
+    }
+
+    const supportEmail = process.env.SUPPORT_EMAIL || 'support@dealersface.com';
+
+    const result = await emailService.sendWithDbTemplate('account-suspended', recipientEmail, {
+      accountName,
+      reason: reason || 'Please contact support for more information',
+      supportEmail,
+    });
+
+    // Log the email
+    await prisma.emailLog.create({
+      data: {
+        recipient: recipientEmail,
+        subject: `🚫 Account Suspended - ${accountName}`,
+        status: result ? 'SENT' : 'FAILED',
+        metadata: {
+          type: 'system',
+          templateSlug: 'account-suspended',
+          triggeredBy: 'account_suspension',
+          accountName,
+          reason,
+        },
+      },
+    });
+
+    return res.json({
+      success: result,
+      message: result ? 'Suspension notification sent' : 'Failed to send notification',
+    });
+  } catch (error) {
+    logger.error('Trigger account suspended email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send account suspended email',
+    });
+  }
+}
+
+/**
+ * Send system announcement email (bulk)
+ * POST /api/email/trigger/announcement
+ */
+export async function triggerAnnouncementEmail(req: Request, res: Response) {
+  try {
+    const authReq = req as AuthRequest;
+    const { recipientEmails, announcementTitle, announcementContent, ctaText, ctaUrl } = req.body;
+
+    if (!recipientEmails || !Array.isArray(recipientEmails) || recipientEmails.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one recipient email is required',
+      });
+    }
+
+    if (!announcementTitle || !announcementContent) {
+      return res.status(400).json({
+        success: false,
+        error: 'Announcement title and content are required',
+      });
+    }
+
+    // Validate all emails
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const validEmails = recipientEmails.filter((email: string) => emailRegex.test(email.trim()));
+
+    if (validEmails.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid email addresses provided',
+      });
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const email of validEmails) {
+      try {
+        const result = await emailService.sendWithDbTemplate('system-announcement', email.trim(), {
+          announcementTitle,
+          announcementContent,
+          ctaText: ctaText || 'Learn More',
+          ctaUrl: ctaUrl || '',
+        });
+
+        if (result) {
+          sent++;
+        } else {
+          failed++;
+        }
+
+        // Log each email
+        await prisma.emailLog.create({
+          data: {
+            recipient: email.trim(),
+            subject: `📢 ${announcementTitle}`,
+            status: result ? 'SENT' : 'FAILED',
+            metadata: {
+              type: 'system',
+              templateSlug: 'system-announcement',
+              triggeredBy: 'admin_announcement',
+              sentBy: authReq.user?.id,
+            },
+          },
+        });
+      } catch {
+        failed++;
+      }
+    }
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: authReq.user?.id,
+        action: 'SYSTEM_ANNOUNCEMENT_SENT',
+        entityType: 'email',
+        entityId: 'announcement',
+        metadata: {
+          totalRecipients: validEmails.length,
+          sent,
+          failed,
+          title: announcementTitle,
+        },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: `Announcement sent to ${sent} recipients (${failed} failed)`,
+      data: { sent, failed, total: validEmails.length },
+    });
+  } catch (error) {
+    logger.error('Trigger announcement email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to send announcement emails',
+    });
+  }
+}

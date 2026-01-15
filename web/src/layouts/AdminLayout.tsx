@@ -10,8 +10,6 @@ import {
   LogOut,
   Shield,
   ChevronLeft,
-  FileText,
-  Send,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -20,9 +18,7 @@ const navigation = [
   { name: 'Accounts', href: '/admin/accounts', icon: Building2 },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },
-  { name: 'Email Composer', href: '/admin/email-composer', icon: Send },
-  { name: 'Email Templates', href: '/admin/email-templates', icon: FileText },
-  { name: 'Email Logs', href: '/admin/emails', icon: Mail },
+  { name: 'Email', href: '/admin/email', icon: Mail },
   { name: 'Audit Logs', href: '/admin/audit', icon: Activity },
   { name: 'Settings', href: '/admin/settings', icon: Settings },
 ];
