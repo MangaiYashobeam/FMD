@@ -131,16 +131,30 @@ export default function SettingsPage() {
         throw new Error('No account found');
       }
       
-      // Sanitize and format FTP settings for the API
-      const ftpSettings = {
-        ftpHost: sanitizeString(ftpForm.host, { maxLength: 255 }),
-        ftpPort: parseInt(ftpForm.port, 10) || 21,
-        ftpUsername: sanitizeString(ftpForm.username, { maxLength: 255 }),
-        ftpPassword: ftpForm.password, // Don't sanitize passwords
-        csvPath: sanitizeString(ftpForm.path, { maxLength: 500 }),
-        autoSync: ftpForm.autoSync,
-        syncInterval: parseInt(ftpForm.syncInterval, 10) || 60,
-      };
+      // Build FTP settings object, only including non-empty values
+      const ftpSettings: Record<string, any> = {};
+      
+      if (ftpForm.host.trim()) {
+        ftpSettings.ftpHost = sanitizeString(ftpForm.host, { maxLength: 255 });
+      }
+      if (ftpForm.port) {
+        ftpSettings.ftpPort = parseInt(ftpForm.port, 10) || 21;
+      }
+      if (ftpForm.username.trim()) {
+        ftpSettings.ftpUsername = sanitizeString(ftpForm.username, { maxLength: 255 });
+      }
+      if (ftpForm.password) {
+        ftpSettings.ftpPassword = ftpForm.password;
+      }
+      if (ftpForm.path.trim()) {
+        ftpSettings.csvPath = sanitizeString(ftpForm.path, { maxLength: 500 });
+      }
+      
+      // Always include these
+      ftpSettings.autoSync = ftpForm.autoSync;
+      // Convert hours to minutes (form stores hours, API expects minutes)
+      const intervalHours = parseInt(ftpForm.syncInterval, 10) || 1;
+      ftpSettings.syncInterval = Math.max(15, intervalHours * 60); // Minimum 15 minutes
       
       return accountsApi.updateSettings(accountId, ftpSettings);
     },
