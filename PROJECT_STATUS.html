@@ -551,19 +551,39 @@
             <p style="margin-top: 10px; font-size: 0.9rem;">Root Admin Seeded ✅ | Health Check Passing ✅ | Docker Build Working ✅</p>
         </div>
         
+        <!-- NEW Feature Banner - ADF System -->
+        <div style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 20px; border-radius: 12px; margin-bottom: 30px;">
+            <h2 style="margin-bottom: 10px;">📋 NEW: Comprehensive ADF/DMS Lead Management System</h2>
+            <p style="margin-bottom: 15px;">Added January 15, 2026 - Full industry-standard ADF XML 1.0 integration for DMS communication</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ Lead Management</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ ADF XML Generation</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ DMS Email Delivery</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ HTTP POST to DMS</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ Sales Rep Mapping</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ Auto-Assignment</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ Communication Tracking</span>
+                <span style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; font-size: 0.85rem;">✅ Activity Timeline</span>
+            </div>
+        </div>
+        
         <!-- Quick Stats -->
         <div class="stats-grid">
             <div class="stat-card success">
-                <div class="number">95%</div>
+                <div class="number">98%</div>
                 <div class="label">Backend Complete</div>
             </div>
             <div class="stat-card success">
-                <div class="number">95%</div>
+                <div class="number">98%</div>
                 <div class="label">Frontend Complete</div>
             </div>
             <div class="stat-card success">
                 <div class="number">100%</div>
                 <div class="label">Security Hardened</div>
+            </div>
+            <div class="stat-card success">
+                <div class="number">100%</div>
+                <div class="label">ADF/DMS System</div>
             </div>
             <div class="stat-card warning">
                 <div class="number">80%</div>
@@ -630,6 +650,16 @@
                     <span class="url">/admin/* routes</span>
                     <div style="margin-top: 10px;">
                         <span class="status-badge live">READY ✅</span>
+                    </div>
+                </div>
+                
+                <div class="link-card">
+                    <h3>📥 ADF Lead Management</h3>
+                    <p>Comprehensive lead system with DMS integration</p>
+                    <a href="https://fmd-production.up.railway.app/leads" target="_blank">Open Leads</a>
+                    <span class="url">/api/leads/* routes</span>
+                    <div style="margin-top: 10px;">
+                        <span class="status-badge live">NEW ✅</span>
                     </div>
                 </div>
             </div>
@@ -729,6 +759,7 @@
                 <span class="tech-badge hosting">🚂 Railway</span>
                 <span class="tech-badge">🔐 JWT Auth</span>
                 <span class="tech-badge">📧 Nodemailer</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #22c55e, #16a34a);">📋 ADF XML 1.0</span>
             </div>
         </section>
         
@@ -739,9 +770,9 @@
                 What's Complete
             </h2>
             
-            <h3 style="margin-bottom: 15px; color: var(--success);">Backend API (95% Complete)</h3>
+            <h3 style="margin-bottom: 15px; color: var(--success);">Backend API (98% Complete)</h3>
             <div class="progress-bar">
-                <div class="fill" style="width: 95%;">95%</div>
+                <div class="fill" style="width: 98%;">98%</div>
             </div>
             
             <div class="feature-list">
@@ -829,11 +860,46 @@
                         <p>Comprehensive validation on all endpoints with express-validator</p>
                     </div>
                 </div>
+                <div class="feature-item">
+                    <div class="status-icon done">✓</div>
+                    <div class="content">
+                        <h4>📋 ADF/DMS Integration (NEW)</h4>
+                        <p>Full ADF XML 1.0 generation, email delivery, HTTP POST to DMS systems</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="status-icon done">✓</div>
+                    <div class="content">
+                        <h4>📥 Lead Management System (NEW)</h4>
+                        <p>Comprehensive leads with status workflow, communications, activities, notes</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="status-icon done">✓</div>
+                    <div class="content">
+                        <h4>👤 Sales Rep Mapping (NEW)</h4>
+                        <p>Facebook username to DMS rep mapping with auto-assignment (round-robin)</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="status-icon done">✓</div>
+                    <div class="content">
+                        <h4>⚙️ System Settings (NEW)</h4>
+                        <p>SUPER_ADMIN system configuration with email templates, security settings</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="status-icon done">✓</div>
+                    <div class="content">
+                        <h4>📁 CSV Upload Fix (NEW)</h4>
+                        <p>Fixed inventory CSV upload 401/400 errors with proper accountId handling</p>
+                    </div>
+                </div>
             </div>
             
-            <h3 style="margin: 30px 0 15px; color: var(--success);">Frontend Dashboard (95% Complete)</h3>
+            <h3 style="margin: 30px 0 15px; color: var(--success);">Frontend Dashboard (98% Complete)</h3>
             <div class="progress-bar">
-                <div class="fill" style="width: 95%; background: linear-gradient(90deg, var(--success), #4ade80);">95%</div>
+                <div class="fill" style="width: 98%; background: linear-gradient(90deg, var(--success), #4ade80);">98%</div>
             </div>
             
             <div class="feature-list">
@@ -910,6 +976,13 @@
                 <div class="feature-item">
                     <div class="status-icon done">✓</div>
                     <div class="content">
+                        <h4>📋 ADF Lead Page (NEW)</h4>
+                        <p>Comprehensive ADF-integrated leads with DMS sending, communications tracking</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="status-icon done">✓</div>
+                    <div class="content">
                         <h4>💬 Messages Page (NEW)</h4>
                         <p>Facebook Messenger integration with real-time chat UI, conversation list</p>
                     </div>
@@ -949,6 +1022,13 @@
                         <p>Added onError handlers to all mutations across LeadsPage, MessagesPage, FacebookPage, TeamPage to prevent unintended logouts on API failures.</p>
                     </div>
                 </div>
+                <div class="feature-item">
+                    <div class="status-icon done">✓</div>
+                    <div class="content">
+                        <h4>🏢 System Settings Page (NEW)</h4>
+                        <p>SUPER_ADMIN system configuration page with email, security, and integration settings</p>
+                    </div>
+                </div>
             </div>
         </section>
         
@@ -968,6 +1048,9 @@
                     <li><s style="color: var(--success);">Backend Security Hardening (validation, rate limiting, injection guards)</s> ✅ DONE</li>
                     <li><s style="color: var(--success);">API Key Authentication System for Chrome Extension</s> ✅ DONE</li>
                     <li><s style="color: var(--success);">Chrome Extension API key login UI</s> ✅ DONE (popup with tabs)</li>
+                    <li><s style="color: var(--success);">ADF Lead Management System with DMS Integration</s> ✅ DONE (Jan 15, 2026)</li>
+                    <li><s style="color: var(--success);">Sales Rep Mapping (Facebook → DMS)</s> ✅ DONE</li>
+                    <li><s style="color: var(--success);">CSV Upload Bug Fix (401/400 errors)</s> ✅ DONE</li>
                     <li>Test Chrome Extension posting flow end-to-end</li>
                     <li>Facebook OAuth integration for marketplace posting (backend ready, needs FB_APP_ID config)</li>
                     <li>Implement Stripe payment processing (backend ready, add STRIPE_SECRET_KEY)</li>
@@ -1150,6 +1233,70 @@
                     <span class="desc">Send test email</span>
                 </div>
             </div>
+            
+            <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Leads & ADF (NEW)</h3>
+            <div class="api-endpoints">
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/leads</span>
+                    <span class="desc">List leads with filtering</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/leads</span>
+                    <span class="desc">Create new lead</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/leads/:id</span>
+                    <span class="desc">Get lead details</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method put">PUT</span>
+                    <span class="path">/api/leads/:id</span>
+                    <span class="desc">Update lead</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/leads/:id/adf</span>
+                    <span class="desc">Send ADF to DMS/Email</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/leads/:id/adf/preview</span>
+                    <span class="desc">Preview ADF XML</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/leads/:id/communications</span>
+                    <span class="desc">Add lead communication</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/leads/stats</span>
+                    <span class="desc">Lead statistics</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/leads/config/adf</span>
+                    <span class="desc">Get ADF configuration</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method put">PUT</span>
+                    <span class="path">/api/leads/config/adf</span>
+                    <span class="desc">Update ADF configuration</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/leads/config/adf/test-dms</span>
+                    <span class="desc">Test DMS connection</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/leads/config/adf/mappings</span>
+                    <span class="desc">Create sales rep mapping</span>
+                </div>
+            </div>
         </section>
         
         <!-- File Structure -->
@@ -1163,7 +1310,7 @@
 <pre>
 <span class="folder">FaceMyDealer/</span>
 ├── <span class="folder">prisma/</span>
-│   ├── schema.prisma              <span class="comment"># Database schema</span>
+│   ├── schema.prisma              <span class="comment"># Database schema (28 models)</span>
 │   └── <span class="folder">seeds/</span>
 │       └── rootAdmin.seed.ts      <span class="comment"># Root admin seeder</span>
 ├── <span class="folder">src/</span>                            <span class="comment"># Backend API</span>
@@ -1172,17 +1319,24 @@
 │   │   ├── adminController.ts     <span class="comment"># System admin endpoints</span>
 │   │   ├── emailController.ts
 │   │   ├── vehicleController.ts
-│   │   └── leadController.ts
+│   │   ├── leadController.ts      <span class="comment"># Lead & ADF management (NEW)</span>
+│   │   └── systemController.ts    <span class="comment"># System settings (NEW)</span>
+│   ├── <span class="folder">services/</span>
+│   │   ├── adf.service.ts         <span class="comment"># ADF XML generation (NEW)</span>
+│   │   ├── email.service.ts
+│   │   ├── ftp.service.ts
+│   │   └── ...
 │   ├── <span class="folder">middleware/</span>
 │   │   ├── auth.ts                <span class="comment"># JWT authentication</span>
 │   │   ├── rbac.ts                <span class="comment"># Role-based access control</span>
-│   │   ├── validation.ts          <span class="comment"># Input validation (NEW)</span>
-│   │   ├── security.ts            <span class="comment"># Rate limiting, injection guards (NEW)</span>
-│   │   └── apiKey.ts              <span class="comment"># API key auth for extension (NEW)</span>
+│   │   ├── validation.ts          <span class="comment"># Input validation</span>
+│   │   ├── security.ts            <span class="comment"># Rate limiting, injection guards</span>
+│   │   └── apiKey.ts              <span class="comment"># API key auth for extension</span>
 │   ├── <span class="folder">routes/</span>
 │   │   ├── auth.routes.ts
 │   │   ├── admin.routes.ts
-│   │   ├── apiKey.routes.ts       <span class="comment"># API key management (NEW)</span>
+│   │   ├── apiKey.routes.ts       <span class="comment"># API key management</span>
+│   │   ├── lead.routes.ts         <span class="comment"># ADF/Lead routes (NEW)</span>
 │   │   └── ...
 │   └── server.ts                  <span class="comment"># Express server entry</span>
 ├── <span class="folder">web/</span>                            <span class="comment"># React Frontend</span>
@@ -1198,16 +1352,19 @@
 │   │   │   │   └── ForgotPasswordPage.tsx
 │   │   │   ├── <span class="folder">dashboard/</span>
 │   │   │   │   ├── DashboardPage.tsx
-│   │   │   │   └── InventoryPage.tsx
-│   │   │   └── <span class="folder">admin/</span>              <span class="comment"># NEW Admin pages</span>
+│   │   │   │   ├── InventoryPage.tsx
+│   │   │   │   └── LeadsPage.tsx      <span class="comment"># ADF Lead management (NEW)</span>
+│   │   │   └── <span class="folder">admin/</span>              <span class="comment"># Admin pages</span>
 │   │   │       ├── AdminDashboardPage.tsx
 │   │   │       ├── AccountsPage.tsx
 │   │   │       ├── UsersPage.tsx
 │   │   │       ├── PaymentsPage.tsx
 │   │   │       ├── EmailLogsPage.tsx
-│   │   │       └── AuditLogsPage.tsx
+│   │   │       ├── AuditLogsPage.tsx
+│   │   │       └── SystemSettingsPage.tsx <span class="comment"># System config (NEW)</span>
 │   │   ├── <span class="folder">lib/</span>
-│   │   │   └── api.ts             <span class="comment"># API client</span>
+│   │   │   ├── api.ts             <span class="comment"># API client</span>
+│   │   │   └── sanitize.ts        <span class="comment"># Security utils</span>
 │   │   └── App.tsx                <span class="comment"># Routes config</span>
 │   └── package.json
 ├── <span class="folder">2.5_0/</span>                          <span class="comment"># Chrome Extension</span>
@@ -1345,6 +1502,8 @@ railway shell
                 <li><strong><s>Seed Root Admin:</s></strong> <span style="color: var(--success);">✅ COMPLETED - admin@gadproductions.com is live!</span></li>
                 <li><strong><s>Backend Security Hardening:</s></strong> <span style="color: var(--success);">✅ COMPLETED - Validation, rate limiting, injection guards</span></li>
                 <li><strong><s>API Key System:</s></strong> <span style="color: var(--success);">✅ COMPLETED - Chrome Extension authentication ready</span></li>
+                <li><strong><s>ADF/DMS Integration:</s></strong> <span style="color: var(--success);">✅ COMPLETED - Full lead management with ADF XML generation</span></li>
+                <li><strong><s>Sales Rep Mapping:</s></strong> <span style="color: var(--success);">✅ COMPLETED - Facebook username to DMS rep mapping</span></li>
                 <li><strong>Test Chrome Extension:</strong> Integrate API key system, test posting flow</li>
                 <li><strong>Add Facebook OAuth:</strong> Set <code style="background: var(--gray-100); padding: 2px 8px; border-radius: 4px;">FB_APP_ID</code> and <code style="background: var(--gray-100); padding: 2px 8px; border-radius: 4px;">FB_APP_SECRET</code> in Railway</li>
                 <li><strong>Add Stripe Keys:</strong> Set <code style="background: var(--gray-100); padding: 2px 8px; border-radius: 4px;">STRIPE_SECRET_KEY</code> in Railway env vars</li>
@@ -1360,7 +1519,7 @@ railway shell
             
             <div class="two-col">
                 <div>
-                    <h3 style="margin-bottom: 15px; color: var(--gray-700);">Backend Routes (10 files)</h3>
+                    <h3 style="margin-bottom: 15px; color: var(--gray-700);">Backend Routes (11 files)</h3>
                     <div class="api-endpoints">
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">auth.routes.ts</span><span class="desc">Login, register, refresh, logout</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">account.routes.ts</span><span class="desc">Account CRUD, settings</span></div>
@@ -1371,7 +1530,8 @@ railway shell
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">email.routes.ts</span><span class="desc">Email logs, test send</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">subscription.routes.ts</span><span class="desc">Stripe integration</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">userCredentials.routes.ts</span><span class="desc">User settings</span></div>
-                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">apiKey.routes.ts</span><span class="desc">Extension API keys (NEW)</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">apiKey.routes.ts</span><span class="desc">Extension API keys</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">lead.routes.ts</span><span class="desc">ADF/DMS Lead system (NEW)</span></div>
                     </div>
                     
                     <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Backend Middleware (6 files)</h3>
@@ -1384,7 +1544,7 @@ railway shell
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">errorHandler.ts</span><span class="desc">Global error handling</span></div>
                     </div>
                     
-                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Backend Controllers (10 files)</h3>
+                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Backend Controllers (12 files)</h3>
                     <div class="api-endpoints">
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">auth.controller.ts</span><span class="desc">Login, register, tokens</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">account.controller.ts</span><span class="desc">Account CRUD</span></div>
@@ -1396,9 +1556,11 @@ railway shell
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">subscription.controller.ts</span><span class="desc">Stripe billing</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">userCredentials.controller.ts</span><span class="desc">User settings</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">apiKey.controller.ts</span><span class="desc">API key mgmt</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">lead.controller.ts</span><span class="desc">Lead & ADF mgmt (NEW)</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">system.controller.ts</span><span class="desc">System settings (NEW)</span></div>
                     </div>
                     
-                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Backend Services (6 files)</h3>
+                    <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Backend Services (7 files)</h3>
                     <div class="api-endpoints">
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">csvParser.service.ts</span><span class="desc">Parse CSV inventory</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">email.service.ts</span><span class="desc">Nodemailer integration</span></div>
@@ -1406,11 +1568,12 @@ railway shell
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">ftp.service.ts</span><span class="desc">FTP/SFTP client</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">scheduler.service.ts</span><span class="desc">node-cron jobs</span></div>
                         <div class="api-endpoint"><span class="method get">⚠️</span><span class="path">stripe.service.ts</span><span class="desc">Needs STRIPE_SECRET_KEY</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">adf.service.ts</span><span class="desc">ADF XML generation (NEW)</span></div>
                     </div>
                 </div>
                 
                 <div>
-                    <h3 style="margin-bottom: 15px; color: var(--gray-700);">Frontend Pages (19 total)</h3>
+                    <h3 style="margin-bottom: 15px; color: var(--gray-700);">Frontend Pages (21 total)</h3>
                     <div class="api-endpoints">
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">LoginPage.tsx</span><span class="desc">User authentication</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">RegisterPage.tsx</span><span class="desc">Account creation</span></div>
@@ -1422,15 +1585,16 @@ railway shell
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">SyncPage.tsx</span><span class="desc">Sync status</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">TeamPage.tsx</span><span class="desc">Team management</span></div>
                         <div class="api-endpoint"><span class="method post">✅</span><span class="path">SettingsPage.tsx</span><span class="desc">Account settings + API Keys</span></div>
-                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">LeadsPage.tsx</span><span class="desc">Lead management (NEW)</span></div>
-                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">MessagesPage.tsx</span><span class="desc">FB Messenger (NEW)</span></div>
-                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">AnalyticsPage.tsx</span><span class="desc">Charts & metrics (NEW)</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">LeadsPage.tsx</span><span class="desc">ADF Lead management (NEW)</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">MessagesPage.tsx</span><span class="desc">FB Messenger</span></div>
+                        <div class="api-endpoint"><span class="method post">✅</span><span class="path">AnalyticsPage.tsx</span><span class="desc">Charts & metrics</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/AdminDashboardPage.tsx</span><span class="desc">Admin overview</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/AccountsPage.tsx</span><span class="desc">All accounts</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/UsersPage.tsx</span><span class="desc">All users</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/PaymentsPage.tsx</span><span class="desc">Payment history</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/EmailLogsPage.tsx</span><span class="desc">Email logs</span></div>
                         <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/AuditLogsPage.tsx</span><span class="desc">Audit trail</span></div>
+                        <div class="api-endpoint"><span class="method get">✅</span><span class="path">admin/SystemSettingsPage.tsx</span><span class="desc">System config (NEW)</span></div>
                     </div>
                     
                     <h3 style="margin: 25px 0 15px; color: var(--gray-700);">Frontend Components (10 files)</h3>
@@ -1477,7 +1641,7 @@ railway shell
                 </div>
             </div>
             
-            <h3 style="margin: 30px 0 15px; color: var(--gray-700);">Database Schema (20 models in Prisma)</h3>
+            <h3 style="margin: 30px 0 15px; color: var(--gray-700);">Database Schema (28 models + 4 enums in Prisma)</h3>
             <div class="tech-stack">
                 <span class="tech-badge backend">User</span>
                 <span class="tech-badge backend">Account</span>
@@ -1499,6 +1663,22 @@ railway shell
                 <span class="tech-badge database">RefreshToken</span>
                 <span class="tech-badge database">PasswordResetToken</span>
                 <span class="tech-badge" style="background: linear-gradient(135deg, #22c55e, #16a34a);">ApiKey</span>
+                <span class="tech-badge database">SystemSettings</span>
+                <span class="tech-badge database">EmailTemplate</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">Lead (NEW)</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">LeadCommunication (NEW)</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">LeadActivity (NEW)</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">ADFConfiguration (NEW)</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">SalesRepMapping (NEW)</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">ADFSubmission (NEW)</span>
+            </div>
+            
+            <h4 style="margin: 20px 0 10px; color: var(--gray-600);">Enums:</h4>
+            <div class="tech-stack">
+                <span class="tech-badge frontend">UserRole</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">LeadStatus (NEW)</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">LeadSource (NEW)</span>
+                <span class="tech-badge" style="background: linear-gradient(135deg, #f59e0b, #d97706);">LeadPriority (NEW)</span>
             </div>
             
             <h3 style="margin: 30px 0 15px; color: var(--gray-700);">Chrome Extension Files (7 files)</h3>
