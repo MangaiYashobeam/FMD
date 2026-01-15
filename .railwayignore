@@ -1,0 +1,9 @@
+# Railway ignore file
+# Only ignore node_modules that will be installed during build
+node_modules/
+dist/
+web/dist/
+logs/
+*.log
+.env
+.env.local
