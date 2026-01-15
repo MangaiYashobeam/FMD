@@ -3,6 +3,16 @@ import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+
+// Load environment variables first
+dotenv.config();
+
+// Early logging to track startup progress
+console.log('🔵 Starting FaceMyDealer server...');
+console.log('🔵 Environment:', process.env.NODE_ENV);
+console.log('🔵 Port:', process.env.PORT || 3000);
+console.log('🔵 Loading modules...');
+
 import { errorHandler } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
@@ -17,10 +27,27 @@ import { initializeQueueProcessor } from '@/jobs/queueProcessor';
 import { schedulerService } from '@/services/scheduler.service';
 import { shutdownEmailQueue } from '@/queues/email.queue';
 
-dotenv.config();
+console.log('🔵 All modules loaded successfully');
 
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
+
+console.log('🔵 Express app created');
+
+// ============================================
+// Global error handlers
+// ============================================
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  process.exit(1);
+});
 
 // ============================================
 // Security Middleware
