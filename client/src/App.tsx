@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
 import { ClientLayout } from './components/ClientLayout';
+import { SalesRepLayout } from './components/SalesRepLayout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ClientDashboardPage } from './pages/client/ClientDashboardPage';
@@ -11,6 +12,11 @@ import { TeamManagementPage } from './pages/client/TeamManagementPage';
 import { TemplatesPage } from './pages/client/TemplatesPage';
 import { SettingsPage } from './pages/client/SettingsPage';
 import { SubscriptionPage } from './pages/client/SubscriptionPage';
+import { SalesRepDashboardPage } from './pages/sales/SalesRepDashboardPage';
+import { VehicleListPage } from './pages/sales/VehicleListPage';
+import { PostVehiclePage } from './pages/sales/PostVehiclePage';
+import { PostHistoryPage } from './pages/sales/PostHistoryPage';
+import { FacebookSettingsPage } from './pages/sales/FacebookSettingsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,7 +73,7 @@ function AppRoutes() {
         </Route>
       )}
 
-      {/* Client Routes (ACCOUNT_OWNER, ADMIN, SALES_REP) */}
+      {/* Client Routes (ACCOUNT_OWNER, ADMIN) */}
       <Route
         path="/client/*"
         element={
@@ -83,12 +89,35 @@ function AppRoutes() {
         <Route path="subscription" element={<SubscriptionPage />} />
       </Route>
 
+      {/* Sales Rep Routes */}
+      <Route
+        path="/sales/*"
+        element={
+          <ProtectedRoute>
+            <SalesRepLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<SalesRepDashboardPage />} />
+        <Route path="vehicles" element={<VehicleListPage />} />
+        <Route path="post/:vehicleId" element={<PostVehiclePage />} />
+        <Route path="posts" element={<PostHistoryPage />} />
+        <Route path="settings" element={<FacebookSettingsPage />} />
+      </Route>
+
       {/* Root redirect based on role */}
       <Route
         path="/"
         element={
           <ProtectedRoute>
-            <Navigate to={user?.role === 'SUPER_ADMIN' ? '/admin' : '/client'} replace />
+            <Navigate 
+              to={
+                user?.role === 'SUPER_ADMIN' ? '/admin' :
+                user?.role === 'SALES_REP' ? '/sales' :
+                '/client'
+              } 
+              replace 
+            />
           </ProtectedRoute>
         }
       />
