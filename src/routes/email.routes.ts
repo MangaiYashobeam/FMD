@@ -5,8 +5,14 @@ import { authenticate } from '@/middleware/auth';
 import { requireSuperAdmin, requireRole, UserRole } from '@/middleware/rbac';
 import { asyncHandler } from '@/utils/asyncHandler';
 import { validate } from '@/middleware/validation';
+import emailTrackingRoutes from './email-tracking.routes';
 
 const router = Router();
+
+// ============================================
+// Email Tracking Routes (Public - no auth)
+// ============================================
+router.use('/track', emailTrackingRoutes);
 
 /**
  * Email Routes
@@ -432,6 +438,225 @@ router.post(
     body('ctaUrl').optional().isURL(),
   ]),
   asyncHandler(emailController.triggerAnnouncementEmail)
+);
+
+// ============================================
+// Mail Engine Management (Super Admin)
+// ============================================
+
+/**
+ * @route   GET /api/email/engine/status
+ * @desc    Get mail engine status
+ * @access  Super Admin
+ */
+router.get(
+  '/engine/status',
+  requireSuperAdmin,
+  asyncHandler(emailController.getMailEngineStatus)
+);
+
+/**
+ * @route   GET /api/email/engine/queue
+ * @desc    Get queue statistics
+ * @access  Super Admin
+ */
+router.get(
+  '/engine/queue',
+  requireSuperAdmin,
+  asyncHandler(emailController.getQueueStats)
+);
+
+/**
+ * @route   POST /api/email/engine/queue/start
+ * @desc    Start queue processor
+ * @access  Super Admin
+ */
+router.post(
+  '/engine/queue/start',
+  requireSuperAdmin,
+  asyncHandler(emailController.startQueue)
+);
+
+/**
+ * @route   POST /api/email/engine/queue/stop
+ * @desc    Stop queue processor
+ * @access  Super Admin
+ */
+router.post(
+  '/engine/queue/stop',
+  requireSuperAdmin,
+  asyncHandler(emailController.stopQueue)
+);
+
+/**
+ * @route   POST /api/email/engine/queue/retry/:queueId
+ * @desc    Retry a failed queued email
+ * @access  Super Admin
+ */
+router.post(
+  '/engine/queue/retry/:queueId',
+  requireSuperAdmin,
+  validate([param('queueId').isUUID()]),
+  asyncHandler(emailController.retryQueuedEmail)
+);
+
+/**
+ * @route   DELETE /api/email/engine/queue/:queueId
+ * @desc    Cancel a queued email
+ * @access  Super Admin
+ */
+router.delete(
+  '/engine/queue/:queueId',
+  requireSuperAdmin,
+  validate([param('queueId').isUUID()]),
+  asyncHandler(emailController.cancelQueuedEmail)
+);
+
+// ============================================
+// Domain Management
+// ============================================
+
+/**
+ * @route   GET /api/email/domains
+ * @desc    Get all configured email domains
+ * @access  Super Admin
+ */
+router.get(
+  '/domains',
+  requireSuperAdmin,
+  asyncHandler(emailController.getDomains)
+);
+
+/**
+ * @route   POST /api/email/domains
+ * @desc    Add a new email domain
+ * @access  Super Admin
+ */
+router.post(
+  '/domains',
+  requireSuperAdmin,
+  validate([
+    body('domain').trim().notEmpty().withMessage('Domain is required'),
+    body('hourlyLimit').optional().isInt({ min: 1 }),
+    body('dailyLimit').optional().isInt({ min: 1 }),
+  ]),
+  asyncHandler(emailController.addDomain)
+);
+
+/**
+ * @route   GET /api/email/domains/:domain/dns
+ * @desc    Get DNS records for domain setup
+ * @access  Super Admin
+ */
+router.get(
+  '/domains/:domain/dns',
+  requireSuperAdmin,
+  asyncHandler(emailController.getDomainDnsRecords)
+);
+
+/**
+ * @route   POST /api/email/domains/:domain/verify
+ * @desc    Verify domain DNS configuration
+ * @access  Super Admin
+ */
+router.post(
+  '/domains/:domain/verify',
+  requireSuperAdmin,
+  asyncHandler(emailController.verifyDomain)
+);
+
+// ============================================
+// Suppression List Management
+// ============================================
+
+/**
+ * @route   GET /api/email/suppressions
+ * @desc    Get suppression list
+ * @access  Super Admin
+ */
+router.get(
+  '/suppressions',
+  requireSuperAdmin,
+  validate([
+    query('page').optional().isInt({ min: 1 }),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('reason').optional().isString(),
+  ]),
+  asyncHandler(emailController.getSuppressions)
+);
+
+/**
+ * @route   POST /api/email/suppressions
+ * @desc    Add email to suppression list
+ * @access  Super Admin
+ */
+router.post(
+  '/suppressions',
+  requireSuperAdmin,
+  validate([
+    body('email').isEmail().withMessage('Valid email required'),
+    body('reason').trim().notEmpty().withMessage('Reason is required'),
+    body('details').optional().isString(),
+  ]),
+  asyncHandler(emailController.addSuppression)
+);
+
+/**
+ * @route   DELETE /api/email/suppressions/:email
+ * @desc    Remove email from suppression list
+ * @access  Super Admin
+ */
+router.delete(
+  '/suppressions/:email',
+  requireSuperAdmin,
+  asyncHandler(emailController.removeSuppression)
+);
+
+// ============================================
+// Analytics
+// ============================================
+
+/**
+ * @route   GET /api/email/analytics
+ * @desc    Get comprehensive email analytics
+ * @access  Super Admin
+ */
+router.get(
+  '/analytics',
+  requireSuperAdmin,
+  validate([
+    query('startDate').optional().isISO8601(),
+    query('endDate').optional().isISO8601(),
+    query('period').optional().isIn(['HOUR', 'DAY', 'WEEK', 'MONTH']),
+    query('accountId').optional().isUUID(),
+  ]),
+  asyncHandler(emailController.getAnalytics)
+);
+
+/**
+ * @route   GET /api/email/analytics/export
+ * @desc    Export email analytics to CSV
+ * @access  Super Admin
+ */
+router.get(
+  '/analytics/export',
+  requireSuperAdmin,
+  validate([
+    query('startDate').isISO8601().withMessage('Start date is required'),
+    query('endDate').isISO8601().withMessage('End date is required'),
+  ]),
+  asyncHandler(emailController.exportAnalytics)
+);
+
+/**
+ * @route   GET /api/email/report/:messageId
+ * @desc    Get detailed report for a specific email
+ * @access  Super Admin
+ */
+router.get(
+  '/report/:messageId',
+  requireSuperAdmin,
+  asyncHandler(emailController.getMessageReport)
 );
 
 export default router;

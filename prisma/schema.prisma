@@ -559,16 +559,267 @@ model EmailLog {
   id            String   @id @default(uuid())
   recipient     String
   subject       String
-  status        String   // SENT, FAILED, QUEUED, BOUNCED
+  status        String   // QUEUED, SENDING, SENT, DELIVERED, BOUNCED, FAILED, DEFERRED
   messageId     String?  @map("message_id")
   errorMessage  String?  @map("error_message") @db.Text
   metadata      Json?    // Additional data like template name, variables
+  
+  // MTA Tracking
+  mtaMessageId  String?  @map("mta_message_id") // Local MTA message ID
+  mtaResponse   String?  @map("mta_response") @db.Text // MTA response
+  
+  // Delivery Tracking
+  sentAt        DateTime? @map("sent_at")
+  deliveredAt   DateTime? @map("delivered_at")
+  bouncedAt     DateTime? @map("bounced_at")
+  
+  // Engagement Tracking
+  openedAt      DateTime? @map("opened_at")
+  openCount     Int       @default(0) @map("open_count")
+  clickedAt     DateTime? @map("clicked_at")
+  clickCount    Int       @default(0) @map("click_count")
+  
+  // Bounce/Complaint Info
+  bounceType    String?  @map("bounce_type") // HARD, SOFT
+  bounceReason  String?  @map("bounce_reason") @db.Text
+  isComplaint   Boolean  @default(false) @map("is_complaint")
+  complainedAt  DateTime? @map("complained_at")
+  
+  // Retry Management
+  retryCount    Int       @default(0) @map("retry_count")
+  maxRetries    Int       @default(3) @map("max_retries")
+  nextRetryAt   DateTime? @map("next_retry_at")
+  
+  // Reference
+  accountId     String?  @map("account_id")
+  userId        String?  @map("user_id") // Sent by
+  templateSlug  String?  @map("template_slug")
+  
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([recipient])
   @@index([status])
   @@index([createdAt])
+  @@index([accountId])
+  @@index([messageId])
   @@map("email_logs")
+}
+
+// Email Queue - For reliable email delivery
+model EmailQueue {
+  id            String   @id @default(uuid())
+  
+  // Email Details
+  fromEmail     String   @map("from_email")
+  fromName      String?  @map("from_name")
+  toEmail       String   @map("to_email")
+  toName        String?  @map("to_name")
+  ccEmails      String[] @default([]) @map("cc_emails")
+  bccEmails     String[] @default([]) @map("bcc_emails")
+  replyTo       String?  @map("reply_to")
+  
+  // Content
+  subject       String
+  htmlContent   String   @map("html_content") @db.Text
+  textContent   String?  @map("text_content") @db.Text
+  headers       Json?    // Custom headers including DKIM signature
+  
+  // Tracking
+  trackingId    String   @unique @map("tracking_id") // For open/click tracking
+  trackOpens    Boolean  @default(true) @map("track_opens")
+  trackClicks   Boolean  @default(true) @map("track_clicks")
+  
+  // Status
+  status        String   @default("PENDING") // PENDING, PROCESSING, SENT, FAILED, DEFERRED
+  priority      Int      @default(5) // 1-10 (1 = highest)
+  
+  // Delivery Tracking
+  messageId     String?  @map("message_id")
+  mtaMessageId  String?  @map("mta_message_id")
+  mtaResponse   String?  @map("mta_response") @db.Text
+  errorMessage  String?  @map("error_message") @db.Text
+  
+  // Retry Logic
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(3) @map("max_attempts")
+  nextAttemptAt DateTime? @map("next_attempt_at")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  lastError     String?  @map("last_error") @db.Text
+  
+  // Scheduling
+  scheduledAt   DateTime? @map("scheduled_at")
+  processedAt   DateTime? @map("processed_at")
+  
+  // Reference
+  accountId     String?  @map("account_id")
+  userId        String?  @map("user_id")
+  templateSlug  String?  @map("template_slug")
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  @@index([status, priority, scheduledAt])
+  @@index([nextAttemptAt])
+  @@index([toEmail])
+  @@index([trackingId])
+  @@map("email_queue")
+}
+
+// Email Tracking Events
+model EmailTrackingEvent {
+  id            String   @id @default(uuid())
+  trackingId    String   @map("tracking_id")
+  emailLogId    String?  @map("email_log_id")
+  
+  // Event Details
+  eventType     String   // OPEN, CLICK, BOUNCE, COMPLAINT, DELIVERY
+  
+  // Click Tracking
+  url           String?  @db.Text // Alias for clickedUrl 
+  clickedUrl    String?  @map("clicked_url") @db.Text
+  
+  // Bounce Info
+  bounceType    String?  @map("bounce_type")
+  bounceReason  String?  @map("bounce_reason") @db.Text
+  
+  // Client Info
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent") @db.Text
+  country       String?
+  city          String?
+  
+  // Metadata
+  metadata      Json?
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  @@index([trackingId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("email_tracking_events")
+}
+
+// Email Domain Configuration - DKIM/SPF/DMARC
+model EmailDomain {
+  id                 String   @id @default(uuid())
+  domain             String   @unique
+  
+  // DKIM Configuration
+  dkimSelector       String   @default("mail") @map("dkim_selector")
+  dkimPrivateKey     String?  @map("dkim_private_key") @db.Text // Encrypted
+  dkimPublicKey      String?  @map("dkim_public_key") @db.Text
+  dkimEnabled        Boolean  @default(false) @map("dkim_enabled")
+  
+  // DNS Records (for verification guidance)
+  spfRecord          String?  @map("spf_record") @db.Text
+  dmarcRecord        String?  @map("dmarc_record") @db.Text
+  dkimRecord         String?  @map("dkim_record") @db.Text
+  
+  // Verification Status
+  spfVerified        Boolean  @default(false) @map("spf_verified")
+  dkimVerified       Boolean  @default(false) @map("dkim_verified")
+  dmarcVerified      Boolean  @default(false) @map("dmarc_verified")
+  isVerified         Boolean  @default(false) @map("is_verified") // Overall verification
+  lastVerifiedAt     DateTime? @map("last_verified_at")
+  
+  // Domain Reputation
+  reputation         Int      @default(100) // Alias for reputationScore
+  reputationScore    Int      @default(100) @map("reputation_score") // 0-100
+  totalSent          Int      @default(0) @map("total_sent")
+  totalBounced       Int      @default(0) @map("total_bounced")
+  totalComplaints    Int      @default(0) @map("total_complaints")
+  bounceRate         Float    @default(0) @map("bounce_rate")
+  complaintRate      Float    @default(0) @map("complaint_rate")
+  
+  // Rate Limiting
+  hourlyLimit        Int      @default(100) @map("hourly_limit")
+  dailyLimit         Int      @default(1000) @map("daily_limit")
+  currentHourCount   Int      @default(0) @map("current_hour_count")
+  currentDayCount    Int      @default(0) @map("current_day_count")
+  hourResetAt        DateTime? @map("hour_reset_at")
+  dayResetAt         DateTime? @map("day_reset_at")
+  
+  // Status
+  isActive           Boolean  @default(true) @map("is_active")
+  isDefault          Boolean  @default(false) @map("is_default")
+  
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  
+  @@map("email_domains")
+}
+
+// Email Suppression List - Bounces, Unsubscribes, Complaints
+model EmailSuppression {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  
+  // Suppression Reason
+  reason        String   // BOUNCE_HARD, BOUNCE_SOFT, UNSUBSCRIBE, COMPLAINT, MANUAL
+  details       String?  @db.Text
+  
+  // Source
+  sourceType    String?  @map("source_type") // EMAIL_LOG_ID, WEBHOOK, MANUAL
+  sourceId      String?  @map("source_id")
+  
+  // Status
+  isActive      Boolean  @default(true) @map("is_active")
+  expiresAt     DateTime? @map("expires_at") // For soft bounces
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  @@index([email])
+  @@index([reason])
+  @@map("email_suppressions")
+}
+
+// Email Statistics - Aggregated stats
+model EmailStats {
+  id            String   @id @default(uuid())
+  
+  // Time Period
+  period        String   // HOUR, DAY, WEEK, MONTH
+  periodStart   DateTime @map("period_start")
+  periodEnd     DateTime @map("period_end")
+  
+  // Sending Stats
+  totalQueued   Int      @default(0) @map("total_queued")
+  totalSent     Int      @default(0) @map("total_sent")
+  totalFailed   Int      @default(0) @map("total_failed")
+  totalDeferred Int      @default(0) @map("total_deferred")
+  
+  // Delivery Stats
+  totalDelivered Int     @default(0) @map("total_delivered")
+  totalBounced  Int      @default(0) @map("total_bounced")
+  hardBounces   Int      @default(0) @map("hard_bounces")
+  softBounces   Int      @default(0) @map("soft_bounces")
+  
+  // Engagement Stats
+  totalOpened   Int      @default(0) @map("total_opened")
+  uniqueOpens   Int      @default(0) @map("unique_opens")
+  totalClicked  Int      @default(0) @map("total_clicked")
+  uniqueClicks  Int      @default(0) @map("unique_clicks")
+  totalComplaints Int    @default(0) @map("total_complaints")
+  totalUnsubscribes Int  @default(0) @map("total_unsubscribes")
+  
+  // Rates
+  deliveryRate  Float    @default(0) @map("delivery_rate")
+  bounceRate    Float    @default(0) @map("bounce_rate")
+  openRate      Float    @default(0) @map("open_rate")
+  clickRate     Float    @default(0) @map("click_rate")
+  complaintRate Float    @default(0) @map("complaint_rate")
+  
+  // Domain
+  domain        String?
+  accountId     String?  @map("account_id")
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  @@unique([period, periodStart, domain, accountId])
+  @@index([period, periodStart])
+  @@index([domain])
+  @@map("email_stats")
 }
 
 // ============================================

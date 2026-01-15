@@ -1893,3 +1893,485 @@ export async function triggerAnnouncementEmail(req: Request, res: Response) {
     });
   }
 }
+
+// ============================================
+// Mail Engine Management
+// ============================================
+
+/**
+ * Get mail engine status
+ */
+export async function getMailEngineStatus(_req: Request, res: Response) {
+  try {
+    // Dynamic import to avoid circular dependencies
+    const { mailEngine } = await import('@/services/mail-engine');
+    const status = await mailEngine.getStatus();
+
+    return res.json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    logger.error('Get mail engine status error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get mail engine status',
+    });
+  }
+}
+
+/**
+ * Get queue statistics
+ */
+export async function getQueueStats(_req: Request, res: Response) {
+  try {
+    const { mailEngine } = await import('@/services/mail-engine');
+    const stats = await mailEngine.getQueueStats();
+
+    // Get pending queue items
+    const pendingEmails = await prisma.emailQueue.findMany({
+      where: {
+        status: { in: ['PENDING', 'PROCESSING'] },
+      },
+      take: 50,
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'asc' },
+      ],
+      select: {
+        id: true,
+        toEmail: true,
+        subject: true,
+        status: true,
+        priority: true,
+        attempts: true,
+        maxAttempts: true,
+        scheduledAt: true,
+        createdAt: true,
+        lastError: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        stats,
+        pending: pendingEmails,
+      },
+    });
+  } catch (error) {
+    logger.error('Get queue stats error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get queue statistics',
+    });
+  }
+}
+
+/**
+ * Start queue processor
+ */
+export async function startQueue(_req: Request, res: Response) {
+  try {
+    const { mailEngine } = await import('@/services/mail-engine');
+    mailEngine.startQueue();
+
+    return res.json({
+      success: true,
+      message: 'Queue processor started',
+    });
+  } catch (error) {
+    logger.error('Start queue error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to start queue processor',
+    });
+  }
+}
+
+/**
+ * Stop queue processor
+ */
+export async function stopQueue(_req: Request, res: Response) {
+  try {
+    const { mailEngine } = await import('@/services/mail-engine');
+    mailEngine.stopQueue();
+
+    return res.json({
+      success: true,
+      message: 'Queue processor stopped',
+    });
+  } catch (error) {
+    logger.error('Stop queue error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to stop queue processor',
+    });
+  }
+}
+
+/**
+ * Retry a failed queued email
+ */
+export async function retryQueuedEmail(req: Request, res: Response) {
+  try {
+    const queueId = req.params.queueId as string;
+    const { mailEngine } = await import('@/services/mail-engine');
+    
+    const success = await mailEngine.retryEmail(queueId);
+
+    if (success) {
+      return res.json({
+        success: true,
+        message: 'Email queued for retry',
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        error: 'Email not found or cannot be retried',
+      });
+    }
+  } catch (error) {
+    logger.error('Retry queued email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retry email',
+    });
+  }
+}
+
+/**
+ * Cancel a queued email
+ */
+export async function cancelQueuedEmail(req: Request, res: Response) {
+  try {
+    const queueId = req.params.queueId as string;
+    const { mailEngine } = await import('@/services/mail-engine');
+    
+    const success = await mailEngine.cancelEmail(queueId);
+
+    if (success) {
+      return res.json({
+        success: true,
+        message: 'Email cancelled',
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        error: 'Email not found or cannot be cancelled',
+      });
+    }
+  } catch (error) {
+    logger.error('Cancel queued email error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to cancel email',
+    });
+  }
+}
+
+// ============================================
+// Domain Management
+// ============================================
+
+/**
+ * Get all configured email domains
+ */
+export async function getDomains(_req: Request, res: Response) {
+  try {
+    const domains = await prisma.emailDomain.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({
+      success: true,
+      data: domains,
+    });
+  } catch (error) {
+    logger.error('Get domains error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get domains',
+    });
+  }
+}
+
+/**
+ * Add a new email domain
+ */
+export async function addDomain(req: Request, res: Response) {
+  try {
+    const { domain, hourlyLimit, dailyLimit } = req.body;
+    const { mailEngine } = await import('@/services/mail-engine');
+
+    // Setup domain with DKIM (stores keys in database)
+    const dkimConfig = await mailEngine.setupDomain(domain);
+
+    // Update domain with rate limits if provided
+    const domainRecord = await prisma.emailDomain.update({
+      where: { domain },
+      data: {
+        hourlyLimit: hourlyLimit || 100,
+        dailyLimit: dailyLimit || 1000,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        domain: domainRecord,
+        dnsRecords: dkimConfig,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Add domain error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to add domain',
+    });
+  }
+}
+
+/**
+ * Get DNS records for domain setup
+ */
+export async function getDomainDnsRecords(req: Request, res: Response) {
+  try {
+    const domain = req.params.domain as string;
+    const { mailEngine } = await import('@/services/mail-engine');
+
+    const dnsRecords = await mailEngine.getDnsRecords(domain);
+
+    return res.json({
+      success: true,
+      data: dnsRecords,
+    });
+  } catch (error: any) {
+    logger.error('Get domain DNS records error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get DNS records',
+    });
+  }
+}
+
+/**
+ * Verify domain DNS configuration
+ */
+export async function verifyDomain(req: Request, res: Response) {
+  try {
+    const { domain } = req.params as { domain: string };
+    const { mailEngine } = await import('@/services/mail-engine');
+
+    const verification = await mailEngine.verifyDomain(domain);
+
+    // Update domain verification status
+    await prisma.emailDomain.update({
+      where: { domain },
+      data: {
+        isVerified: verification.spfConfigured && verification.dkimDnsVerified,
+        lastVerifiedAt: new Date(),
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: verification,
+    });
+  } catch (error: any) {
+    logger.error('Verify domain error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to verify domain',
+    });
+  }
+}
+
+// ============================================
+// Suppression List Management
+// ============================================
+
+/**
+ * Get suppression list
+ */
+export async function getSuppressions(req: Request, res: Response) {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const reason = req.query.reason as string;
+
+    const where: any = { isActive: true };
+    if (reason) {
+      where.reason = reason;
+    }
+
+    const [suppressions, total] = await Promise.all([
+      prisma.emailSuppression.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.emailSuppression.count({ where }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: suppressions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    logger.error('Get suppressions error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get suppression list',
+    });
+  }
+}
+
+/**
+ * Add email to suppression list
+ */
+export async function addSuppression(req: Request, res: Response) {
+  try {
+    const { email, reason, details } = req.body;
+    const { mailEngine } = await import('@/services/mail-engine');
+
+    await mailEngine.suppressEmail(email, reason, details);
+
+    return res.json({
+      success: true,
+      message: `${email} added to suppression list`,
+    });
+  } catch (error) {
+    logger.error('Add suppression error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to add to suppression list',
+    });
+  }
+}
+
+/**
+ * Remove email from suppression list
+ */
+export async function removeSuppression(req: Request, res: Response) {
+  try {
+    const email = req.params.email as string;
+    const { mailEngine } = await import('@/services/mail-engine');
+
+    await mailEngine.unsuppressEmail(email);
+
+    return res.json({
+      success: true,
+      message: `${email} removed from suppression list`,
+    });
+  } catch (error) {
+    logger.error('Remove suppression error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to remove from suppression list',
+    });
+  }
+}
+
+// ============================================
+// Analytics
+// ============================================
+
+/**
+ * Get comprehensive email analytics
+ */
+export async function getAnalytics(req: Request, res: Response) {
+  try {
+    const { mailEngine } = await import('@/services/mail-engine');
+    
+    const startDate = req.query.startDate 
+      ? new Date(req.query.startDate as string) 
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
+    
+    const endDate = req.query.endDate 
+      ? new Date(req.query.endDate as string) 
+      : new Date();
+    
+    const period = (req.query.period as 'HOUR' | 'DAY' | 'WEEK' | 'MONTH') || 'DAY';
+    const accountId = req.query.accountId as string | undefined;
+
+    const analytics = await mailEngine.getAnalytics({
+      startDate,
+      endDate,
+      period,
+      accountId,
+    });
+
+    return res.json({
+      success: true,
+      data: analytics,
+    });
+  } catch (error) {
+    logger.error('Get analytics error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get analytics',
+    });
+  }
+}
+
+/**
+ * Export email analytics to CSV
+ */
+export async function exportAnalytics(req: Request, res: Response) {
+  try {
+    const startDate = new Date(req.query.startDate as string);
+    const endDate = new Date(req.query.endDate as string);
+
+    const { emailAnalyticsService } = await import('@/services/mail-engine/analytics.service');
+    const csv = await emailAnalyticsService.exportToCsv(startDate, endDate);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=email-analytics-${startDate.toISOString().split('T')[0]}-${endDate.toISOString().split('T')[0]}.csv`);
+    
+    return res.send(csv);
+  } catch (error) {
+    logger.error('Export analytics error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to export analytics',
+    });
+  }
+}
+
+/**
+ * Get detailed report for a specific email
+ */
+export async function getMessageReport(req: Request, res: Response) {
+  try {
+    const messageId = req.params.messageId as string;
+    const { emailAnalyticsService } = await import('@/services/mail-engine/analytics.service');
+
+    const report = await emailAnalyticsService.getMessageReport(messageId);
+
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        error: 'Message not found',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: report,
+    });
+  } catch (error) {
+    logger.error('Get message report error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get message report',
+    });
+  }
+}
