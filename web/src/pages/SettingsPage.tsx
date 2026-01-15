@@ -28,11 +28,14 @@ import {
   CloudUpload,
   FileText,
   Info,
+  Send,
+  Users,
+  Globe,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
-type SettingsTab = 'profile' | 'dealership' | 'ftp' | 'notifications' | 'billing' | 'security' | 'apikeys';
+type SettingsTab = 'profile' | 'dealership' | 'ftp' | 'notifications' | 'billing' | 'security' | 'apikeys' | 'adf';
 
 // API Key types
 interface ApiKey {
@@ -289,6 +292,7 @@ export default function SettingsPage() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'dealership', label: 'Dealership', icon: Building2 },
     { id: 'ftp', label: 'FTP/Data Feed', icon: Server },
+    { id: 'adf', label: 'ADF/DMS', icon: Send },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'security', label: 'Security', icon: Key },
@@ -949,6 +953,11 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ADF/DMS Configuration Tab */}
+          {activeTab === 'adf' && (
+            <ADFConfigurationTab />
+          )}
+
           {/* Notifications Tab */}
           {activeTab === 'notifications' && (
             <div className="space-y-6">
@@ -1356,6 +1365,510 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ADF Configuration Tab Component
+function ADFConfigurationTab() {
+  const queryClient = useQueryClient();
+  const [testingDms, setTestingDms] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // ADF Configuration state
+  const [adfConfig, setAdfConfig] = useState({
+    enabled: false,
+    dmsProvider: '',
+    dmsEndpoint: '',
+    dmsApiKey: '',
+    dmsUsername: '',
+    dmsPassword: '',
+    emailEnabled: false,
+    emailRecipients: '',
+    autoAssignEnabled: false,
+    autoAssignMethod: 'round_robin',
+    includeVehiclePhotos: true,
+    includeTradeIn: true,
+    defaultPriority: 'MEDIUM',
+    aiAssistEnabled: false,
+  });
+  
+  // Fetch ADF configuration
+  const { data: configData } = useQuery({
+    queryKey: ['adf-config'],
+    queryFn: async () => {
+      const response = await api.get('/api/leads/config/adf');
+      return response.data;
+    },
+    retry: false,
+  });
+
+  // Update local state when config loads
+  useState(() => {
+    if (configData?.config) {
+      setAdfConfig(prev => ({
+        ...prev,
+        enabled: configData.config.enabled ?? false,
+        dmsProvider: configData.config.dmsProvider || '',
+        dmsEndpoint: configData.config.dmsEndpoint || '',
+        dmsApiKey: configData.config.dmsApiKey || '',
+        dmsUsername: configData.config.dmsUsername || '',
+        dmsPassword: configData.config.dmsPassword || '',
+        emailEnabled: configData.config.emailEnabled ?? false,
+        emailRecipients: configData.config.adfEmailRecipients?.join(', ') || '',
+        autoAssignEnabled: configData.config.autoAssignEnabled ?? false,
+        autoAssignMethod: configData.config.autoAssignMethod || 'round_robin',
+        includeVehiclePhotos: configData.config.includeVehiclePhotos ?? true,
+        includeTradeIn: configData.config.includeTradeIn ?? true,
+        defaultPriority: configData.config.defaultPriority || 'MEDIUM',
+        aiAssistEnabled: configData.config.aiAssistEnabled ?? false,
+      }));
+    }
+  });
+
+  // Sales rep mappings
+  const { data: mappingsData } = useQuery({
+    queryKey: ['sales-rep-mappings'],
+    queryFn: async () => {
+      const response = await api.get('/api/leads/config/adf');
+      return response.data?.mappings || [];
+    },
+    retry: false,
+  });
+  
+  const [newMapping, setNewMapping] = useState({
+    facebookUsername: '',
+    dmsRepId: '',
+    dmsRepName: '',
+  });
+
+  // Save ADF configuration mutation
+  const saveConfigMutation = useMutation({
+    mutationFn: async (config: typeof adfConfig) => {
+      const response = await api.put('/api/leads/config/adf', {
+        enabled: config.enabled,
+        dmsProvider: config.dmsProvider,
+        dmsEndpoint: config.dmsEndpoint,
+        dmsApiKey: config.dmsApiKey,
+        dmsUsername: config.dmsUsername,
+        dmsPassword: config.dmsPassword,
+        emailEnabled: config.emailEnabled,
+        adfEmailRecipients: config.emailRecipients.split(',').map(e => e.trim()).filter(Boolean),
+        autoAssignEnabled: config.autoAssignEnabled,
+        autoAssignMethod: config.autoAssignMethod,
+        includeVehiclePhotos: config.includeVehiclePhotos,
+        includeTradeIn: config.includeTradeIn,
+        defaultPriority: config.defaultPriority,
+        aiAssistEnabled: config.aiAssistEnabled,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adf-config'] });
+    },
+  });
+
+  // Test DMS connection mutation
+  const testDmsMutation = useMutation({
+    mutationFn: async () => {
+      setTestingDms(true);
+      setTestResult(null);
+      const response = await api.post('/api/leads/config/adf/test-dms', {
+        endpoint: adfConfig.dmsEndpoint,
+        method: 'POST',
+        apiKey: adfConfig.dmsApiKey,
+        username: adfConfig.dmsUsername,
+        password: adfConfig.dmsPassword,
+      });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setTestingDms(false);
+      setTestResult({ success: data.success, message: data.message || 'Connection successful!' });
+    },
+    onError: (error: any) => {
+      setTestingDms(false);
+      setTestResult({ success: false, message: error.response?.data?.message || 'Connection failed' });
+    },
+  });
+
+  // Create mapping mutation
+  const createMappingMutation = useMutation({
+    mutationFn: async (mapping: typeof newMapping) => {
+      const response = await api.post('/api/leads/config/adf/mappings', mapping);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales-rep-mappings'] });
+      setNewMapping({ facebookUsername: '', dmsRepId: '', dmsRepName: '' });
+    },
+  });
+
+  // Delete mapping mutation
+  const deleteMappingMutation = useMutation({
+    mutationFn: async (mappingId: string) => {
+      const response = await api.delete(`/api/leads/config/adf/mappings/${mappingId}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales-rep-mappings'] });
+    },
+  });
+
+  const dmsProviders = [
+    { value: '', label: 'Select DMS Provider' },
+    { value: 'vinsolutions', label: 'VinSolutions' },
+    { value: 'dealersocket', label: 'DealerSocket' },
+    { value: 'elead', label: 'eLead CRM' },
+    { value: 'dealertrack', label: 'DealerTrack' },
+    { value: 'cdk', label: 'CDK Global' },
+    { value: 'reynolds', label: 'Reynolds & Reynolds' },
+    { value: 'automate', label: 'AutoMate' },
+    { value: 'custom', label: 'Custom/Other' },
+  ];
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">ADF/DMS Integration</h2>
+          <p className="text-sm text-gray-500">Configure lead delivery to your DMS using ADF XML standard</p>
+        </div>
+        <button
+          onClick={() => saveConfigMutation.mutate(adfConfig)}
+          disabled={saveConfigMutation.isPending}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saveConfigMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save ADF Settings
+        </button>
+      </div>
+
+      {/* Enable ADF Toggle */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <Send className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">Enable ADF Lead Delivery</h3>
+              <p className="text-sm text-gray-600">Automatically send leads to your DMS in ADF XML format</p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={adfConfig.enabled}
+              onChange={(e) => setAdfConfig({ ...adfConfig, enabled: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-14 h-7 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+            <div className="absolute left-1 top-1 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-7"></div>
+          </label>
+        </div>
+      </div>
+
+      {/* DMS Configuration */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+          <Globe className="w-5 h-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-900">DMS HTTP POST Configuration</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">DMS Provider</label>
+            <select
+              value={adfConfig.dmsProvider}
+              onChange={(e) => setAdfConfig({ ...adfConfig, dmsProvider: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {dmsProviders.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">DMS Endpoint URL</label>
+            <input
+              type="url"
+              value={adfConfig.dmsEndpoint}
+              onChange={(e) => setAdfConfig({ ...adfConfig, dmsEndpoint: e.target.value })}
+              placeholder="https://your-dms.com/api/adf"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">API Key (Optional)</label>
+            <input
+              type="password"
+              value={adfConfig.dmsApiKey}
+              onChange={(e) => setAdfConfig({ ...adfConfig, dmsApiKey: e.target.value })}
+              placeholder="Your DMS API key"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+              <input
+                type="text"
+                value={adfConfig.dmsUsername}
+                onChange={(e) => setAdfConfig({ ...adfConfig, dmsUsername: e.target.value })}
+                placeholder="DMS Username"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+              <input
+                type="password"
+                value={adfConfig.dmsPassword}
+                onChange={(e) => setAdfConfig({ ...adfConfig, dmsPassword: e.target.value })}
+                placeholder="DMS Password"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 pt-4">
+          <button
+            onClick={() => testDmsMutation.mutate()}
+            disabled={!adfConfig.dmsEndpoint || testingDms}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            {testingDms ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Test Connection
+          </button>
+          {testResult && (
+            <div className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-lg",
+              testResult.success ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+            )}>
+              {testResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+              {testResult.message}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Email Configuration */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
+        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <Bell className="w-5 h-5 text-gray-600" />
+            <h3 className="font-semibold text-gray-900">Email ADF Delivery</h3>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={adfConfig.emailEnabled}
+              onChange={(e) => setAdfConfig({ ...adfConfig, emailEnabled: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+          </label>
+        </div>
+
+        {adfConfig.emailEnabled && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Email Recipients (comma-separated)
+            </label>
+            <textarea
+              value={adfConfig.emailRecipients}
+              onChange={(e) => setAdfConfig({ ...adfConfig, emailRecipients: e.target.value })}
+              placeholder="leads@yourdealership.com, sales@yourdealership.com"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              ADF XML will be sent as an email attachment to these addresses
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Auto-Assignment Configuration */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
+        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <Users className="w-5 h-5 text-gray-600" />
+            <h3 className="font-semibold text-gray-900">Lead Auto-Assignment</h3>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={adfConfig.autoAssignEnabled}
+              onChange={(e) => setAdfConfig({ ...adfConfig, autoAssignEnabled: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+            <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+          </label>
+        </div>
+
+        {adfConfig.autoAssignEnabled && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Assignment Method</label>
+              <select
+                value={adfConfig.autoAssignMethod}
+                onChange={(e) => setAdfConfig({ ...adfConfig, autoAssignMethod: e.target.value })}
+                className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="round_robin">Round Robin</option>
+                <option value="facebook_match">Match by Facebook Username</option>
+                <option value="least_assigned">Least Assigned</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sales Rep Mappings */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+          <Users className="w-5 h-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-900">Sales Rep Mappings</h3>
+          <span className="text-sm text-gray-500">(Facebook Username → DMS Rep)</span>
+        </div>
+
+        {/* Existing Mappings */}
+        {mappingsData && mappingsData.length > 0 && (
+          <div className="space-y-2">
+            {mappingsData.map((mapping: any) => (
+              <div key={mapping.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-medium text-gray-700">@{mapping.facebookUsername}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="text-sm text-gray-600">{mapping.dmsRepName || mapping.dmsRepId}</span>
+                </div>
+                <button
+                  onClick={() => deleteMappingMutation.mutate(mapping.id)}
+                  className="p-1 text-red-500 hover:bg-red-50 rounded"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add New Mapping */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-gray-100">
+          <div>
+            <input
+              type="text"
+              value={newMapping.facebookUsername}
+              onChange={(e) => setNewMapping({ ...newMapping, facebookUsername: e.target.value })}
+              placeholder="Facebook Username"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <input
+              type="text"
+              value={newMapping.dmsRepId}
+              onChange={(e) => setNewMapping({ ...newMapping, dmsRepId: e.target.value })}
+              placeholder="DMS Rep ID"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <input
+              type="text"
+              value={newMapping.dmsRepName}
+              onChange={(e) => setNewMapping({ ...newMapping, dmsRepName: e.target.value })}
+              placeholder="Rep Name"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <button
+            onClick={() => createMappingMutation.mutate(newMapping)}
+            disabled={!newMapping.facebookUsername || !newMapping.dmsRepId || createMappingMutation.isPending}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {createMappingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Add Mapping
+          </button>
+        </div>
+      </div>
+
+      {/* Advanced Options */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+          <Key className="w-5 h-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-900">Advanced Options</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Default Lead Priority</label>
+            <select
+              value={adfConfig.defaultPriority}
+              onChange={(e) => setAdfConfig({ ...adfConfig, defaultPriority: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="URGENT">Urgent</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-4 pt-4">
+          {[
+            { key: 'includeVehiclePhotos', label: 'Include Vehicle Photos', desc: 'Attach vehicle photos in ADF submission' },
+            { key: 'includeTradeIn', label: 'Include Trade-In Info', desc: 'Include trade-in details when available' },
+            { key: 'aiAssistEnabled', label: 'AI Communication Assistant', desc: 'Enable AI to help draft lead responses' },
+          ].map((item) => (
+            <div key={item.key} className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div>
+                <p className="font-medium text-gray-700">{item.label}</p>
+                <p className="text-sm text-gray-500">{item.desc}</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={(adfConfig as any)[item.key]}
+                  onChange={(e) =>
+                    setAdfConfig({
+                      ...adfConfig,
+                      [item.key]: e.target.checked,
+                    })
+                  }
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Info Box */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+        <div className="flex gap-4">
+          <Info className="w-6 h-6 text-amber-600 flex-shrink-0" />
+          <div>
+            <h4 className="font-semibold text-amber-900">About ADF XML Standard</h4>
+            <p className="text-sm text-amber-800 mt-1">
+              ADF (Auto-lead Data Format) is an industry-standard XML format for transmitting automotive leads between 
+              systems. This integration allows seamless delivery of Facebook Marketplace leads to your DMS system.
+            </p>
+            <p className="text-sm text-amber-800 mt-2">
+              <strong>Supported delivery methods:</strong> HTTP POST to DMS endpoint, or Email with XML attachment.
+            </p>
+          </div>
         </div>
       </div>
     </div>
