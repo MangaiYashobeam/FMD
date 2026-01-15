@@ -88,6 +88,27 @@ app.use((req, _res, next) => {
 // ============================================
 // Health Check
 // ============================================
+// Root route
+// ============================================
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'FaceMyDealer API',
+    version: '1.0.0',
+    status: 'online',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      vehicles: '/api/vehicles',
+      accounts: '/api/accounts',
+      facebook: '/api/facebook',
+      sync: '/api/sync',
+      admin: '/api/admin',
+    },
+    documentation: 'https://github.com/MangaiYashobeam/FMD',
+  });
+});
+
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
