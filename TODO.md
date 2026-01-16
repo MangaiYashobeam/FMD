@@ -6,6 +6,69 @@
 
 ---
 
+## 🚨🚨🚨 CRITICAL ACTION ITEMS - DO NOT SKIP 🚨🚨🚨
+
+> **⚠️ THESE ITEMS BLOCK PRODUCTION LAUNCH - COMPLETE BEFORE ANYTHING ELSE ⚠️**
+
+| # | Task | Status | Priority | Blocking |
+|---|------|--------|----------|----------|
+| 1 | 📧 **Request AWS SES production access** | ❌ PENDING | 🔴 CRITICAL | Email delivery |
+| 2 | 💳 **Configure Stripe API keys** | ❌ PENDING | 🔴 CRITICAL | Payment processing |
+| 3 | 📘 **Submit Facebook App for review** | ❌ PENDING | 🔴 CRITICAL | Marketplace posting |
+| 4 | 🧪 **Test full user flow (register→sync→post)** | ❌ PENDING | 🔴 CRITICAL | Launch readiness |
+
+### 📧 Task 1: AWS SES Production Access
+```
+1. Go to AWS Console → SES → Account Dashboard
+2. Click "Request Production Access"
+3. Fill out use case (transactional emails for dealership platform)
+4. Wait for approval (usually 24-48 hours)
+5. Once approved, update Railway env: SES_PRODUCTION=true
+```
+**Status:** ❌ NOT STARTED  
+**Deadline:** ASAP  
+
+### 💳 Task 2: Configure Stripe
+```
+1. Go to https://dashboard.stripe.com/apikeys
+2. Copy Secret Key (sk_live_xxx or sk_test_xxx)
+3. Go to Railway Dashboard → Variables
+4. Add: STRIPE_SECRET_KEY=sk_xxx
+5. Add: STRIPE_WEBHOOK_SECRET=whsec_xxx
+6. Test with a $1 subscription
+```
+**Status:** ❌ NOT STARTED  
+**Deadline:** ASAP  
+
+### 📘 Task 3: Facebook App Review
+```
+1. Go to https://developers.facebook.com
+2. Select your app → App Review
+3. Request permissions:
+   - pages_read_engagement
+   - pages_manage_posts
+   - publish_to_groups (if needed)
+4. Provide demo video showing legitimate use
+5. Submit for review (can take 5-10 business days)
+```
+**Status:** ❌ NOT STARTED  
+**Deadline:** ASAP  
+
+### 🧪 Task 4: Full User Flow Test
+```
+1. Register new account at dealersface.com
+2. Configure FTP settings with real DMS data
+3. Trigger manual sync
+4. Verify vehicles imported correctly
+5. Connect Facebook account
+6. Post a test vehicle to Marketplace
+7. Verify lead capture works
+```
+**Status:** ❌ NOT STARTED  
+**Deadline:** Before public launch  
+
+---
+
 ## ✅ Phase 1: Backend API - COMPLETED ✅
 
 ### Infrastructure & Deployment
