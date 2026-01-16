@@ -1,6 +1,35 @@
 import { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { logger } from '@/utils/logger';
+import { iipcService } from '@/services/iipc.service';
+
+/**
+ * Check if IP can bypass rate limiting via IIPC
+ */
+function canBypassRateLimit(req: Request): boolean {
+  // Check if already computed by iipcCheck middleware
+  if (req.iipc?.canOverrideRateLimit) {
+    return true;
+  }
+  
+  // Otherwise check directly with IIPC service
+  const ip = getClientIPForRateLimit(req);
+  return iipcService.isSuperAdminIP(ip);
+}
+
+/**
+ * Get client IP for rate limiting
+ */
+function getClientIPForRateLimit(req: Request): string {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    const ips = Array.isArray(forwardedFor) 
+      ? forwardedFor[0] 
+      : forwardedFor.split(',')[0];
+    return ips.trim();
+  }
+  return req.ip || 'unknown';
+}
 
 /**
  * Security Middleware
@@ -26,7 +55,9 @@ export const generalLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     // Skip rate limiting for health checks
-    return req.path === '/health';
+    if (req.path === '/health') return true;
+    // Skip for IIPC whitelisted IPs (super admin)
+    return canBypassRateLimit(req);
   },
   keyGenerator: (req) => {
     // Use forwarded IP if behind proxy, otherwise use direct IP
@@ -57,6 +88,10 @@ export const authLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip for IIPC whitelisted IPs (super admin can bypass login blocks)
+    return canBypassRateLimit(req);
+  },
   keyGenerator: (req) => {
     // Include email in key for login attempts to prevent distributed attacks
     const email = req.body?.email?.toLowerCase() || '';
@@ -88,6 +123,10 @@ export const passwordResetLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip for IIPC whitelisted IPs
+    return canBypassRateLimit(req);
+  },
   keyGenerator: (req) => {
     const email = req.body?.email?.toLowerCase() || '';
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() 

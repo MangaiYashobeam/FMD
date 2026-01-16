@@ -605,6 +605,15 @@ class IIPCService extends EventEmitter {
     return [...this.config.superAdminOverrideIPs];
   }
 
+  /**
+   * Check if an IP is a super admin override IP
+   */
+  isSuperAdminIP(ip: string): boolean {
+    return this.config.superAdminOverrideIPs.some(adminIP => 
+      this.ipMatchesRule(ip, adminIP)
+    );
+  }
+
   // ============================================
   // Global Whitelist Management
   // ============================================
