@@ -1,7 +1,9 @@
 /**
  * Mail Transfer Agent (MTA) Service
- * Self-hosted email sending using local MTA (Postfix/Sendmail)
- * Production-grade email delivery without third-party services
+ * Supports multiple delivery methods:
+ * - Amazon SES (recommended for cloud deployments)
+ * - Local MTA (Postfix/Sendmail)
+ * - Direct MX delivery
  * 
  * @module MTAService
  * @author DealersFace
@@ -19,9 +21,33 @@ import { DKIMService } from './dkim.service';
 const dnsResolveMx = promisify(dns.resolveMx);
 const dnsResolve4 = promisify(dns.resolve4);
 
+// Delivery Method Types
+type DeliveryMethod = 'ses' | 'smtp' | 'local' | 'direct';
+
 // MTA Configuration
 const MTA_CONFIG = {
-  // Local MTA Settings
+  // Delivery Method: 'ses' | 'smtp' | 'local' | 'direct'
+  deliveryMethod: (process.env.MTA_DELIVERY_METHOD || 'ses') as DeliveryMethod,
+  
+  // Amazon SES Settings
+  ses: {
+    host: process.env.SES_SMTP_HOST || 'email-smtp.us-east-1.amazonaws.com',
+    port: parseInt(process.env.SES_SMTP_PORT || '587'),
+    user: process.env.SES_SMTP_USER || '',
+    pass: process.env.SES_SMTP_PASS || '',
+    region: process.env.SES_REGION || 'us-east-1',
+  },
+  
+  // Generic SMTP Relay Settings
+  smtp: {
+    host: process.env.SMTP_HOST || '',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    secure: process.env.SMTP_SECURE === 'true',
+  },
+  
+  // Local MTA Settings (Postfix/Sendmail)
   localMtaHost: process.env.LOCAL_MTA_HOST || 'localhost',
   localMtaPort: parseInt(process.env.LOCAL_MTA_PORT || '25'),
   useTls: process.env.MTA_USE_TLS === 'true',
@@ -42,9 +68,9 @@ const MTA_CONFIG = {
   maxRetries: 3,
   retryDelays: [60, 300, 1800], // 1min, 5min, 30min
   
-  // Rate Limiting
-  defaultHourlyLimit: 100,
-  defaultDailyLimit: 1000,
+  // Rate Limiting (SES has 14/sec default, 50k/day in sandbox)
+  defaultHourlyLimit: 1000,
+  defaultDailyLimit: 50000,
   
   // System Domain
   systemDomain: process.env.MAIL_DOMAIN || 'dealersface.com',
@@ -78,6 +104,7 @@ export interface MTASendResult {
 
 export interface MTAStatus {
   available: boolean;
+  deliveryMethod: DeliveryMethod;
   host: string;
   port: number;
   tlsEnabled: boolean;
@@ -88,7 +115,7 @@ export interface MTAStatus {
 
 /**
  * Mail Transfer Agent Service
- * Handles low-level SMTP communication with local MTA or direct delivery
+ * Handles email delivery via SES, SMTP relay, local MTA, or direct MX
  */
 export class MTAService {
   private dkimService: DKIMService;
@@ -98,8 +125,9 @@ export class MTAService {
     this.dkimService = new DKIMService();
     this.mtaStatus = {
       available: false,
-      host: MTA_CONFIG.localMtaHost,
-      port: MTA_CONFIG.localMtaPort,
+      deliveryMethod: MTA_CONFIG.deliveryMethod,
+      host: this.getConfiguredHost(),
+      port: this.getConfiguredPort(),
       tlsEnabled: MTA_CONFIG.useTls,
       directDelivery: MTA_CONFIG.directDelivery,
       lastCheck: new Date(),
@@ -112,21 +140,61 @@ export class MTAService {
   }
 
   /**
-   * Check if local MTA is available
+   * Get the configured SMTP host based on delivery method
+   */
+  private getConfiguredHost(): string {
+    switch (MTA_CONFIG.deliveryMethod) {
+      case 'ses': return MTA_CONFIG.ses.host;
+      case 'smtp': return MTA_CONFIG.smtp.host;
+      case 'local': return MTA_CONFIG.localMtaHost;
+      case 'direct': return 'direct-mx';
+      default: return MTA_CONFIG.ses.host;
+    }
+  }
+
+  /**
+   * Get the configured SMTP port based on delivery method
+   */
+  private getConfiguredPort(): number {
+    switch (MTA_CONFIG.deliveryMethod) {
+      case 'ses': return MTA_CONFIG.ses.port;
+      case 'smtp': return MTA_CONFIG.smtp.port;
+      case 'local': return MTA_CONFIG.localMtaPort;
+      case 'direct': return 25;
+      default: return MTA_CONFIG.ses.port;
+    }
+  }
+
+  /**
+   * Check if the configured mail service is available
    */
   async checkMTAAvailability(): Promise<MTAStatus> {
     try {
-      const socket = await this.createConnection(
-        MTA_CONFIG.localMtaHost,
-        MTA_CONFIG.localMtaPort,
-        5000
-      );
+      const host = this.getConfiguredHost();
+      const port = this.getConfiguredPort();
+      
+      // For direct delivery, just mark as available
+      if (MTA_CONFIG.deliveryMethod === 'direct') {
+        this.mtaStatus = {
+          available: true,
+          deliveryMethod: 'direct',
+          host: 'direct-mx',
+          port: 25,
+          tlsEnabled: true,
+          directDelivery: true,
+          lastCheck: new Date(),
+        };
+        logger.info('✅ Direct MX delivery mode enabled');
+        return this.mtaStatus;
+      }
+      
+      const socket = await this.createConnection(host, port, 5000);
       
       // Read greeting
       const greeting = await this.readLine(socket);
       
       if (!greeting.startsWith('220')) {
-        throw new Error(`Unexpected MTA greeting: ${greeting}`);
+        throw new Error(`Unexpected greeting: ${greeting}`);
       }
       
       // Send QUIT
@@ -135,27 +203,29 @@ export class MTAService {
       
       this.mtaStatus = {
         available: true,
-        host: MTA_CONFIG.localMtaHost,
-        port: MTA_CONFIG.localMtaPort,
-        tlsEnabled: MTA_CONFIG.useTls,
+        deliveryMethod: MTA_CONFIG.deliveryMethod,
+        host,
+        port,
+        tlsEnabled: MTA_CONFIG.deliveryMethod === 'ses' || MTA_CONFIG.smtp.secure,
         directDelivery: MTA_CONFIG.directDelivery,
         lastCheck: new Date(),
       };
       
-      logger.info(`✅ MTA available at ${MTA_CONFIG.localMtaHost}:${MTA_CONFIG.localMtaPort}`);
+      logger.info(`✅ ${MTA_CONFIG.deliveryMethod.toUpperCase()} available at ${host}:${port}`);
       
     } catch (error: any) {
       this.mtaStatus = {
         available: false,
-        host: MTA_CONFIG.localMtaHost,
-        port: MTA_CONFIG.localMtaPort,
+        deliveryMethod: MTA_CONFIG.deliveryMethod,
+        host: this.getConfiguredHost(),
+        port: this.getConfiguredPort(),
         tlsEnabled: MTA_CONFIG.useTls,
         directDelivery: MTA_CONFIG.directDelivery,
         lastCheck: new Date(),
         error: error.message,
       };
       
-      logger.warn(`❌ MTA not available: ${error.message}`);
+      logger.warn(`❌ ${MTA_CONFIG.deliveryMethod.toUpperCase()} not available: ${error.message}`);
     }
     
     return this.mtaStatus;
@@ -211,13 +281,23 @@ export class MTAService {
       // Build email message with DKIM signing
       const rawEmail = await this.buildEmailMessage(options, messageId, trackingId);
       
-      // Send via appropriate method
+      // Send via appropriate method based on delivery method configuration
       let result: MTASendResult;
       
-      if (MTA_CONFIG.directDelivery) {
-        result = await this.sendDirectToMX(options.from, options.to, rawEmail, messageId);
-      } else {
-        result = await this.sendViaLocalMTA(options.from, options.to, rawEmail, messageId);
+      switch (MTA_CONFIG.deliveryMethod) {
+        case 'ses':
+          result = await this.sendViaSES(options.from, options.to, rawEmail, messageId);
+          break;
+        case 'smtp':
+          result = await this.sendViaSMTPRelay(options.from, options.to, rawEmail, messageId);
+          break;
+        case 'direct':
+          result = await this.sendDirectToMX(options.from, options.to, rawEmail, messageId);
+          break;
+        case 'local':
+        default:
+          result = await this.sendViaLocalMTA(options.from, options.to, rawEmail, messageId);
+          break;
       }
       
       // Update rate limit counters
@@ -238,6 +318,163 @@ export class MTAService {
         retryAfter: MTA_CONFIG.retryDelays[0],
       };
     }
+  }
+
+  /**
+   * Send email via Amazon SES SMTP
+   * Recommended for cloud deployments - excellent deliverability and analytics
+   */
+  private async sendViaSES(
+    from: string,
+    to: string | string[],
+    rawEmail: string,
+    messageId: string
+  ): Promise<MTASendResult> {
+    const { host, port, user, pass } = MTA_CONFIG.ses;
+    
+    if (!user || !pass) {
+      return {
+        success: false,
+        messageId,
+        error: 'SES credentials not configured (SES_SMTP_USER, SES_SMTP_PASS)',
+        shouldRetry: false,
+      };
+    }
+    
+    const socket = await this.createConnection(host, port, MTA_CONFIG.connectionTimeout);
+    
+    try {
+      // Read greeting
+      const greeting = await this.readLine(socket);
+      if (!greeting.startsWith('220')) {
+        throw new Error(`SES greeting error: ${greeting}`);
+      }
+      
+      // EHLO
+      const ehloResponse = await this.sendCommand(socket, `EHLO ${MTA_CONFIG.heloHostname}`);
+      const capabilities = this.parseEhloCapabilities(ehloResponse);
+      
+      // STARTTLS (required for SES)
+      if (capabilities.includes('STARTTLS')) {
+        const tlsResponse = await this.sendCommand(socket, 'STARTTLS');
+        if (tlsResponse.startsWith('220')) {
+          const tlsSocket = await this.upgradeToTls(socket, host);
+          
+          // Re-EHLO after TLS
+          await this.sendCommand(tlsSocket, `EHLO ${MTA_CONFIG.heloHostname}`);
+          
+          // Authenticate with SES credentials
+          await this.authenticateSMTPWithCredentials(tlsSocket, user, pass);
+          
+          return this.completeSmtpTransaction(tlsSocket, from, to, rawEmail, messageId);
+        }
+      }
+      
+      throw new Error('SES requires STARTTLS but server does not support it');
+      
+    } catch (error: any) {
+      logger.error('SES send error:', error.message);
+      return {
+        success: false,
+        messageId,
+        error: `SES error: ${error.message}`,
+        shouldRetry: this.isRetryableError(error),
+        retryAfter: MTA_CONFIG.retryDelays[0],
+      };
+    } finally {
+      socket.destroy();
+    }
+  }
+
+  /**
+   * Send email via generic SMTP relay (SendGrid, Mailgun, etc.)
+   */
+  private async sendViaSMTPRelay(
+    from: string,
+    to: string | string[],
+    rawEmail: string,
+    messageId: string
+  ): Promise<MTASendResult> {
+    const { host, port, user, pass, secure } = MTA_CONFIG.smtp;
+    
+    if (!host || !user || !pass) {
+      return {
+        success: false,
+        messageId,
+        error: 'SMTP relay credentials not configured (SMTP_HOST, SMTP_USER, SMTP_PASS)',
+        shouldRetry: false,
+      };
+    }
+    
+    const socket = await this.createConnection(host, port, MTA_CONFIG.connectionTimeout);
+    
+    try {
+      // Read greeting
+      const greeting = await this.readLine(socket);
+      if (!greeting.startsWith('220')) {
+        throw new Error(`SMTP greeting error: ${greeting}`);
+      }
+      
+      // EHLO
+      const ehloResponse = await this.sendCommand(socket, `EHLO ${MTA_CONFIG.heloHostname}`);
+      const capabilities = this.parseEhloCapabilities(ehloResponse);
+      
+      // STARTTLS if not already secure connection
+      if (!secure && capabilities.includes('STARTTLS')) {
+        const tlsResponse = await this.sendCommand(socket, 'STARTTLS');
+        if (tlsResponse.startsWith('220')) {
+          const tlsSocket = await this.upgradeToTls(socket, host);
+          await this.sendCommand(tlsSocket, `EHLO ${MTA_CONFIG.heloHostname}`);
+          await this.authenticateSMTPWithCredentials(tlsSocket, user, pass);
+          return this.completeSmtpTransaction(tlsSocket, from, to, rawEmail, messageId);
+        }
+      }
+      
+      // Direct auth if secure or no STARTTLS
+      await this.authenticateSMTPWithCredentials(socket, user, pass);
+      return this.completeSmtpTransaction(socket, from, to, rawEmail, messageId);
+      
+    } catch (error: any) {
+      logger.error('SMTP relay error:', error.message);
+      return {
+        success: false,
+        messageId,
+        error: `SMTP error: ${error.message}`,
+        shouldRetry: this.isRetryableError(error),
+        retryAfter: MTA_CONFIG.retryDelays[0],
+      };
+    } finally {
+      socket.destroy();
+    }
+  }
+
+  /**
+   * Authenticate with SMTP server using provided credentials
+   */
+  private async authenticateSMTPWithCredentials(
+    socket: net.Socket | tls.TLSSocket,
+    user: string,
+    pass: string
+  ): Promise<void> {
+    // Use AUTH LOGIN (widely supported including SES)
+    const authResponse = await this.sendCommand(socket, 'AUTH LOGIN');
+    if (!authResponse.startsWith('334')) {
+      throw new Error(`AUTH LOGIN not supported: ${authResponse}`);
+    }
+    
+    // Send username (base64 encoded)
+    const userResponse = await this.sendCommand(socket, Buffer.from(user).toString('base64'));
+    if (!userResponse.startsWith('334')) {
+      throw new Error(`Username rejected: ${userResponse}`);
+    }
+    
+    // Send password (base64 encoded)
+    const passResponse = await this.sendCommand(socket, Buffer.from(pass).toString('base64'));
+    if (!passResponse.startsWith('235')) {
+      throw new Error(`Authentication failed: ${passResponse}`);
+    }
+    
+    logger.debug('SMTP authentication successful');
   }
 
   /**
