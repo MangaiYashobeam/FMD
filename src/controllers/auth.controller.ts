@@ -251,10 +251,15 @@ export class AuthController {
     }
 
     // Verify refresh token
-    jwt.verify(
-      refreshToken,
-      process.env.JWT_REFRESH_SECRET || 'refresh-secret'
-    ) as { id: string };
+    let decoded: { id: string };
+    try {
+      decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET || 'refresh-secret'
+      ) as { id: string };
+    } catch (err) {
+      throw new AppError('Invalid refresh token', 401);
+    }
 
     // Check if token exists in database
     const tokenRecord = await prisma.refreshToken.findUnique({
@@ -266,9 +271,15 @@ export class AuthController {
       throw new AppError('Invalid or expired refresh token', 401);
     }
 
+    // Delete the old refresh token (rotation)
+    await prisma.refreshToken.delete({
+      where: { id: tokenRecord.id },
+    });
+
     // Generate new access token
     const jwtSecret = process.env.JWT_SECRET || 'secret';
     const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
+    const refreshTokenOptions: SignOptions = { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any };
 
     const accessToken = jwt.sign(
       { id: tokenRecord.user.id, email: tokenRecord.user.email },
@@ -276,9 +287,28 @@ export class AuthController {
       accessTokenOptions
     );
 
+    // Generate new refresh token (rotation for security)
+    const newRefreshToken = jwt.sign(
+      { id: tokenRecord.user.id },
+      process.env.JWT_REFRESH_SECRET || 'refresh-secret',
+      refreshTokenOptions
+    );
+
+    // Save new refresh token
+    await prisma.refreshToken.create({
+      data: {
+        userId: tokenRecord.user.id,
+        token: newRefreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      },
+    });
+
     res.json({
       success: true,
-      data: { accessToken },
+      data: { 
+        accessToken,
+        refreshToken: newRefreshToken,
+      },
     });
   }
 

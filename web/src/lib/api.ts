@@ -35,18 +35,29 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refreshToken');
-        if (refreshToken) {
+        
+        // Only attempt refresh if we have a valid refresh token
+        if (refreshToken && refreshToken !== 'undefined' && refreshToken !== 'null') {
           const response = await axios.post(`${API_BASE_URL}/api/auth/refresh-token`, {
             refreshToken,
+          }, {
+            headers: { 'Content-Type': 'application/json' },
           });
 
           const { accessToken, refreshToken: newRefreshToken } = response.data.data;
           
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('refreshToken', newRefreshToken);
+          if (accessToken) {
+            localStorage.setItem('accessToken', accessToken);
+          }
+          if (newRefreshToken) {
+            localStorage.setItem('refreshToken', newRefreshToken);
+          }
           
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
+        } else {
+          // No valid refresh token - clear storage and redirect
+          throw new Error('No valid refresh token');
         }
       } catch (refreshError) {
         // Refresh failed - only logout if we're not already on auth pages
