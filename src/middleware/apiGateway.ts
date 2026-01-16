@@ -15,6 +15,7 @@
 import { Request, Response, NextFunction, Router } from 'express';
 import crypto from 'crypto';
 import { logger } from '@/utils/logger';
+import { iipcService } from '@/services/iipc.service';
 
 // ============================================
 // Types
@@ -206,6 +207,16 @@ const RATE_CONFIG = {
  */
 export const ring3RateShield = (req: Request, res: Response, next: NextFunction): void => {
   const context = (req as any).securityContext as SecurityContext;
+  
+  // IIPC bypass - super admin IPs skip rate limiting
+  if (iipcService.isSuperAdminIP(context.clientIP)) {
+    context.rings.rateShield = true;
+    context.passedRings++;
+    res.setHeader('X-RateLimit-Bypass', 'IIPC-SuperAdmin');
+    next();
+    return;
+  }
+  
   const key = `${context.clientIP}:${req.path.split('/')[3] || 'default'}`;
 
   const now = Date.now();
