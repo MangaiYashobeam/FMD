@@ -250,13 +250,12 @@ export class AuthController {
       throw new AppError('Refresh token required', 400);
     }
 
-    // Verify refresh token
-    let decoded: { id: string };
+    // Verify refresh token (throws if invalid)
     try {
-      decoded = jwt.verify(
+      jwt.verify(
         refreshToken,
         process.env.JWT_REFRESH_SECRET || 'refresh-secret'
-      ) as { id: string };
+      );
     } catch (err) {
       throw new AppError('Invalid refresh token', 401);
     }
