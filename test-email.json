@@ -1,1 +1,1 @@
-﻿{"to":"admin@gadproductions.com","subject":"Test from DealersFace Mail Engine","body":"<h1>Hello!</h1><p>This is a test email from the self-hosted mail engine with DKIM, SPF, and DMARC configured.</p>"}
+{"to":"admin@gadproductions.com","subject":"Test from DealersFace","body":"Hello from the mail engine!"}

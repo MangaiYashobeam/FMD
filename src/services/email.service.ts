@@ -59,20 +59,28 @@ export class EmailService {
   private fromName: string;
 
   constructor() {
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT || '587');
-    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_FROM;
-    const smtpPass = process.env.SMTP_PASSWORD;
+    // Support both generic SMTP and SES-specific config
+    const sesHost = process.env.SES_SMTP_HOST;
+    const sesUser = process.env.SES_SMTP_USER;
+    const sesPass = process.env.SES_SMTP_PASS;
+    
+    // Use SES if configured, otherwise fall back to generic SMTP
+    const smtpHost = sesHost || process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpPort = parseInt(process.env.SES_SMTP_PORT || process.env.SMTP_PORT || '587');
+    const smtpUser = sesUser || process.env.SMTP_USER || process.env.EMAIL_FROM;
+    const smtpPass = sesPass || process.env.SMTP_PASSWORD;
 
     // Use dealersface.com as default system domain
     this.fromEmail = process.env.EMAIL_FROM || SYSTEM_FROM_EMAIL;
     this.fromName = process.env.EMAIL_FROM_NAME || SYSTEM_FROM_NAME;
 
     if (!smtpPass) {
-      logger.warn('SMTP_PASSWORD not configured - email service disabled');
+      logger.warn('SMTP credentials not configured - email service disabled');
       // Create a test account for development
       this.createTestAccount();
     } else {
+      logger.info(`📧 Configuring email with ${sesHost ? 'Amazon SES' : 'SMTP'}: ${smtpHost}:${smtpPort}`);
+      
       this.transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
@@ -81,6 +89,10 @@ export class EmailService {
           user: smtpUser,
           pass: smtpPass,
         },
+        // Longer timeout for cloud environments
+        connectionTimeout: 30000,
+        greetingTimeout: 30000,
+        socketTimeout: 60000,
       });
 
       this.verifyConnection();
