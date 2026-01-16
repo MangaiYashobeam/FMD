@@ -483,5 +483,50 @@ export const notificationsApi = {
   deleteAll: () => api.delete('/api/notifications'),
 };
 
+// Intelliceil Security API
+export const intelliceilApi = {
+  // Get full status (dashboard data)
+  getStatus: () => api.get('/api/intelliceil/status'),
+  
+  // Get geo locations for map
+  getGeoLocations: () => api.get('/api/intelliceil/geo-locations'),
+  
+  // Get traffic history for charts
+  getTrafficHistory: () => api.get('/api/intelliceil/traffic-history'),
+  
+  // Get configuration
+  getConfig: () => api.get('/api/intelliceil/config'),
+  
+  // Update configuration
+  updateConfig: (config: {
+    enabled?: boolean;
+    alertThreshold?: number;
+    mitigationThreshold?: number;
+    autoMitigate?: boolean;
+    notifyOnAttack?: boolean;
+    notifyEmail?: string;
+    maxRequestsPerIP?: number;
+    windowSeconds?: number;
+  }) => api.put('/api/intelliceil/config', config),
+  
+  // Block an IP
+  blockIP: (ip: string) => api.post('/api/intelliceil/block-ip', { ip }),
+  
+  // Unblock an IP
+  unblockIP: (ip: string) => api.post('/api/intelliceil/unblock-ip', { ip }),
+  
+  // Activate mitigation manually
+  activateMitigation: () => api.post('/api/intelliceil/mitigation/activate'),
+  
+  // Deactivate mitigation
+  deactivateMitigation: () => api.post('/api/intelliceil/mitigation/deactivate'),
+  
+  // Add trusted domain
+  addTrustedDomain: (domain: string) => api.post('/api/intelliceil/trusted-domains', { domain }),
+  
+  // Remove trusted domain
+  removeTrustedDomain: (domain: string) => api.delete('/api/intelliceil/trusted-domains', { data: { domain } }),
+};
+
 export default api;
 

@@ -10,6 +10,7 @@ import {
   LogOut,
   Shield,
   ChevronLeft,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -20,6 +21,7 @@ const navigation = [
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },
   { name: 'Email', href: '/admin/email', icon: Mail },
   { name: 'Audit Logs', href: '/admin/audit', icon: Activity },
+  { name: 'Intelliceil', href: '/admin/security', icon: ShieldAlert },
   { name: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 

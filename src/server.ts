@@ -40,6 +40,9 @@ import emailRoutes from '@/routes/email.routes';
 import { initializeQueueProcessor } from '@/jobs/queueProcessor';
 import { schedulerService } from '@/services/scheduler.service';
 import { shutdownEmailQueue } from '@/queues/email.queue';
+import { intelliceilService } from '@/services/intelliceil.service';
+import { intelliceilMiddleware, intelliceilMonitor } from '@/middleware/intelliceil';
+import intelliceilRoutes from '@/routes/intelliceil.routes';
 
 console.log('🔵 All modules loaded successfully');
 
@@ -94,6 +97,12 @@ app.use(express.static(webDistPath, {
 // ============================================
 // Security Middleware (after static files)
 // ============================================
+
+// Intelliceil - Anti-DDoS & Exchange Security (monitors all traffic)
+app.use(intelliceilMonitor);
+
+// API-specific Intelliceil protection (blocks malicious traffic)
+app.use('/api', intelliceilMiddleware);
 
 // IP Filtering and suspicious activity tracking (first line of defense for API)
 app.use('/api', ipFilter);
@@ -227,6 +236,7 @@ app.use('/api/subscriptions', require('./routes/subscription.routes').default); 
 app.use('/api/admin', ring5AuthBarrier, require('./routes/admin.routes').default); // Requires admin
 app.use('/api/email', ring5AuthBarrier, emailRoutes);                          // Requires auth
 app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
+app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
 
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes
@@ -295,9 +305,19 @@ const startServer = async () => {
       logger.info('Continuing without auto-sync...');
     }
 
+    // Initialize Intelliceil security system
+    try {
+      await intelliceilService.initialize();
+      logger.info('✅ Intelliceil security system initialized');
+    } catch (error) {
+      logger.warn('⚠️  Intelliceil initialization failed:', error);
+      logger.info('Continuing with basic security...');
+    }
+
     app.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       logger.info(`📡 Health check available at: http://localhost:${PORT}/health`);
+      logger.info(`🛡️ Intelliceil security active`);
     });
   } catch (error) {
     logger.error('❌ Failed to start server:', error);
@@ -313,6 +333,7 @@ const startServer = async () => {
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   schedulerService.shutdown();
+  intelliceilService.shutdown();
   await shutdownEmailQueue();
   process.exit(0);
 });
@@ -320,6 +341,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   schedulerService.shutdown();
+  intelliceilService.shutdown();
   await shutdownEmailQueue();
   process.exit(0);
 });
