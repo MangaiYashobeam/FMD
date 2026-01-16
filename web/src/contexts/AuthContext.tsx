@@ -29,11 +29,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Clean up corrupted tokens on mount
+  useEffect(() => {
+    const accessToken = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    
+    // Remove corrupted tokens (stored as "undefined" or "null" strings)
+    if (accessToken === 'undefined' || accessToken === 'null' || accessToken === '') {
+      localStorage.removeItem('accessToken');
+    }
+    if (refreshToken === 'undefined' || refreshToken === 'null' || refreshToken === '') {
+      localStorage.removeItem('refreshToken');
+    }
+  }, []);
+
   // Check for existing session on mount
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('accessToken');
-      if (token) {
+      if (token && token !== 'undefined' && token !== 'null') {
         try {
           const response = await authApi.getProfile();
           // The profile endpoint returns user data directly in data (not data.user)
@@ -58,11 +72,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    // Clear any existing corrupted tokens before login
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    
     const response = await authApi.login(email, password);
     const { accessToken, refreshToken, user: userData, accounts } = response.data.data;
     
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
+    // Only store valid tokens
+    if (accessToken && accessToken !== 'undefined') {
+      localStorage.setItem('accessToken', accessToken);
+    }
+    if (refreshToken && refreshToken !== 'undefined') {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
     // Construct user object with accounts
     setUser({
       id: userData.id,
