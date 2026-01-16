@@ -64,12 +64,40 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // ============================================
-// Security Middleware
+// Serve React Frontend (Static Files) - FIRST!
+// Serve static files before any security middleware
+// ============================================
+const webDistPath = path.join(__dirname, '../web/dist');
+console.log('🔵 Static files path:', webDistPath);
+
+// Serve static assets with proper MIME types and caching
+app.use(express.static(webDistPath, {
+  maxAge: '1y',
+  etag: true,
+  index: false, // Don't serve index.html for directory requests (handled by SPA fallback)
+  setHeaders: (res, filePath) => {
+    // Set correct MIME types explicitly
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    } else if (filePath.endsWith('.svg')) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+    } else if (filePath.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json');
+    } else if (filePath.endsWith('.woff') || filePath.endsWith('.woff2')) {
+      res.setHeader('Content-Type', filePath.endsWith('.woff2') ? 'font/woff2' : 'font/woff');
+    }
+  }
+}));
+
+// ============================================
+// Security Middleware (after static files)
 // ============================================
 
-// IP Filtering and suspicious activity tracking (first line of defense)
-app.use(ipFilter);
-app.use(suspiciousActivityTracker);
+// IP Filtering and suspicious activity tracking (first line of defense for API)
+app.use('/api', ipFilter);
+app.use('/api', suspiciousActivityTracker);
 
 // Helmet for security headers
 app.use(helmet({
@@ -144,21 +172,21 @@ const secureGateway = createSecureGateway();
 app.use('/api', secureGateway);
 
 // ============================================
-// Body Parsing
+// Body Parsing (API only)
 // ============================================
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use('/api', express.json({ limit: '10mb' }));
+app.use('/api', express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============================================
-// Request Sanitization (after body parsing)
+// Request Sanitization (after body parsing, API only)
 // ============================================
-app.use(sanitizeRequest);
-app.use(injectionGuard);
+app.use('/api', sanitizeRequest);
+app.use('/api', injectionGuard);
 
 // ============================================
-// Request Logging
+// Request Logging (API only)
 // ============================================
-app.use((req, _res, next) => {
+app.use('/api', (req, _res, next) => {
   logger.info(`${req.method} ${req.path}`, {
     ip: req.ip,
     userAgent: req.get('user-agent'),
@@ -195,19 +223,23 @@ app.use('/api/email', ring5AuthBarrier, emailRoutes);                          /
 app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
 
 // ============================================
-// Serve React Frontend (Static Files)
+// SPA Fallback - serve index.html for all non-API routes
 // ============================================
-const webDistPath = path.join(__dirname, '../web/dist');
-app.use(express.static(webDistPath));
-
-// SPA fallback - serve index.html for all non-API routes
 app.get('*', (req, res, next) => {
-  // Skip API routes
+  // Skip API routes and health check
   if (req.path.startsWith('/api/') || req.path === '/health') {
     return next();
   }
+  
+  // Skip asset requests that should have been handled by static middleware
+  if (req.path.startsWith('/assets/')) {
+    console.error('⚠️ Asset not found:', req.path);
+    return res.status(404).send('Asset not found');
+  }
+  
   res.sendFile(path.join(webDistPath, 'index.html'), (err) => {
     if (err) {
+      console.error('❌ Error serving index.html:', err);
       // If web/dist doesn't exist, fall through to 404
       next();
     }
