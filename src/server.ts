@@ -107,7 +107,13 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://graph.facebook.com"],
+      connectSrc: [
+        "'self'",
+        "https://graph.facebook.com",
+        "https://fmd-production.up.railway.app",
+        "https://dealersface.com",
+        "https://www.dealersface.com"
+      ],
     },
   },
   hsts: {
