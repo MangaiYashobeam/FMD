@@ -235,6 +235,41 @@ app.get('/health', (_req, res) => {
 });
 
 // ============================================
+// IIPC Emergency Rate Limit Reset (No auth - IP verified only)
+// This allows super admin IPs to reset their rate limits even when locked out
+// ============================================
+app.post('/api/iipc/emergency-reset', async (req, res) => {
+  const { resetRateLimitsForIP } = await import('@/middleware/security');
+  
+  // Get client IP
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const clientIP = forwardedFor 
+    ? (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0]).trim()
+    : req.ip || 'unknown';
+  
+  // Check if this is a super admin IP
+  if (!iipcService.isSuperAdminIP(clientIP)) {
+    logger.warn(`Unauthorized emergency reset attempt from IP: ${clientIP}`);
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Forbidden - IP not authorized',
+      yourIP: clientIP,
+    });
+  }
+  
+  // Reset rate limits for this IP
+  const result = await resetRateLimitsForIP(clientIP);
+  
+  logger.info(`Emergency rate limit reset by super admin IP: ${clientIP}`);
+  
+  res.json({
+    success: true,
+    message: `Rate limits cleared for your IP (${clientIP})`,
+    data: result,
+  });
+});
+
+// ============================================
 // API Routes (Protected by 7-Ring Security Gateway)
 // ============================================
 // All routes under /api are secured by the gateway middleware
