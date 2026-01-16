@@ -24,6 +24,10 @@ import {
   authLimiter,
   passwordResetLimiter,
 } from '@/middleware/security';
+import {
+  createSecureGateway,
+  ring5AuthBarrier,
+} from '@/middleware/apiGateway';
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
 import authRoutes from '@/routes/auth.routes';
@@ -118,12 +122,26 @@ app.use(cors({
 }));
 
 // ============================================
-// Rate Limiting
+// Rate Limiting (Legacy - kept for additional protection)
 // ============================================
 app.use('/api/', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/forgot-password', passwordResetLimiter);
+
+// ============================================
+// 7-Ring Secure API Gateway
+// ============================================
+// All API routes go through the secure gateway with 7 layers of protection:
+// Ring 1: Gateway Path Verification
+// Ring 2: IP Sentinel (whitelist/blacklist)
+// Ring 3: Rate Shield (token bucket)
+// Ring 4: Request Validator (injection prevention)
+// Ring 5: Auth Barrier (JWT - applied per route)
+// Ring 6: API Key Fortress
+// Ring 7: RBAC Guardian
+const secureGateway = createSecureGateway();
+app.use('/api', secureGateway);
 
 // ============================================
 // Body Parsing
@@ -149,29 +167,8 @@ app.use((req, _res, next) => {
 });
 
 // ============================================
-// Health Check
+// Health Check (Internal monitoring only)
 // ============================================
-// Root route
-// ============================================
-app.get('/', (_req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'FaceMyDealer API',
-    version: '1.0.0',
-    status: 'online',
-    endpoints: {
-      health: '/health',
-      auth: '/api/auth',
-      vehicles: '/api/vehicles',
-      accounts: '/api/accounts',
-      facebook: '/api/facebook',
-      sync: '/api/sync',
-      admin: '/api/admin',
-    },
-    documentation: 'https://github.com/MangaiYashobeam/FMD',
-  });
-});
-
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -181,19 +178,21 @@ app.get('/health', (_req, res) => {
 });
 
 // ============================================
-// API Routes
+// API Routes (Protected by 7-Ring Security Gateway)
 // ============================================
-app.use('/api/auth', authRoutes);
-app.use('/api/vehicles', vehicleRoutes);
-app.use('/api/accounts', accountRoutes);
-app.use('/api/facebook', facebookRoutes);
-app.use('/api/sync', syncRoutes);
-app.use('/api/users/me', userCredentialsRoutes);
-app.use('/api/users/me/api-keys', require('./routes/apiKey.routes').default);
-app.use('/api/subscriptions', require('./routes/subscription.routes').default);
-app.use('/api/admin', require('./routes/admin.routes').default);
-app.use('/api/email', emailRoutes);
-app.use('/api/leads', require('./routes/lead.routes').default);
+// All routes under /api are secured by the gateway middleware
+// Individual routes add Ring 5 (Auth) as needed
+app.use('/api/auth', authRoutes);                                              // Auth routes (public)
+app.use('/api/vehicles', ring5AuthBarrier, vehicleRoutes);                     // Requires auth
+app.use('/api/accounts', ring5AuthBarrier, accountRoutes);                     // Requires auth
+app.use('/api/facebook', ring5AuthBarrier, facebookRoutes);                    // Requires auth
+app.use('/api/sync', ring5AuthBarrier, syncRoutes);                            // Requires auth
+app.use('/api/users/me', ring5AuthBarrier, userCredentialsRoutes);             // Requires auth
+app.use('/api/users/me/api-keys', ring5AuthBarrier, require('./routes/apiKey.routes').default);
+app.use('/api/subscriptions', require('./routes/subscription.routes').default); // Mixed (webhook is public)
+app.use('/api/admin', ring5AuthBarrier, require('./routes/admin.routes').default); // Requires admin
+app.use('/api/email', ring5AuthBarrier, emailRoutes);                          // Requires auth
+app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
 
 // ============================================
 // Serve React Frontend (Static Files)
