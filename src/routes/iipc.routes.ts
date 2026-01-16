@@ -73,4 +73,14 @@ router.get('/my-ips', iipcController.getUserIPs);
 router.post('/emergency/request', iipcController.requestEmergencyAccess);
 router.post('/emergency/verify', iipcController.verifyEmergencyAccess);
 
+// ============================================
+// Rate Limit Control (Super Admin)
+// ============================================
+
+// Reset rate limits for specific IP or current IP
+router.post('/reset-rate-limits', iipcController.resetRateLimits);
+
+// Reset ALL rate limits (use with caution)
+router.post('/reset-all-rate-limits', iipcController.resetAllRateLimits);
+
 export default router;

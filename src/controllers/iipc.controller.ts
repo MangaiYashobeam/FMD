@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { iipcService, IPAccessLevel, IPRuleScope } from '@/services/iipc.service';
+import { resetRateLimitsForIP, resetAllRateLimits } from '@/middleware/security';
 import { logger } from '@/utils/logger';
 
 class IIPCController {
@@ -396,6 +397,48 @@ class IIPCController {
     } catch (error) {
       logger.error('IIPC checkCurrentIP error:', error);
       res.status(500).json({ success: false, error: 'Failed to check IP' });
+    }
+  }
+
+  /**
+   * Reset rate limits for an IP (Super Admin only)
+   */
+  async resetRateLimits(req: Request, res: Response): Promise<void> {
+    try {
+      const ip = req.body.ip || req.iipc?.clientIP || req.ip;
+      
+      if (!ip) {
+        res.status(400).json({ success: false, error: 'IP address required' });
+        return;
+      }
+
+      const result = await resetRateLimitsForIP(ip);
+      
+      res.json({
+        success: true,
+        message: `Rate limits cleared for IP ${ip}`,
+        data: result,
+      });
+    } catch (error) {
+      logger.error('IIPC resetRateLimits error:', error);
+      res.status(500).json({ success: false, error: 'Failed to reset rate limits' });
+    }
+  }
+
+  /**
+   * Reset ALL rate limits (Super Admin only - use with caution)
+   */
+  async resetAllRateLimits(_req: Request, res: Response): Promise<void> {
+    try {
+      await resetAllRateLimits();
+      
+      res.json({
+        success: true,
+        message: 'All rate limits cleared',
+      });
+    } catch (error) {
+      logger.error('IIPC resetAllRateLimits error:', error);
+      res.status(500).json({ success: false, error: 'Failed to reset rate limits' });
     }
   }
 }

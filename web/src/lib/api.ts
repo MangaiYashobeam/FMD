@@ -614,6 +614,14 @@ export const iipcApi = {
   
   // Check current IP status
   checkCurrentIP: () => api.get('/api/iipc/check-ip'),
+  
+  // Reset rate limits for IP (Super Admin)
+  resetRateLimits: (ip?: string) =>
+    api.post('/api/iipc/reset-rate-limits', { ip }),
+  
+  // Reset ALL rate limits (Super Admin - use with caution)
+  resetAllRateLimits: () =>
+    api.post('/api/iipc/reset-all-rate-limits'),
 };
 
 export default api;

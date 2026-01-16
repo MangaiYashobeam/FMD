@@ -4,6 +4,90 @@ import { logger } from '@/utils/logger';
 import { iipcService } from '@/services/iipc.service';
 
 /**
+ * Custom in-memory store that allows resetting keys
+ */
+class ResettableStore {
+  private hits: Map<string, { count: number; resetTime: number }> = new Map();
+  private windowMs: number;
+
+  constructor(windowMs: number) {
+    this.windowMs = windowMs;
+  }
+
+  async increment(key: string): Promise<{ totalHits: number; resetTime: Date }> {
+    const now = Date.now();
+    let record = this.hits.get(key);
+    
+    if (!record || now > record.resetTime) {
+      record = { count: 0, resetTime: now + this.windowMs };
+      this.hits.set(key, record);
+    }
+    
+    record.count++;
+    return { totalHits: record.count, resetTime: new Date(record.resetTime) };
+  }
+
+  async decrement(key: string): Promise<void> {
+    const record = this.hits.get(key);
+    if (record && record.count > 0) {
+      record.count--;
+    }
+  }
+
+  async resetKey(key: string): Promise<void> {
+    this.hits.delete(key);
+  }
+
+  async resetAll(): Promise<void> {
+    this.hits.clear();
+  }
+
+  // Reset all keys containing a specific IP
+  async resetIP(ip: string): Promise<number> {
+    let count = 0;
+    for (const key of this.hits.keys()) {
+      if (key.includes(ip)) {
+        this.hits.delete(key);
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // Get all keys (for debugging)
+  getKeys(): string[] {
+    return Array.from(this.hits.keys());
+  }
+}
+
+// Create shared stores
+const generalStore = new ResettableStore(15 * 60 * 1000);
+const authStore = new ResettableStore(15 * 60 * 1000);
+const passwordResetStore = new ResettableStore(60 * 60 * 1000);
+
+/**
+ * Reset rate limits for a specific IP across all limiters
+ */
+export async function resetRateLimitsForIP(ip: string): Promise<{ cleared: number }> {
+  let cleared = 0;
+  cleared += await generalStore.resetIP(ip);
+  cleared += await authStore.resetIP(ip);
+  cleared += await passwordResetStore.resetIP(ip);
+  logger.info(`Rate limits cleared for IP ${ip}: ${cleared} entries`);
+  return { cleared };
+}
+
+/**
+ * Reset all rate limits (use with caution)
+ */
+export async function resetAllRateLimits(): Promise<void> {
+  await generalStore.resetAll();
+  await authStore.resetAll();
+  await passwordResetStore.resetAll();
+  logger.info('All rate limits cleared');
+}
+
+/**
  * Check if IP can bypass rate limiting via IIPC
  */
 function canBypassRateLimit(req: Request): boolean {
@@ -46,6 +130,7 @@ function getClientIPForRateLimit(req: Request): string {
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
+  store: generalStore as any,
   message: {
     success: false,
     message: 'Too many requests. Please try again later.',
@@ -81,6 +166,7 @@ export const generalLimiter = rateLimit({
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5,
+  store: authStore as any,
   message: {
     success: false,
     message: 'Too many authentication attempts. Please try again later.',
@@ -116,6 +202,7 @@ export const authLimiter = rateLimit({
 export const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3,
+  store: passwordResetStore as any,
   message: {
     success: false,
     message: 'Too many password reset attempts. Please try again later.',
