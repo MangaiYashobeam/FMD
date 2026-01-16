@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
 
@@ -7,6 +8,8 @@ import prisma from '@/config/database';
  * Handles all email sending with template support and queuing
  * Default Domain: dealersface.com
  * System Sender: fb-api@dealersface.com
+ * 
+ * Supports both SES API (recommended) and SMTP
  */
 
 // System email defaults
@@ -55,31 +58,50 @@ export interface ComposeEmailOptions {
 
 export class EmailService {
   private transporter!: nodemailer.Transporter;
+  private sesClient: SESClient | null = null;
+  private useSesApi: boolean = false;
   private fromEmail: string;
   private fromName: string;
 
   constructor() {
-    // Support both generic SMTP and SES-specific config
+    // Check for SES API credentials (preferred - no SMTP ports needed)
+    const sesAccessKey = process.env.AWS_ACCESS_KEY_ID || process.env.SES_ACCESS_KEY_ID;
+    const sesSecretKey = process.env.AWS_SECRET_ACCESS_KEY || process.env.SES_SECRET_ACCESS_KEY;
+    const sesRegion = process.env.SES_REGION || process.env.AWS_REGION || 'eu-north-1';
+    
+    // Use dealersface.com as default system domain
+    this.fromEmail = process.env.EMAIL_FROM || SYSTEM_FROM_EMAIL;
+    this.fromName = process.env.EMAIL_FROM_NAME || SYSTEM_FROM_NAME;
+
+    // Prefer SES API over SMTP (works on Railway without port issues)
+    if (sesAccessKey && sesSecretKey) {
+      logger.info(`📧 Configuring email with Amazon SES API (${sesRegion})`);
+      this.sesClient = new SESClient({
+        region: sesRegion,
+        credentials: {
+          accessKeyId: sesAccessKey,
+          secretAccessKey: sesSecretKey,
+        },
+      });
+      this.useSesApi = true;
+      return;
+    }
+
+    // Fallback to SMTP (SES SMTP or generic)
     const sesHost = process.env.SES_SMTP_HOST;
     const sesUser = process.env.SES_SMTP_USER;
     const sesPass = process.env.SES_SMTP_PASS;
     
-    // Use SES if configured, otherwise fall back to generic SMTP
     const smtpHost = sesHost || process.env.SMTP_HOST || 'smtp.gmail.com';
     const smtpPort = parseInt(process.env.SES_SMTP_PORT || process.env.SMTP_PORT || '587');
     const smtpUser = sesUser || process.env.SMTP_USER || process.env.EMAIL_FROM;
     const smtpPass = sesPass || process.env.SMTP_PASSWORD;
 
-    // Use dealersface.com as default system domain
-    this.fromEmail = process.env.EMAIL_FROM || SYSTEM_FROM_EMAIL;
-    this.fromName = process.env.EMAIL_FROM_NAME || SYSTEM_FROM_NAME;
-
     if (!smtpPass) {
-      logger.warn('SMTP credentials not configured - email service disabled');
-      // Create a test account for development
+      logger.warn('No email credentials configured - using test account');
       this.createTestAccount();
     } else {
-      logger.info(`📧 Configuring email with ${sesHost ? 'Amazon SES' : 'SMTP'}: ${smtpHost}:${smtpPort}`);
+      logger.info(`📧 Configuring email with ${sesHost ? 'Amazon SES SMTP' : 'SMTP'}: ${smtpHost}:${smtpPort}`);
       
       this.transporter = nodemailer.createTransport({
         host: smtpHost,
@@ -89,7 +111,6 @@ export class EmailService {
           user: smtpUser,
           pass: smtpPass,
         },
-        // Longer timeout for cloud environments
         connectionTimeout: 30000,
         greetingTimeout: 30000,
         socketTimeout: 60000,
@@ -127,6 +148,39 @@ export class EmailService {
   }
 
   /**
+   * Send email via SES API
+   */
+  private async sendViaSesApi(options: EmailOptions): Promise<{ success: boolean; messageId?: string }> {
+    if (!this.sesClient) {
+      throw new Error('SES client not initialized');
+    }
+
+    const fromEmail = options.from || this.fromEmail;
+    const fromName = options.fromName || this.fromName;
+    const toAddresses = Array.isArray(options.to) ? options.to : [options.to];
+
+    const command = new SendEmailCommand({
+      Source: `"${fromName}" <${fromEmail}>`,
+      Destination: {
+        ToAddresses: toAddresses,
+        CcAddresses: options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : undefined,
+        BccAddresses: options.bcc ? (Array.isArray(options.bcc) ? options.bcc : [options.bcc]) : undefined,
+      },
+      Message: {
+        Subject: { Data: options.subject, Charset: 'UTF-8' },
+        Body: {
+          Html: options.html ? { Data: options.html, Charset: 'UTF-8' } : undefined,
+          Text: options.text ? { Data: options.text, Charset: 'UTF-8' } : undefined,
+        },
+      },
+      ReplyToAddresses: options.replyTo ? [options.replyTo] : undefined,
+    });
+
+    const response = await this.sesClient.send(command);
+    return { success: true, messageId: response.MessageId };
+  }
+
+  /**
    * Send email
    */
   async sendEmail(options: EmailOptions): Promise<boolean> {
@@ -134,30 +188,41 @@ export class EmailService {
       const fromEmail = options.from || this.fromEmail;
       const fromName = options.fromName || this.fromName;
       
-      const info = await this.transporter.sendMail({
-        from: `"${fromName}" <${fromEmail}>`,
-        to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
-        subject: options.subject,
-        text: options.text,
-        html: options.html,
-        cc: options.cc,
-        bcc: options.bcc,
-        replyTo: options.replyTo,
-        attachments: options.attachments,
-      });
-
-      logger.info(`📧 Email sent: ${info.messageId} to ${options.to}`);
+      let messageId: string | undefined;
       
-      // Log preview URL for test accounts
-      if (process.env.NODE_ENV === 'development') {
-        const previewUrl = nodemailer.getTestMessageUrl(info);
-        if (previewUrl) {
-          logger.info(`📧 Preview URL: ${previewUrl}`);
+      // Use SES API if available (preferred - no port issues)
+      if (this.useSesApi && this.sesClient) {
+        const result = await this.sendViaSesApi(options);
+        messageId = result.messageId;
+        logger.info(`📧 Email sent via SES API: ${messageId} to ${options.to}`);
+      } else {
+        // Fallback to SMTP
+        const info = await this.transporter.sendMail({
+          from: `"${fromName}" <${fromEmail}>`,
+          to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
+          subject: options.subject,
+          text: options.text,
+          html: options.html,
+          cc: options.cc,
+          bcc: options.bcc,
+          replyTo: options.replyTo,
+          attachments: options.attachments,
+        });
+        
+        messageId = info.messageId;
+        logger.info(`📧 Email sent via SMTP: ${messageId} to ${options.to}`);
+        
+        // Log preview URL for test accounts
+        if (process.env.NODE_ENV === 'development') {
+          const previewUrl = nodemailer.getTestMessageUrl(info);
+          if (previewUrl) {
+            logger.info(`📧 Preview URL: ${previewUrl}`);
+          }
         }
       }
 
       // Save to database
-      await this.logEmail(options, 'SENT', info.messageId);
+      await this.logEmail(options, 'SENT', messageId);
 
       return true;
     } catch (error) {

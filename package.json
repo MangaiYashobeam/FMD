@@ -30,6 +30,7 @@
   "author": "FaceMyDealer",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.970.0",
     "@prisma/client": "^5.20.0",
     "@types/bcrypt": "^5.0.2",
     "@types/cors": "^2.8.17",
