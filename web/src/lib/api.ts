@@ -528,5 +528,82 @@ export const intelliceilApi = {
   removeTrustedDomain: (domain: string) => api.delete('/api/intelliceil/trusted-domains', { data: { domain } }),
 };
 
+// IIPC (Internal IP Controller) API
+export const iipcApi = {
+  // Get full status with rules
+  getStatus: () => api.get('/api/iipc/status'),
+  
+  // Get configuration
+  getConfig: () => api.get('/api/iipc/config'),
+  
+  // Update configuration
+  updateConfig: (config: {
+    enabled?: boolean;
+    enforceIPMatching?: boolean;
+    allowEmergencyAccess?: boolean;
+    emergencyCodeExpireMinutes?: number;
+  }) => api.put('/api/iipc/config', config),
+  
+  // Get role settings
+  getRoleSettings: (role?: string) => api.get('/api/iipc/roles', { params: { role } }),
+  
+  // Update role settings
+  updateRoleSettings: (data: { role: string; settings: Record<string, unknown> }) =>
+    api.put('/api/iipc/roles', data),
+  
+  // Get all IP rules
+  getRules: (params?: { scope?: string; type?: string }) =>
+    api.get('/api/iipc/rules', { params }),
+  
+  // Add new IP rule
+  addRule: (rule: {
+    ip: string;
+    type: 'WHITELIST' | 'BLACKLIST';
+    scope: 'GLOBAL' | 'ROLE' | 'USER' | 'NETWORK';
+    scopeValue?: string;
+    computerName?: string;
+    description?: string;
+    canOverrideRateLimit?: boolean;
+    canOverrideLoginBlock?: boolean;
+    canOverrideAllSecurity?: boolean;
+    expiresAt?: string;
+  }) => api.post('/api/iipc/rules', rule),
+  
+  // Update IP rule
+  updateRule: (id: string, updates: Record<string, unknown>) =>
+    api.put(`/api/iipc/rules/${id}`, updates),
+  
+  // Delete IP rule
+  deleteRule: (id: string) => api.delete(`/api/iipc/rules/${id}`),
+  
+  // Get super admin IPs
+  getSuperAdminIPs: () => api.get('/api/iipc/super-admin-ips'),
+  
+  // Add super admin IP
+  addSuperAdminIP: (ip: string) => api.post('/api/iipc/super-admin-ips', { ip }),
+  
+  // Remove super admin IP
+  removeSuperAdminIP: (ip: string) => api.delete('/api/iipc/super-admin-ips', { data: { ip } }),
+  
+  // Request emergency access
+  requestEmergencyAccess: (email: string) =>
+    api.post('/api/iipc/emergency/request', { email }),
+  
+  // Verify emergency access code
+  verifyEmergencyAccess: (email: string, code: string) =>
+    api.post('/api/iipc/emergency/verify', { email, code }),
+  
+  // Whitelist own IP (self-service)
+  whitelistOwnIP: (data?: { computerName?: string; description?: string }) =>
+    api.post('/api/iipc/whitelist-own-ip', data),
+  
+  // Get user's whitelisted IPs
+  getUserIPs: (userId?: string) =>
+    api.get('/api/iipc/user-ips', { params: { userId } }),
+  
+  // Check current IP status
+  checkCurrentIP: () => api.get('/api/iipc/check-ip'),
+};
+
 export default api;
 

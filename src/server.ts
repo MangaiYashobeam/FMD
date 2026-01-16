@@ -43,6 +43,9 @@ import { shutdownEmailQueue } from '@/queues/email.queue';
 import { intelliceilService } from '@/services/intelliceil.service';
 import { intelliceilMiddleware, intelliceilMonitor } from '@/middleware/intelliceil';
 import intelliceilRoutes from '@/routes/intelliceil.routes';
+import { iipcService } from '@/services/iipc.service';
+import { iipcCheck } from '@/middleware/iipc';
+import iipcRoutes from '@/routes/iipc.routes';
 
 console.log('🔵 All modules loaded successfully');
 
@@ -100,6 +103,9 @@ app.use(express.static(webDistPath, {
 
 // Intelliceil - Anti-DDoS & Exchange Security (monitors all traffic)
 app.use(intelliceilMonitor);
+
+// IIPC - Internal IP Controller (tracks client IPs for access control)
+app.use(iipcCheck);
 
 // API-specific Intelliceil protection (blocks malicious traffic)
 app.use('/api', intelliceilMiddleware);
@@ -245,6 +251,7 @@ app.use('/api/admin', ring5AuthBarrier, require('./routes/admin.routes').default
 app.use('/api/email', ring5AuthBarrier, emailRoutes);                          // Requires auth
 app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
 app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
+app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes
@@ -322,6 +329,15 @@ const startServer = async () => {
       logger.info('Continuing with basic security...');
     }
 
+    // Initialize IIPC (Internal IP Controller)
+    try {
+      await iipcService.initialize();
+      logger.info('✅ IIPC (IP Access Control) initialized');
+    } catch (error) {
+      logger.warn('⚠️  IIPC initialization failed:', error);
+      logger.info('Continuing without IP access control...');
+    }
+
     app.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       logger.info(`📡 Health check available at: http://localhost:${PORT}/health`);
@@ -342,6 +358,7 @@ process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   schedulerService.shutdown();
   intelliceilService.shutdown();
+  iipcService.shutdown();
   await shutdownEmailQueue();
   process.exit(0);
 });
@@ -350,6 +367,7 @@ process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   schedulerService.shutdown();
   intelliceilService.shutdown();
+  iipcService.shutdown();
   await shutdownEmailQueue();
   process.exit(0);
 });

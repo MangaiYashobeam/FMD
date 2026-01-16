@@ -30,6 +30,7 @@ import EmailManagementPage from './pages/admin/EmailManagementPage';
 import AuditLogsPage from './pages/admin/AuditLogsPage';
 import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import IntelliceilPage from './pages/admin/IntelliceilPage';
+import IIPCPage from './pages/admin/IIPCPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -94,6 +95,7 @@ function App() {
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="settings" element={<SystemSettingsPage />} />
               <Route path="security" element={<IntelliceilPage />} />
+              <Route path="iipc" element={<IIPCPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}
