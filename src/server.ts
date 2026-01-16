@@ -115,14 +115,19 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
       connectSrc: [
         "'self'",
         "https://graph.facebook.com",
         "https://fmd-production.up.railway.app",
         "https://dealersface.com",
-        "https://www.dealersface.com"
+        "https://www.dealersface.com",
+        "wss://dealersface.com",
+        "wss://www.dealersface.com",
+        "wss://fmd-production.up.railway.app"
       ],
+      fontSrc: ["'self'", "data:"],
+      frameSrc: ["'self'", "https://www.facebook.com"],
     },
   },
   hsts: {
@@ -142,6 +147,9 @@ app.use(securityHeaders);
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173', // Vite dev server
+  'https://dealersface.com',
+  'https://www.dealersface.com',
+  'https://fmd-production.up.railway.app',
   ...(process.env.ALLOWED_ORIGINS?.split(',') || []),
   process.env.API_URL,
 ].filter(Boolean) as string[];

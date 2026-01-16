@@ -54,60 +54,66 @@ function getClientIP(req: Request): string {
  * Monitors all incoming requests and blocks malicious traffic
  */
 export function intelliceilMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const ip = getClientIP(req);
-  
-  // Get geo location
-  let country: string | undefined;
-  let city: string | undefined;
-  let lat: number | undefined;
-  let lon: number | undefined;
-  
   try {
-    const geo = geoip.lookup(ip);
-    if (geo) {
-      country = geo.country;
-      city = geo.city;
-      lat = geo.ll?.[0];
-      lon = geo.ll?.[1];
+    const ip = getClientIP(req);
+    
+    // Get geo location
+    let country: string | undefined;
+    let city: string | undefined;
+    let lat: number | undefined;
+    let lon: number | undefined;
+    
+    try {
+      const geo = geoip.lookup(ip);
+      if (geo) {
+        country = geo.country;
+        city = geo.city;
+        lat = geo.ll?.[0];
+        lon = geo.ll?.[1];
+      }
+    } catch {
+      // GeoIP lookup failed, continue without location
     }
-  } catch {
-    // GeoIP lookup failed, continue without location
-  }
 
-  // Record request and get decision
-  const decision = intelliceilService.recordRequest({
-    ip,
-    endpoint: req.path,
-    method: req.method,
-    referer: req.headers.referer,
-    userAgent: req.headers['user-agent'],
-    country,
-    city,
-    lat,
-    lon,
-  });
-
-  // Attach Intelliceil data to request
-  req.intelliceil = {
-    allowed: decision.allowed,
-    reason: decision.reason,
-    ip,
-    country,
-    city,
-  };
-
-  // If request is blocked, return 429
-  if (!decision.allowed) {
-    res.status(429).json({
-      success: false,
-      error: 'Request blocked by Intelliceil security',
-      reason: decision.reason,
-      retryAfter: 60,
+    // Record request and get decision
+    const decision = intelliceilService.recordRequest({
+      ip,
+      endpoint: req.path,
+      method: req.method,
+      referer: req.headers.referer,
+      userAgent: req.headers['user-agent'],
+      country,
+      city,
+      lat,
+      lon,
     });
-    return;
-  }
 
-  next();
+    // Attach Intelliceil data to request
+    req.intelliceil = {
+      allowed: decision.allowed,
+      reason: decision.reason,
+      ip,
+      country,
+      city,
+    };
+
+    // If request is blocked, return 429
+    if (!decision.allowed) {
+      res.status(429).json({
+        success: false,
+        error: 'Request blocked by Intelliceil security',
+        reason: decision.reason,
+        retryAfter: 60,
+      });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    // If Intelliceil fails, allow the request through to prevent service disruption
+    console.error('Intelliceil middleware error:', error);
+    next();
+  }
 }
 
 /**
@@ -115,38 +121,43 @@ export function intelliceilMiddleware(req: Request, res: Response, next: NextFun
  * Use this for public routes that should still be monitored
  */
 export function intelliceilMonitor(req: Request, _res: Response, next: NextFunction): void {
-  const ip = getClientIP(req);
-  
-  // Get geo location
-  let country: string | undefined;
-  let city: string | undefined;
-  let lat: number | undefined;
-  let lon: number | undefined;
-  
   try {
-    const geo = geoip.lookup(ip);
-    if (geo) {
-      country = geo.country;
-      city = geo.city;
-      lat = geo.ll?.[0];
-      lon = geo.ll?.[1];
+    const ip = getClientIP(req);
+    
+    // Get geo location
+    let country: string | undefined;
+    let city: string | undefined;
+    let lat: number | undefined;
+    let lon: number | undefined;
+    
+    try {
+      const geo = geoip.lookup(ip);
+      if (geo) {
+        country = geo.country;
+        city = geo.city;
+        lat = geo.ll?.[0];
+        lon = geo.ll?.[1];
+      }
+    } catch {
+      // Continue without location
     }
-  } catch {
-    // Continue without location
-  }
 
-  // Record but don't block
-  intelliceilService.recordRequest({
-    ip,
-    endpoint: req.path,
-    method: req.method,
-    referer: req.headers.referer,
-    userAgent: req.headers['user-agent'],
-    country,
-    city,
-    lat,
-    lon,
-  });
+    // Record but don't block
+    intelliceilService.recordRequest({
+      ip,
+      endpoint: req.path,
+      method: req.method,
+      referer: req.headers.referer,
+      userAgent: req.headers['user-agent'],
+      country,
+      city,
+      lat,
+      lon,
+    });
+  } catch (error) {
+    // If monitoring fails, continue without blocking
+    console.error('Intelliceil monitor error:', error);
+  }
 
   next();
 }
