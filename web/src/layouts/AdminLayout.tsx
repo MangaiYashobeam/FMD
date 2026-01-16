@@ -53,7 +53,7 @@ export default function AdminLayout() {
           {/* Back to Dashboard Link */}
           <div className="mt-6 px-4">
             <Link
-              to="/dashboard"
+              to="/app/dashboard"
               className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />

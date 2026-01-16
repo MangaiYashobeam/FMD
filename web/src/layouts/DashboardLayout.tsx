@@ -22,15 +22,15 @@ import {
 import { cn } from '../lib/utils';
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Inventory', href: '/inventory', icon: Package },
-  { name: 'Leads', href: '/leads', icon: UserCheck },
-  { name: 'Messages', href: '/messages', icon: MessageCircle },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Facebook', href: '/facebook', icon: Facebook },
-  { name: 'Sync', href: '/sync', icon: RefreshCw },
-  { name: 'Team', href: '/team', icon: Users },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
+  { name: 'Inventory', href: '/app/inventory', icon: Package },
+  { name: 'Leads', href: '/app/leads', icon: UserCheck },
+  { name: 'Messages', href: '/app/messages', icon: MessageCircle },
+  { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
+  { name: 'Facebook', href: '/app/facebook', icon: Facebook },
+  { name: 'Sync', href: '/app/sync', icon: RefreshCw },
+  { name: 'Team', href: '/app/team', icon: Users },
+  { name: 'Settings', href: '/app/settings', icon: Settings },
   { name: 'Admin Panel', href: '/admin', icon: Shield, adminOnly: true },
 ];
 
@@ -78,7 +78,7 @@ export default function DashboardLayout() {
         <nav className="px-4 py-4 space-y-1">
           {navigation.map((item) => {
             const isActive = location.pathname === item.href || 
-              (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+              (item.href !== '/app/dashboard' && location.pathname.startsWith(item.href));
             
             // Admin link styling
             if ((item as any).adminOnly) {
@@ -197,7 +197,7 @@ export default function DashboardLayout() {
                         <p className="text-xs text-gray-500">{user?.email}</p>
                       </div>
                       <Link
-                        to="/dashboard/settings"
+                        to="/app/settings"
                         onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       >
