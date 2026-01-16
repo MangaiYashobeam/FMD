@@ -1,4 +1,4 @@
-# FaceMyDealer - Railway Deployment Guide
+# Dealers Face - Railway Deployment Guide
 
 ## Prerequisites
 - Railway account connected to GitHub (https://railway.app)
@@ -172,7 +172,7 @@ mkdir chrome-extension/icons
 1. Click extension icon in toolbar
 2. Enter backend URL: `https://your-railway-app.up.railway.app`
 3. Click "Login"
-4. Enter your FaceMyDealer credentials
+4. Enter your Dealers Face credentials
 5. Extension will fetch encrypted Facebook credentials
 
 ### 5. Test Marketplace Posting

@@ -8,7 +8,7 @@ import path from 'path';
 dotenv.config();
 
 // Early logging to track startup progress
-console.log('🔵 Starting FaceMyDealer server...');
+console.log('🔵 Starting Dealers Face server...');
 console.log('🔵 Environment:', process.env.NODE_ENV);
 console.log('🔵 Port:', process.env.PORT || 3000);
 console.log('🔵 Loading modules...');

@@ -2,7 +2,7 @@
 
 ## 🎯 System Overview
 
-FaceMyDealer implements a **dual posting system** to maximize reach:
+Dealers Face implements a **dual posting system** to maximize reach:
 
 1. **Facebook Groups** (API-based) - Automated backend posting
 2. **Personal Facebook Marketplace** (Extension-based) - Browser automation
@@ -13,7 +13,7 @@ FaceMyDealer implements a **dual posting system** to maximize reach:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     FACEMYDEALER PLATFORM                       │
+│                     DEALERS FACE PLATFORM                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌──────────────┐      ┌──────────────┐      ┌──────────────┐ │

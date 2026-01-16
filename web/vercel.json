@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "facemydealer-dashboard",
+  "name": "dealersface-dashboard",
   "builds": [
     {
       "src": "package.json",

@@ -1,10 +1,10 @@
-# FaceMyDealer - Quick Start Script
+# Dealers Face - Quick Start Script
 # This script helps you get started with the project
 
 Write-Host "
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║          FaceMyDealer - Quick Start Setup                ║
+║          Dealers Face - Quick Start Setup                ║
 ║     Auto Dealer Facebook Marketplace Automation          ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Car,
   CheckCircle,
   ChevronRight,
   Facebook,
@@ -18,6 +17,7 @@ import {
   Star,
   ArrowRight,
 } from 'lucide-react';
+import { DealersFaceIcon } from '../components/ui/Logo';
 
 // SVG Illustrations
 const HeroIllustration = () => (
@@ -124,7 +124,7 @@ export default function LandingPage() {
     {
       name: 'Mike Johnson',
       role: 'Owner, Johnson Auto Group',
-      content: 'FaceMyDealer transformed our Facebook presence. We went from 5 leads a week to 50+ overnight. The ROI is incredible.',
+      content: 'Dealers Face transformed our Facebook presence. We went from 5 leads a week to 50+ overnight. The ROI is incredible.',
       rating: 5,
     },
     {
@@ -136,7 +136,7 @@ export default function LandingPage() {
     {
       name: 'David Rodriguez',
       role: 'General Manager, AutoMax Dealers',
-      content: 'Managing 12 locations was a nightmare before FaceMyDealer. Now one person handles everything. Saved us $30K/month in labor.',
+      content: 'Managing 12 locations was a nightmare before Dealers Face. Now one person handles everything. Saved us $30K/month in labor.',
       rating: 5,
     },
   ];
@@ -199,10 +199,8 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg">
-                <Car className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-bold text-gray-900">FaceMyDealer</span>
+              <DealersFaceIcon size={40} />
+              <span className="text-xl font-bold text-gray-900">Dealers <span className="text-blue-600">Face</span></span>
             </div>
 
             {/* Desktop Nav */}
@@ -498,7 +496,7 @@ export default function LandingPage() {
               Loved by Dealerships Everywhere
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              See why hundreds of dealers choose FaceMyDealer to grow their business.
+              See why hundreds of dealers choose Dealers Face to grow their business.
             </p>
           </div>
 
@@ -536,7 +534,7 @@ export default function LandingPage() {
             Ready to Sell More Cars?
           </h2>
           <p className="text-xl text-blue-100 mb-10 max-w-2xl mx-auto">
-            Join 500+ dealerships already using FaceMyDealer to dominate Facebook Marketplace. 
+            Join 500+ dealerships already using Dealers Face to dominate Facebook Marketplace. 
             Start your free trial today—no credit card required.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -563,15 +561,14 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-4 gap-8 mb-12">
             <div>
               <div className="flex items-center space-x-3 mb-6">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-                  <Car className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-xl font-bold text-white">FaceMyDealer</span>
+                <DealersFaceIcon size={40} />
+                <span className="text-xl font-bold text-white">Dealers <span className="text-blue-400">Face</span></span>
               </div>
               <p className="text-gray-400 leading-relaxed">
                 The #1 Facebook Marketplace automation platform for auto dealers. 
                 Sell more cars, save time, grow faster.
               </p>
+              <p className="text-gray-500 text-sm mt-4">📧 support@dealersface.com</p>
             </div>
             <div>
               <h4 className="text-white font-semibold mb-4">Product</h4>
@@ -603,7 +600,7 @@ export default function LandingPage() {
           </div>
           <div className="pt-8 border-t border-gray-800 flex flex-col md:flex-row items-center justify-between">
             <p className="text-gray-500">
-              © {new Date().getFullYear()} FaceMyDealer. All rights reserved.
+              © {new Date().getFullYear()} Dealers Face. All rights reserved.
             </p>
             <div className="flex items-center space-x-4 mt-4 md:mt-0">
               <a href="#" className="w-10 h-10 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-center justify-center transition-colors">

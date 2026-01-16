@@ -1,4 +1,4 @@
-# 🎉 FaceMyDealer - Project Summary
+# 🎉 Dealers Face - Project Summary
 
 ## What We've Built
 
@@ -71,7 +71,7 @@ You now have a **production-ready foundation** for an auto dealer Facebook Marke
 ### 📁 **Project Structure**
 
 ```
-FaceMyDealer/
+Dealers Face/
 ├── src/
 │   ├── config/
 │   │   └── database.ts          # Prisma client setup

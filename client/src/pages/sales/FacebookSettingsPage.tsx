@@ -85,7 +85,7 @@ export const FacebookSettingsPage: React.FC = () => {
           <div className="ml-3">
             <h3 className="text-sm font-medium text-purple-800">Chrome Extension Required</h3>
             <p className="mt-1 text-sm text-purple-700">
-              To post to Facebook Marketplace, you need to install the FaceMyDealer Chrome extension. The extension will use these credentials to automate posting on your behalf.
+              To post to Facebook Marketplace, you need to install the Dealers Face Chrome extension. The extension will use these credentials to automate posting on your behalf.
             </p>
             <a
               href="/chrome-extension/2.5_0"
@@ -204,7 +204,7 @@ export const FacebookSettingsPage: React.FC = () => {
         
         <ol className="list-decimal list-inside space-y-3 text-sm text-gray-700">
           <li>Save your Facebook credentials using the form above</li>
-          <li>Install the FaceMyDealer Chrome extension</li>
+          <li>Install the Dealers Face Chrome extension</li>
           <li>Select a vehicle from the Vehicles page</li>
           <li>Configure your post (description, template, etc.)</li>
           <li>Click "Post to Facebook" - the extension will handle the rest!</li>

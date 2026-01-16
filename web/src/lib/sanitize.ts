@@ -1,6 +1,6 @@
 /**
  * Security Utilities for Input Sanitization and XSS Protection
- * Production-level security for FaceMyDealer frontend
+ * Production-level security for Dealers Face frontend
  */
 
 // HTML entities map for encoding

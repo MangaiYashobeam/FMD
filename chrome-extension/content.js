@@ -1,6 +1,6 @@
 // Content script that runs on Facebook Marketplace pages
 
-console.log('FaceMyDealer content script loaded');
+console.log('Dealers Face content script loaded');
 
 let pendingVehicle = null;
 let fbCredentials = null;
@@ -402,7 +402,7 @@ function showSuccessNotification() {
       z-index: 999999;
     ">
       <h3 style="margin: 0 0 10px 0;">🎉 Success!</h3>
-      <p style="margin: 0;">Vehicle posted to Marketplace and tracked in FaceMyDealer.</p>
+      <p style="margin: 0;">Vehicle posted to Marketplace and tracked in Dealers Face.</p>
     </div>
   `;
 

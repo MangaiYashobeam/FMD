@@ -1,4 +1,4 @@
-// FaceMyDealer Chrome Extension - Side Panel JavaScript
+// Dealers Face Chrome Extension - Side Panel JavaScript
 
 const API_BASE_URL = 'https://fmd-production.up.railway.app';
 
@@ -468,4 +468,4 @@ function setupEventListeners() {
   });
 }
 
-console.log('FaceMyDealer side panel loaded');
+console.log('Dealers Face side panel loaded');

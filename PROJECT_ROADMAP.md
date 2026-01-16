@@ -1,4 +1,4 @@
-# FaceMyDealer - Auto Dealer Facebook Marketplace Automation Platform
+# Dealers Face - Auto Dealer Facebook Marketplace Automation Platform
 
 ## 🎯 Project Overview
 A robust, production-level platform for auto dealerships to automate vehicle listings on Facebook Marketplace using asynchronous client-side background execution.

@@ -1,6 +1,6 @@
-# FaceMyDealer - Quick Start Guide
+# Dealers Face - Quick Start Guide
 
-Complete guide to running the FaceMyDealer application locally and in production.
+Complete guide to running the Dealers Face application locally and in production.
 
 ## 📋 Prerequisites
 
@@ -41,7 +41,7 @@ PORT=3000
 API_URL=http://localhost:3000
 
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/facemydealer
+DATABASE_URL=postgresql://user:password@localhost:5432/dealersface
 
 # Redis
 REDIS_HOST=localhost
@@ -66,8 +66,8 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASSWORD=
-EMAIL_FROM=noreply@facemydealer.com
-EMAIL_FROM_NAME=FaceMyDealer
+EMAIL_FROM=noreply@dealersface.com
+EMAIL_FROM_NAME=Dealers Face
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000
@@ -129,7 +129,7 @@ Create a super admin user via API or database:
 INSERT INTO users (id, email, password_hash, first_name, last_name, is_active, email_verified)
 VALUES (
   gen_random_uuid(),
-  'admin@facemydealer.com',
+  'admin@dealersface.com',
   '$2b$12$your_bcrypt_hashed_password_here',
   'Admin',
   'User',
@@ -138,11 +138,11 @@ VALUES (
 );
 
 -- Get the user ID
-SELECT id FROM users WHERE email = 'admin@facemydealer.com';
+SELECT id FROM users WHERE email = 'admin@dealersface.com';
 
 -- Create super admin account
 INSERT INTO accounts (id, name, is_active, subscription_status)
-VALUES (gen_random_uuid(), 'FaceMyDealer Admin', true, 'active');
+VALUES (gen_random_uuid(), 'Dealers Face Admin', true, 'active');
 
 -- Link user to account with SUPER_ADMIN role
 INSERT INTO account_users (id, user_id, account_id, role)
@@ -246,7 +246,7 @@ SMTP_PORT=587
 SMTP_USER=apikey
 SMTP_PASSWORD=your_sendgrid_api_key
 EMAIL_FROM=noreply@yourdomain.com
-EMAIL_FROM_NAME=FaceMyDealer
+EMAIL_FROM_NAME=Dealers Face
 
 # CORS (add your frontend domain)
 ALLOWED_ORIGINS=https://your-frontend-domain.com

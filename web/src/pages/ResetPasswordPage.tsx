@@ -71,7 +71,7 @@ export default function ResetPasswordPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-xl mb-4">
             <Car className="w-10 h-10 text-blue-600" />
           </div>
-          <h1 className="text-3xl font-bold text-white">FaceMyDealer</h1>
+          <h1 className="text-3xl font-bold text-white">Dealers <span className="text-blue-300">Face</span></h1>
           <p className="text-blue-200 mt-2">Create New Password</p>
         </div>
 
@@ -245,7 +245,7 @@ export default function ResetPasswordPage() {
 
         {/* Footer */}
         <p className="text-center text-blue-200 text-sm mt-8">
-          © 2026 FaceMyDealer. All rights reserved.
+          © 2026 Dealers Face. All rights reserved.
         </p>
       </div>
     </div>

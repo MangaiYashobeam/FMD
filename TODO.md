@@ -1,4 +1,4 @@
-# FaceMyDealer - Development TODO
+# Dealers Face - Development TODO
 **Last Updated:** January 15, 2026  
 **Backend Status:** ✅ LIVE on Railway  
 **Frontend Status:** 🚧 NOT STARTED  

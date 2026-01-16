@@ -228,7 +228,7 @@ export default function AnalyticsPage() {
 
   const handleExport = () => {
     // Generate CSV export of analytics
-    const csvContent = `FaceMyDealer Analytics Report - ${new Date().toLocaleDateString()}
+    const csvContent = `Dealers Face Analytics Report - ${new Date().toLocaleDateString()}
     
 Overview Metrics:
 Total Listings,${analytics.overview.totalListings}

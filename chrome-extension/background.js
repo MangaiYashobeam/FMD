@@ -1,4 +1,4 @@
-// Background service worker for FaceMyDealer Chrome Extension
+// Background service worker for Dealers Face Chrome Extension
 
 let apiUrl = 'https://fmd-production.up.railway.app/api';
 let authToken = null;
@@ -6,7 +6,7 @@ let apiKey = null; // API key for extension auth
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('FaceMyDealer extension installed');
+  console.log('Dealers Face extension installed');
   
   // Load saved settings
   chrome.storage.local.get(['apiUrl', 'authToken', 'apiKey'], (result) => {

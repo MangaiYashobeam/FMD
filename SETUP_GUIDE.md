@@ -1,6 +1,6 @@
-# 🚀 FaceMyDealer - Complete Setup Guide
+# 🚀 Dealers Face - Complete Setup Guide
 
-This guide will walk you through setting up the entire FaceMyDealer platform from scratch.
+This guide will walk you through setting up the entire Dealers Face platform from scratch.
 
 ---
 
@@ -23,8 +23,8 @@ Before starting, ensure you have:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/facemydealer.git
-cd facemydealer
+git clone https://github.com/yourusername/dealersface.git
+cd dealersface
 
 # Install dependencies
 npm install
@@ -48,9 +48,9 @@ Start-Service postgresql-x64-14
 
 # Create database using psql
 psql -U postgres
-CREATE DATABASE facemydealer;
-CREATE USER facemydealer_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE facemydealer TO facemydealer_user;
+CREATE DATABASE dealersface;
+CREATE USER dealersface_user WITH PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE dealersface TO dealersface_user;
 \q
 ```
 
@@ -97,7 +97,7 @@ code .env
 
 ```env
 # Database (from Railway or local)
-DATABASE_URL=postgresql://user:password@localhost:5432/facemydealer
+DATABASE_URL=postgresql://user:password@localhost:5432/dealersface
 
 # JWT Secrets (generate random strings)
 JWT_SECRET=generate-a-random-64-character-string-here
@@ -168,7 +168,7 @@ curl http://localhost:3000/health
 2. Click "My Apps" → "Create App"
 3. Choose "Business" type
 4. Fill in details:
-   - App Name: "FaceMyDealer - [Your Name]"
+   - App Name: "Dealers Face - [Your Name]"
    - Contact Email: your email
    
 ### Configure OAuth
@@ -519,4 +519,4 @@ npm run lint              # Lint code
 
 ---
 
-**Congratulations! 🎉 Your FaceMyDealer platform is ready!**
+**Congratulations! 🎉 Your Dealers Face platform is ready!**

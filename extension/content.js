@@ -1,6 +1,6 @@
-// FaceMyDealer Chrome Extension - Facebook Content Script
+// Dealers Face Chrome Extension - Facebook Content Script
 
-console.log('FaceMyDealer content script loaded on Facebook');
+console.log('Dealers Face content script loaded on Facebook');
 
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

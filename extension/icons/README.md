@@ -1,4 +1,4 @@
-# FaceMyDealer Extension Icons
+# Dealers Face Extension Icons
 
 This folder should contain the extension icons in the following sizes:
 - icon16.png (16x16 pixels)
@@ -8,6 +8,6 @@ This folder should contain the extension icons in the following sizes:
 
 You can create these icons using any image editor or icon generator.
 
-Recommended: Use a car/vehicle icon with the FaceMyDealer branding colors:
+Recommended: Use a car/vehicle icon with the Dealers Face branding colors:
 - Primary Blue: #2563eb
 - Secondary Purple: #7c3aed

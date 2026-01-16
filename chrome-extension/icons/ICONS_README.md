@@ -1,4 +1,4 @@
-# FaceMyDealer Extension Icons
+# Dealers Face Extension Icons
 
 ## Available Icons
 
@@ -41,7 +41,7 @@ inkscape icon128.svg --export-filename=icon128.png --export-width=128
 - **Colors**: Blue (#3b82f6) to Purple (#8b5cf6) gradient
 - **Elements**: Car icon with Facebook badge
 - **Style**: Modern rounded corners, clean design
-- **Brand**: Matches FaceMyDealer web dashboard theme
+- **Brand**: Matches Dealers Face web dashboard theme
 
 ## After Conversion
 

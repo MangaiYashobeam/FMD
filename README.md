@@ -1,8 +1,8 @@
-# FaceMyDealer - Auto Dealer Facebook Marketplace Automation
+# Dealers Face - Auto Dealer Facebook Marketplace Automation
 
 <div align="center">
 
-![FaceMyDealer](https://via.placeholder.com/800x200/4267B2/FFFFFF?text=FaceMyDealer+-+Automate+Your+Vehicle+Listings)
+![Dealers Face](https://via.placeholder.com/800x200/4267B2/FFFFFF?text=Dealers+Face+-+Automate+Your+Vehicle+Listings)
 
 **Robust, Production-Ready Platform for Auto Dealerships**
 
@@ -76,8 +76,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/facemydealer.git
-cd facemydealer
+git clone https://github.com/yourusername/dealersface.git
+cd dealersface
 
 # Install dependencies
 npm install
@@ -109,8 +109,8 @@ Server will be running at `http://localhost:3000`
 ### Step 1: Clone & Install
 
 ```bash
-git clone https://github.com/yourusername/facemydealer.git
-cd facemydealer
+git clone https://github.com/yourusername/dealersface.git
+cd dealersface
 npm install
 ```
 
@@ -126,7 +126,7 @@ Edit `.env` with your values:
 
 ```env
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/facemydealer
+DATABASE_URL=postgresql://user:password@localhost:5432/dealersface
 
 # JWT Secrets
 JWT_SECRET=your-super-secret-key
@@ -168,9 +168,9 @@ sudo apt-get install postgresql postgresql-contrib
 
 # Create database
 sudo -u postgres psql
-CREATE DATABASE facemydealer;
-CREATE USER facemydealer_user WITH PASSWORD 'your-password';
-GRANT ALL PRIVILEGES ON DATABASE facemydealer TO facemydealer_user;
+CREATE DATABASE dealersface;
+CREATE USER dealersface_user WITH PASSWORD 'your-password';
+GRANT ALL PRIVILEGES ON DATABASE dealersface TO dealersface_user;
 \q
 ```
 
@@ -280,7 +280,7 @@ npm run build
 ### Connect to Backend
 
 1. Click extension icon
-2. Login with your FaceMyDealer credentials
+2. Login with your Dealers Face credentials
 3. Extension will connect to your account
 
 ---
@@ -417,7 +417,7 @@ Set in Railway dashboard:
 ### Project Structure
 
 ```
-facemydealer/
+dealersface/
 ├── src/
 │   ├── config/         # Configuration files
 │   ├── controllers/    # Route controllers
@@ -515,9 +515,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-- **Email**: support@facemydealer.com
-- **Documentation**: https://docs.facemydealer.com
-- **Issues**: https://github.com/yourusername/facemydealer/issues
+- **Email**: support@dealersface.com
+- **Documentation**: https://docs.dealersface.com
+- **Issues**: https://github.com/yourusername/dealersface/issues
 
 ---
 
@@ -539,6 +539,6 @@ See [PROJECT_ROADMAP.md](PROJECT_ROADMAP.md) for detailed development plan.
 
 **Built with ❤️ for Auto Dealers**
 
-[Website](https://facemydealer.com) • [Documentation](https://docs.facemydealer.com) • [Demo](https://demo.facemydealer.com)
+[Website](https://dealersface.com) • [Documentation](https://docs.dealersface.com) • [Demo](https://demo.dealersface.com)
 
 </div>

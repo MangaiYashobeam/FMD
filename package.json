@@ -1,7 +1,7 @@
 {
-  "name": "facemydealer",
+  "name": "dealersface",
   "version": "1.0.0",
-  "description": "Auto Dealer Facebook Marketplace Automation Platform",
+  "description": "Dealers Face - Auto Dealer Facebook Marketplace Automation Platform",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -25,9 +25,10 @@
     "facebook",
     "marketplace",
     "automation",
-    "auto-dealer"
+    "auto-dealer",
+    "dealersface"
   ],
-  "author": "FaceMyDealer",
+  "author": "Dealers Face",
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-ses": "^3.970.0",

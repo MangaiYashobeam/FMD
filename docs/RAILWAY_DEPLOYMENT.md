@@ -2,7 +2,7 @@
 
 ## Railway Environment Variables Configuration
 
-This document lists all required environment variables for deploying FaceMyDealer to Railway.
+This document lists all required environment variables for deploying Dealers Face to Railway.
 
 ### 📋 Required Environment Variables
 
@@ -49,13 +49,13 @@ Choose ONE option:
 
 **Option 1: Ethereal (Development/Testing)**
 ```bash
-EMAIL_FROM="noreply@facemydealer.com"
+EMAIL_FROM="noreply@dealersface.com"
 # No other config needed - Ethereal auto-configures
 ```
 
 **Option 2: SendGrid (Recommended for Production)**
 ```bash
-EMAIL_FROM="noreply@facemydealer.com"
+EMAIL_FROM="noreply@dealersface.com"
 SMTP_HOST="smtp.sendgrid.net"
 SMTP_PORT="587"
 SMTP_USER="apikey"
@@ -64,7 +64,7 @@ SMTP_PASS="YOUR_SENDGRID_API_KEY"
 
 **Option 3: AWS SES**
 ```bash
-EMAIL_FROM="noreply@facemydealer.com"
+EMAIL_FROM="noreply@dealersface.com"
 SMTP_HOST="email-smtp.us-east-1.amazonaws.com"
 SMTP_PORT="587"
 SMTP_USER="YOUR_SES_ACCESS_KEY"
@@ -224,14 +224,14 @@ SMTP_PASS="YOUR_API_KEY"
 ## 🌐 Custom Domain Setup
 
 1. **Railway Dashboard** → Settings → Domains
-2. **Add custom domain** (e.g., app.facemydealer.com)
+2. **Add custom domain** (e.g., app.dealersface.com)
 3. **Update DNS** with Railway's CNAME:
    ```
    CNAME: app → your-app.up.railway.app
    ```
 4. **Update CORS** environment variable:
    ```bash
-   ALLOWED_ORIGINS="https://app.facemydealer.com"
+   ALLOWED_ORIGINS="https://app.dealersface.com"
    ```
 
 ---

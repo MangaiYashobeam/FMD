@@ -44,7 +44,7 @@ export default function AdminLayout() {
                 <Shield className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-white">FaceMyDealer</h1>
+                <h1 className="text-lg font-bold text-white">Dealers <span className="text-blue-300">Face</span></h1>
                 <p className="text-xs text-slate-400">System Admin</p>
               </div>
             </div>

@@ -1,4 +1,4 @@
-// Custom React Hooks - FaceMyDealer
+// Custom React Hooks - Dealers Face
 // Centralized hook exports for clean imports
 
 export { useApi, useFetch } from './useApi';

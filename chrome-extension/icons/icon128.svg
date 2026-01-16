@@ -44,5 +44,5 @@
   <text x="102" y="33" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">f</text>
   
   <!-- FMD text -->
-  <text x="64" y="118" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle" opacity="0.9">FaceMyDealer</text>
+  <text x="64" y="118" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle" opacity="0.9">Dealers Face</text>
 </svg>

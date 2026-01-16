@@ -32,7 +32,7 @@ export const AdminLayout: React.FC = () => {
       <div className="hidden md:flex md:w-64 md:flex-col">
         <div className="flex flex-col flex-grow pt-5 bg-white border-r border-gray-200 overflow-y-auto">
           <div className="flex items-center flex-shrink-0 px-4">
-            <h1 className="text-2xl font-bold text-primary-600">FaceMyDealer</h1>
+            <h1 className="text-2xl font-bold text-primary-600">Dealers Face</h1>
           </div>
           <div className="mt-8 flex-grow flex flex-col">
             <nav className="flex-1 px-2 space-y-1">

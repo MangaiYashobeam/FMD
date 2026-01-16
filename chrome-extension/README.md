@@ -1,10 +1,10 @@
-# FaceMyDealer Chrome Extension
+# Dealers Face Chrome Extension
 
 Auto-post vehicles to Facebook Marketplace from your dealership inventory.
 
 ## Features
 
-- 🔐 Secure login with FaceMyDealer backend
+- 🔐 Secure login with Dealers Face backend
 - 🤖 Auto-fill Facebook Marketplace listing forms
 - 🔑 2FA handling with backup codes
 - 📸 Automatic form completion
@@ -22,14 +22,14 @@ Auto-post vehicles to Facebook Marketplace from your dealership inventory.
 
 1. Click the extension icon
 2. Select API endpoint (Production or Local)
-3. Log in with your FaceMyDealer credentials
+3. Log in with your Dealers Face credentials
 4. Go to Dashboard → Settings → Credentials
 5. Add your Facebook username, password, and 2FA backup codes
 
 ## How to Use
 
 ### Method 1: From Dashboard (Future)
-1. Open FaceMyDealer dashboard
+1. Open Dealers Face dashboard
 2. Go to Vehicles page
 3. Click "Post to Marketplace" button on any vehicle
 4. Extension opens Facebook and auto-fills the form
@@ -101,4 +101,4 @@ chrome-extension/
 
 ## License
 
-Proprietary - FaceMyDealer
+Proprietary - Dealers Face

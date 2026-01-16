@@ -15,7 +15,7 @@ import prisma from '@/config/database';
 // System email defaults
 const SYSTEM_DOMAIN = 'dealersface.com';
 const SYSTEM_FROM_EMAIL = `fb-api@${SYSTEM_DOMAIN}`;
-const SYSTEM_FROM_NAME = 'DealersFace';
+const SYSTEM_FROM_NAME = 'Dealers Face';
 const SYSTEM_SUPPORT_EMAIL = `support@${SYSTEM_DOMAIN}`;
 const SYSTEM_NOREPLY_EMAIL = `noreply@${SYSTEM_DOMAIN}`;
 
@@ -294,12 +294,12 @@ export class EmailService {
   async sendWelcomeEmail(userEmail: string, userName: string, tempPassword?: string) {
     const template: EmailTemplate = {
       name: 'welcome',
-      subject: 'Welcome to FaceMyDealer! 🚗',
+      subject: 'Welcome to Dealers Face! 🚗',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #2563eb;">Welcome to FaceMyDealer!</h1>
+          <h1 style="color: #2563eb;">Welcome to Dealers Face!</h1>
           <p>Hi ${userName},</p>
-          <p>Thank you for joining FaceMyDealer - your automated Facebook Marketplace solution for auto dealerships.</p>
+          <p>Thank you for joining Dealers Face - your automated Facebook Marketplace solution for auto dealerships.</p>
           
           ${tempPassword ? `
             <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -322,7 +322,7 @@ export class EmailService {
           
           <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
             <p style="color: #6b7280; font-size: 12px;">
-              This is an automated message from FaceMyDealer. Please do not reply to this email.
+              This is an automated message from Dealers Face. Please do not reply to this email.
             </p>
           </div>
         </div>
@@ -340,12 +340,12 @@ export class EmailService {
 
     const template: EmailTemplate = {
       name: 'password-reset',
-      subject: 'Reset Your Password - FaceMyDealer',
+      subject: 'Reset Your Password - Dealers Face',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h1 style="color: #2563eb;">Password Reset Request</h1>
           <p>Hi ${userName},</p>
-          <p>We received a request to reset your password for your FaceMyDealer account.</p>
+          <p>We received a request to reset your password for your Dealers Face account.</p>
           
           <div style="margin: 30px 0;">
             <a href="${resetUrl}" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
@@ -517,7 +517,7 @@ export class EmailService {
   ) {
     const template: EmailTemplate = {
       name: 'daily-digest',
-      subject: '📊 Your Daily FaceMyDealer Report',
+      subject: '📊 Your Daily Dealers Face Report',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h1 style="color: #2563eb;">Your Daily Report</h1>

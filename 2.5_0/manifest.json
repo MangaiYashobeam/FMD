@@ -8,7 +8,7 @@
          "64": "icon64.plasmo.8bb5e6e0.png"
       }
    },
-   "author": "Shiftly Auto",
+   "author": "Dealers Face",
    "background": {
       "service_worker": "static/background/index.js"
    },
@@ -44,7 +44,7 @@
    },
    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAl0M42zHe+IAr3K04WMylSLh2VQMFoU3FPr2kfg7NJGmnQp1KkVILKRuVbKWXrIafD4wLPOZIqdvAEqOmy3svQ3CkZ8Nrq2kAKmGZBdLy0/jiUTtrlKMLNnTXtFbIbF1kMH7IUeUcekPZElqukTmXaG37yL7aNYtbFU37ivC72BZGfl+y1ZfnbZv4peX+pQdoX2FNPCji5Wn0QkpLC6QrY9d27jLaTrZp5w7ewqS2f5pY72iVi2WEzay19DbEsFL4JxMyexsQKKi/Ls5XMqYaI148+00Kr/mBUSJYJZFYWPorwWqFBzRNHvtULyJT5O9NUwFnbHJkAGbLiqFkcYGsYQIDAQAB",
    "manifest_version": 3,
-   "name": "Shiftly Auto Lister",
+   "name": "Dealers Face Marketplace Lister",
    "permissions": [ "storage", "sidePanel", "tabs", "unlimitedStorage" ],
    "side_panel": {
       "default_path": "sidepanel.html"

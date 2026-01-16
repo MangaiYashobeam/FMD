@@ -133,7 +133,7 @@ export default function AdminDashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">System Dashboard</h1>
-        <p className="text-gray-500 mt-1">FaceMyDealer platform overview</p>
+        <p className="text-gray-500 mt-1">Dealers Face platform overview</p>
       </div>
 
       {/* Stats Grid */}

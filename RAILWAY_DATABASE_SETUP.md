@@ -1,6 +1,6 @@
 # Railway Database Setup Guide
 
-Complete guide to setting up PostgreSQL and Redis databases on Railway and connecting them to your FaceMyDealer application.
+Complete guide to setting up PostgreSQL and Redis databases on Railway and connecting them to your Dealers Face application.
 
 ## 📋 Prerequisites
 

@@ -1,4 +1,4 @@
-// UI Components - FaceMyDealer Design System
+// UI Components - Dealers Face Design System
 // Import these components throughout the application for consistent styling
 
 export { Button } from './Button';

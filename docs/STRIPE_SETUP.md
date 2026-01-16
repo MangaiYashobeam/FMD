@@ -1,11 +1,11 @@
 # Stripe Payment Integration Setup Guide
 
-This guide walks you through setting up Stripe payment integration for FaceMyDealer subscriptions.
+This guide walks you through setting up Stripe payment integration for Dealers Face subscriptions.
 
 ## Prerequisites
 
 - Stripe account (create at [stripe.com](https://stripe.com))
-- FaceMyDealer production environment deployed
+- Dealers Face production environment deployed
 - SSL/HTTPS configured (required for Stripe)
 
 ## Step 1: Create a Stripe Account
@@ -43,7 +43,7 @@ This guide walks you through setting up Stripe payment integration for FaceMyDea
 
 | Field | Value |
 |-------|-------|
-| Name | FaceMyDealer Basic |
+| Name | Dealers Face Basic |
 | Description | Essential features for small dealerships |
 | Pricing | $49/month (recurring) |
 | Metadata | `tier: basic, vehicles: 50` |
@@ -52,7 +52,7 @@ This guide walks you through setting up Stripe payment integration for FaceMyDea
 
 | Field | Value |
 |-------|-------|
-| Name | FaceMyDealer Professional |
+| Name | Dealers Face Professional |
 | Description | Advanced features for growing dealerships |
 | Pricing | $99/month (recurring) |
 | Metadata | `tier: professional, vehicles: 200` |
@@ -61,7 +61,7 @@ This guide walks you through setting up Stripe payment integration for FaceMyDea
 
 | Field | Value |
 |-------|-------|
-| Name | FaceMyDealer Enterprise |
+| Name | Dealers Face Enterprise |
 | Description | Full-featured for large operations |
 | Pricing | $199/month (recurring) |
 | Metadata | `tier: enterprise, vehicles: unlimited` |
@@ -85,7 +85,7 @@ Webhooks notify your server of payment events.
 
 ```
 Endpoint URL: https://fmd-production.up.railway.app/api/webhooks/stripe
-Description: FaceMyDealer subscription events
+Description: Dealers Face subscription events
 Events to send:
   - checkout.session.completed
   - customer.subscription.created
@@ -211,7 +211,7 @@ Monthly: invoice.paid or invoice.payment_failed
 
 ### Handling Failed Payments
 
-FaceMyDealer automatically:
+Dealers Face automatically:
 1. Sends reminder emails
 2. Retries payment (3 attempts over 7 days)
 3. Downgrades to free tier if all attempts fail

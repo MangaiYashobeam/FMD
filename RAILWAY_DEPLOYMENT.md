@@ -1,4 +1,4 @@
-# 🚂 Railway Deployment Guide for FaceMyDealer
+# 🚂 Railway Deployment Guide for Dealers Face
 
 ## 📦 Repository Successfully Pushed to GitHub
 
@@ -74,7 +74,7 @@ ALLOWED_ORIGINS=https://<your-railway-domain>.railway.app
 OPENAI_API_KEY=<your-openai-key>
 
 # Optional - Email service
-EMAIL_FROM=noreply@facemydealer.com
+EMAIL_FROM=noreply@dealersface.com
 SENDGRID_API_KEY=<your-sendgrid-key>
 
 # Optional - Error tracking
@@ -358,7 +358,7 @@ railway logs --follow
 
 ## ✅ Deployment Complete!
 
-Your FaceMyDealer backend is now:
+Your Dealers Face backend is now:
 - ✅ Deployed on Railway
 - ✅ Connected to PostgreSQL
 - ✅ Connected to Redis

@@ -1,4 +1,4 @@
-// Production-level Prisma Schema for FaceMyDealer
+// Production-level Prisma Schema for Dealers Face
 // Database: PostgreSQL
 
 generator client {

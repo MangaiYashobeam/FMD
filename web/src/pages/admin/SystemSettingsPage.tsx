@@ -88,9 +88,9 @@ export default function SystemSettingsPage() {
 
   // General settings form
   const [generalForm, setGeneralForm] = useState<SystemConfig>({
-    siteName: 'FaceMyDealer',
-    siteUrl: 'https://facemydealer.com',
-    supportEmail: 'support@facemydealer.com',
+    siteName: 'Dealers Face',
+    siteUrl: 'https://dealersface.com',
+    supportEmail: 'support@dealersface.com',
     maintenanceMode: false,
     allowRegistration: true,
     requireEmailVerification: true,
@@ -106,8 +106,8 @@ export default function SystemSettingsPage() {
     smtpUser: '',
     smtpPassword: '',
     smtpSecure: false,
-    fromEmail: 'noreply@facemydealer.com',
-    fromName: 'FaceMyDealer',
+    fromEmail: 'noreply@dealersface.com',
+    fromName: 'Dealers Face',
   });
 
   // Plan editing

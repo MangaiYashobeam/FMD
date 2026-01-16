@@ -1,10 +1,10 @@
-// FaceMyDealer Chrome Extension - Background Service Worker
+// Dealers Face Chrome Extension - Background Service Worker
 
 const API_BASE_URL = 'https://fmd-production.up.railway.app';
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener((details) => {
-  console.log('FaceMyDealer extension installed:', details.reason);
+  console.log('Dealers Face extension installed:', details.reason);
   
   // Open side panel on extension icon click
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -105,4 +105,4 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-console.log('FaceMyDealer background script loaded');
+console.log('Dealers Face background script loaded');

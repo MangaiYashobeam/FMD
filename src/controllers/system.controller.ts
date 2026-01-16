@@ -196,9 +196,9 @@ export const testEmailConfiguration = async (req: Request, res: Response, next: 
       // Send test email to admin
       const testTo = (req as any).user?.email || fromEmail;
       await transporter.sendMail({
-        from: `"${fromName || 'FaceMyDealer'}" <${fromEmail}>`,
+        from: `"${fromName || 'Dealers Face'}" <${fromEmail}>`,
         to: testTo,
-        subject: 'Email Configuration Test - FaceMyDealer',
+        subject: 'Email Configuration Test - Dealers Face',
         text: 'This is a test email to verify your email server configuration is working correctly.',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -207,7 +207,7 @@ export const testEmailConfiguration = async (req: Request, res: Response, next: 
             <p style="color: #16a34a; font-weight: bold;">✓ Your email server is configured correctly!</p>
             <hr style="border: 1px solid #e5e7eb; margin: 20px 0;" />
             <p style="color: #6b7280; font-size: 12px;">
-              Sent from FaceMyDealer System Settings
+              Sent from Dealers Face System Settings
             </p>
           </div>
         `,

@@ -1,0 +1,25 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="#2563EB"/>
+  
+  <!-- Car Silhouette -->
+  <g transform="translate(4, 8)">
+    <!-- Car body -->
+    <path d="M3 12h18v-3c0-1-0.5-2-1.5-2.5L17 5.5c-0.5-0.5-1-1-2-1.5L13 3H11L9 4C8 4.5 7.5 5 7 5.5L4.5 6.5C3.5 7 3 8 3 9v3z" fill="white" opacity="0.95"/>
+    
+    <!-- Window -->
+    <path d="M7.5 6.5L9 5.5h6l1.5 1L15 9H9L7.5 6.5z" fill="#2563EB"/>
+    
+    <!-- Wheels -->
+    <circle cx="7" cy="12" r="2.5" fill="white"/>
+    <circle cx="7" cy="12" r="1.2" fill="#2563EB"/>
+    <circle cx="17" cy="12" r="2.5" fill="white"/>
+    <circle cx="17" cy="12" r="1.2" fill="#2563EB"/>
+  </g>
+  
+  <!-- Price tag element -->
+  <g transform="translate(21, 4)">
+    <circle cx="4" cy="4" r="4" fill="#FCD34D"/>
+    <text x="4" y="6" font-family="Arial" font-size="5" font-weight="bold" fill="#2563EB" text-anchor="middle">$</text>
+  </g>
+</svg>

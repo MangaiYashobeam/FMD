@@ -1,6 +1,6 @@
 # Email Notification System
 
-Complete email notification system for FaceMyDealer with templates, queue-based delivery, and comprehensive admin controls.
+Complete email notification system for Dealers Face with templates, queue-based delivery, and comprehensive admin controls.
 
 ## Features
 
@@ -62,8 +62,8 @@ SMTP_USER=your-email@gmail.com    # SMTP username
 SMTP_PASSWORD=your-app-password   # SMTP password or app-specific password
 
 # Email Settings
-EMAIL_FROM=noreply@facemydealer.com  # From email address
-EMAIL_FROM_NAME=FaceMyDealer          # From display name
+EMAIL_FROM=noreply@dealersface.com  # From email address
+EMAIL_FROM_NAME=Dealers Face          # From display name
 ```
 
 ### SMTP Provider Examples
@@ -139,7 +139,7 @@ All email endpoints require authentication and admin permissions.
       {
         "id": "uuid",
         "recipient": "user@example.com",
-        "subject": "Welcome to FaceMyDealer",
+        "subject": "Welcome to Dealers Face",
         "status": "SENT",
         "messageId": "msg_12345",
         "createdAt": "2025-01-01T12:00:00Z"

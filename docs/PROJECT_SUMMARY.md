@@ -1,8 +1,8 @@
-# FaceMyDealer - Project Complete Summary
+# Dealers Face - Project Complete Summary
 
 ## 🎉 Project Overview
 
-**FaceMyDealer** is a complete Facebook Marketplace automation tool specifically designed for Auto Dealers. It enables dealerships to automatically post vehicle inventory to Facebook Marketplace through their sales team's personal accounts.
+**Dealers Face** is a complete Facebook Marketplace automation tool specifically designed for Auto Dealers. It enables dealerships to automatically post vehicle inventory to Facebook Marketplace through their sales team's personal accounts.
 
 **Repository:** https://github.com/MangaiYashobeam/FMD.git
 
@@ -192,7 +192,7 @@ Axios
 ## 📦 Project Structure
 
 ```
-FaceMyDealer/
+Dealers Face/
 ├── src/                          # Backend source
 │   ├── controllers/              # 11 controllers
 │   ├── services/                 # 8 services

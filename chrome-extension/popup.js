@@ -1,4 +1,4 @@
-// Popup script for FaceMyDealer Chrome Extension
+// Popup script for Dealers Face Chrome Extension
 
 const loginForm = document.getElementById('loginForm');
 const mainContent = document.getElementById('mainContent');

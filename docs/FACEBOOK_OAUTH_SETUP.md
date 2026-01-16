@@ -1,12 +1,12 @@
 # Facebook OAuth Setup Guide
 
-This guide walks you through setting up Facebook OAuth integration for FaceMyDealer.
+This guide walks you through setting up Facebook OAuth integration for Dealers Face.
 
 ## Prerequisites
 
 - Facebook account (preferably a business account)
 - Access to Facebook Developers platform
-- FaceMyDealer production environment already deployed
+- Dealers Face production environment already deployed
 
 ## Step 1: Create a Facebook App
 
@@ -14,7 +14,7 @@ This guide walks you through setting up Facebook OAuth integration for FaceMyDea
 2. Click **My Apps** → **Create App**
 3. Select **Business** as the app type
 4. Fill in the details:
-   - **App Name**: `FaceMyDealer` (or your dealership name)
+   - **App Name**: `Dealers Face` (or your dealership name)
    - **App Contact Email**: Your business email
    - **Business Portfolio**: Select or create one
 5. Click **Create App**
@@ -170,7 +170,7 @@ Facebook Graph API has rate limits:
 - **App tokens**: 200 × number of users/hour
 - **Page tokens**: 4800 calls/day per page
 
-FaceMyDealer implements automatic rate limiting and retry logic.
+Dealers Face implements automatic rate limiting and retry logic.
 
 ## Support Resources
 

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "FaceMyDealer - Auto Post to Facebook Marketplace",
+  "name": "Dealers Face - Auto Post to Facebook Marketplace",
   "version": "1.0.0",
   "description": "Automatically post vehicles to Facebook Marketplace from your dealership inventory",
   "permissions": [
