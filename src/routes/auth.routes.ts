@@ -1,11 +1,68 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { AuthController } from '@/controllers/auth.controller';
 import { authenticate } from '@/middleware/auth';
 import { validate, authValidators } from '@/middleware/validation';
+import prisma from '@/config/database';
 
 const router = Router();
 const authController = new AuthController();
+
+// ============================================
+// Diagnostic Route (TEMPORARY - Remove in production)
+// ============================================
+
+/**
+ * @route   GET /api/auth/health
+ * @desc    Check auth system health
+ * @access  Public
+ */
+router.get('/health', async (_req: Request, res: Response) => {
+  try {
+    // Check database connection
+    const dbCheck = await prisma.$queryRaw`SELECT 1 as ok`;
+    
+    // Check if super admin exists
+    const superAdmin = await prisma.user.findUnique({
+      where: { email: 'admin@gadproductions.com' },
+      select: { 
+        id: true, 
+        email: true, 
+        isActive: true,
+        accountUsers: {
+          select: { role: true }
+        }
+      },
+    });
+
+    // Check environment variables
+    const envCheck = {
+      JWT_SECRET: !!process.env.JWT_SECRET,
+      JWT_REFRESH_SECRET: !!process.env.JWT_REFRESH_SECRET,
+      DATABASE_URL: !!process.env.DATABASE_URL,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        database: dbCheck ? 'connected' : 'error',
+        superAdmin: superAdmin ? {
+          exists: true,
+          active: superAdmin.isActive,
+          roles: superAdmin.accountUsers.map(au => au.role),
+        } : { exists: false },
+        environment: envCheck,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+  }
+});
 
 // ============================================
 // Public Routes

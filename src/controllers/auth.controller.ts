@@ -143,103 +143,117 @@ export class AuthController {
    * Login user
    */
   async login(req: Request, res: Response) {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      throw new AppError('Validation failed', 400);
-    }
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new AppError('Validation failed', 400);
+      }
 
-    const { email, password } = req.body;
+      const { email, password } = req.body;
+      logger.info(`Login attempt for: ${email}`);
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: {
-        accountUsers: {
-          include: {
-            account: true,
+      // Find user
+      const user = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+        include: {
+          accountUsers: {
+            include: {
+              account: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    if (!user || !user.isActive) {
-      throw new AppError('Invalid credentials', 401);
-    }
+      if (!user || !user.isActive) {
+        logger.warn(`Login failed - user not found or inactive: ${email}`);
+        throw new AppError('Invalid credentials', 401);
+      }
 
-    // Verify password
-    const isPasswordValid = user.passwordHash 
-      ? await bcrypt.compare(password, user.passwordHash)
-      : false;
+      // Verify password
+      const isPasswordValid = user.passwordHash 
+        ? await bcrypt.compare(password, user.passwordHash)
+        : false;
 
-    if (!isPasswordValid) {
-      throw new AppError('Invalid credentials', 401);
-    }
+      if (!isPasswordValid) {
+        logger.warn(`Login failed - invalid password: ${email}`);
+        throw new AppError('Invalid credentials', 401);
+      }
 
-    // Generate tokens
-    const jwtSecret = process.env.JWT_SECRET || 'secret';
-    const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'refresh-secret';
-    const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
-    const refreshTokenOptions: SignOptions = { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any };
+      // Generate tokens
+      const jwtSecret = process.env.JWT_SECRET;
+      const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET;
+      
+      if (!jwtSecret || !jwtRefreshSecret) {
+        logger.error('JWT secrets not configured in environment variables');
+        throw new AppError('Server configuration error', 500);
+      }
 
-    const accessToken = jwt.sign(
-      { id: user.id, email: user.email },
-      jwtSecret,
-      accessTokenOptions
-    );
+      const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
+      const refreshTokenOptions: SignOptions = { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any };
 
-    const refreshToken = jwt.sign(
-      { id: user.id },
-      jwtRefreshSecret,
-      refreshTokenOptions
-    );
+      const accessToken = jwt.sign(
+        { id: user.id, email: user.email },
+        jwtSecret,
+        accessTokenOptions
+      );
 
-    // Save refresh token
-    await prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        token: refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
+      const refreshToken = jwt.sign(
+        { id: user.id },
+        jwtRefreshSecret,
+        refreshTokenOptions
+      );
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
-
-    // Log login
-    await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        action: 'USER_LOGIN',
-        entityType: 'user',
-        entityId: user.id,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      },
-    });
-
-    logger.info(`User logged in: ${user.email}`);
-
-    res.json({
-      success: true,
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
+      // Save refresh token
+      await prisma.refreshToken.create({
+        data: {
+          userId: user.id,
+          token: refreshToken,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
-        accounts: user.accountUsers.map((au) => ({
-          id: au.account.id,
-          name: au.account.name,
-          role: au.role,
-        })),
-        accessToken,
-        refreshToken,
-      },
-    });
+      });
+
+      // Update last login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
+      // Log login
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'USER_LOGIN',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        },
+      });
+
+      logger.info(`User logged in successfully: ${user.email}`);
+
+      res.json({
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+          },
+          accounts: user.accountUsers.map((au) => ({
+            id: au.account.id,
+            name: au.account.name,
+            role: au.role,
+          })),
+          accessToken,
+          refreshToken,
+        },
+      });
+    } catch (error) {
+      logger.error('Login error:', error);
+      throw error;
+    }
   }
 
   /**
