@@ -271,6 +271,84 @@ app.post('/api/iipc/emergency-reset', async (req, res): Promise<void> => {
 });
 
 // ============================================
+// IIPC Emergency Super Admin Promotion (No auth - IP verified only)
+// This allows promoting a user to SUPER_ADMIN when you're locked out
+// ============================================
+app.post('/api/iipc/promote-super-admin', async (req, res): Promise<void> => {
+  // Get client IP
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const clientIP = forwardedFor 
+    ? (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0]).trim()
+    : req.ip || 'unknown';
+  
+  // Only super admin IPs can use this
+  if (!iipcService.isSuperAdminIP(clientIP)) {
+    logger.warn(`Unauthorized super admin promotion attempt from IP: ${clientIP}`);
+    res.status(403).json({ 
+      success: false, 
+      error: 'Forbidden - IP not authorized',
+      yourIP: clientIP,
+    });
+    return;
+  }
+  
+  const { email } = req.body;
+  
+  if (!email) {
+    res.status(400).json({ success: false, error: 'Email is required' });
+    return;
+  }
+  
+  try {
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      include: { accountUsers: true },
+    });
+    
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    
+    // Update all their account user records to SUPER_ADMIN
+    if (user.accountUsers.length > 0) {
+      await prisma.accountUser.updateMany({
+        where: { userId: user.id },
+        data: { role: 'SUPER_ADMIN' },
+      });
+    } else {
+      // User has no accounts - create one
+      const account = await prisma.account.create({
+        data: {
+          name: 'System Admin Account',
+          dealershipName: 'FaceMyDealer Admin',
+        },
+      });
+      
+      await prisma.accountUser.create({
+        data: {
+          userId: user.id,
+          accountId: account.id,
+          role: 'SUPER_ADMIN',
+        },
+      });
+    }
+    
+    logger.info(`User ${email} promoted to SUPER_ADMIN by IP: ${clientIP}`);
+    
+    res.json({
+      success: true,
+      message: `User ${email} has been promoted to SUPER_ADMIN`,
+      userId: user.id,
+    });
+  } catch (error: any) {
+    logger.error('Failed to promote super admin:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
 // API Routes (Protected by 7-Ring Security Gateway)
 // ============================================
 // All routes under /api are secured by the gateway middleware
