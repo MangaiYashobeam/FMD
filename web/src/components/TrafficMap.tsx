@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Popup, CircleMarker, useMap } from 'react-leaflet';
 import { Ban, ExternalLink } from 'lucide-react';
