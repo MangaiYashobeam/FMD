@@ -82,8 +82,11 @@ export default function DashboardLayout() {
             const isActive = location.pathname === item.href || 
               (item.href !== '/app/dashboard' && location.pathname.startsWith(item.href));
             
-            // Admin link styling
+            // Only show Admin Panel for SUPER_ADMIN users
             if ((item as any).adminOnly) {
+              const isSuperAdmin = user?.accounts?.some(a => a.role === 'SUPER_ADMIN');
+              if (!isSuperAdmin) return null;
+              
               return (
                 <Link
                   key={item.name}

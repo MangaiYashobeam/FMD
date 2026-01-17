@@ -14,6 +14,8 @@ import {
   User,
 } from 'lucide-react';
 import { adminApi } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 
 interface User {
   id: string;
@@ -45,7 +47,11 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(null);
   const limit = 10;
+  
+  const { impersonateUser } = useAuth();
+  const toast = useToast();
 
   useEffect(() => {
     loadUsers();
@@ -78,6 +84,19 @@ export default function UsersPage() {
       if (roles.includes(role)) return role;
     }
     return roles[0];
+  };
+
+  const handleImpersonate = async (user: User) => {
+    setImpersonatingUserId(user.id);
+    try {
+      await impersonateUser(user.id);
+      toast.success(`Now viewing as ${user.email}`);
+    } catch (error) {
+      console.error('Failed to impersonate:', error);
+      toast.error('Failed to impersonate user');
+    } finally {
+      setImpersonatingUserId(null);
+    }
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -236,10 +255,16 @@ export default function UsersPage() {
                             <Key className="w-4 h-4" />
                           </button>
                           <button
-                            className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            onClick={() => handleImpersonate(user)}
+                            disabled={impersonatingUserId === user.id}
+                            className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
                             title="Login as User"
                           >
-                            <LogIn className="w-4 h-4" />
+                            {impersonatingUserId === user.id ? (
+                              <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <LogIn className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -369,7 +394,10 @@ export default function UsersPage() {
                 <button className="flex-1 py-2 px-4 bg-yellow-100 text-yellow-700 rounded-lg font-medium hover:bg-yellow-200">
                   Reset Password
                 </button>
-                <button className="flex-1 py-2 px-4 bg-purple-100 text-purple-700 rounded-lg font-medium hover:bg-purple-200">
+                <button 
+                  onClick={() => { setSelectedUser(null); handleImpersonate(selectedUser); }}
+                  className="flex-1 py-2 px-4 bg-purple-100 text-purple-700 rounded-lg font-medium hover:bg-purple-200"
+                >
                   Login as User
                 </button>
                 <button

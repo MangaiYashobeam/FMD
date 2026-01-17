@@ -12,8 +12,17 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  LogIn,
+  TrendingUp,
+  Activity,
+  RefreshCw,
+  Calendar,
+  DollarSign,
+  X,
 } from 'lucide-react';
 import { adminApi } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 
 interface Account {
   id: string;
@@ -25,9 +34,26 @@ interface Account {
   createdAt: string;
   trialEndsAt?: string;
   subscriptionPlan?: { name: string; basePrice: number };
-  accountUsers?: Array<{ user: { email: string; firstName: string; lastName: string } }>;
+  accountUsers?: Array<{ 
+    role: string;
+    user: { 
+      id: string;
+      email: string; 
+      firstName: string; 
+      lastName: string;
+      isActive: boolean;
+    } 
+  }>;
   _count?: { vehicles: number; syncJobs: number; payments: number };
 }
+
+const roleColors: Record<string, { bg: string; text: string }> = {
+  SUPER_ADMIN: { bg: 'bg-purple-100', text: 'text-purple-700' },
+  ACCOUNT_OWNER: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  ADMIN: { bg: 'bg-green-100', text: 'text-green-700' },
+  SALES_REP: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
+  VIEWER: { bg: 'bg-gray-100', text: 'text-gray-700' },
+};
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -37,7 +63,12 @@ export default function AccountsPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'analytics'>('overview');
   const limit = 10;
+  
+  const { impersonateUser } = useAuth();
+  const toast = useToast();
 
   useEffect(() => {
     loadAccounts();
@@ -79,6 +110,19 @@ export default function AccountsPage() {
       loadAccounts();
     } catch (err) {
       console.error('Failed to delete account:', err);
+    }
+  };
+
+  const handleImpersonateUser = async (userId: string, userEmail: string) => {
+    setImpersonatingUserId(userId);
+    try {
+      await impersonateUser(userId);
+      toast.success(`Now viewing as ${userEmail}`);
+    } catch (error) {
+      console.error('Failed to impersonate:', error);
+      toast.error('Failed to impersonate user');
+    } finally {
+      setImpersonatingUserId(null);
     }
   };
 
@@ -246,11 +290,18 @@ export default function AccountsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => setSelectedAccount(account)}
+                          onClick={() => { setSelectedAccount(account); setActiveTab('overview'); }}
                           className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setSelectedAccount(account); setActiveTab('users'); }}
+                          className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                          title="View Users & Impersonate"
+                        >
+                          <LogIn className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleToggleStatus(account)}
@@ -312,96 +363,277 @@ export default function AccountsPage() {
         )}
       </div>
 
-      {/* Account Details Modal */}
+      {/* Account Details Modal - Enhanced */}
       {selectedAccount && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-100">
+          <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-blue-600 to-blue-700">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">Account Details</h2>
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Building2 className="w-7 h-7 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">{selectedAccount.name}</h2>
+                    <p className="text-blue-100">{selectedAccount.dealershipName || 'Dealership Account'}</p>
+                  </div>
+                </div>
                 <button
                   onClick={() => setSelectedAccount(null)}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                  className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 >
-                  <XCircle className="w-5 h-5" />
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* Tabs */}
+              <div className="flex gap-1 mt-4">
+                <button
+                  onClick={() => setActiveTab('overview')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'overview'
+                      ? 'bg-white text-blue-700'
+                      : 'text-white/80 hover:bg-white/10'
+                  }`}
+                >
+                  Overview
+                </button>
+                <button
+                  onClick={() => setActiveTab('users')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'users'
+                      ? 'bg-white text-blue-700'
+                      : 'text-white/80 hover:bg-white/10'
+                  }`}
+                >
+                  Users ({selectedAccount.accountUsers?.length || 0})
+                </button>
+                <button
+                  onClick={() => setActiveTab('analytics')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'analytics'
+                      ? 'bg-white text-blue-700'
+                      : 'text-white/80 hover:bg-white/10'
+                  }`}
+                >
+                  Analytics
                 </button>
               </div>
             </div>
-            <div className="p-6 space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Building2 className="w-8 h-8 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{selectedAccount.name}</h3>
-                  <p className="text-gray-500">{selectedAccount.dealershipName || 'No dealership name'}</p>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">Status</p>
-                  <div className="mt-1">{statusBadge(selectedAccount)}</div>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">Plan</p>
-                  <p className="text-lg font-semibold text-gray-900 mt-1">
-                    {selectedAccount.subscriptionPlan?.name || 'No Plan'}
-                  </p>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">Users</p>
-                  <p className="text-lg font-semibold text-gray-900 mt-1">
-                    {selectedAccount.accountUsers?.length || 0}
-                  </p>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">Vehicles</p>
-                  <p className="text-lg font-semibold text-gray-900 mt-1">
-                    {selectedAccount._count?.vehicles || 0}
-                  </p>
-                </div>
-              </div>
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {/* Overview Tab */}
+              {activeTab === 'overview' && (
+                <div className="space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-4 bg-blue-50 rounded-xl text-center">
+                      <Users className="w-6 h-6 text-blue-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-gray-900">{selectedAccount.accountUsers?.length || 0}</p>
+                      <p className="text-sm text-gray-500">Users</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-xl text-center">
+                      <Car className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-gray-900">{selectedAccount._count?.vehicles || 0}</p>
+                      <p className="text-sm text-gray-500">Vehicles</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-xl text-center">
+                      <RefreshCw className="w-6 h-6 text-purple-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-gray-900">{selectedAccount._count?.syncJobs || 0}</p>
+                      <p className="text-sm text-gray-500">Sync Jobs</p>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-xl text-center">
+                      <DollarSign className="w-6 h-6 text-amber-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-gray-900">{selectedAccount._count?.payments || 0}</p>
+                      <p className="text-sm text-gray-500">Payments</p>
+                    </div>
+                  </div>
 
-              {selectedAccount.accountUsers && selectedAccount.accountUsers.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Team Members</h4>
-                  <div className="space-y-2">
-                    {selectedAccount.accountUsers.map((au, index) => (
-                      <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Users className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {au.user.firstName} {au.user.lastName}
-                          </p>
-                          <p className="text-xs text-gray-500">{au.user.email}</p>
-                        </div>
+                  {/* Account Details */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <p className="text-sm text-gray-500 mb-1">Status</p>
+                      <div>{statusBadge(selectedAccount)}</div>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <p className="text-sm text-gray-500 mb-1">Plan</p>
+                      <p className="font-semibold text-gray-900">{selectedAccount.subscriptionPlan?.name || 'No Plan'}</p>
+                      {selectedAccount.subscriptionPlan?.basePrice && (
+                        <p className="text-sm text-gray-500">${selectedAccount.subscriptionPlan.basePrice}/month</p>
+                      )}
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <p className="text-sm text-gray-500 mb-1">Created</p>
+                      <p className="font-semibold text-gray-900">{new Date(selectedAccount.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    {selectedAccount.trialEndsAt && (
+                      <div className="p-4 bg-gray-50 rounded-xl">
+                        <p className="text-sm text-gray-500 mb-1">Trial Ends</p>
+                        <p className="font-semibold text-gray-900">{new Date(selectedAccount.trialEndsAt).toLocaleDateString()}</p>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => handleToggleStatus(selectedAccount)}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium ${
-                    selectedAccount.isActive
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                      : 'bg-green-100 text-green-700 hover:bg-green-200'
-                  }`}
-                >
-                  {selectedAccount.isActive ? 'Deactivate Account' : 'Activate Account'}
-                </button>
-                <button
-                  onClick={() => setSelectedAccount(null)}
-                  className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200"
-                >
-                  Close
-                </button>
-              </div>
+              {/* Users Tab */}
+              {activeTab === 'users' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-500">Click the login icon to impersonate any user in this account.</p>
+                  
+                  {selectedAccount.accountUsers && selectedAccount.accountUsers.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedAccount.accountUsers.map((au, index) => {
+                        const roleStyle = roleColors[au.role] || roleColors.VIEWER;
+                        return (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                {au.user.firstName?.[0]}{au.user.lastName?.[0]}
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {au.user.firstName} {au.user.lastName}
+                                </p>
+                                <p className="text-sm text-gray-500">{au.user.email}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleStyle.bg} ${roleStyle.text}`}>
+                                    {au.role.replace('_', ' ')}
+                                  </span>
+                                  {au.user.isActive ? (
+                                    <span className="text-xs text-green-600">● Active</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-400">● Inactive</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleImpersonateUser(au.user.id, au.user.email)}
+                              disabled={impersonatingUserId === au.user.id}
+                              className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50"
+                              title="Login as this user"
+                            >
+                              {impersonatingUserId === au.user.id ? (
+                                <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <LogIn className="w-4 h-4" />
+                              )}
+                              <span className="text-sm font-medium">Impersonate</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p>No users in this account</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Analytics Tab */}
+              {activeTab === 'analytics' && (
+                <div className="space-y-6">
+                  {/* Usage Stats */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <Activity className="w-4 h-4" />
+                      Account Usage Statistics
+                    </h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="p-4 border border-gray-200 rounded-xl">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-500">Inventory Listings</span>
+                          <TrendingUp className="w-4 h-4 text-green-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">{selectedAccount._count?.vehicles || 0}</p>
+                        <p className="text-xs text-green-600 mt-1">Active vehicles</p>
+                      </div>
+                      <div className="p-4 border border-gray-200 rounded-xl">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-500">Total Syncs</span>
+                          <RefreshCw className="w-4 h-4 text-blue-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">{selectedAccount._count?.syncJobs || 0}</p>
+                        <p className="text-xs text-blue-600 mt-1">FTP sync jobs run</p>
+                      </div>
+                      <div className="p-4 border border-gray-200 rounded-xl">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-500">Revenue</span>
+                          <DollarSign className="w-4 h-4 text-amber-500" />
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900">
+                          ${((selectedAccount.subscriptionPlan?.basePrice || 0) * (selectedAccount._count?.payments || 0)).toFixed(0)}
+                        </p>
+                        <p className="text-xs text-amber-600 mt-1">Total payments</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Activity Timeline Mock */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Recent Activity
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                        <div className="w-2 h-2 rounded-full bg-green-500 mt-2" />
+                        <div>
+                          <p className="text-sm text-gray-900">Account created</p>
+                          <p className="text-xs text-gray-500">{new Date(selectedAccount.createdAt).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      {selectedAccount._count?.syncJobs ? (
+                        <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-2 h-2 rounded-full bg-blue-500 mt-2" />
+                          <div>
+                            <p className="text-sm text-gray-900">{selectedAccount._count.syncJobs} sync jobs completed</p>
+                            <p className="text-xs text-gray-500">Inventory synchronization</p>
+                          </div>
+                        </div>
+                      ) : null}
+                      {selectedAccount._count?.vehicles ? (
+                        <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="w-2 h-2 rounded-full bg-purple-500 mt-2" />
+                          <div>
+                            <p className="text-sm text-gray-900">{selectedAccount._count.vehicles} vehicles in inventory</p>
+                            <p className="text-xs text-gray-500">Current active listings</p>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between">
+              <button
+                onClick={() => handleToggleStatus(selectedAccount)}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  selectedAccount.isActive
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                }`}
+              >
+                {selectedAccount.isActive ? 'Deactivate Account' : 'Activate Account'}
+              </button>
+              <button
+                onClick={() => setSelectedAccount(null)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
