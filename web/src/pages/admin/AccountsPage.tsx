@@ -288,27 +288,27 @@ export default function AccountsPage() {
                       {new Date(account.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2 relative z-10">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
-                          onClick={() => { setSelectedAccount(account); setActiveTab('overview'); }}
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); setSelectedAccount(account); setActiveTab('overview'); }}
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setSelectedAccount(account); setActiveTab('users'); }}
-                          className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); setSelectedAccount(account); setActiveTab('users'); }}
+                          className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                           title="View Users & Impersonate"
                         >
                           <LogIn className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleToggleStatus(account)}
-                          className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(account); }}
+                          className={`p-2 rounded-lg transition-colors ${
                             account.isActive
                               ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
                               : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
@@ -323,8 +323,8 @@ export default function AccountsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteAccount(account)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteAccount(account); }}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />
