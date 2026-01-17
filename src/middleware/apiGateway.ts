@@ -407,12 +407,13 @@ export const ring5AuthBarrier = (req: Request, _res: Response, next: NextFunctio
 export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunction): void => {
   const context = (req as any).securityContext as SecurityContext;
   const apiKey = req.headers['x-api-key'] as string;
+  const authHeader = req.headers['authorization'] as string;
 
   // API key is optional for browser-based requests (use JWT instead)
   // But required for server-to-server communication
   if (!apiKey) {
-    // Skip if already authenticated via JWT
-    if (context.rings.authBarrier) {
+    // Skip if request has JWT token (will be validated by Ring 5 per-route)
+    if (authHeader?.startsWith('Bearer ')) {
       context.rings.apiKeyFortress = true;
       context.passedRings++;
       return next();
