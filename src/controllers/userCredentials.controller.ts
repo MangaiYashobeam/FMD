@@ -21,7 +21,7 @@ export class UserCredentialsController {
   /**
    * Get user's Facebook credentials (decrypted)
    */
-  async getCredentials(_req: AuthRequest, res: Response) {
+  async getCredentials(_req: AuthRequest, _res: Response) {
     logger.warn('UserCredentialsController.getCredentials called but feature is disabled');
     throw new AppError(this.FEATURE_UNAVAILABLE_MSG, 503);
   }
@@ -29,7 +29,7 @@ export class UserCredentialsController {
   /**
    * Update user's Facebook credentials
    */
-  async updateCredentials(_req: AuthRequest, res: Response) {
+  async updateCredentials(_req: AuthRequest, _res: Response) {
     logger.warn('UserCredentialsController.updateCredentials called but feature is disabled');
     throw new AppError(this.FEATURE_UNAVAILABLE_MSG, 503);
   }
@@ -37,7 +37,7 @@ export class UserCredentialsController {
   /**
    * Delete user's Facebook credentials
    */
-  async deleteCredentials(_req: AuthRequest, res: Response) {
+  async deleteCredentials(_req: AuthRequest, _res: Response) {
     logger.warn('UserCredentialsController.deleteCredentials called but feature is disabled');
     throw new AppError(this.FEATURE_UNAVAILABLE_MSG, 503);
   }
@@ -45,7 +45,7 @@ export class UserCredentialsController {
   /**
    * Use a 2FA code (mark as used by removing it from the list)
    */
-  async use2FACode(_req: AuthRequest, res: Response) {
+  async use2FACode(_req: AuthRequest, _res: Response) {
     logger.warn('UserCredentialsController.use2FACode called but feature is disabled');
     throw new AppError(this.FEATURE_UNAVAILABLE_MSG, 503);
   }
@@ -53,7 +53,7 @@ export class UserCredentialsController {
   /**
    * Get next available 2FA code without marking it as used
    */
-  async getNext2FACode(_req: AuthRequest, res: Response) {
+  async getNext2FACode(_req: AuthRequest, _res: Response) {
     logger.warn('UserCredentialsController.getNext2FACode called but feature is disabled');
     throw new AppError(this.FEATURE_UNAVAILABLE_MSG, 503);
   }
@@ -61,7 +61,7 @@ export class UserCredentialsController {
   /**
    * Add new 2FA codes to the list
    */
-  async add2FACodes(_req: AuthRequest, res: Response) {
+  async add2FACodes(_req: AuthRequest, _res: Response) {
     logger.warn('UserCredentialsController.add2FACodes called but feature is disabled');
     throw new AppError(this.FEATURE_UNAVAILABLE_MSG, 503);
   }
