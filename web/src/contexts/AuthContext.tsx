@@ -59,10 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: userData.accounts?.[0]?.role || 'USER',
             accounts: userData.accounts || [],
           });
-        } catch (error) {
-          // Token invalid - clear storage
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
+        } catch (error: any) {
+          // Only clear tokens if it's a definitive auth failure (401)
+          // The interceptor will have already tried to refresh
+          // Network errors should NOT clear tokens
+          console.error('[AuthContext] checkAuth failed:', error?.response?.status || error.message);
+          
+          if (error?.response?.status === 401) {
+            // Interceptor already tried refresh and failed - tokens are invalid
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+          }
+          // For other errors (network, 500, etc.), keep tokens - might be temporary
         }
       }
       setIsLoading(false);
