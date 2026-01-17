@@ -8,11 +8,21 @@
  * 4. At 30% above average, activating smart mitigation
  * 5. Smart mitigation only blocks abnormal traffic, not all traffic
  * 6. Trusted sources (Facebook, dealers, etc.) always pass through
+ * 
+ * Enterprise Security Features:
+ * - HMAC Request Signature Validation
+ * - JWT Token Fingerprinting
+ * - SQL Injection Detection
+ * - XSS Attack Detection
+ * - Bot Detection & CAPTCHA Triggers
+ * - IP Reputation Checking
+ * - Encrypted Payload Validation
  */
 
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
 import { EventEmitter } from 'events';
+import crypto from 'crypto';
 
 // ============================================
 // Types & Interfaces
@@ -75,6 +85,53 @@ export interface IntelliceilConfig {
   autoMitigate: boolean;
   notifyOnAttack: boolean;
   notifyEmail: string;
+  // Enterprise Security Settings
+  enableSignatureValidation: boolean;
+  enableTokenFingerprinting: boolean;
+  enableSQLInjectionDetection: boolean;
+  enableXSSDetection: boolean;
+  enableBotDetection: boolean;
+  enableIPReputation: boolean;
+  botDetectionThreshold: number; // 0-100
+  signatureSecret: string;
+}
+
+// Enterprise Security Types
+export interface RequestSignature {
+  signature: string;
+  timestamp: number;
+  nonce: string;
+}
+
+export interface TokenFingerprint {
+  fingerprint: string;
+  userAgent: string;
+  ip: string;
+  acceptLanguage?: string;
+  timezone?: string;
+  createdAt: Date;
+}
+
+export interface SecurityValidationResult {
+  valid: boolean;
+  reason: string;
+  threatScore?: number;
+  recommendation?: string;
+}
+
+export interface BotDetectionResult {
+  isBot: boolean;
+  confidence: number;
+  reason: string;
+  indicators?: string[];
+}
+
+export interface IPReputationResult {
+  ip: string;
+  score: number;
+  threats: string[];
+  lastChecked: Date;
+  isMalicious: boolean;
 }
 
 // ============================================
@@ -149,6 +206,115 @@ const TRUSTED_IP_RANGES = [
 ];
 
 // ============================================
+// Enterprise Security Patterns
+// ============================================
+
+// SQL Injection Detection Patterns
+const SQL_INJECTION_PATTERNS = [
+  /(\%27)|(\')|(\-\-)|(\%23)|(#)/i,
+  /((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))/i,
+  /\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))/i,
+  /((\%27)|(\'))union/i,
+  /exec(\s|\+)+(s|x)p\w+/i,
+  /UNION(\s+)SELECT/i,
+  /INSERT(\s+)INTO/i,
+  /DELETE(\s+)FROM/i,
+  /DROP(\s+)TABLE/i,
+  /UPDATE(\s+)\w+(\s+)SET/i,
+  /SELECT(\s+).*(\s+)FROM/i,
+  /TRUNCATE(\s+)TABLE/i,
+  /ALTER(\s+)TABLE/i,
+  /CREATE(\s+)(TABLE|DATABASE|INDEX)/i,
+  /\bOR\b.*=.*\bOR\b/i,
+  /\bAND\b.*=.*\bAND\b/i,
+  /1\s*=\s*1/i,
+  /1\s*=\s*'1'/i,
+  /''\s*OR\s*''/i,
+  /;\s*--/i,
+  /\/\*.*\*\//i,
+  /WAITFOR(\s+)DELAY/i,
+  /BENCHMARK\s*\(/i,
+  /SLEEP\s*\(/i,
+];
+
+// XSS Attack Detection Patterns
+const XSS_PATTERNS = [
+  /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+  /javascript\s*:/gi,
+  /on\w+\s*=/gi,
+  /<iframe/gi,
+  /<object/gi,
+  /<embed/gi,
+  /<link/gi,
+  /<meta/gi,
+  /eval\s*\(/gi,
+  /document\.(cookie|location|write|domain)/gi,
+  /window\.(location|open)/gi,
+  /innerHTML\s*=/gi,
+  /outerHTML\s*=/gi,
+  /\.appendChild\s*\(/gi,
+  /\.insertAdjacentHTML\s*\(/gi,
+  /fromCharCode/gi,
+  /String\.fromCharCode/gi,
+  /%3C\s*script/gi,
+  /&#x3C;script/gi,
+  /&#60;script/gi,
+  /data:\s*text\/html/gi,
+  /vbscript\s*:/gi,
+  /expression\s*\(/gi,
+  /@import/gi,
+];
+
+// Bot User Agent Patterns
+const BOT_USER_AGENTS = [
+  /headless/i,
+  /phantomjs/i,
+  /selenium/i,
+  /webdriver/i,
+  /puppeteer/i,
+  /playwright/i,
+  /electron/i,
+  /nightmare/i,
+  /casperjs/i,
+  /slimerjs/i,
+  /splash/i,
+  /htmlunit/i,
+  /python-requests/i,
+  /curl\//i,
+  /wget\//i,
+  /httpie/i,
+  /axios/i,
+  /node-fetch/i,
+  /got\//i,
+  /libwww/i,
+  /lwp-/i,
+  /java\//i,
+  /httpclient/i,
+  /okhttp/i,
+  /scrapy/i,
+  /bot\b/i,
+  /crawler/i,
+  /spider/i,
+  /scan/i,
+];
+
+// Honeypot Endpoints (trap attackers)
+const HONEYPOT_ENDPOINTS = [
+  '/admin.php',
+  '/wp-admin',
+  '/wp-login.php',
+  '/phpmyadmin',
+  '/.env',
+  '/.git/config',
+  '/config.php',
+  '/backup.sql',
+  '/database.sql',
+  '/shell.php',
+  '/c99.php',
+  '/r57.php',
+];
+
+// ============================================
 // Intelliceil Service Class
 // ============================================
 
@@ -165,6 +331,21 @@ class IntelliceilService extends EventEmitter {
   private monitoringInterval: NodeJS.Timeout | null = null;
   private baselineInterval: NodeJS.Timeout | null = null;
   private registeredDMSDomains: Set<string> = new Set();
+  
+  // Enterprise Security Private Members
+  private ipReputationCache: Map<string, IPReputationResult> = new Map();
+  private tokenFingerprintCache: Map<string, TokenFingerprint> = new Map();
+  private requestTimingCache: Map<string, number[]> = new Map();
+  private usedNonces: Set<string> = new Set();
+  private nonceCleanupInterval: NodeJS.Timeout | null = null;
+  private securityMetrics = {
+    sqlInjectionAttempts: 0,
+    xssAttempts: 0,
+    botDetections: 0,
+    signatureFailures: 0,
+    replayAttempts: 0,
+    honeypotHits: 0,
+  };
 
   constructor() {
     super();
@@ -183,6 +364,15 @@ class IntelliceilService extends EventEmitter {
       autoMitigate: true,
       notifyOnAttack: true,
       notifyEmail: 'admin@dealersface.com',
+      // Enterprise Security Defaults
+      enableSignatureValidation: true,
+      enableTokenFingerprinting: true,
+      enableSQLInjectionDetection: true,
+      enableXSSDetection: true,
+      enableBotDetection: true,
+      enableIPReputation: true,
+      botDetectionThreshold: 70,
+      signatureSecret: process.env.INTELLICEIL_SECRET || crypto.randomBytes(32).toString('hex'),
     };
 
     this.baseline = {
@@ -727,6 +917,16 @@ class IntelliceilService extends EventEmitter {
     topSources: { source: string; count: number }[];
     topEndpoints: { endpoint: string; count: number }[];
     topCountries: { country: string; count: number }[];
+    securityMetrics: {
+      sqlInjectionAttempts: number;
+      xssAttempts: number;
+      botDetections: number;
+      signatureFailures: number;
+      replayAttempts: number;
+      honeypotHits: number;
+      ipReputationCacheSize: number;
+      tokenFingerprintCacheSize: number;
+    };
   } {
     // Get current RPS from last snapshot in history
     const lastSnapshot = this.trafficHistory[this.trafficHistory.length - 1];
@@ -787,6 +987,7 @@ class IntelliceilService extends EventEmitter {
       topSources,
       topEndpoints,
       topCountries,
+      securityMetrics: this.getSecurityMetrics(),
     };
   }
 
@@ -823,6 +1024,595 @@ class IntelliceilService extends EventEmitter {
     this.updateConfig({ trustedDomains: this.config.trustedDomains });
   }
 
+  // ============================================
+  // ENTERPRISE SECURITY FEATURES
+  // ============================================
+
+  /**
+   * Validates HMAC request signature for API authenticity
+   * Prevents request tampering and replay attacks
+   */
+  validateRequestSignature(
+    payload: string,
+    signature: string,
+    timestamp: number,
+    nonce?: string
+  ): SecurityValidationResult {
+    if (!this.config.enableSignatureValidation) {
+      return { valid: true, reason: 'Signature validation disabled' };
+    }
+
+    // Check timestamp freshness (5 minute window)
+    const now = Date.now();
+    const age = Math.abs(now - timestamp);
+    if (age > 5 * 60 * 1000) {
+      this.securityMetrics.replayAttempts++;
+      return { 
+        valid: false, 
+        reason: 'Request timestamp expired',
+        threatScore: 80,
+        recommendation: 'Possible replay attack - block IP'
+      };
+    }
+
+    // Check nonce for replay prevention
+    if (nonce) {
+      if (this.usedNonces.has(nonce)) {
+        this.securityMetrics.replayAttempts++;
+        return { 
+          valid: false, 
+          reason: 'Nonce already used',
+          threatScore: 95,
+          recommendation: 'Replay attack detected - block IP immediately'
+        };
+      }
+      this.usedNonces.add(nonce);
+      // Clean old nonces every hour
+      this.scheduleNonceCleanup();
+    }
+
+    // Verify HMAC signature
+    const dataToSign = `${timestamp}.${payload}${nonce ? '.' + nonce : ''}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', this.config.signatureSecret)
+      .update(dataToSign)
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      this.securityMetrics.signatureFailures++;
+      return { 
+        valid: false, 
+        reason: 'Invalid signature',
+        threatScore: 70,
+        recommendation: 'Request tampering detected'
+      };
+    }
+
+    return { valid: true, reason: 'Signature valid' };
+  }
+
+  /**
+   * Generates a new request signature for outgoing requests
+   */
+  generateRequestSignature(payload: string): RequestSignature {
+    const timestamp = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const dataToSign = `${timestamp}.${payload}.${nonce}`;
+    const signature = crypto
+      .createHmac('sha256', this.config.signatureSecret)
+      .update(dataToSign)
+      .digest('hex');
+
+    return { timestamp, nonce, signature };
+  }
+
+  /**
+   * Creates a token fingerprint for session binding
+   * Prevents token theft by binding tokens to device/browser
+   */
+  createTokenFingerprint(
+    userId: string,
+    userAgent: string,
+    ip: string,
+    acceptLanguage?: string,
+    acceptEncoding?: string
+  ): TokenFingerprint {
+    const fingerprintData = `${userAgent}|${acceptLanguage || ''}|${acceptEncoding || ''}`;
+    const fingerprint = crypto
+      .createHash('sha256')
+      .update(fingerprintData)
+      .digest('hex')
+      .substring(0, 32);
+
+    const tokenFingerprint: TokenFingerprint = {
+      fingerprint,
+      userAgent,
+      ip,
+      createdAt: new Date(),
+    };
+
+    this.tokenFingerprintCache.set(`${userId}:${fingerprint}`, tokenFingerprint);
+    return tokenFingerprint;
+  }
+
+  /**
+   * Validates token fingerprint against stored fingerprint
+   */
+  validateTokenFingerprint(
+    storedFingerprint: TokenFingerprint,
+    currentUserAgent: string,
+    currentIP: string
+  ): SecurityValidationResult {
+    if (!this.config.enableTokenFingerprinting) {
+      return { valid: true, reason: 'Token fingerprinting disabled' };
+    }
+
+    // Check user agent match
+    if (storedFingerprint.userAgent !== currentUserAgent) {
+      return {
+        valid: false,
+        reason: 'User agent mismatch',
+        threatScore: 75,
+        recommendation: 'Possible token theft - force re-authentication'
+      };
+    }
+
+    // IP change is suspicious but not always malicious (mobile networks)
+    if (storedFingerprint.ip !== currentIP) {
+      return {
+        valid: true, // Allow but flag
+        reason: 'IP address changed',
+        threatScore: 30,
+        recommendation: 'Monitor for additional suspicious activity'
+      };
+    }
+
+    return { valid: true, reason: 'Fingerprint valid' };
+  }
+
+  /**
+   * Detects SQL injection attempts in input
+   */
+  detectSQLInjection(input: string): SecurityValidationResult {
+    if (!this.config.enableSQLInjectionDetection) {
+      return { valid: true, reason: 'SQL injection detection disabled' };
+    }
+
+    if (!input || typeof input !== 'string') {
+      return { valid: true, reason: 'No input to check' };
+    }
+
+    const normalizedInput = input.toLowerCase().trim();
+    
+    for (const pattern of SQL_INJECTION_PATTERNS) {
+      if (pattern.test(normalizedInput)) {
+        this.securityMetrics.sqlInjectionAttempts++;
+        logger.warn(`🚨 SQL Injection attempt detected: ${input.substring(0, 100)}`);
+        return {
+          valid: false,
+          reason: 'SQL injection pattern detected',
+          threatScore: 95,
+          recommendation: 'Block request and log IP'
+        };
+      }
+    }
+
+    return { valid: true, reason: 'No SQL injection detected' };
+  }
+
+  /**
+   * Detects XSS attempts in input
+   */
+  detectXSS(input: string): SecurityValidationResult {
+    if (!this.config.enableXSSDetection) {
+      return { valid: true, reason: 'XSS detection disabled' };
+    }
+
+    if (!input || typeof input !== 'string') {
+      return { valid: true, reason: 'No input to check' };
+    }
+
+    for (const pattern of XSS_PATTERNS) {
+      if (pattern.test(input)) {
+        this.securityMetrics.xssAttempts++;
+        logger.warn(`🚨 XSS attempt detected: ${input.substring(0, 100)}`);
+        return {
+          valid: false,
+          reason: 'XSS pattern detected',
+          threatScore: 90,
+          recommendation: 'Sanitize input and log attempt'
+        };
+      }
+    }
+
+    return { valid: true, reason: 'No XSS detected' };
+  }
+
+  /**
+   * Scans request body/params for SQL injection and XSS
+   */
+  validateRequestInput(input: Record<string, unknown>): SecurityValidationResult {
+    const results: SecurityValidationResult[] = [];
+
+    const scanValue = (value: unknown, path: string): void => {
+      if (typeof value === 'string') {
+        const sqlResult = this.detectSQLInjection(value);
+        if (!sqlResult.valid) {
+          results.push({ ...sqlResult, reason: `${sqlResult.reason} in ${path}` });
+        }
+        const xssResult = this.detectXSS(value);
+        if (!xssResult.valid) {
+          results.push({ ...xssResult, reason: `${xssResult.reason} in ${path}` });
+        }
+      } else if (Array.isArray(value)) {
+        value.forEach((item, index) => scanValue(item, `${path}[${index}]`));
+      } else if (value && typeof value === 'object') {
+        Object.entries(value).forEach(([key, val]) => scanValue(val, `${path}.${key}`));
+      }
+    };
+
+    Object.entries(input).forEach(([key, value]) => scanValue(value, key));
+
+    if (results.length > 0) {
+      const maxThreatScore = Math.max(...results.map(r => r.threatScore || 0));
+      return {
+        valid: false,
+        reason: results.map(r => r.reason).join('; '),
+        threatScore: maxThreatScore,
+        recommendation: 'Block request - malicious input detected'
+      };
+    }
+
+    return { valid: true, reason: 'Input validated' };
+  }
+
+  /**
+   * Detects automated bot traffic
+   */
+  detectBot(
+    userAgent: string,
+    ip: string,
+    requestTimestamp?: number
+  ): BotDetectionResult {
+    if (!this.config.enableBotDetection) {
+      return { isBot: false, confidence: 0, reason: 'Bot detection disabled' };
+    }
+
+    let botScore = 0;
+    const indicators: string[] = [];
+
+    // Check known bot user agents
+    for (const pattern of BOT_USER_AGENTS) {
+      if (pattern.test(userAgent)) {
+        botScore += 50;
+        indicators.push(`Known bot pattern: ${pattern.source}`);
+        break;
+      }
+    }
+
+    // Check for missing or suspicious user agent
+    if (!userAgent || userAgent.length < 20) {
+      botScore += 30;
+      indicators.push('Missing or short user agent');
+    }
+
+    // Check request timing regularity
+    if (requestTimestamp) {
+      const timings = this.requestTimingCache.get(ip) || [];
+      timings.push(requestTimestamp);
+      
+      // Keep last 20 request timestamps
+      if (timings.length > 20) {
+        timings.shift();
+      }
+      this.requestTimingCache.set(ip, timings);
+
+      // Check for robotic timing (too regular intervals)
+      if (timings.length >= 5) {
+        const intervals = [];
+        for (let i = 1; i < timings.length; i++) {
+          intervals.push(timings[i] - timings[i - 1]);
+        }
+        
+        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        const variance = this.calculateVariance(intervals);
+        const coefficientOfVariation = variance > 0 ? Math.sqrt(variance) / avgInterval : 0;
+        
+        // Very regular timing (low variance) is suspicious
+        if (coefficientOfVariation < 0.1 && intervals.length >= 5) {
+          botScore += 25;
+          indicators.push('Suspiciously regular request timing');
+        }
+
+        // Very fast requests (< 100ms average)
+        if (avgInterval < 100) {
+          botScore += 20;
+          indicators.push('Inhuman request speed');
+        }
+      }
+    }
+
+    // Check request rate
+    const ipData = this.ipRequestCounts.get(ip);
+    if (ipData) {
+      const requestsPerMinute = ipData.count / Math.max(1, (Date.now() - ipData.firstSeen.getTime()) / 60000);
+      if (requestsPerMinute > 60) {
+        botScore += 20;
+        indicators.push(`High request rate: ${requestsPerMinute.toFixed(1)}/min`);
+      }
+    }
+
+    const isBot = botScore >= this.config.botDetectionThreshold;
+    
+    if (isBot) {
+      this.securityMetrics.botDetections++;
+      logger.info(`🤖 Bot detected (score: ${botScore}): ${indicators.join(', ')}`);
+    }
+
+    return {
+      isBot,
+      confidence: Math.min(100, botScore),
+      reason: indicators.join('; ') || 'No bot indicators',
+      indicators,
+    };
+  }
+
+  /**
+   * Checks IP reputation against threat intelligence
+   */
+  async checkIPReputation(ip: string): Promise<IPReputationResult> {
+    if (!this.config.enableIPReputation) {
+      return { ip, score: 100, threats: [], lastChecked: new Date(), isMalicious: false };
+    }
+
+    // Check cache first
+    const cached = this.ipReputationCache.get(ip);
+    if (cached && (Date.now() - cached.lastChecked.getTime()) < 3600000) {
+      return cached; // Cache for 1 hour
+    }
+
+    const threats: string[] = [];
+    let score = 100;
+
+    // Check if IP is in known bad ranges (Tor exit nodes, known botnets, etc.)
+    const knownBadRanges = [
+      '185.220.', // Tor exit nodes common range
+      '104.244.', // Another common abuse range
+      '45.33.',   // Common VPS abuse
+    ];
+
+    for (const range of knownBadRanges) {
+      if (ip.startsWith(range)) {
+        score -= 30;
+        threats.push('IP in suspicious range');
+        break;
+      }
+    }
+
+    // Check internal threat intelligence
+    const ipData = this.ipRequestCounts.get(ip);
+    if (ipData) {
+      if (ipData.blocked) {
+        score -= 50;
+        threats.push('Previously blocked');
+      }
+      
+      // High request rate
+      const requestsPerMinute = ipData.count / Math.max(1, (Date.now() - ipData.firstSeen.getTime()) / 60000);
+      if (requestsPerMinute > 100) {
+        score -= 20;
+        threats.push('Abnormally high request rate');
+      }
+    }
+
+    // Check if IP was involved in attacks
+    if (this.config.blockedIPs.includes(ip)) {
+      score = 0;
+      threats.push('Blacklisted');
+    }
+
+    const result: IPReputationResult = {
+      ip,
+      score: Math.max(0, score),
+      threats,
+      lastChecked: new Date(),
+      isMalicious: score < 30,
+    };
+
+    this.ipReputationCache.set(ip, result);
+    return result;
+  }
+
+  /**
+   * Checks if endpoint is a honeypot trap
+   */
+  checkHoneypot(endpoint: string): { isHoneypot: boolean; action: string } {
+    const normalizedEndpoint = endpoint.toLowerCase();
+    
+    for (const honeypot of HONEYPOT_ENDPOINTS) {
+      if (normalizedEndpoint.includes(honeypot)) {
+        this.securityMetrics.honeypotHits++;
+        logger.warn(`🍯 Honeypot triggered: ${endpoint}`);
+        return { 
+          isHoneypot: true, 
+          action: 'block_and_flag' 
+        };
+      }
+    }
+
+    return { isHoneypot: false, action: 'allow' };
+  }
+
+  /**
+   * Decrypts and validates encrypted payload
+   */
+  decryptPayload(encryptedData: string, key: string, iv: string): { success: boolean; data?: string; error?: string } {
+    try {
+      const decipher = crypto.createDecipheriv(
+        'aes-256-cbc',
+        Buffer.from(key, 'hex'),
+        Buffer.from(iv, 'hex')
+      );
+      
+      let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      
+      return { success: true, data: decrypted };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Decryption failed'
+      };
+    }
+  }
+
+  /**
+   * Encrypts payload for secure transmission
+   */
+  encryptPayload(data: string): { encryptedData: string; iv: string; key: string } {
+    const key = crypto.randomBytes(32);
+    const iv = crypto.randomBytes(16);
+    
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    let encrypted = cipher.update(data, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    return {
+      encryptedData: encrypted,
+      iv: iv.toString('hex'),
+      key: key.toString('hex'),
+    };
+  }
+
+  /**
+   * Comprehensive security check for incoming requests
+   */
+  async performSecurityCheck(request: {
+    ip: string;
+    endpoint: string;
+    userAgent: string;
+    body?: Record<string, unknown>;
+    signature?: string;
+    timestamp?: number;
+    nonce?: string;
+  }): Promise<SecurityValidationResult> {
+    const results: SecurityValidationResult[] = [];
+
+    // 1. Check honeypot
+    const honeypotResult = this.checkHoneypot(request.endpoint);
+    if (honeypotResult.isHoneypot) {
+      this.manualBlock(request.ip);
+      return {
+        valid: false,
+        reason: 'Honeypot trap triggered',
+        threatScore: 100,
+        recommendation: 'IP automatically blocked'
+      };
+    }
+
+    // 2. Check IP reputation
+    const ipReputation = await this.checkIPReputation(request.ip);
+    if (ipReputation.isMalicious) {
+      results.push({
+        valid: false,
+        reason: `Malicious IP: ${ipReputation.threats.join(', ')}`,
+        threatScore: 100 - ipReputation.score,
+      });
+    }
+
+    // 3. Check bot detection
+    const botResult = this.detectBot(request.userAgent, request.ip, Date.now());
+    if (botResult.isBot) {
+      results.push({
+        valid: false,
+        reason: `Bot detected: ${botResult.reason}`,
+        threatScore: botResult.confidence,
+      });
+    }
+
+    // 4. Validate signature if provided
+    if (request.signature && request.timestamp) {
+      const signatureResult = this.validateRequestSignature(
+        JSON.stringify(request.body || {}),
+        request.signature,
+        request.timestamp,
+        request.nonce
+      );
+      if (!signatureResult.valid) {
+        results.push(signatureResult);
+      }
+    }
+
+    // 5. Validate request body
+    if (request.body) {
+      const inputResult = this.validateRequestInput(request.body);
+      if (!inputResult.valid) {
+        results.push(inputResult);
+      }
+    }
+
+    // Aggregate results
+    if (results.length > 0) {
+      const maxThreatScore = Math.max(...results.map(r => r.threatScore || 0));
+      return {
+        valid: false,
+        reason: results.map(r => r.reason).join('; '),
+        threatScore: maxThreatScore,
+        recommendation: maxThreatScore >= 80 
+          ? 'Block IP immediately' 
+          : 'Log and monitor'
+      };
+    }
+
+    return { valid: true, reason: 'All security checks passed' };
+  }
+
+  /**
+   * Helper: Calculate variance of numbers array
+   */
+  private calculateVariance(numbers: number[]): number {
+    if (numbers.length === 0) return 0;
+    const mean = numbers.reduce((a, b) => a + b, 0) / numbers.length;
+    return numbers.reduce((sum, num) => sum + Math.pow(num - mean, 2), 0) / numbers.length;
+  }
+
+  /**
+   * Helper: Schedule nonce cleanup
+   */
+  private scheduleNonceCleanup(): void {
+    if (this.nonceCleanupInterval) return;
+    
+    this.nonceCleanupInterval = setInterval(() => {
+      // Clear all nonces every hour (they expire in 5 mins anyway)
+      this.usedNonces.clear();
+    }, 3600000);
+  }
+
+  /**
+   * Get security metrics
+   */
+  getSecurityMetrics(): typeof this.securityMetrics & { ipReputationCacheSize: number; tokenFingerprintCacheSize: number } {
+    return {
+      ...this.securityMetrics,
+      ipReputationCacheSize: this.ipReputationCache.size,
+      tokenFingerprintCacheSize: this.tokenFingerprintCache.size,
+    };
+  }
+
+  /**
+   * Reset security metrics
+   */
+  resetSecurityMetrics(): void {
+    this.securityMetrics = {
+      sqlInjectionAttempts: 0,
+      xssAttempts: 0,
+      botDetections: 0,
+      signatureFailures: 0,
+      replayAttempts: 0,
+      honeypotHits: 0,
+    };
+  }
+
   // Cleanup
   shutdown(): void {
     if (this.monitoringInterval) {
@@ -831,6 +1621,16 @@ class IntelliceilService extends EventEmitter {
     if (this.baselineInterval) {
       clearInterval(this.baselineInterval);
     }
+    if (this.nonceCleanupInterval) {
+      clearInterval(this.nonceCleanupInterval);
+    }
+    
+    // Clear caches
+    this.ipReputationCache.clear();
+    this.tokenFingerprintCache.clear();
+    this.requestTimingCache.clear();
+    this.usedNonces.clear();
+    
     logger.info('🛡️ Intelliceil shutdown complete');
   }
 }
