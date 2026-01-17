@@ -12,6 +12,18 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+// Feature Pages
+import {
+  FeaturesIndexPage,
+  FacebookMarketplacePage,
+  DMSFTPSyncPage,
+  MultiAccountPage,
+  LeadManagementPage,
+  ChromeExtensionPage,
+  AnalyticsTrackingPage,
+} from './pages/features';
+// Market Pages
+import { MarketsIndexPage, StateMarketPage } from './pages/markets';
 // Dashboard Pages
 import DashboardPage from './pages/DashboardPage';
 import InventoryPage from './pages/InventoryPage';
@@ -32,6 +44,7 @@ import AuditLogsPage from './pages/admin/AuditLogsPage';
 import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import IntelliceilPage from './pages/admin/IntelliceilPage';
 import IIPCPage from './pages/admin/IIPCPage';
+import EmailSettingsPage from './pages/admin/EmailSettingsPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -57,6 +70,19 @@ function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              
+              {/* Feature Pages */}
+              <Route path="/features" element={<FeaturesIndexPage />} />
+              <Route path="/features/facebook-marketplace" element={<FacebookMarketplacePage />} />
+              <Route path="/features/dms-ftp-sync" element={<DMSFTPSyncPage />} />
+              <Route path="/features/multi-account" element={<MultiAccountPage />} />
+              <Route path="/features/lead-management" element={<LeadManagementPage />} />
+              <Route path="/features/chrome-extension" element={<ChromeExtensionPage />} />
+              <Route path="/features/analytics" element={<AnalyticsTrackingPage />} />
+              
+              {/* Market Pages (52 states) */}
+              <Route path="/markets" element={<MarketsIndexPage />} />
+              <Route path="/markets/:stateSlug" element={<StateMarketPage />} />
 
               {/* Protected dashboard routes */}
               <Route
@@ -93,6 +119,7 @@ function App() {
               <Route path="users" element={<UsersPage />} />
               <Route path="payments" element={<PaymentsPage />} />
               <Route path="email" element={<EmailManagementPage />} />
+              <Route path="email-settings" element={<EmailSettingsPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="settings" element={<SystemSettingsPage />} />
               <Route path="security" element={<IntelliceilPage />} />

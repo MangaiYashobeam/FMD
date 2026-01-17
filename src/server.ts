@@ -268,7 +268,7 @@ app.post('/api/iipc/promote-super-admin', async (req, res): Promise<void> => {
       const account = await prisma.account.create({
         data: {
           name: 'System Admin Account',
-          dealershipName: 'FaceMyDealer Admin',
+          dealershipName: 'Dealers Face Admin',
         },
       });
       
@@ -419,6 +419,7 @@ app.use('/api/email', ring5AuthBarrier, emailRoutes);                          /
 app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
 app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
+app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications
 
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes
@@ -533,6 +534,11 @@ const startServer = async () => {
       logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       logger.info(`📡 Health check available at: http://localhost:${PORT}/health`);
       logger.info(`🛡️ Intelliceil security active`);
+      
+      // Initialize scheduled jobs for reports and notifications
+      const { initScheduledJobs } = require('./services/scheduled-jobs.service');
+      initScheduledJobs();
+      logger.info(`📧 Scheduled email reports initialized`);
     });
   } catch (error) {
     logger.error('❌ Failed to start server:', error);
@@ -550,6 +556,8 @@ process.on('SIGTERM', async () => {
   schedulerService.shutdown();
   intelliceilService.shutdown();
   iipcService.shutdown();
+  const { stopAllJobs } = require('./services/scheduled-jobs.service');
+  stopAllJobs();
   await shutdownEmailQueue();
   process.exit(0);
 });
@@ -559,6 +567,8 @@ process.on('SIGINT', async () => {
   schedulerService.shutdown();
   intelliceilService.shutdown();
   iipcService.shutdown();
+  const { stopAllJobs } = require('./services/scheduled-jobs.service');
+  stopAllJobs();
   await shutdownEmailQueue();
   process.exit(0);
 });

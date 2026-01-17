@@ -144,12 +144,17 @@ export default function LandingPage() {
   const pricingPlans = [
     {
       name: 'Starter',
-      price: 99,
-      description: 'Perfect for small dealerships getting started',
+      price: 699,
+      period: '/month',
+      description: '10 active posting accounts included',
+      extraUserNote: '+$119 per extra user',
       features: [
-        'Up to 100 vehicles',
-        '1 Facebook account',
-        'Manual posting',
+        '10 active posting accounts',
+        'Unlimited vehicle inventory',
+        'Facebook Marketplace integration',
+        'DMS/FTP auto-sync',
+        'Chrome extension access',
+        'Lead capture & ADF export',
         'Basic analytics',
         'Email support',
       ],
@@ -157,37 +162,63 @@ export default function LandingPage() {
       popular: false,
     },
     {
-      name: 'Professional',
-      price: 249,
-      description: 'For growing dealerships with serious volume',
+      name: 'Growth',
+      price: 1199,
+      period: '/month',
+      description: '25 active posting accounts included',
+      extraUserNote: '+$100 per extra user',
       features: [
-        'Up to 500 vehicles',
-        '3 Facebook accounts',
-        'Auto-sync (FTP/DMS)',
-        'Scheduled posting',
-        'Lead management',
-        'Chrome extension',
-        'Priority support',
+        '25 active posting accounts',
+        'All Starter features',
+        'Multi-location management',
+        'Advanced analytics dashboard',
+        'Priority support (24hr)',
+        'Phone support',
+        'Custom posting schedules',
+        'Team activity tracking',
       ],
       cta: 'Start Free Trial',
       popular: true,
     },
     {
-      name: 'Enterprise',
-      price: 499,
-      description: 'For dealer groups and high-volume operations',
+      name: 'Pro',
+      price: 2999,
+      period: '/month',
+      description: 'Unlimited accounts & users',
+      extraUserNote: 'No extra user fees',
       features: [
-        'Unlimited vehicles',
-        'Unlimited Facebook accounts',
-        'Multi-location support',
-        'API access',
-        'ADF integration',
+        'Unlimited posting accounts',
+        'Unlimited users included',
+        'Full REST API access',
         'Custom integrations',
         'Dedicated account manager',
+        'Premium support (4hr)',
         '24/7 phone support',
+        'SLA guarantee (99.9%)',
+      ],
+      cta: 'Start Free Trial',
+      popular: false,
+    },
+    {
+      name: 'Enterprise Lifetime',
+      price: 24999,
+      period: ' one-time',
+      description: '4 years unlimited access',
+      savings: 'Save $118,953 (82.6%)',
+      extraUserNote: null,
+      features: [
+        'All Pro features included',
+        '4 years unlimited access',
+        'Unlimited users forever',
+        'Lock in current pricing',
+        'VIP support status',
+        'Priority feature requests',
+        'Quarterly business reviews',
+        'After 4 years: Pro rate',
       ],
       cta: 'Contact Sales',
       popular: false,
+      isLifetime: true,
     },
   ];
 
@@ -437,17 +468,19 @@ export default function LandingPage() {
               Simple, Transparent Pricing
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Choose the plan that fits your dealership. All plans include a 14-day free trial.
+              Choose the plan that fits your dealership. All monthly plans include a 14-day free trial.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {pricingPlans.map((plan, index) => (
               <div
                 key={index}
-                className={`relative bg-white rounded-2xl p-8 ${
+                className={`relative bg-white rounded-2xl p-6 ${
                   plan.popular
-                    ? 'border-2 border-blue-500 shadow-xl scale-105'
+                    ? 'border-2 border-blue-500 shadow-xl ring-4 ring-blue-100'
+                    : (plan as any).isLifetime
+                    ? 'border-2 border-amber-400 bg-gradient-to-b from-amber-50 to-white'
                     : 'border border-gray-200'
                 }`}
               >
@@ -458,25 +491,46 @@ export default function LandingPage() {
                     </div>
                   </div>
                 )}
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                <p className="text-gray-600 mb-6">{plan.description}</p>
-                <div className="mb-6">
-                  <span className="text-5xl font-extrabold text-gray-900">${plan.price}</span>
-                  <span className="text-gray-600">/month</span>
+                {(plan as any).isLifetime && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                    <div className="px-4 py-1 bg-amber-500 text-white text-sm font-semibold rounded-full">
+                      Best Value
+                    </div>
+                  </div>
+                )}
+                <h3 className="text-xl font-bold text-gray-900 mb-1">{plan.name}</h3>
+                <p className="text-sm text-gray-500 mb-4">{plan.description}</p>
+                {(plan as any).savings && (
+                  <div className="mb-3 inline-block px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-full">
+                    {(plan as any).savings}
+                  </div>
+                )}
+                <div className="mb-4">
+                  <span className="text-4xl font-extrabold text-gray-900">
+                    ${plan.price.toLocaleString()}
+                  </span>
+                  <span className="text-gray-600">{(plan as any).period}</span>
                 </div>
-                <ul className="space-y-4 mb-8">
+                {(plan as any).extraUserNote && (
+                  <p className="text-sm text-blue-600 font-medium mb-4">
+                    {(plan as any).extraUserNote}
+                  </p>
+                )}
+                <ul className="space-y-3 mb-6">
                   {plan.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-start">
-                      <CheckCircle className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                    <li key={featureIndex} className="flex items-start text-sm">
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
                       <span className="text-gray-600">{feature}</span>
                     </li>
                   ))}
                 </ul>
                 <Link
-                  to="/register"
-                  className={`block w-full py-3 px-6 text-center font-semibold rounded-xl transition-all ${
+                  to={(plan as any).isLifetime ? '/contact' : '/register'}
+                  className={`block w-full py-3 px-4 text-center font-semibold rounded-xl transition-all ${
                     plan.popular
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+                      : (plan as any).isLifetime
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-lg hover:shadow-xl'
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
                   }`}
                 >
@@ -484,6 +538,16 @@ export default function LandingPage() {
                 </Link>
               </div>
             ))}
+          </div>
+
+          {/* Enterprise Note */}
+          <div className="mt-12 text-center">
+            <p className="text-gray-600">
+              Need a custom solution for your dealer group?{' '}
+              <Link to="/contact" className="text-blue-600 font-semibold hover:underline">
+                Contact our sales team
+              </Link>
+            </p>
           </div>
         </div>
       </section>

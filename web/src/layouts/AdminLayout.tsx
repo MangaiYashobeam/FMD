@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ShieldAlert,
   Network,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
@@ -22,6 +23,7 @@ const navigation = [
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },
   { name: 'Email', href: '/admin/email', icon: Mail },
+  { name: 'Reports & Alerts', href: '/admin/email-settings', icon: FileText },
   { name: 'Audit Logs', href: '/admin/audit', icon: Activity },
   { name: 'Intelliceil', href: '/admin/security', icon: ShieldAlert },
   { name: 'IIPC', href: '/admin/iipc', icon: Network },

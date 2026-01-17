@@ -689,5 +689,80 @@ export const iipcApi = {
     api.post('/api/iipc/reset-all-rate-limits'),
 };
 
-export default api;
+// Reports & Email API
+export const reportsApi = {
+  // Super Admin Reports
+  generateSuperAdminReport: (data: { period: string; sendEmail?: boolean; customRange?: { start: string; end: string } }) =>
+    api.post('/api/reports/super-admin', data),
+  
+  // Security Reports
+  generateSecurityReport: (data: { period: string; sendEmail?: boolean }) =>
+    api.post('/api/reports/security', data),
+  
+  // Admin (Dealer) Reports
+  generateAdminReport: (data: { period: string; sendEmail?: boolean; customRange?: { start: string; end: string } }) =>
+    api.post('/api/reports/admin', data),
+  
+  generateAdminReportForAccount: (accountId: string, data: { period: string; sendEmail?: boolean; recipientEmail?: string }) =>
+    api.post(`/api/reports/admin/${accountId}`, data),
+  
+  // User Reports
+  generateUserReport: (data: { period: string; sendEmail?: boolean }) =>
+    api.post('/api/reports/user', data),
+  
+  generateUserReportForUser: (userId: string, data: { period: string; sendEmail?: boolean; recipientEmail?: string }) =>
+    api.post(`/api/reports/user/${userId}`, data),
+  
+  // Preview Reports (returns HTML)
+  previewReport: (type: string, period: string = 'weekly') =>
+    api.get(`/api/reports/preview/${type}?period=${period}`),
+  
+  // Notification Config
+  getNotificationConfig: () =>
+    api.get('/api/reports/notification-config'),
+  
+  updateNotificationConfig: (config: {
+    enabled?: boolean;
+    superAdminEmail?: string;
+    notifyOnAttack?: boolean;
+    notifyOnMitigation?: boolean;
+    notifyOnSQLInjection?: boolean;
+    notifyOnXSS?: boolean;
+    notifyOnBot?: boolean;
+    notifyOnHoneypot?: boolean;
+    cooldownMinutes?: number;
+  }) => api.put('/api/reports/notification-config', config),
+  
+  // Test Notifications
+  sendTestNotification: (type: string) =>
+    api.post('/api/reports/test-notification', { type }),
+  
+  // Trigger Scheduled Reports
+  triggerScheduledReports: (period: string = 'weekly') =>
+    api.post('/api/reports/trigger-scheduled', { period }),
 
+  // PDF Downloads
+  downloadReportPDF: (type: string, period: string = 'weekly') =>
+    api.get(`/api/reports/download/${type}?period=${period}`, { responseType: 'blob' }),
+
+  // Invoice endpoints
+  createInvoice: (data: {
+    accountId: string;
+    items: { description: string; quantity: number; unitPrice: number }[];
+    taxRate?: number;
+    notes?: string;
+    paymentTerms?: string;
+    dueInDays?: number;
+  }) => api.post('/api/reports/invoices', data),
+  
+  getInvoicePDF: (invoiceId: string) =>
+    api.get(`/api/reports/invoices/${invoiceId}/pdf`, { responseType: 'blob' }),
+  
+  sendInvoice: (invoiceId: string) =>
+    api.post(`/api/reports/invoices/${invoiceId}/send`),
+  
+  markInvoicePaid: (invoiceId: string, data?: { paymentMethod?: string; transactionId?: string }) =>
+    api.post(`/api/reports/invoices/${invoiceId}/paid`, data),
+};
+
+export default api;
