@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Shield,
@@ -17,7 +17,6 @@ import {
   X,
   ChevronDown,
   ChevronUp,
-  MapPin,
   Server,
   Eye,
   ExternalLink,
@@ -33,6 +32,9 @@ import {
 } from 'lucide-react';
 import { intelliceilApi } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
+
+// Lazy load the map component to avoid SSR issues
+const TrafficMap = lazy(() => import('../../components/TrafficMap'));
 
 // Types
 interface ThreatLevel {
@@ -672,7 +674,7 @@ export default function IntelliceilPage() {
       {/* Map Tab */}
       {activeTab === 'map' && (
         <div className="space-y-6">
-          {/* Interactive World Map */}
+          {/* Interactive World Map with OpenStreetMap */}
           <div className="bg-white p-6 rounded-xl border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">Live Traffic Map</h3>
@@ -682,163 +684,28 @@ export default function IntelliceilPage() {
               </div>
             </div>
             
-            <div className="relative h-[500px] bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl overflow-hidden">
-              {/* World Map SVG Background */}
-              <svg 
-                viewBox="0 0 1000 500" 
-                className="absolute inset-0 w-full h-full opacity-20"
-                preserveAspectRatio="xMidYMid slice"
-              >
-                <defs>
-                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#94a3b8" strokeWidth="0.5"/>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
-                {/* Simplified continents outline */}
-                <ellipse cx="200" cy="200" rx="150" ry="100" fill="#cbd5e1" opacity="0.5" /> {/* North America */}
-                <ellipse cx="220" cy="330" rx="80" ry="80" fill="#cbd5e1" opacity="0.5" /> {/* South America */}
-                <ellipse cx="500" cy="200" rx="100" ry="70" fill="#cbd5e1" opacity="0.5" /> {/* Europe */}
-                <ellipse cx="520" cy="300" rx="130" ry="100" fill="#cbd5e1" opacity="0.5" /> {/* Africa */}
-                <ellipse cx="700" cy="200" rx="180" ry="80" fill="#cbd5e1" opacity="0.5" /> {/* Asia */}
-                <ellipse cx="850" cy="380" rx="80" ry="60" fill="#cbd5e1" opacity="0.5" /> {/* Australia */}
-              </svg>
-              
-              {/* Traffic Points with Tooltips */}
-              <div className="absolute inset-0">
-                {intelliceil.geoLocations.slice(0, 50).map((loc: GeoLocation, i: number) => {
-                  const x = ((loc.lon + 180) / 360) * 100;
-                  const y = ((90 - loc.lat) / 180) * 100;
-                  const isSelected = selectedMapMarker?.ip === loc.ip;
-                  
-                  return (
-                    <div key={loc.ip}>
-                      {/* Pulse Ring */}
-                      <div
-                        className={`absolute w-6 h-6 rounded-full transform -translate-x-1/2 -translate-y-1/2 ${
-                          loc.isTrusted ? 'bg-green-500/20' : 'bg-blue-500/20'
-                        }`}
-                        style={{ 
-                          left: `${x}%`, 
-                          top: `${y}%`,
-                          animation: `ping 2s cubic-bezier(0, 0, 0.2, 1) infinite`,
-                          animationDelay: `${i * 100}ms` 
-                        }}
-                      />
-                      {/* Main Point - Clickable */}
-                      <button
-                        onClick={() => setSelectedMapMarker(isSelected ? null : loc)}
-                        className={`absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all z-10 ${
-                          loc.isTrusted 
-                            ? 'bg-green-500 hover:bg-green-400 shadow-green-500/50' 
-                            : 'bg-blue-500 hover:bg-blue-400 shadow-blue-500/50'
-                        } ${isSelected ? 'ring-4 ring-white scale-150 z-20' : 'shadow-lg'}`}
-                        style={{ left: `${x}%`, top: `${y}%` }}
-                        title={`${loc.ip} (${loc.city}, ${loc.country})`}
-                      />
-                      
-                      {/* Popup Modal on Map */}
-                      {isSelected && (
-                        <div 
-                          className="absolute z-30 bg-white rounded-xl shadow-2xl p-4 w-72 transform -translate-x-1/2"
-                          style={{ 
-                            left: `${x}%`, 
-                            top: `${Math.min(y + 5, 70)}%`,
-                          }}
-                        >
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <MapPin className={`w-4 h-4 ${loc.isTrusted ? 'text-green-500' : 'text-blue-500'}`} />
-                              <span className="font-medium text-gray-900">{loc.city}</span>
-                            </div>
-                            <button 
-                              onClick={() => setSelectedMapMarker(null)}
-                              className="text-gray-400 hover:text-gray-600"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                          
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">IP Address:</span>
-                              <span className="font-mono text-gray-900">{loc.ip}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Country:</span>
-                              <span className="text-gray-900">{loc.country} ({loc.countryCode})</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Requests:</span>
-                              <span className="font-semibold text-gray-900">{loc.requestCount}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Status:</span>
-                              <span className={`font-medium ${loc.isTrusted ? 'text-green-600' : 'text-blue-600'}`}>
-                                {loc.isTrusted ? '✓ Trusted' : 'Regular'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Last Active:</span>
-                              <span className="text-gray-900">{new Date(loc.lastSeen).toLocaleTimeString()}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
-                            <button
-                              onClick={() => { blockIPMutation.mutate(loc.ip); setSelectedMapMarker(null); }}
-                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition-colors"
-                            >
-                              <Ban className="w-3 h-3" />
-                              Block
-                            </button>
-                            <a
-                              href={`https://whatismyipaddress.com/ip/${loc.ip}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              Lookup
-                            </a>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Legend */}
-              <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Legend</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm" />
-                    <span className="text-sm text-gray-700">Trusted Source</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm" />
-                    <span className="text-sm text-gray-700">Regular Traffic</span>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-400 mt-2">Click markers for details</p>
-              </div>
-
-              {/* Stats Overlay */}
-              <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100">
-                <div className="grid grid-cols-2 gap-4 text-center">
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900">{intelliceil.geoLocations.length}</p>
-                    <p className="text-xs text-gray-500">Active IPs</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900">{intelliceil.topCountries.length}</p>
-                    <p className="text-xs text-gray-500">Countries</p>
-                  </div>
+            <Suspense fallback={
+              <div className="h-[500px] bg-slate-100 rounded-xl flex items-center justify-center">
+                <div className="text-center">
+                  <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
+                  <p className="text-gray-500">Loading map...</p>
                 </div>
               </div>
-            </div>
+            }>
+              <TrafficMap
+                geoLocations={intelliceil.geoLocations}
+                onBlockIP={(ip) => blockIPMutation.mutate(ip)}
+                selectedIP={selectedMapMarker?.ip || null}
+                onSelectIP={(ip) => {
+                  if (ip) {
+                    const loc = intelliceil.geoLocations.find((g: GeoLocation) => g.ip === ip);
+                    setSelectedMapMarker(loc || null);
+                  } else {
+                    setSelectedMapMarker(null);
+                  }
+                }}
+              />
+            </Suspense>
           </div>
 
           {/* Active Connections List with Expandable Cards */}
