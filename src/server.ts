@@ -156,6 +156,8 @@ const allowedOrigins = [
   'https://dealersface.com',
   'https://www.dealersface.com',
   'https://fmd-production.up.railway.app',
+  // Chrome Extension origins
+  'chrome-extension://*',
   ...(process.env.ALLOWED_ORIGINS?.split(',') || []),
   process.env.API_URL,
 ].filter(Boolean) as string[];
@@ -164,6 +166,11 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
+    
+    // Allow Chrome extension requests
+    if (origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
     
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -420,6 +427,10 @@ app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default)
 app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications
+
+// Chrome Extension AI Hybrid System
+app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (public callback)
+app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
 
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes

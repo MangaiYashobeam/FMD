@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DF-Auto Sim | AI Hybrid System Documentation</title>
+  <style>
+    :root {
+      --bg-dark: #0a0a0f;
+      --bg-card: #12121a;
+      --bg-card-hover: #1a1a25;
+      --border: #2a2a3a;
+      --text-primary: #ffffff;
+      --text-secondary: #8892b0;
+      --text-muted: #5a5a6a;
+      --accent-blue: #0066ff;
+      --accent-cyan: #00ccff;
+      --accent-green: #00c853;
+      --accent-yellow: #ffc107;
+      --accent-red: #ff4444;
+      --accent-orange: #ff9800;
+      --accent-purple: #9c27b0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+    
+    /* Navigation */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: rgba(10, 10, 15, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 40px;
+      z-index: 1000;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .nav-logo {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .nav-links {
+      display: flex;
+      gap: 24px;
+    }
+    
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+    
+    .nav-links a:hover {
+      color: var(--accent-cyan);
+    }
+    
+    /* Hero Section */
+    .hero {
+      padding: 140px 40px 80px;
+      text-align: center;
+      background: linear-gradient(180deg, rgba(0, 102, 255, 0.1) 0%, transparent 100%);
+    }
+    
+    .hero h1 {
+      font-size: 56px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .hero .subtitle {
+      font-size: 24px;
+      color: var(--text-secondary);
+      max-width: 700px;
+      margin: 0 auto 32px;
+    }
+    
+    .version-badge {
+      display: inline-block;
+      padding: 8px 20px;
+      background: rgba(0, 102, 255, 0.2);
+      border: 1px solid var(--accent-blue);
+      border-radius: 100px;
+      font-size: 14px;
+      color: var(--accent-cyan);
+    }
+    
+    /* Status Banner */
+    .status-banner {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      padding: 24px;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 60px;
+    }
+    
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    
+    .status-dot.green { background: var(--accent-green); box-shadow: 0 0 12px var(--accent-green); }
+    .status-dot.yellow { background: var(--accent-yellow); box-shadow: 0 0 12px var(--accent-yellow); }
+    .status-dot.red { background: var(--accent-red); box-shadow: 0 0 12px var(--accent-red); }
+    .status-dot.blue { background: var(--accent-blue); box-shadow: 0 0 12px var(--accent-blue); }
+    
+    /* Container */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 40px;
+    }
+    
+    /* Section Headers */
+    .section-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    
+    .section-header h2 {
+      font-size: 36px;
+      margin-bottom: 12px;
+    }
+    
+    .section-header p {
+      color: var(--text-secondary);
+      font-size: 18px;
+    }
+    
+    /* Architecture Diagram */
+    .architecture {
+      padding: 60px 0;
+    }
+    
+    .arch-diagram {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      font-family: 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      overflow-x: auto;
+      white-space: pre;
+      color: var(--text-secondary);
+    }
+    
+    .arch-diagram .layer-server { color: var(--accent-cyan); }
+    .arch-diagram .layer-extension { color: var(--accent-green); }
+    .arch-diagram .layer-facebook { color: #1877f2; }
+    .arch-diagram .layer-ai { color: var(--accent-purple); }
+    
+    /* Components Grid */
+    .components {
+      padding: 60px 0;
+    }
+    
+    .component-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 24px;
+    }
+    
+    .component-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      transition: all 0.3s;
+    }
+    
+    .component-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent-blue);
+      transform: translateY(-4px);
+    }
+    
+    .component-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .component-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+    
+    .component-icon.server { background: rgba(0, 204, 255, 0.2); }
+    .component-icon.extension { background: rgba(0, 200, 83, 0.2); }
+    .component-icon.ai { background: rgba(156, 39, 176, 0.2); }
+    .component-icon.auth { background: rgba(255, 152, 0, 0.2); }
+    .component-icon.queue { background: rgba(255, 193, 7, 0.2); }
+    .component-icon.ui { background: rgba(0, 102, 255, 0.2); }
+    
+    .component-title {
+      font-size: 20px;
+      font-weight: 600;
+    }
+    
+    .component-status {
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 100px;
+      margin-top: 4px;
+    }
+    
+    .component-status.working {
+      background: rgba(0, 200, 83, 0.2);
+      color: var(--accent-green);
+    }
+    
+    .component-status.partial {
+      background: rgba(255, 193, 7, 0.2);
+      color: var(--accent-yellow);
+    }
+    
+    .component-status.planned {
+      background: rgba(0, 102, 255, 0.2);
+      color: var(--accent-blue);
+    }
+    
+    .component-status.needs-work {
+      background: rgba(255, 68, 68, 0.2);
+      color: var(--accent-red);
+    }
+    
+    .component-card p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+    
+    .component-features {
+      list-style: none;
+    }
+    
+    .component-features li {
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .component-features li::before {
+      content: '→';
+      color: var(--accent-cyan);
+    }
+    
+    /* Honesty Section */
+    .honesty {
+      padding: 60px 0;
+    }
+    
+    .honesty-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    
+    @media (max-width: 1024px) {
+      .honesty-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .honesty-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+    }
+    
+    .honesty-card.works {
+      border-left: 4px solid var(--accent-green);
+    }
+    
+    .honesty-card.issues {
+      border-left: 4px solid var(--accent-red);
+    }
+    
+    .honesty-card.growth {
+      border-left: 4px solid var(--accent-blue);
+    }
+    
+    .honesty-card h3 {
+      font-size: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .honesty-card ul {
+      list-style: none;
+    }
+    
+    .honesty-card li {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    
+    .honesty-card li:last-child {
+      border-bottom: none;
+    }
+    
+    .honesty-card li strong {
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 4px;
+    }
+    
+    /* Agent Features */
+    .agent-features {
+      padding: 60px 0;
+      background: linear-gradient(180deg, rgba(156, 39, 176, 0.1) 0%, transparent 100%);
+    }
+    
+    .feature-highlight {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+      margin-bottom: 60px;
+    }
+    
+    .feature-highlight:nth-child(even) {
+      direction: rtl;
+    }
+    
+    .feature-highlight:nth-child(even) > * {
+      direction: ltr;
+    }
+    
+    @media (max-width: 900px) {
+      .feature-highlight {
+        grid-template-columns: 1fr;
+      }
+      .feature-highlight:nth-child(even) {
+        direction: ltr;
+      }
+    }
+    
+    .feature-content h3 {
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+    
+    .feature-content p {
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+    
+    .feature-code {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+    }
+    
+    .feature-code .keyword { color: var(--accent-purple); }
+    .feature-code .function { color: var(--accent-cyan); }
+    .feature-code .string { color: var(--accent-green); }
+    .feature-code .comment { color: var(--text-muted); }
+    
+    /* Data Flow */
+    .data-flow {
+      padding: 60px 0;
+    }
+    
+    .flow-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    
+    .flow-number {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    
+    .flow-content h4 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    
+    .flow-content p {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    
+    /* API Reference */
+    .api-ref {
+      padding: 60px 0;
+    }
+    
+    .api-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-card);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    
+    .api-table th,
+    .api-table td {
+      padding: 16px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .api-table th {
+      background: rgba(0, 102, 255, 0.1);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    
+    .api-table td {
+      font-size: 13px;
+    }
+    
+    .api-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .method {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: monospace;
+    }
+    
+    .method.get { background: rgba(0, 200, 83, 0.2); color: var(--accent-green); }
+    .method.post { background: rgba(0, 102, 255, 0.2); color: var(--accent-blue); }
+    .method.put { background: rgba(255, 152, 0, 0.2); color: var(--accent-orange); }
+    .method.delete { background: rgba(255, 68, 68, 0.2); color: var(--accent-red); }
+    
+    .endpoint {
+      font-family: 'Fira Code', monospace;
+      color: var(--accent-cyan);
+    }
+    
+    /* Requirements */
+    .requirements {
+      padding: 60px 0;
+      background: var(--bg-card);
+    }
+    
+    .req-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+    
+    .req-card {
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    
+    .req-card h4 {
+      font-size: 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .req-card code {
+      display: block;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px;
+      border-radius: 8px;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--accent-cyan);
+      overflow-x: auto;
+    }
+    
+    /* Footer */
+    .footer {
+      padding: 40px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    
+    .footer a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-logo">DF-Auto Sim</div>
+    <div class="nav-links">
+      <a href="#architecture">Architecture</a>
+      <a href="#components">Components</a>
+      <a href="#honesty">Honesty Report</a>
+      <a href="#agent-features">Agent Features</a>
+      <a href="#api">API Reference</a>
+      <a href="#setup">Setup</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1>AI Hybrid Facebook Automation</h1>
+    <p class="subtitle">
+      A state-of-the-art system combining OAuth authentication, browser automation, 
+      and AI-powered navigation for Facebook Marketplace
+    </p>
+    <span class="version-badge">Version 2.5.0 | January 2026</span>
+  </section>
+
+  <!-- Status Banner -->
+  <div class="status-banner">
+    <div class="status-item">
+      <span class="status-dot green"></span>
+      <span>OAuth Flow: Ready</span>
+    </div>
+    <div class="status-item">
+      <span class="status-dot green"></span>
+      <span>AI Agent: Implemented</span>
+    </div>
+    <div class="status-item">
+      <span class="status-dot yellow"></span>
+      <span>Extension: Needs Testing</span>
+    </div>
+    <div class="status-item">
+      <span class="status-dot blue"></span>
+      <span>Task Queue: Database Ready</span>
+    </div>
+  </div>
+
+  <!-- Architecture -->
+  <section class="architecture container" id="architecture">
+    <div class="section-header">
+      <h2>System Architecture</h2>
+      <p>How the hybrid system connects all components</p>
+    </div>
+    
+    <div class="arch-diagram">
+<span class="layer-server">┌─────────────────────────────────────────────────────────────────────────────────────┐</span>
+<span class="layer-server">│                           DEALERS FACE SERVER (Railway)                              │</span>
+<span class="layer-server">│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────┐  │</span>
+<span class="layer-server">│  │  Facebook OAuth  │  │   Task Queue    │  │    AI Agent      │  │  Prisma DB   │  │</span>
+<span class="layer-server">│  │  /api/auth/fb   │  │  ExtensionTask  │  │  (Anthropic)     │  │  PostgreSQL  │  │</span>
+<span class="layer-server">│  │                 │  │                 │  │                  │  │              │  │</span>
+<span class="layer-server">│  │ • Get Auth URL  │  │ • Pending Tasks │  │ • Find Elements  │  │ • Users      │  │</span>
+<span class="layer-server">│  │ • Token Exchg   │  │ • Task Status   │  │ • Analyze Leads  │  │ • Leads      │  │</span>
+<span class="layer-server">│  │ • Long-lived    │  │ • Results Store │  │ • Gen Responses  │  │ • Messages   │  │</span>
+<span class="layer-server">│  │ • Refresh       │  │ • Priority Q    │  │ • Self-Healing   │  │ • Tasks      │  │</span>
+<span class="layer-server">│  └────────┬────────┘  └────────┬────────┘  └─────────┬────────┘  └──────┬───────┘  │</span>
+<span class="layer-server">│           │                    │                     │                  │           │</span>
+<span class="layer-server">│           └────────────────────┴─────────────────────┴──────────────────┘           │</span>
+<span class="layer-server">│                                        │                                             │</span>
+<span class="layer-server">│                               Extension API Routes                                   │</span>
+<span class="layer-server">│                        /api/extension/tasks/:id/pending                              │</span>
+<span class="layer-server">│                        /api/extension/find-element                                   │</span>
+<span class="layer-server">│                        /api/extension/scrape-result                                  │</span>
+<span class="layer-server">└──────────────────────────────────────────┬──────────────────────────────────────────┘</span>
+                                           │
+                                    HTTPS / REST API
+                                           │
+<span class="layer-extension">┌──────────────────────────────────────────┴──────────────────────────────────────────┐</span>
+<span class="layer-extension">│                           CHROME EXTENSION (DF-Auto Sim)                             │</span>
+<span class="layer-extension">│  ┌─────────────────────────────────────────────────────────────────────────────┐    │</span>
+<span class="layer-extension">│  │                         BACKGROUND SERVICE WORKER                            │    │</span>
+<span class="layer-extension">│  │  • OAuth Flow Handler (chrome.identity API)                                  │    │</span>
+<span class="layer-extension">│  │  • Task Polling (every 30 seconds)                                          │    │</span>
+<span class="layer-extension">│  │  • Message Routing (content ↔ server)                                       │    │</span>
+<span class="layer-extension">│  │  • Token Management & Refresh                                               │    │</span>
+<span class="layer-extension">│  │  • Tab Management                                                            │    │</span>
+<span class="layer-extension">│  └──────────────────────────────────┬──────────────────────────────────────────┘    │</span>
+<span class="layer-extension">│                                     │                                                │</span>
+<span class="layer-extension">│                          chrome.runtime.sendMessage                                  │</span>
+<span class="layer-extension">│                                     │                                                │</span>
+<span class="layer-extension">│  ┌──────────────────────────────────┴──────────────────────────────────────────┐    │</span>
+<span class="layer-extension">│  │                         CONTENT SCRIPT (AI-Powered)                          │    │</span>
+<span class="layer-extension">│  │  • Human-Like Typing (50-150ms delay, 2% typo simulation)                   │    │</span>
+<span class="layer-extension">│  │  • Natural Mouse Movements (smooth scroll, random offsets)                  │    │</span>
+<span class="layer-extension">│  │  • AI Element Finding (fallback to server when CSS fails)                   │    │</span>
+<span class="layer-extension">│  │  • DOM Scraping (inbox, conversations, listings)                            │    │</span>
+<span class="layer-extension">│  │  • Command Execution (navigate, click, type, upload, scrape)                │    │</span>
+<span class="layer-extension">│  └──────────────────────────────────┬──────────────────────────────────────────┘    │</span>
+<span class="layer-extension">└──────────────────────────────────────┬──────────────────────────────────────────────┘</span>
+                                       │
+                           Injected into Facebook pages
+                                       │
+<span class="layer-facebook">┌──────────────────────────────────────┴──────────────────────────────────────────────┐</span>
+<span class="layer-facebook">│                           FACEBOOK MARKETPLACE                                       │</span>
+<span class="layer-facebook">│  ┌───────────────────────────────────────────────────────────────────────────────┐  │</span>
+<span class="layer-facebook">│  │  User's Authorized Browser Session (Real Facebook Account)                   │  │</span>
+<span class="layer-facebook">│  │  • Marketplace Inbox: /marketplace/inbox                                      │  │</span>
+<span class="layer-facebook">│  │  • Create Listing: /marketplace/create/vehicle                               │  │</span>
+<span class="layer-facebook">│  │  • Your Listings: /marketplace/you/selling                                   │  │</span>
+<span class="layer-facebook">│  │  • Conversations: /messages/t/{id}                                           │  │</span>
+<span class="layer-facebook">│  └───────────────────────────────────────────────────────────────────────────────┘  │</span>
+<span class="layer-facebook">└─────────────────────────────────────────────────────────────────────────────────────┘</span>
+    </div>
+  </section>
+
+  <!-- Components -->
+  <section class="components container" id="components">
+    <div class="section-header">
+      <h2>System Components</h2>
+      <p>Deep dive into each part of the hybrid system</p>
+    </div>
+    
+    <div class="component-grid">
+      <!-- AI Agent Service -->
+      <div class="component-card">
+        <div class="component-header">
+          <div class="component-icon ai">🧠</div>
+          <div>
+            <div class="component-title">AI Navigation Agent</div>
+            <span class="component-status working">✓ Implemented</span>
+          </div>
+        </div>
+        <p>
+          Uses Anthropic Claude (claude-sonnet-4-20250514) to intelligently navigate Facebook's 
+          ever-changing UI. When traditional CSS selectors fail, the AI analyzes the page 
+          HTML to find the right element.
+        </p>
+        <ul class="component-features">
+          <li><strong>findElement()</strong> - AI-powered element discovery with fallback selectors</li>
+          <li><strong>analyzeConversation()</strong> - Lead scoring, intent detection, info extraction</li>
+          <li><strong>generateLeadResponse()</strong> - Context-aware professional responses</li>
+          <li><strong>detectUIChanges()</strong> - Self-healing selector updates when FB changes</li>
+          <li><strong>generateVehicleDescription()</strong> - AI-written listing descriptions</li>
+        </ul>
+      </div>
+
+      <!-- Content Script -->
+      <div class="component-card">
+        <div class="component-header">
+          <div class="component-icon extension">🎯</div>
+          <div>
+            <div class="component-title">Content Script</div>
+            <span class="component-status partial">⚠ Needs Testing</span>
+          </div>
+        </div>
+        <p>
+          Runs directly in Facebook pages to execute automation commands. Features 
+          human-like behavior patterns to avoid detection, including realistic typing 
+          delays and natural mouse movements.
+        </p>
+        <ul class="component-features">
+          <li><strong>typeHumanlike()</strong> - 50-150ms keystroke delays, 2% typo simulation</li>
+          <li><strong>clickHumanlike()</strong> - Smooth scroll, centered click with random offset</li>
+          <li><strong>findElement()</strong> - CSS → Facebook selectors → AI fallback</li>
+          <li><strong>scrapeInbox()</strong> - Extract conversations with unread status</li>
+          <li><strong>scrapeConversation()</strong> - Get message history with timestamps</li>
+        </ul>
+      </div>
+
+      <!-- Background Worker -->
+      <div class="component-card">
+        <div class="component-header">
+          <div class="component-icon server">⚙️</div>
+          <div>
+            <div class="component-title">Background Worker</div>
+            <span class="component-status working">✓ Implemented</span>
+          </div>
+        </div>
+        <p>
+          Service worker that manages OAuth flows, polls for pending tasks, routes 
+          messages between content scripts and the server, and handles token refresh.
+        </p>
+        <ul class="component-features">
+          <li><strong>initiateOAuth()</strong> - Launch Facebook OAuth with CSRF state</li>
+          <li><strong>exchangeCodeForToken()</strong> - Get long-lived token via server</li>
+          <li><strong>pollForTasks()</strong> - Check server every 30 seconds</li>
+          <li><strong>distributeTask()</strong> - Send commands to content scripts</li>
+          <li><strong>refreshTokenIfNeeded()</strong> - Auto-refresh 5 min before expiry</li>
+        </ul>
+      </div>
+
+      <!-- OAuth Service -->
+      <div class="component-card">
+        <div class="component-header">
+          <div class="component-icon auth">🔐</div>
+          <div>
+            <div class="component-title">Facebook OAuth</div>
+            <span class="component-status working">✓ Ready</span>
+          </div>
+        </div>
+        <p>
+          Full OAuth 2.0 implementation with Facebook Graph API v18.0. Handles 
+          authorization code flow, token exchange, and long-lived token generation.
+        </p>
+        <ul class="component-features">
+          <li><strong>App ID:</strong> 505778791605869 (DF-Auto Sim)</li>
+          <li><strong>Scopes:</strong> email, public_profile</li>
+          <li><strong>Token Type:</strong> Long-lived (60 days)</li>
+          <li><strong>Server Token:</strong> JWT for API auth (7 days)</li>
+          <li><strong>Auto Refresh:</strong> Before expiry</li>
+        </ul>
+      </div>
+
+      <!-- Task Queue -->
+      <div class="component-card">
+        <div class="component-header">
+          <div class="component-icon queue">📋</div>
+          <div>
+            <div class="component-title">Task Queue</div>
+            <span class="component-status working">✓ Database Ready</span>
+          </div>
+        </div>
+        <p>
+          Prisma-based task queue for scheduling and tracking extension commands. 
+          Supports priority queuing, retry logic, and result storage.
+        </p>
+        <ul class="component-features">
+          <li><strong>Types:</strong> post_vehicle, scrape_inbox, scrape_conversation, respond_lead</li>
+          <li><strong>Priority:</strong> 1-10 scale (higher = urgent)</li>
+          <li><strong>Status:</strong> pending → processing → completed/failed</li>
+          <li><strong>Retry:</strong> Up to 3 attempts with exponential backoff</li>
+          <li><strong>Results:</strong> Stored as JSON for later analysis</li>
+        </ul>
+      </div>
+
+      <!-- Sidepanel UI -->
+      <div class="component-card">
+        <div class="component-header">
+          <div class="component-icon ui">🖥️</div>
+          <div>
+            <div class="component-title">Sidepanel UI</div>
+            <span class="component-status working">✓ Designed</span>
+          </div>
+        </div>
+        <p>
+          Modern, dark-themed dashboard for the Chrome extension. Shows connection 
+          status, stats, action buttons, and activity log.
+        </p>
+        <ul class="component-features">
+          <li><strong>Login:</strong> One-click Facebook OAuth</li>
+          <li><strong>Stats:</strong> Listings, leads, responses, pending tasks</li>
+          <li><strong>Actions:</strong> Scan inbox, post vehicle, open dashboard</li>
+          <li><strong>Activity Log:</strong> Real-time action history</li>
+          <li><strong>Auto-refresh:</strong> Stats update every 30 seconds</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Honesty Report -->
+  <section class="honesty container" id="honesty">
+    <div class="section-header">
+      <h2>🎯 Brutal Honesty Report</h2>
+      <p>What works, what doesn't, and where we can grow</p>
+    </div>
+    
+    <div class="honesty-grid">
+      <!-- What Works -->
+      <div class="honesty-card works">
+        <h3>✅ What Actually Works</h3>
+        <ul>
+          <li>
+            <strong>OAuth Flow Architecture</strong>
+            Complete implementation with chrome.identity API, token exchange, long-lived tokens, and JWT for server auth. Ready to test.
+          </li>
+          <li>
+            <strong>AI Agent Service</strong>
+            All methods implemented with Anthropic Claude integration. Proper prompting for element finding, conversation analysis, and response generation.
+          </li>
+          <li>
+            <strong>Human-Like Behavior</strong>
+            Realistic typing with delays, typo simulation, natural mouse movements, and random wait times. Designed to avoid detection.
+          </li>
+          <li>
+            <strong>Database Schema</strong>
+            Prisma models for ExtensionTask, Message, AIResponse, DealerAccount, and FacebookSession. Ready for migration.
+          </li>
+          <li>
+            <strong>API Routes</strong>
+            All endpoints for extension communication are implemented with proper auth middleware.
+          </li>
+          <li>
+            <strong>Server Integration</strong>
+            Routes registered in server.ts with CORS support for Chrome extensions.
+          </li>
+        </ul>
+      </div>
+
+      <!-- What Doesn't Work -->
+      <div class="honesty-card issues">
+        <h3>❌ What Doesn't Work Yet</h3>
+        <ul>
+          <li>
+            <strong>Facebook API Limitations</strong>
+            We only have email and public_profile permissions. Can't use Graph API for Marketplace posting. That's why we need browser automation.
+          </li>
+          <li>
+            <strong>Extension Not Tested</strong>
+            Content script and background worker are written but haven't been loaded into Chrome and tested on Facebook. Selectors may need adjustment.
+          </li>
+          <li>
+            <strong>Facebook Selectors</strong>
+            Facebook obfuscates class names. Our fallback selectors use aria-labels but may break. AI fallback is the safety net.
+          </li>
+          <li>
+            <strong>App Secret Missing</strong>
+            FACEBOOK_APP_SECRET environment variable not set. Required for token exchange.
+          </li>
+          <li>
+            <strong>Prisma Migration</strong>
+            New models added to schema but migration not run. Database tables don't exist yet.
+          </li>
+          <li>
+            <strong>No Production Testing</strong>
+            Entire system is theoretical until loaded into Chrome and tested on real Facebook pages.
+          </li>
+        </ul>
+      </div>
+
+      <!-- Growth Opportunities -->
+      <div class="honesty-card growth">
+        <h3>🚀 Areas of Growth (Agent Superpowers)</h3>
+        <ul>
+          <li>
+            <strong>Self-Healing UI Detection</strong>
+            AI can learn when Facebook changes their UI and automatically update selectors. No manual intervention needed.
+          </li>
+          <li>
+            <strong>Lead Intelligence</strong>
+            Analyze buyer messages to score leads, detect urgency, extract phone/email, identify trade-ins, and flag hot leads.
+          </li>
+          <li>
+            <strong>Smart Response Generation</strong>
+            Generate professional, context-aware responses that match the conversation tone. Handle price negotiations, availability questions, and scheduling.
+          </li>
+          <li>
+            <strong>Multi-Account Management</strong>
+            Task queue supports multiple dealer accounts. Each can have their own Facebook connection and posting schedule.
+          </li>
+          <li>
+            <strong>Conversation Memory</strong>
+            Message history stored in database. AI can remember past interactions and provide continuous context.
+          </li>
+          <li>
+            <strong>Visual Analysis (Future)</strong>
+            Could add screenshot analysis for AI to "see" the page when HTML analysis isn't enough.
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Agent Features -->
+  <section class="agent-features container" id="agent-features">
+    <div class="section-header">
+      <h2>🤖 Unique Agent Capabilities</h2>
+      <p>What makes this AI agent special</p>
+    </div>
+
+    <div class="feature-highlight">
+      <div class="feature-content">
+        <h3>Intelligent Element Finding</h3>
+        <p>
+          When CSS selectors fail (and they will, because Facebook changes their UI constantly), 
+          the AI analyzes the page HTML and finds the element using natural language understanding.
+        </p>
+        <p>
+          <strong>Example:</strong> "Find the button that says Publish near the bottom of the form"
+          <br>
+          <strong>AI Returns:</strong> CSS selector + fallback selectors + confidence score
+        </p>
+      </div>
+      <div class="feature-code">
+<span class="comment">// Request to AI Agent</span>
+{
+  targetDescription: <span class="string">"price input field"</span>,
+  pageContext: <span class="string">"&lt;html&gt;...50KB of Facebook HTML..."</span>,
+  url: <span class="string">"https://facebook.com/marketplace/create"</span>
+}
+
+<span class="comment">// AI Response</span>
+{
+  selector: <span class="string">"[aria-label='Price']"</span>,
+  confidence: <span class="keyword">0.95</span>,
+  alternativeSelectors: [
+    <span class="string">"input[name='price']"</span>,
+    <span class="string">"[data-testid='price-input']"</span>
+  ],
+  reasoning: <span class="string">"Found input with aria-label 'Price'..."</span>
+}
+      </div>
+    </div>
+
+    <div class="feature-highlight">
+      <div class="feature-content">
+        <h3>Lead Conversation Analysis</h3>
+        <p>
+          The AI reads the entire conversation and extracts actionable intelligence: 
+          lead score, buyer intent, contact information, trade-in details, and suggested next steps.
+        </p>
+        <p>
+          This turns a wall of Facebook messages into structured CRM data automatically.
+        </p>
+      </div>
+      <div class="feature-code">
+<span class="comment">// Input: Raw conversation</span>
+[
+  { sender: <span class="string">"Buyer"</span>, text: <span class="string">"Is this still available?"</span> },
+  { sender: <span class="string">"Buyer"</span>, text: <span class="string">"I can come today, call me 555-1234"</span> },
+  { sender: <span class="string">"Buyer"</span>, text: <span class="string">"Also have a 2019 Civic to trade"</span> }
+]
+
+<span class="comment">// AI Analysis Output</span>
+{
+  leadScore: <span class="keyword">92</span>,
+  buyerIntent: <span class="string">"HIGH - Ready to buy today"</span>,
+  extractedInfo: {
+    phone: <span class="string">"555-1234"</span>,
+    hasTradeIn: <span class="keyword">true</span>,
+    tradeVehicle: <span class="string">"2019 Honda Civic"</span>,
+    urgency: <span class="string">"IMMEDIATE"</span>
+  },
+  suggestedActions: [
+    <span class="string">"Call immediately"</span>,
+    <span class="string">"Get trade-in details"</span>
+  ]
+}
+      </div>
+    </div>
+
+    <div class="feature-highlight">
+      <div class="feature-content">
+        <h3>Context-Aware Response Generation</h3>
+        <p>
+          The AI doesn't just respond—it responds like your best salesperson. It understands 
+          the vehicle being discussed, the dealer's style, and the conversation context.
+        </p>
+        <p>
+          Responses can be sent automatically or queued for human approval first.
+        </p>
+      </div>
+      <div class="feature-code">
+<span class="comment">// Generate response for price negotiation</span>
+{
+  leadMessages: [...conversation],
+  vehicleInfo: {
+    year: <span class="keyword">2022</span>,
+    make: <span class="string">"Toyota"</span>,
+    model: <span class="string">"Camry"</span>,
+    price: <span class="keyword">28995</span>
+  },
+  dealerProfile: {
+    businessName: <span class="string">"Valley Auto Sales"</span>,
+    responseStyle: <span class="string">"friendly_professional"</span>
+  },
+  responseType: <span class="string">"price_negotiation"</span>
+}
+
+<span class="comment">// AI Generated Response</span>
+{
+  message: <span class="string">"Hi! Thanks for your interest in the Camry.
+I understand you're looking for the best deal.
+This one's priced to sell at $28,995 - one of the
+lowest in the area for a 2022. When would you
+like to come see it? We're open until 7pm today!"</span>,
+  confidence: <span class="keyword">0.88</span>,
+  tone: <span class="string">"friendly_professional"</span>
+}
+      </div>
+    </div>
+  </section>
+
+  <!-- Data Flow -->
+  <section class="data-flow container" id="data-flow">
+    <div class="section-header">
+      <h2>📊 Data Flow</h2>
+      <p>How a task moves through the system</p>
+    </div>
+
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-number">1</div>
+        <div class="flow-content">
+          <h4>User Creates Task</h4>
+          <p>Dealer clicks "Post Vehicle" in the dashboard or API creates a task. Task is stored in PostgreSQL with status "pending" and priority.</p>
+        </div>
+      </div>
+      
+      <div class="flow-step">
+        <div class="flow-number">2</div>
+        <div class="flow-content">
+          <h4>Extension Polls for Tasks</h4>
+          <p>Background worker polls <code>/api/extension/tasks/:accountId/pending</code> every 30 seconds. Receives task with navigation commands.</p>
+        </div>
+      </div>
+      
+      <div class="flow-step">
+        <div class="flow-number">3</div>
+        <div class="flow-content">
+          <h4>Task Distributed to Content Script</h4>
+          <p>Background worker sends task to content script via <code>chrome.tabs.sendMessage()</code>. Opens Facebook tab if needed.</p>
+        </div>
+      </div>
+      
+      <div class="flow-step">
+        <div class="flow-number">4</div>
+        <div class="flow-content">
+          <h4>Content Script Executes Commands</h4>
+          <p>Content script runs commands: navigate → wait → click → type → upload → submit. Uses human-like behavior. Calls AI for element finding if needed.</p>
+        </div>
+      </div>
+      
+      <div class="flow-step">
+        <div class="flow-number">5</div>
+        <div class="flow-content">
+          <h4>Results Sent Back</h4>
+          <p>Content script reports success/failure to background worker. Background worker calls <code>/api/extension/tasks/:id/complete</code> with results.</p>
+        </div>
+      </div>
+      
+      <div class="flow-step">
+        <div class="flow-number">6</div>
+        <div class="flow-content">
+          <h4>Server Processes Results</h4>
+          <p>Server updates vehicle status, stores scraped leads, triggers AI analysis of conversations, and updates dashboard stats.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- API Reference -->
+  <section class="api-ref container" id="api">
+    <div class="section-header">
+      <h2>📡 API Reference</h2>
+      <p>Extension API endpoints</p>
+    </div>
+
+    <table class="api-table">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Endpoint</th>
+          <th>Description</th>
+          <th>Auth</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/auth/facebook/callback</td>
+          <td>Exchange OAuth code for tokens</td>
+          <td>Public</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/auth/facebook/refresh</td>
+          <td>Refresh access token</td>
+          <td>Public</td>
+        </tr>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="endpoint">/api/extension/tasks/:accountId/pending</td>
+          <td>Get pending tasks for account</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/extension/tasks</td>
+          <td>Create new task</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/extension/tasks/:taskId/complete</td>
+          <td>Mark task as completed</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/extension/tasks/:taskId/failed</td>
+          <td>Mark task as failed</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/extension/scrape-result</td>
+          <td>Store scraped data</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/extension/find-element</td>
+          <td>AI element finding</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/extension/analyze-conversation</td>
+          <td>AI lead analysis</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="endpoint">/api/extension/generate-response</td>
+          <td>AI response generation</td>
+          <td>JWT</td>
+        </tr>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="endpoint">/api/extension/account</td>
+          <td>Get account info and stats</td>
+          <td>JWT</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Setup Requirements -->
+  <section class="requirements container" id="setup">
+    <div class="section-header">
+      <h2>⚙️ Setup Requirements</h2>
+      <p>What you need to get this running</p>
+    </div>
+
+    <div class="req-grid">
+      <div class="req-card">
+        <h4>🔑 Environment Variables</h4>
+        <code>
+# Add to Railway/local .env
+FACEBOOK_APP_SECRET=your_app_secret_here
+ANTHROPIC_API_KEY=your_anthropic_key
+
+# Existing (should have)
+JWT_SECRET=your_jwt_secret
+DATABASE_URL=postgresql://...
+        </code>
+      </div>
+
+      <div class="req-card">
+        <h4>📦 Prisma Migration</h4>
+        <code>
+# Run in project root
+npx prisma migrate dev --name add-extension-models
+
+# Or for production
+npx prisma migrate deploy
+        </code>
+      </div>
+
+      <div class="req-card">
+        <h4>🔗 Facebook Developer Console</h4>
+        <code>
+1. Go to developers.facebook.com
+2. App ID: 505778791605869
+3. Add OAuth Redirect URI:
+   https://&lt;extension-id&gt;.chromiumapp.org/oauth2
+
+4. Enable: email, public_profile permissions
+        </code>
+      </div>
+
+      <div class="req-card">
+        <h4>🧩 Load Extension</h4>
+        <code>
+1. Open chrome://extensions
+2. Enable "Developer mode"
+3. Click "Load unpacked"
+4. Select: FaceMyDealer/extension folder
+5. Copy the Extension ID
+6. Update Facebook OAuth redirect
+        </code>
+      </div>
+
+      <div class="req-card">
+        <h4>🧪 Test Flow</h4>
+        <code>
+1. Click extension icon → Sidepanel opens
+2. Click "Connect with Facebook"
+3. Complete OAuth login
+4. Open facebook.com/marketplace
+5. Check for "DF-Auto Sim active" in console
+6. Create a test task via API
+        </code>
+      </div>
+
+      <div class="req-card">
+        <h4>📊 Monitor</h4>
+        <code>
+# View extension logs
+chrome://extensions → DF-Auto Sim → 
+  "Service worker" link → Console
+
+# View content script logs
+Right-click Facebook page → Inspect →
+  Console → Filter: "DF-Auto"
+        </code>
+      </div>
+    </div>
+  </section>
+
+  <!-- File Reference -->
+  <section class="container" style="padding: 60px 0;">
+    <div class="section-header">
+      <h2>📁 File Reference</h2>
+      <p>Where everything lives</p>
+    </div>
+
+    <table class="api-table">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Purpose</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="endpoint">extension/content-ai.js</td>
+          <td>AI-powered content script for Facebook pages</td>
+          <td><span class="component-status working">Implemented</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">extension/background-ai.js</td>
+          <td>Service worker for OAuth and task management</td>
+          <td><span class="component-status working">Implemented</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">extension/sidepanel-ai.html</td>
+          <td>Extension dashboard UI</td>
+          <td><span class="component-status working">Designed</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">extension/sidepanel-ai.js</td>
+          <td>Sidepanel interactivity</td>
+          <td><span class="component-status working">Implemented</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">extension/manifest.json</td>
+          <td>Extension configuration</td>
+          <td><span class="component-status working">Updated</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">src/services/ai-agent.service.ts</td>
+          <td>Anthropic Claude integration</td>
+          <td><span class="component-status working">Implemented</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">src/services/facebook-hybrid.service.ts</td>
+          <td>OAuth, task queue, navigation commands</td>
+          <td><span class="component-status working">Implemented</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">src/routes/extension.routes.ts</td>
+          <td>API endpoints for extension</td>
+          <td><span class="component-status working">Implemented</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">src/routes/facebook-auth.routes.ts</td>
+          <td>Facebook OAuth handlers</td>
+          <td><span class="component-status working">Implemented</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">src/config/facebook.ts</td>
+          <td>Facebook App configuration</td>
+          <td><span class="component-status working">Configured</span></td>
+        </tr>
+        <tr>
+          <td class="endpoint">prisma/schema.prisma</td>
+          <td>Database models (ExtensionTask, Message, etc.)</td>
+          <td><span class="component-status partial">Migration Pending</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>
+      DF-Auto Sim v2.5.0 | Built for <a href="https://dealersface.com">Dealers Face</a>
+      <br>
+      Facebook App ID: 505778791605869 | January 2026
+    </p>
+  </footer>
+</body>
+</html>
