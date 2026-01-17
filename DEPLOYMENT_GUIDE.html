@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaceMyDealer - Hetzner VPS Deployment Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        .step {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .step-number {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #7b2cbf, #00d4ff);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        h2 {
+            color: #fff;
+            font-size: 1.5rem;
+        }
+        h3 {
+            color: #00d4ff;
+            margin: 25px 0 15px 0;
+            font-size: 1.1rem;
+        }
+        p {
+            margin-bottom: 15px;
+            color: #b0b0b0;
+        }
+        .code-container {
+            position: relative;
+            margin: 15px 0;
+        }
+        pre {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        code {
+            color: #c9d1d9;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .copy-btn:hover {
+            background: #2ea043;
+        }
+        .copy-btn.copied {
+            background: #7b2cbf;
+        }
+        .warning {
+            background: rgba(255, 193, 7, 0.1);
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .warning strong {
+            color: #ffc107;
+        }
+        .info {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 4px solid #00d4ff;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .info strong {
+            color: #00d4ff;
+        }
+        .success {
+            background: rgba(35, 134, 54, 0.1);
+            border-left: 4px solid #238636;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .success strong {
+            color: #238636;
+        }
+        .toc {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 25px 30px;
+            margin-bottom: 40px;
+        }
+        .toc h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .toc ul {
+            list-style: none;
+            columns: 2;
+        }
+        .toc li {
+            margin-bottom: 8px;
+        }
+        .toc a {
+            color: #00d4ff;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .toc a:hover {
+            color: #7b2cbf;
+        }
+        .comment {
+            color: #6a737d;
+        }
+        .string {
+            color: #a5d6ff;
+        }
+        .keyword {
+            color: #ff7b72;
+        }
+        .var {
+            color: #ffa657;
+        }
+        ul, ol {
+            margin: 15px 0 15px 30px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        @media (max-width: 768px) {
+            .toc ul {
+                columns: 1;
+            }
+            h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 FaceMyDealer VPS Deployment</h1>
+        <p class="subtitle">Complete Hetzner Server Setup Guide - From Zero to Production</p>
+
+        <div class="toc">
+            <h3>📋 Table of Contents</h3>
+            <ul>
+                <li><a href="#step1">1. Create Hetzner VPS</a></li>
+                <li><a href="#step2">2. Initial Server Setup</a></li>
+                <li><a href="#step3">3. Install Node.js 20</a></li>
+                <li><a href="#step4">4. Install PostgreSQL</a></li>
+                <li><a href="#step5">5. Install Redis</a></li>
+                <li><a href="#step6">6. Install Nginx</a></li>
+                <li><a href="#step7">7. Setup GitHub SSH</a></li>
+                <li><a href="#step8">8. Clone & Build App</a></li>
+                <li><a href="#step9">9. Environment Variables</a></li>
+                <li><a href="#step10">10. Database Migration</a></li>
+                <li><a href="#step11">11. PM2 Process Manager</a></li>
+                <li><a href="#step12">12. Nginx Configuration</a></li>
+                <li><a href="#step13">13. SSL Certificate</a></li>
+                <li><a href="#step14">14. Domain DNS Setup</a></li>
+                <li><a href="#step15">15. Firewall Setup</a></li>
+                <li><a href="#step16">16. Auto-Deploy Webhook</a></li>
+                <li><a href="#step17">17. Maintenance Commands</a></li>
+            </ul>
+        </div>
+
+        <!-- STEP 1 -->
+        <div class="step" id="step1">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <h2>Create Hetzner VPS</h2>
+            </div>
+            <p>Log into <a href="https://console.hetzner.cloud" style="color:#00d4ff">Hetzner Cloud Console</a> and create a new server:</p>
+            <ol>
+                <li><strong>Location:</strong> Choose closest to your users (e.g., Nuremberg, Helsinki, Ashburn)</li>
+                <li><strong>Image:</strong> Ubuntu 24.04 LTS</li>
+                <li><strong>Type:</strong> CX22 (2 vCPU, 4GB RAM) - €4.85/month minimum</li>
+                <li><strong>SSH Key:</strong> Add your public SSH key (recommended) or use password</li>
+                <li><strong>Name:</strong> facemydealer-prod</li>
+            </ol>
+            <div class="info">
+                <strong>💡 Recommended Specs:</strong> CX32 (4 vCPU, 8GB RAM) for production with multiple users.
+            </div>
+            <h3>Generate SSH Key (if you don't have one)</h3>
+            <p>Run this on your LOCAL machine (Windows PowerShell):</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Generate SSH key pair</span>
+ssh-keygen -t ed25519 -C "your-email@example.com"
+
+<span class="comment"># View your public key (add this to Hetzner)</span>
+cat ~/.ssh/id_ed25519.pub</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 2 -->
+        <div class="step" id="step2">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <h2>Initial Server Setup & Security</h2>
+            </div>
+            <p>SSH into your new server:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Connect to server (replace with your IP)</span>
+ssh root@YOUR_SERVER_IP</code></pre>
+            </div>
+            
+            <h3>Update System & Install Essentials</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Update packages</span>
+apt update && apt upgrade -y
+
+<span class="comment"># Install essential tools</span>
+apt install -y curl wget git build-essential software-properties-common \
+  apt-transport-https ca-certificates gnupg lsb-release ufw fail2ban htop</code></pre>
+            </div>
+
+            <h3>Create Non-Root User</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create user 'deploy' with sudo privileges</span>
+adduser deploy
+usermod -aG sudo deploy
+
+<span class="comment"># Copy SSH keys to new user</span>
+mkdir -p /home/deploy/.ssh
+cp ~/.ssh/authorized_keys /home/deploy/.ssh/
+chown -R deploy:deploy /home/deploy/.ssh
+chmod 700 /home/deploy/.ssh
+chmod 600 /home/deploy/.ssh/authorized_keys</code></pre>
+            </div>
+
+            <h3>Secure SSH</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Edit SSH config</span>
+nano /etc/ssh/sshd_config</code></pre>
+            </div>
+            <p>Find and change these lines:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+Port 22</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Restart SSH</span>
+systemctl restart sshd</code></pre>
+            </div>
+            <div class="warning">
+                <strong>⚠️ Important:</strong> Before closing this session, open a NEW terminal and test: <code>ssh deploy@YOUR_SERVER_IP</code>
+            </div>
+        </div>
+
+        <!-- STEP 3 -->
+        <div class="step" id="step3">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <h2>Install Node.js 20 LTS</h2>
+            </div>
+            <p>Now SSH as deploy user for remaining steps:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>ssh deploy@YOUR_SERVER_IP</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Install Node.js 20.x via NodeSource</span>
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+<span class="comment"># Verify installation</span>
+node --version   <span class="comment"># Should show v20.x.x</span>
+npm --version    <span class="comment"># Should show 10.x.x</span>
+
+<span class="comment"># Install global packages</span>
+sudo npm install -g pm2 typescript</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 4 -->
+        <div class="step" id="step4">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <h2>Install & Configure PostgreSQL</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Install PostgreSQL 16</span>
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+sudo apt update
+sudo apt install -y postgresql-16 postgresql-contrib-16
+
+<span class="comment"># Start and enable PostgreSQL</span>
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+<span class="comment"># Verify it's running</span>
+sudo systemctl status postgresql</code></pre>
+            </div>
+
+            <h3>Create Database & User</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Switch to postgres user</span>
+sudo -u postgres psql</code></pre>
+            </div>
+            <p>Run these SQL commands (replace YOUR_SECURE_PASSWORD):</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment">-- Create database and user</span>
+CREATE USER facemydealer WITH PASSWORD 'YOUR_SECURE_PASSWORD';
+CREATE DATABASE facemydealer_prod OWNER facemydealer;
+GRANT ALL PRIVILEGES ON DATABASE facemydealer_prod TO facemydealer;
+
+<span class="comment">-- Connect to the database and grant schema permissions</span>
+\c facemydealer_prod
+GRANT ALL ON SCHEMA public TO facemydealer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO facemydealer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO facemydealer;
+
+<span class="comment">-- Exit psql</span>
+\q</code></pre>
+            </div>
+            <div class="info">
+                <strong>📝 Your DATABASE_URL will be:</strong><br>
+                <code>postgresql://facemydealer:YOUR_SECURE_PASSWORD@localhost:5432/facemydealer_prod</code>
+            </div>
+        </div>
+
+        <!-- STEP 5 -->
+        <div class="step" id="step5">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <h2>Install & Configure Redis</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Install Redis</span>
+sudo apt install -y redis-server
+
+<span class="comment"># Configure Redis for production</span>
+sudo nano /etc/redis/redis.conf</code></pre>
+            </div>
+            <p>Find and update these settings:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Change supervised to systemd</span>
+supervised systemd
+
+<span class="comment"># Bind to localhost only</span>
+bind 127.0.0.1 ::1
+
+<span class="comment"># Set a password (optional but recommended)</span>
+requirepass YOUR_REDIS_PASSWORD
+
+<span class="comment"># Set max memory (adjust based on your VPS RAM)</span>
+maxmemory 256mb
+maxmemory-policy allkeys-lru</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Restart Redis</span>
+sudo systemctl restart redis-server
+sudo systemctl enable redis-server
+
+<span class="comment"># Test Redis</span>
+redis-cli ping   <span class="comment"># Should return PONG</span>
+
+<span class="comment"># If you set a password</span>
+redis-cli -a YOUR_REDIS_PASSWORD ping</code></pre>
+            </div>
+            <div class="info">
+                <strong>📝 Your REDIS_URL will be:</strong><br>
+                <code>redis://:YOUR_REDIS_PASSWORD@localhost:6379</code><br>
+                Or without password: <code>redis://localhost:6379</code>
+            </div>
+        </div>
+
+        <!-- STEP 6 -->
+        <div class="step" id="step6">
+            <div class="step-header">
+                <div class="step-number">6</div>
+                <h2>Install Nginx</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Install Nginx</span>
+sudo apt install -y nginx
+
+<span class="comment"># Start and enable</span>
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+<span class="comment"># Test - visit http://YOUR_SERVER_IP in browser</span>
+sudo systemctl status nginx</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 7 -->
+        <div class="step" id="step7">
+            <div class="step-header">
+                <div class="step-number">7</div>
+                <h2>Setup GitHub SSH Access</h2>
+            </div>
+            <p>Generate SSH key ON THE SERVER for GitHub access:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Generate SSH key for GitHub</span>
+ssh-keygen -t ed25519 -C "deploy@facemydealer"
+
+<span class="comment"># Press Enter for all prompts (no passphrase)</span>
+
+<span class="comment"># Display the public key</span>
+cat ~/.ssh/id_ed25519.pub</code></pre>
+            </div>
+            <div class="warning">
+                <strong>⚠️ Add this key to GitHub:</strong>
+                <ol>
+                    <li>Go to GitHub → Your Repo → Settings → Deploy Keys</li>
+                    <li>Click "Add deploy key"</li>
+                    <li>Paste the public key</li>
+                    <li>Check "Allow write access" if you want auto-deploy</li>
+                    <li>Click "Add key"</li>
+                </ol>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Test GitHub connection</span>
+ssh -T git@github.com
+
+<span class="comment"># Should say: Hi [username]! You've successfully authenticated...</span></code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 8 -->
+        <div class="step" id="step8">
+            <div class="step-header">
+                <div class="step-number">8</div>
+                <h2>Clone & Build Application</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create app directory</span>
+sudo mkdir -p /var/www
+sudo chown deploy:deploy /var/www
+cd /var/www
+
+<span class="comment"># Clone your repository (replace with your repo URL)</span>
+git clone git@github.com:MangaiYashobeam/FMD.git facemydealer
+cd facemydealer
+
+<span class="comment"># Install root dependencies</span>
+npm ci
+
+<span class="comment"># Install web dependencies</span>
+cd web && npm ci && cd ..
+
+<span class="comment"># Generate Prisma client</span>
+npx prisma generate</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 9 -->
+        <div class="step" id="step9">
+            <div class="step-header">
+                <div class="step-number">9</div>
+                <h2>Configure Environment Variables</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create .env file</span>
+nano /var/www/facemydealer/.env</code></pre>
+            </div>
+            <p>Paste and customize this configuration:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Server</span>
+NODE_ENV=production
+PORT=3000
+
+<span class="comment"># Database</span>
+DATABASE_URL="postgresql://facemydealer:YOUR_SECURE_PASSWORD@localhost:5432/facemydealer_prod"
+
+<span class="comment"># Redis</span>
+REDIS_URL="redis://localhost:6379"
+<span class="comment"># Or with password: REDIS_URL="redis://:YOUR_REDIS_PASSWORD@localhost:6379"</span>
+
+<span class="comment"># JWT Secrets (generate secure random strings)</span>
+JWT_SECRET="GENERATE_A_64_CHAR_RANDOM_STRING_HERE_1"
+JWT_REFRESH_SECRET="GENERATE_A_64_CHAR_RANDOM_STRING_HERE_2"
+
+<span class="comment"># Session</span>
+SESSION_SECRET="GENERATE_A_64_CHAR_RANDOM_STRING_HERE_3"
+
+<span class="comment"># App URLs</span>
+FRONTEND_URL="https://dealersface.com"
+BACKEND_URL="https://dealersface.com"
+CORS_ORIGIN="https://dealersface.com"
+
+<span class="comment"># IIPC (your super admin IP)</span>
+IIPC_SUPER_ADMIN_IPS="86.40.131.65"
+
+<span class="comment"># Facebook App (if applicable)</span>
+FACEBOOK_APP_ID="your_app_id"
+FACEBOOK_APP_SECRET="your_app_secret"
+
+<span class="comment"># Email (if applicable)</span>
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="587"
+SMTP_USER="your_email"
+SMTP_PASS="your_password"
+SMTP_FROM="noreply@dealersface.com"</code></pre>
+            </div>
+            <h3>Generate Secure Random Strings</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Generate 3 secure secrets</span>
+openssl rand -hex 32
+openssl rand -hex 32
+openssl rand -hex 32</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 10 -->
+        <div class="step" id="step10">
+            <div class="step-header">
+                <div class="step-number">10</div>
+                <h2>Database Migration</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>cd /var/www/facemydealer
+
+<span class="comment"># Run Prisma migrations</span>
+npx prisma migrate deploy
+
+<span class="comment"># Seed database (if you have seed script)</span>
+npx prisma db seed
+
+<span class="comment"># Optional: Open Prisma Studio to verify</span>
+npx prisma studio</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 11 -->
+        <div class="step" id="step11">
+            <div class="step-header">
+                <div class="step-number">11</div>
+                <h2>Build & Start with PM2</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>cd /var/www/facemydealer
+
+<span class="comment"># Build backend</span>
+npx tsc && npx tsc-alias
+
+<span class="comment"># Build frontend</span>
+cd web && npm run build && cd ..
+
+<span class="comment"># Start with PM2</span>
+pm2 start dist/server.js --name "facemydealer" -i max
+
+<span class="comment"># Save PM2 process list</span>
+pm2 save
+
+<span class="comment"># Enable PM2 startup on reboot</span>
+pm2 startup systemd
+<span class="comment"># Copy and run the command it outputs</span>
+
+<span class="comment"># Verify app is running</span>
+pm2 status
+pm2 logs facemydealer</code></pre>
+            </div>
+            <h3>Create PM2 Ecosystem File (Optional but Recommended)</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create ecosystem config</span>
+nano /var/www/facemydealer/ecosystem.config.js</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>module.exports = {
+  apps: [{
+    name: 'facemydealer',
+    script: 'dist/server.js',
+    cwd: '/var/www/facemydealer',
+    instances: 'max',
+    exec_mode: 'cluster',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3000
+    },
+    error_file: '/var/log/pm2/facemydealer-error.log',
+    out_file: '/var/log/pm2/facemydealer-out.log',
+    merge_logs: true,
+    time: true,
+    max_memory_restart: '1G',
+    exp_backoff_restart_delay: 100
+  }]
+};</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create log directory</span>
+sudo mkdir -p /var/log/pm2
+sudo chown deploy:deploy /var/log/pm2
+
+<span class="comment"># Start using ecosystem file</span>
+pm2 delete facemydealer  <span class="comment"># Remove old process</span>
+pm2 start ecosystem.config.js
+pm2 save</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 12 -->
+        <div class="step" id="step12">
+            <div class="step-header">
+                <div class="step-number">12</div>
+                <h2>Configure Nginx Reverse Proxy</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Remove default config</span>
+sudo rm /etc/nginx/sites-enabled/default
+
+<span class="comment"># Create new config</span>
+sudo nano /etc/nginx/sites-available/facemydealer</code></pre>
+            </div>
+            <p>Paste this Nginx configuration:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Rate limiting zones</span>
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=5r/m;
+limit_conn_zone $binary_remote_addr zone=conn_limit:10m;
+
+<span class="comment"># Upstream</span>
+upstream facemydealer_backend {
+    least_conn;
+    server 127.0.0.1:3000;
+    keepalive 64;
+}
+
+<span class="comment"># HTTP - Redirect to HTTPS</span>
+server {
+    listen 80;
+    listen [::]:80;
+    server_name dealersface.com www.dealersface.com;
+    
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+<span class="comment"># HTTPS - Main config</span>
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name dealersface.com www.dealersface.com;
+
+    <span class="comment"># SSL certificates (will be added by certbot)</span>
+    ssl_certificate /etc/letsencrypt/live/dealersface.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dealersface.com/privkey.pem;
+    
+    <span class="comment"># SSL configuration</span>
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    
+    <span class="comment"># HSTS</span>
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    <span class="comment"># Security headers</span>
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    <span class="comment"># Gzip compression</span>
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
+
+    <span class="comment"># Connection limits</span>
+    limit_conn conn_limit 20;
+
+    <span class="comment"># Client body size (for uploads)</span>
+    client_max_body_size 50M;
+
+    <span class="comment"># Root for static files</span>
+    root /var/www/facemydealer/web/dist;
+    index index.html;
+
+    <span class="comment"># API routes - proxy to Node.js</span>
+    location /api/ {
+        limit_req zone=api_limit burst=20 nodelay;
+        
+        proxy_pass http://facemydealer_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+    }
+
+    <span class="comment"># Auth routes - stricter rate limit</span>
+    location /api/auth/ {
+        limit_req zone=auth_limit burst=5 nodelay;
+        
+        proxy_pass http://facemydealer_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    <span class="comment"># WebSocket support</span>
+    location /socket.io/ {
+        proxy_pass http://facemydealer_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+
+    <span class="comment"># Health check</span>
+    location /health {
+        proxy_pass http://facemydealer_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        access_log off;
+    }
+
+    <span class="comment"># Static assets with caching</span>
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    <span class="comment"># SPA fallback - serve index.html for client-side routing</span>
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Enable the site</span>
+sudo ln -s /etc/nginx/sites-available/facemydealer /etc/nginx/sites-enabled/
+
+<span class="comment"># Test Nginx configuration (ignore SSL errors for now)</span>
+sudo nginx -t
+
+<span class="comment"># Don't reload yet - we need SSL cert first</span></code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 13 -->
+        <div class="step" id="step13">
+            <div class="step-header">
+                <div class="step-number">13</div>
+                <h2>SSL Certificate with Let's Encrypt</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Install Certbot</span>
+sudo apt install -y certbot python3-certbot-nginx
+
+<span class="comment"># Temporarily comment out SSL lines in Nginx config</span>
+sudo nano /etc/nginx/sites-available/facemydealer
+<span class="comment"># Comment out the entire HTTPS server block and uncomment after getting cert</span>
+
+<span class="comment"># Or create a simple HTTP-only config first:</span>
+sudo nano /etc/nginx/sites-available/facemydealer</code></pre>
+            </div>
+            <p>Temporary HTTP-only config for certificate generation:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>server {
+    listen 80;
+    listen [::]:80;
+    server_name dealersface.com www.dealersface.com;
+    root /var/www/facemydealer/web/dist;
+    
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create certbot webroot</span>
+sudo mkdir -p /var/www/certbot
+
+<span class="comment"># Reload Nginx</span>
+sudo nginx -t && sudo systemctl reload nginx
+
+<span class="comment"># Get SSL certificate</span>
+sudo certbot --nginx -d dealersface.com -d www.dealersface.com
+
+<span class="comment"># Follow the prompts - enter email, agree to TOS</span>
+
+<span class="comment"># Now restore the full HTTPS Nginx config from Step 12</span>
+sudo nano /etc/nginx/sites-available/facemydealer
+<span class="comment"># Paste the full config from Step 12</span>
+
+<span class="comment"># Test and reload</span>
+sudo nginx -t && sudo systemctl reload nginx
+
+<span class="comment"># Setup auto-renewal</span>
+sudo systemctl enable certbot.timer
+sudo systemctl start certbot.timer
+
+<span class="comment"># Test renewal</span>
+sudo certbot renew --dry-run</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 14 -->
+        <div class="step" id="step14">
+            <div class="step-header">
+                <div class="step-number">14</div>
+                <h2>Domain DNS Configuration</h2>
+            </div>
+            <p>Go to your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.) and set these DNS records:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>Type    Name    Value                   TTL
+----    ----    -----                   ---
+A       @       YOUR_SERVER_IP          3600
+A       www     YOUR_SERVER_IP          3600
+AAAA    @       YOUR_SERVER_IPV6        3600  (if available)
+AAAA    www     YOUR_SERVER_IPV6        3600  (if available)</code></pre>
+            </div>
+            <div class="info">
+                <strong>💡 Using Cloudflare?</strong> Set SSL/TLS mode to "Full (strict)" to avoid redirect loops.
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Verify DNS propagation</span>
+dig dealersface.com +short
+dig www.dealersface.com +short
+
+<span class="comment"># Or use online tool:</span>
+<span class="comment"># https://dnschecker.org/#A/dealersface.com</span></code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 15 -->
+        <div class="step" id="step15">
+            <div class="step-header">
+                <div class="step-number">15</div>
+                <h2>Firewall Configuration (UFW)</h2>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Enable UFW</span>
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+
+<span class="comment"># Allow SSH (IMPORTANT - do this first!)</span>
+sudo ufw allow ssh
+<span class="comment"># or: sudo ufw allow 22/tcp</span>
+
+<span class="comment"># Allow HTTP and HTTPS</span>
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+<span class="comment"># Allow Nginx Full (alternative)</span>
+sudo ufw allow 'Nginx Full'
+
+<span class="comment"># Enable firewall</span>
+sudo ufw enable
+
+<span class="comment"># Check status</span>
+sudo ufw status verbose</code></pre>
+            </div>
+            <div class="warning">
+                <strong>⚠️ Warning:</strong> Always allow SSH before enabling UFW, or you'll lock yourself out!
+            </div>
+
+            <h3>Configure Fail2Ban</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create local config</span>
+sudo nano /etc/fail2ban/jail.local</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1 86.40.131.65
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 24h
+
+[nginx-http-auth]
+enabled = true
+filter = nginx-http-auth
+port = http,https
+logpath = /var/log/nginx/error.log
+
+[nginx-limit-req]
+enabled = true
+filter = nginx-limit-req
+port = http,https
+logpath = /var/log/nginx/error.log
+maxretry = 10</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Restart Fail2Ban</span>
+sudo systemctl restart fail2ban
+sudo systemctl enable fail2ban
+
+<span class="comment"># Check status</span>
+sudo fail2ban-client status</code></pre>
+            </div>
+        </div>
+
+        <!-- STEP 16 -->
+        <div class="step" id="step16">
+            <div class="step-header">
+                <div class="step-number">16</div>
+                <h2>Auto-Deploy Webhook (Optional)</h2>
+            </div>
+            <p>Create a simple webhook to auto-deploy on git push:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create deploy script</span>
+nano /var/www/facemydealer/deploy.sh</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>#!/bin/bash
+set -e
+
+APP_DIR="/var/www/facemydealer"
+LOG_FILE="/var/log/deploy.log"
+
+echo "========================================" >> $LOG_FILE
+echo "Deployment started at $(date)" >> $LOG_FILE
+
+cd $APP_DIR
+
+<span class="comment"># Pull latest code</span>
+git fetch origin main
+git reset --hard origin/main
+
+<span class="comment"># Install dependencies</span>
+npm ci
+cd web && npm ci && cd ..
+
+<span class="comment"># Generate Prisma client</span>
+npx prisma generate
+
+<span class="comment"># Run migrations</span>
+npx prisma migrate deploy
+
+<span class="comment"># Build backend</span>
+npx tsc && npx tsc-alias
+
+<span class="comment"># Build frontend</span>
+cd web && npm run build && cd ..
+
+<span class="comment"># Reload PM2</span>
+pm2 reload facemydealer
+
+echo "Deployment completed at $(date)" >> $LOG_FILE
+echo "========================================" >> $LOG_FILE</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Make executable</span>
+chmod +x /var/www/facemydealer/deploy.sh
+
+<span class="comment"># Create log file</span>
+sudo touch /var/log/deploy.log
+sudo chown deploy:deploy /var/log/deploy.log
+
+<span class="comment"># Test deploy script</span>
+/var/www/facemydealer/deploy.sh</code></pre>
+            </div>
+            
+            <h3>GitHub Webhook Setup</h3>
+            <p>Install webhook listener:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Install webhook</span>
+sudo apt install -y webhook
+
+<span class="comment"># Create webhook config</span>
+sudo mkdir -p /etc/webhook
+sudo nano /etc/webhook/hooks.json</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>[
+  {
+    "id": "deploy-facemydealer",
+    "execute-command": "/var/www/facemydealer/deploy.sh",
+    "command-working-directory": "/var/www/facemydealer",
+    "response-message": "Deployment triggered",
+    "trigger-rule": {
+      "and": [
+        {
+          "match": {
+            "type": "payload-hmac-sha256",
+            "secret": "YOUR_WEBHOOK_SECRET",
+            "parameter": {
+              "source": "header",
+              "name": "X-Hub-Signature-256"
+            }
+          }
+        },
+        {
+          "match": {
+            "type": "value",
+            "value": "refs/heads/main",
+            "parameter": {
+              "source": "payload",
+              "name": "ref"
+            }
+          }
+        }
+      ]
+    }
+  }
+]</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Create systemd service</span>
+sudo nano /etc/systemd/system/webhook.service</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>[Unit]
+Description=Webhook Service
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+ExecStart=/usr/bin/webhook -hooks /etc/webhook/hooks.json -port 9000 -verbose
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+            </div>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Start webhook service</span>
+sudo systemctl daemon-reload
+sudo systemctl enable webhook
+sudo systemctl start webhook
+
+<span class="comment"># Allow webhook port through firewall</span>
+sudo ufw allow 9000/tcp</code></pre>
+            </div>
+            <p>Add to Nginx config (inside server block):</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>location /hooks/ {
+    proxy_pass http://127.0.0.1:9000/hooks/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}</code></pre>
+            </div>
+            <div class="info">
+                <strong>💡 GitHub Webhook URL:</strong><br>
+                <code>https://dealersface.com/hooks/deploy-facemydealer</code><br><br>
+                In GitHub: Repo → Settings → Webhooks → Add webhook<br>
+                Set Content-Type to <code>application/json</code> and add your secret.
+            </div>
+        </div>
+
+        <!-- STEP 17 -->
+        <div class="step" id="step17">
+            <div class="step-header">
+                <div class="step-number">17</div>
+                <h2>Maintenance Commands Reference</h2>
+            </div>
+            
+            <h3>PM2 Commands</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># View status</span>
+pm2 status
+
+<span class="comment"># View logs</span>
+pm2 logs facemydealer
+pm2 logs facemydealer --lines 100
+
+<span class="comment"># Restart app</span>
+pm2 restart facemydealer
+
+<span class="comment"># Reload app (zero downtime)</span>
+pm2 reload facemydealer
+
+<span class="comment"># Stop app</span>
+pm2 stop facemydealer
+
+<span class="comment"># Monitor resources</span>
+pm2 monit</code></pre>
+            </div>
+
+            <h3>Database Commands</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Connect to database</span>
+sudo -u postgres psql -d facemydealer_prod
+
+<span class="comment"># Backup database</span>
+pg_dump -U facemydealer -h localhost facemydealer_prod > backup_$(date +%Y%m%d).sql
+
+<span class="comment"># Restore database</span>
+psql -U facemydealer -h localhost facemydealer_prod < backup.sql
+
+<span class="comment"># Run Prisma migrations</span>
+cd /var/www/facemydealer && npx prisma migrate deploy
+
+<span class="comment"># Open Prisma Studio</span>
+cd /var/www/facemydealer && npx prisma studio</code></pre>
+            </div>
+
+            <h3>Redis Commands</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Connect to Redis</span>
+redis-cli
+
+<span class="comment"># With password</span>
+redis-cli -a YOUR_REDIS_PASSWORD
+
+<span class="comment"># Common commands</span>
+PING                  <span class="comment"># Test connection</span>
+KEYS *                <span class="comment"># List all keys</span>
+FLUSHALL              <span class="comment"># Clear all data</span>
+INFO                  <span class="comment"># Server info</span>
+MONITOR               <span class="comment"># Real-time commands</span></code></pre>
+            </div>
+
+            <h3>Nginx Commands</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># Test configuration</span>
+sudo nginx -t
+
+<span class="comment"># Reload configuration</span>
+sudo systemctl reload nginx
+
+<span class="comment"># Restart Nginx</span>
+sudo systemctl restart nginx
+
+<span class="comment"># View error logs</span>
+sudo tail -f /var/log/nginx/error.log
+
+<span class="comment"># View access logs</span>
+sudo tail -f /var/log/nginx/access.log</code></pre>
+            </div>
+
+            <h3>Manual Deployment</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code>cd /var/www/facemydealer
+
+<span class="comment"># Pull latest</span>
+git pull origin main
+
+<span class="comment"># Install deps</span>
+npm ci && cd web && npm ci && cd ..
+
+<span class="comment"># Build</span>
+npx prisma generate
+npx tsc && npx tsc-alias
+cd web && npm run build && cd ..
+
+<span class="comment"># Migrate & restart</span>
+npx prisma migrate deploy
+pm2 reload facemydealer</code></pre>
+            </div>
+
+            <h3>System Monitoring</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># View system resources</span>
+htop
+
+<span class="comment"># Disk usage</span>
+df -h
+
+<span class="comment"># Memory usage</span>
+free -m
+
+<span class="comment"># View running services</span>
+sudo systemctl list-units --type=service --state=running
+
+<span class="comment"># View failed services</span>
+sudo systemctl --failed</code></pre>
+            </div>
+
+            <h3>Security Checks</h3>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># View firewall status</span>
+sudo ufw status verbose
+
+<span class="comment"># View banned IPs (Fail2Ban)</span>
+sudo fail2ban-client status sshd
+
+<span class="comment"># Unban an IP</span>
+sudo fail2ban-client set sshd unbanip IP_ADDRESS
+
+<span class="comment"># View recent logins</span>
+last -20
+
+<span class="comment"># View failed login attempts</span>
+sudo grep "Failed password" /var/log/auth.log | tail -20</code></pre>
+            </div>
+        </div>
+
+        <div class="success">
+            <strong>🎉 Deployment Complete!</strong><br>
+            Your FaceMyDealer application should now be running at <code>https://dealersface.com</code>
+        </div>
+
+        <div class="step">
+            <h2>Quick Reference</h2>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre><code><span class="comment"># === QUICK DEPLOY COMMAND ===</span>
+ssh deploy@YOUR_SERVER_IP "cd /var/www/facemydealer && git pull && npm ci && cd web && npm ci && cd .. && npx prisma generate && npx tsc && npx tsc-alias && cd web && npm run build && cd .. && npx prisma migrate deploy && pm2 reload facemydealer"</code></pre>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function copyCode(button) {
+            const codeBlock = button.parentElement.querySelector('code');
+            const text = codeBlock.innerText;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                button.textContent = 'Failed';
+            });
+        }
+    </script>
+</body>
+</html>

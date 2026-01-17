@@ -238,7 +238,7 @@ app.get('/health', (_req, res) => {
 // IIPC Emergency Rate Limit Reset (No auth - IP verified only)
 // This allows super admin IPs to reset their rate limits even when locked out
 // ============================================
-app.post('/api/iipc/emergency-reset', async (req, res) => {
+app.post('/api/iipc/emergency-reset', async (req, res): Promise<void> => {
   const { resetRateLimitsForIP } = await import('@/middleware/security');
   
   // Get client IP
@@ -250,11 +250,12 @@ app.post('/api/iipc/emergency-reset', async (req, res) => {
   // Check if this is a super admin IP
   if (!iipcService.isSuperAdminIP(clientIP)) {
     logger.warn(`Unauthorized emergency reset attempt from IP: ${clientIP}`);
-    return res.status(403).json({ 
+    res.status(403).json({ 
       success: false, 
       error: 'Forbidden - IP not authorized',
       yourIP: clientIP,
     });
+    return;
   }
   
   // Reset rate limits for this IP
