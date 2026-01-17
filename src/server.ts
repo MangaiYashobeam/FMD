@@ -432,6 +432,9 @@ app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').def
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (public callback)
 app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
 
+// AI Center Routes (requires super admin)
+app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes').default); // AI Center (requires admin)
+
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes
 // ============================================
