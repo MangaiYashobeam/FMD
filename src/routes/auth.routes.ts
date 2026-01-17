@@ -4,7 +4,7 @@ import { AuthController } from '@/controllers/auth.controller';
 import { authenticate } from '@/middleware/auth';
 import { validate, authValidators } from '@/middleware/validation';
 import prisma from '@/config/database';
-import * as bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const router = Router();
 const authController = new AuthController();
