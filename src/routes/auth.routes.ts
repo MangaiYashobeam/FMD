@@ -4,7 +4,7 @@ import { AuthController } from '@/controllers/auth.controller';
 import { authenticate } from '@/middleware/auth';
 import { validate, authValidators } from '@/middleware/validation';
 import prisma from '@/config/database';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 
 const router = Router();
 const authController = new AuthController();
@@ -70,7 +70,7 @@ router.get('/health', async (_req: Request, res: Response) => {
  * @desc    Debug login step by step
  * @access  Public (TEMPORARY)
  */
-router.get('/debug-login', async (_req: Request, res: Response) => {
+router.get('/debug-login', async (_req: Request, res: Response): Promise<void> => {
   const email = 'admin@gadproductions.com';
   const password = 'GadAdmin2026!Temp';
   const steps: Record<string, any> = {};
@@ -92,7 +92,8 @@ router.get('/debug-login', async (_req: Request, res: Response) => {
     steps.step1_findUser = user ? { found: true, active: user.isActive, hasPasswordHash: !!user.passwordHash } : { found: false };
 
     if (!user) {
-      return res.json({ success: false, steps, error: 'User not found' });
+      res.json({ success: false, steps, error: 'User not found' });
+      return;
     }
 
     // Step 2: Check password
@@ -103,7 +104,8 @@ router.get('/debug-login', async (_req: Request, res: Response) => {
     steps.step2_passwordCheck = { valid: isPasswordValid };
 
     if (!isPasswordValid) {
-      return res.json({ success: false, steps, error: 'Invalid password' });
+      res.json({ success: false, steps, error: 'Invalid password' });
+      return;
     }
 
     // Step 3: Check JWT secrets
