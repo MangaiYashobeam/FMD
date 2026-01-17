@@ -4,6 +4,7 @@ import { AuthController } from '@/controllers/auth.controller';
 import { authenticate } from '@/middleware/auth';
 import { validate, authValidators } from '@/middleware/validation';
 import prisma from '@/config/database';
+// Build timestamp: 2026-01-17T19:45 - Forces Docker cache invalidation
 import bcrypt from 'bcrypt';
 
 const router = Router();
