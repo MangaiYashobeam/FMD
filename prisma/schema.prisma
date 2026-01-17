@@ -15,82 +15,82 @@ datasource db {
 // ============================================
 
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  passwordHash  String?  @map("password_hash")
-  firstName     String?  @map("first_name")
-  lastName      String?  @map("last_name")
-  name          String?
-  phone         String?
-  profilePicture String? @map("profile_picture")
-  isActive      Boolean  @default(true) @map("is_active")
-  emailVerified Boolean  @default(false) @map("email_verified")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  lastLoginAt   DateTime? @map("last_login_at")
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String?   @map("password_hash")
+  firstName      String?   @map("first_name")
+  lastName       String?   @map("last_name")
+  name           String?
+  phone          String?
+  profilePicture String?   @map("profile_picture")
+  isActive       Boolean   @default(true) @map("is_active")
+  emailVerified  Boolean   @default(false) @map("email_verified")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastLoginAt    DateTime? @map("last_login_at")
 
   // Personal Facebook Marketplace Credentials (for Chrome Extension)
-  fbUsername    String?  @map("fb_username")
-  fbPassword    String?  @map("fb_password") // Encrypted
-  fb2faCodes    String[] @map("fb_2fa_codes") // Array of backup codes
-  fbLastSync    DateTime? @map("fb_last_sync")
-  
+  fbUsername String?   @map("fb_username")
+  fbPassword String?   @map("fb_password") // Encrypted
+  fb2faCodes String[]  @map("fb_2fa_codes") // Array of backup codes
+  fbLastSync DateTime? @map("fb_last_sync")
+
   // Facebook OAuth (new hybrid system)
-  facebookId           String?   @unique @map("facebook_id")
-  facebookAccessToken  String?   @map("facebook_access_token") @db.Text
-  facebookTokenExpiry  DateTime? @map("facebook_token_expiry")
+  facebookId          String?   @unique @map("facebook_id")
+  facebookAccessToken String?   @map("facebook_access_token") @db.Text
+  facebookTokenExpiry DateTime? @map("facebook_token_expiry")
 
   // Relations
-  accountUsers       AccountUser[]
-  facebookProfiles   FacebookProfile[]
-  auditLogs          AuditLog[]
-  notifications      Notification[]
-  refreshTokens      RefreshToken[]
+  accountUsers        AccountUser[]
+  facebookProfiles    FacebookProfile[]
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
-  apiKeys            ApiKey[]
-  assignedLeads      Lead[] @relation("AssignedLeads")
-  salesRepMappings   SalesRepMapping[]
-  leadActivities     LeadActivity[]
-  dealerAccount      DealerAccount?
+  apiKeys             ApiKey[]
+  assignedLeads       Lead[]               @relation("AssignedLeads")
+  salesRepMappings    SalesRepMapping[]
+  leadActivities      LeadActivity[]
+  dealerAccount       DealerAccount?
 
   @@map("users")
 }
 
 model Account {
-  id              String   @id @default(uuid())
-  name            String
-  dealershipName  String?  @map("dealership_name")
-  address         String?
-  city            String?
-  state           String?
-  zip             String?
-  phone           String?
-  website         String?
-  logoUrl         String?  @map("logo_url")
-  isActive        Boolean  @default(true) @map("is_active")
+  id                 String    @id @default(uuid())
+  name               String
+  dealershipName     String?   @map("dealership_name")
+  address            String?
+  city               String?
+  state              String?
+  zip                String?
+  phone              String?
+  website            String?
+  logoUrl            String?   @map("logo_url")
+  isActive           Boolean   @default(true) @map("is_active")
   // Billing & Subscription
-  stripeCustomerId String?  @unique @map("stripe_customer_id")
-  subscriptionPlanId String? @map("subscription_plan_id")
-  subscriptionStatus String  @default("trial") @map("subscription_status") // trial, active, past_due, canceled, paused
+  stripeCustomerId   String?   @unique @map("stripe_customer_id")
+  subscriptionPlanId String?   @map("subscription_plan_id")
+  subscriptionStatus String    @default("trial") @map("subscription_status") // trial, active, past_due, canceled, paused
   currentPeriodStart DateTime? @map("current_period_start")
   currentPeriodEnd   DateTime? @map("current_period_end")
   trialEndsAt        DateTime? @map("trial_ends_at")
-  activeUserCount    Int      @default(0) @map("active_user_count")
-  extraUserCharge    Decimal  @default(0) @map("extra_user_charge") @db.Decimal(10, 2)
-  
+  activeUserCount    Int       @default(0) @map("active_user_count")
+  extraUserCharge    Decimal   @default(0) @map("extra_user_charge") @db.Decimal(10, 2)
+
   // FTP Configuration
-  ftpHost         String?  @map("ftp_host")
-  ftpPort         Int?     @map("ftp_port") @default(21)
-  ftpUsername     String?  @map("ftp_username")
-  ftpPassword     String?  @map("ftp_password") // Encrypted
-  csvPath         String?  @map("csv_path")
-  
+  ftpHost     String? @map("ftp_host")
+  ftpPort     Int?    @default(21) @map("ftp_port")
+  ftpUsername String? @map("ftp_username")
+  ftpPassword String? @map("ftp_password") // Encrypted
+  csvPath     String? @map("csv_path")
+
   // Sync Settings
-  autoSync        Boolean  @default(true) @map("auto_sync")
-  syncInterval    Int      @default(3) @map("sync_interval") // hours
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  autoSync     Boolean @default(true) @map("auto_sync")
+  syncInterval Int     @default(3) @map("sync_interval") // hours
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   accountUsers      AccountUser[]
@@ -100,7 +100,7 @@ model Account {
   facebookProfiles  FacebookProfile[]
   facebookGroups    FacebookGroup[]
   settings          AccountSettings?
-  subscriptionPlan  SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
+  subscriptionPlan  SubscriptionPlan?  @relation(fields: [subscriptionPlanId], references: [id])
   payments          Payment[]
   invoices          Invoice[]
   apiKeys           ApiKey[]
@@ -112,21 +112,21 @@ model Account {
 
 // Role enum for AccountUser
 enum UserRole {
-  SUPER_ADMIN  // Company owner - full system access
+  SUPER_ADMIN // Company owner - full system access
   ACCOUNT_OWNER // Dealership owner - full account access
-  ADMIN         // Account admin - manage users, settings, templates
-  SALES_REP     // Sales representative - personal posting only
-  VIEWER        // Read-only access
+  ADMIN // Account admin - manage users, settings, templates
+  SALES_REP // Sales representative - personal posting only
+  VIEWER // Read-only access
 }
 
 model AccountUser {
-  id        String   @id @default(uuid())
-  accountId String   @map("account_id")
-  userId    String   @map("user_id")
-  role      UserRole @default(SALES_REP)
-  permissions Json?  // Custom permissions override
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  accountId   String   @map("account_id")
+  userId      String   @map("user_id")
+  role        UserRole @default(SALES_REP)
+  permissions Json? // Custom permissions override
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -137,21 +137,21 @@ model AccountUser {
 }
 
 model AccountSettings {
-  id                    String   @id @default(uuid())
-  accountId             String   @unique @map("account_id")
-  autoSyncEnabled       Boolean  @default(true) @map("auto_sync_enabled")
-  syncIntervalHours     Int      @default(3) @map("sync_interval_hours")
-  postsPerRun           Int      @default(1) @map("posts_per_run")
-  autoMarkSold          Boolean  @default(true) @map("auto_mark_sold")
-  autoUpdatePrice       Boolean  @default(true) @map("auto_update_price")
-  includeStockNumber    Boolean  @default(true) @map("include_stock_number")
-  useAiDescription      Boolean  @default(false) @map("use_ai_description")
-  customDescription     String?  @map("custom_description") @db.Text
-  vehicleCategory       String   @default("Car/Truck") @map("vehicle_category")
-  emojiSuffix           String   @default("🤘") @map("emoji_suffix")
-  mileageUnit           String   @default("Miles") @map("mileage_unit")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  accountId          String   @unique @map("account_id")
+  autoSyncEnabled    Boolean  @default(true) @map("auto_sync_enabled")
+  syncIntervalHours  Int      @default(3) @map("sync_interval_hours")
+  postsPerRun        Int      @default(1) @map("posts_per_run")
+  autoMarkSold       Boolean  @default(true) @map("auto_mark_sold")
+  autoUpdatePrice    Boolean  @default(true) @map("auto_update_price")
+  includeStockNumber Boolean  @default(true) @map("include_stock_number")
+  useAiDescription   Boolean  @default(false) @map("use_ai_description")
+  customDescription  String?  @map("custom_description") @db.Text
+  vehicleCategory    String   @default("Car/Truck") @map("vehicle_category")
+  emojiSuffix        String   @default("🤘") @map("emoji_suffix")
+  mileageUnit        String   @default("Miles") @map("mileage_unit")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -164,25 +164,25 @@ model AccountSettings {
 // ============================================
 
 model FacebookProfile {
-  id                String   @id @default(uuid())
-  accountId         String   @map("account_id")
-  userId            String   @map("user_id")
-  pageId            String   @map("page_id") // Facebook Page ID
-  pageName          String   @map("page_name")
-  category          String   @default("Automotive") // Page category
-  facebookUserId    String   @map("facebook_user_id")
-  facebookUserName  String?  @map("facebook_user_name")
-  accessToken       String   @map("access_token") @db.Text
-  refreshToken      String?  @map("refresh_token") @db.Text
-  tokenExpiresAt    DateTime @map("token_expires_at")
-  isActive          Boolean  @default(true) @map("is_active")
-  lastSyncAt        DateTime? @map("last_sync_at")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id               String    @id @default(uuid())
+  accountId        String    @map("account_id")
+  userId           String    @map("user_id")
+  pageId           String    @map("page_id") // Facebook Page ID
+  pageName         String    @map("page_name")
+  category         String    @default("Automotive") // Page category
+  facebookUserId   String    @map("facebook_user_id")
+  facebookUserName String?   @map("facebook_user_name")
+  accessToken      String    @map("access_token") @db.Text
+  refreshToken     String?   @map("refresh_token") @db.Text
+  tokenExpiresAt   DateTime  @map("token_expires_at")
+  isActive         Boolean   @default(true) @map("is_active")
+  lastSyncAt       DateTime? @map("last_sync_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   posts   FacebookPost[]
 
   @@unique([accountId, pageId])
@@ -190,17 +190,17 @@ model FacebookProfile {
 }
 
 model FacebookGroup {
-  id                String   @id @default(uuid())
-  accountId         String   @map("account_id")
-  groupId           String   @map("group_id") // Facebook Group ID
-  name              String
-  url               String?
-  memberCount       Int?     @map("member_count")
-  isActive          Boolean  @default(true) @map("is_active")
-  autoPost          Boolean  @default(false) @map("auto_post")
-  lastPostedAt      DateTime? @map("last_posted_at")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(uuid())
+  accountId    String    @map("account_id")
+  groupId      String    @map("group_id") // Facebook Group ID
+  name         String
+  url          String?
+  memberCount  Int?      @map("member_count")
+  isActive     Boolean   @default(true) @map("is_active")
+  autoPost     Boolean   @default(false) @map("auto_post")
+  lastPostedAt DateTime? @map("last_posted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -210,19 +210,19 @@ model FacebookGroup {
 }
 
 model FacebookPost {
-  id                String   @id @default(uuid())
-  vehicleId         String   @map("vehicle_id")
-  profileId         String   @map("profile_id")
-  postId            String?  @map("post_id") // Facebook post ID
-  message           String?  @db.Text
-  status            String   @default("pending") // PENDING, ACTIVE, FAILED, DELETED
-  errorMessage      String?  @map("error_message") @db.Text
-  postUrl           String?  @map("post_url")
-  postedAt          DateTime? @map("posted_at")
-  deletedAt         DateTime? @map("deleted_at")
-  lastUpdatedAt     DateTime? @map("last_updated_at")
-  retryCount        Int      @default(0) @map("retry_count")
-  createdAt         DateTime @default(now()) @map("created_at")
+  id            String    @id @default(uuid())
+  vehicleId     String    @map("vehicle_id")
+  profileId     String    @map("profile_id")
+  postId        String?   @map("post_id") // Facebook post ID
+  message       String?   @db.Text
+  status        String    @default("pending") // PENDING, ACTIVE, FAILED, DELETED
+  errorMessage  String?   @map("error_message") @db.Text
+  postUrl       String?   @map("post_url")
+  postedAt      DateTime? @map("posted_at")
+  deletedAt     DateTime? @map("deleted_at")
+  lastUpdatedAt DateTime? @map("last_updated_at")
+  retryCount    Int       @default(0) @map("retry_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   // Relations
   vehicle Vehicle         @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -238,72 +238,72 @@ model FacebookPost {
 // ============================================
 
 model Vehicle {
-  id                  String   @id @default(uuid())
-  accountId           String   @map("account_id")
-  
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
   // Identifiers
-  vin                 String
-  stockNumber         String?  @map("stock_number")
-  dealerId            String?  @map("dealer_id")
-  
+  vin         String
+  stockNumber String? @map("stock_number")
+  dealerId    String? @map("dealer_id")
+
   // Basic Info
-  year                Int
-  make                String
-  model               String
-  trim                String?
-  bodyStyle           String?  @map("body_style")
-  bodyType            String?  @map("body_type")
-  
+  year      Int
+  make      String
+  model     String
+  trim      String?
+  bodyStyle String? @map("body_style")
+  bodyType  String? @map("body_type")
+
   // Pricing
-  price               Decimal? @db.Decimal(10, 2) // Primary price field
-  listPrice           Decimal? @map("list_price") @db.Decimal(10, 2)
-  specialPrice        Decimal? @map("special_price") @db.Decimal(10, 2)
-  costPrice           Decimal? @map("cost_price") @db.Decimal(10, 2)
-  wholesalePrice      Decimal? @map("wholesale_price") @db.Decimal(10, 2)
-  
+  price          Decimal? @db.Decimal(10, 2) // Primary price field
+  listPrice      Decimal? @map("list_price") @db.Decimal(10, 2)
+  specialPrice   Decimal? @map("special_price") @db.Decimal(10, 2)
+  costPrice      Decimal? @map("cost_price") @db.Decimal(10, 2)
+  wholesalePrice Decimal? @map("wholesale_price") @db.Decimal(10, 2)
+
   // Specifications
-  mileage             Int?
-  exteriorColor       String?  @map("exterior_color")
-  exteriorColorCode   String?  @map("exterior_color_code")
-  interiorColor       String?  @map("interior_color")
-  interiorColorCode   String?  @map("interior_color_code")
-  interiorMaterial    String?  @map("interior_material")
-  
+  mileage           Int?
+  exteriorColor     String? @map("exterior_color")
+  exteriorColorCode String? @map("exterior_color_code")
+  interiorColor     String? @map("interior_color")
+  interiorColorCode String? @map("interior_color_code")
+  interiorMaterial  String? @map("interior_material")
+
   // Engine & Drivetrain
-  engineDescription   String?  @map("engine_description")
-  engineDisplacement  String?  @map("engine_displacement")
-  cylinders           String?
-  drivetrain          String?
-  transmission        String?
-  transmissionType    String?  @map("transmission_type")
-  fuelType            String?  @map("fuel_type")
-  cityMpg             Int?     @map("city_mpg")
-  hwyMpg              Int?     @map("hwy_mpg")
-  
+  engineDescription  String? @map("engine_description")
+  engineDisplacement String? @map("engine_displacement")
+  cylinders          String?
+  drivetrain         String?
+  transmission       String?
+  transmissionType   String? @map("transmission_type")
+  fuelType           String? @map("fuel_type")
+  cityMpg            Int?    @map("city_mpg")
+  hwyMpg             Int?    @map("hwy_mpg")
+
   // Status
-  isNew               Boolean  @default(false) @map("is_new")
-  factoryCertified    Boolean  @default(false) @map("factory_certified")
-  dealerCertified     Boolean  @default(false) @map("dealer_certified")
-  status              String   @default("active") // active, sold, pending, hidden
-  
+  isNew            Boolean @default(false) @map("is_new")
+  factoryCertified Boolean @default(false) @map("factory_certified")
+  dealerCertified  Boolean @default(false) @map("dealer_certified")
+  status           String  @default("active") // active, sold, pending, hidden
+
   // Descriptions
-  title               String?
-  description         String?  @db.Text
-  dealerComments      String?  @map("dealer_comments") @db.Text
-  optionDescription   String?  @map("option_description") @db.Text
-  optionCodes         String?  @map("option_codes") @db.Text
-  
+  title             String?
+  description       String? @db.Text
+  dealerComments    String? @map("dealer_comments") @db.Text
+  optionDescription String? @map("option_description") @db.Text
+  optionCodes       String? @map("option_codes") @db.Text
+
   // Metadata
-  instockDate         DateTime? @map("instock_date")
-  lastModifiedDate    DateTime? @map("last_modified_date")
-  videoUrl            String?   @map("video_url")
-  imageUrls           String[]  @default([]) @map("image_urls") // Array of image URLs
-  source              String    @default("MANUAL") // MANUAL, FTP, API
-  
+  instockDate      DateTime? @map("instock_date")
+  lastModifiedDate DateTime? @map("last_modified_date")
+  videoUrl         String?   @map("video_url")
+  imageUrls        String[]  @default([]) @map("image_urls") // Array of image URLs
+  source           String    @default("MANUAL") // MANUAL, FTP, API
+
   // Tracking
-  lastSyncedAt        DateTime? @map("last_synced_at")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  lastSyncedAt DateTime? @map("last_synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   // Relations
   account       Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -319,12 +319,12 @@ model Vehicle {
 }
 
 model VehiclePhoto {
-  id          String   @id @default(uuid())
-  vehicleId   String   @map("vehicle_id")
-  url         String
-  displayOrder Int     @default(0) @map("display_order")
-  isPrimary   Boolean  @default(false) @map("is_primary")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  vehicleId    String   @map("vehicle_id")
+  url          String
+  displayOrder Int      @default(0) @map("display_order")
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   // Relations
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -338,18 +338,18 @@ model VehiclePhoto {
 // ============================================
 
 model FtpConfiguration {
-  id          String   @id @default(uuid())
-  accountId   String   @map("account_id")
-  name        String
-  host        String
-  port        Int      @default(21)
-  username    String
-  password    String   // Encrypted in application
-  path        String   @default("/")
-  protocol    String   @default("ftp") // ftp, sftp, ftps
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(uuid())
+  accountId    String    @map("account_id")
+  name         String
+  host         String
+  port         Int       @default(21)
+  username     String
+  password     String // Encrypted in application
+  path         String    @default("/")
+  protocol     String    @default("ftp") // ftp, sftp, ftps
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
   lastTestedAt DateTime? @map("last_tested_at")
 
   // Relations
@@ -359,21 +359,21 @@ model FtpConfiguration {
 }
 
 model SyncJob {
-  id               String   @id @default(uuid())
-  accountId        String   @map("account_id")
-  triggeredBy      String?  @map("triggered_by") // User ID who triggered manual sync
-  status           String   @default("pending") // PENDING, PROCESSING, COMPLETED, FAILED
-  type             String   @default("auto") // auto, manual
-  recordsImported  Int      @default(0) @map("records_imported")
-  recordsUpdated   Int      @default(0) @map("records_updated")
-  recordsFailed    Int      @default(0) @map("records_failed")
-  vehiclesAdded    Int      @default(0) @map("vehicles_added")
-  vehiclesUpdated  Int      @default(0) @map("vehicles_updated")
-  vehiclesMarkedSold Int    @default(0) @map("vehicles_marked_sold")
-  errorMessage     String?  @map("error_message") @db.Text
-  startedAt        DateTime? @map("started_at")
-  completedAt      DateTime? @map("completed_at")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id                 String    @id @default(uuid())
+  accountId          String    @map("account_id")
+  triggeredBy        String?   @map("triggered_by") // User ID who triggered manual sync
+  status             String    @default("pending") // PENDING, PROCESSING, COMPLETED, FAILED
+  type               String    @default("auto") // auto, manual
+  recordsImported    Int       @default(0) @map("records_imported")
+  recordsUpdated     Int       @default(0) @map("records_updated")
+  recordsFailed      Int       @default(0) @map("records_failed")
+  vehiclesAdded      Int       @default(0) @map("vehicles_added")
+  vehiclesUpdated    Int       @default(0) @map("vehicles_updated")
+  vehiclesMarkedSold Int       @default(0) @map("vehicles_marked_sold")
+  errorMessage       String?   @map("error_message") @db.Text
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -400,12 +400,12 @@ model RefreshToken {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -416,17 +416,17 @@ model PasswordResetToken {
 }
 
 model ApiKey {
-  id          String   @id @default(uuid())
-  name        String   // Key identifier (e.g., "Chrome Extension - Desktop")
-  keyHash     String   @unique @map("key_hash") // SHA256 hash of the key
-  userId      String   @map("user_id")
-  accountId   String   @map("account_id")
-  permissions String[] @default([]) // Array of permissions
-  isActive    Boolean  @default(true) @map("is_active")
+  id          String    @id @default(uuid())
+  name        String // Key identifier (e.g., "Chrome Extension - Desktop")
+  keyHash     String    @unique @map("key_hash") // SHA256 hash of the key
+  userId      String    @map("user_id")
+  accountId   String    @map("account_id")
+  permissions String[]  @default([]) // Array of permissions
+  isActive    Boolean   @default(true) @map("is_active")
   expiresAt   DateTime? @map("expires_at")
   lastUsedAt  DateTime? @map("last_used_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   // Relations
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -438,15 +438,15 @@ model ApiKey {
 }
 
 model AuditLog {
-  id          String   @id @default(uuid())
-  userId      String?  @map("user_id")
-  action      String
-  entityType  String?  @map("entity_type")
-  entityId    String?  @map("entity_id")
-  ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
-  metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
 
   // Relations
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -460,7 +460,7 @@ model AuditLog {
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
-  type      String   // info, warning, error, success
+  type      String // info, warning, error, success
   title     String
   message   String   @db.Text
   isRead    Boolean  @default(false) @map("is_read")
@@ -473,60 +473,61 @@ model Notification {
   @@index([userId, isRead])
   @@map("notifications")
 }
+
 // ============================================
 // Subscription & Billing Management
 // ============================================
 
 model SubscriptionPlan {
-  id                String   @id @default(uuid())
-  name              String   @unique // "Starter", "Growth", "Pro", "Enterprise Lifetime"
-  slug              String   @unique @default("") // URL-friendly identifier
-  description       String?  @db.Text // Plan description
-  stripePriceId     String?  @unique @map("stripe_price_id")
-  stripeProductId   String?  @map("stripe_product_id")
-  basePrice         Decimal  @map("base_price") @db.Decimal(10, 2) // Monthly price
-  billingInterval   String   @map("billing_interval") // "monthly", "yearly", "lifetime"
-  includedUsers     Int      @map("included_users") // 10, 25, unlimited (-1)
-  extraUserPrice    Decimal  @map("extra_user_price") @db.Decimal(10, 2) // Price per extra user
-  maxVehicles       Int      @default(-1) @map("max_vehicles") // -1 = unlimited
-  maxPosts          Int      @default(-1) @map("max_posts") // -1 = unlimited posts per month
-  features          Json?    // JSON array of feature strings
-  isActive          Boolean  @default(true) @map("is_active")
-  isPopular         Boolean  @default(false) @map("is_popular") // Highlight as popular plan
-  displayOrder      Int      @default(0) @map("display_order")
-  
+  id              String  @id @default(uuid())
+  name            String  @unique // "Starter", "Growth", "Pro", "Enterprise Lifetime"
+  slug            String  @unique @default("") // URL-friendly identifier
+  description     String? @db.Text // Plan description
+  stripePriceId   String? @unique @map("stripe_price_id")
+  stripeProductId String? @map("stripe_product_id")
+  basePrice       Decimal @map("base_price") @db.Decimal(10, 2) // Monthly price
+  billingInterval String  @map("billing_interval") // "monthly", "yearly", "lifetime"
+  includedUsers   Int     @map("included_users") // 10, 25, unlimited (-1)
+  extraUserPrice  Decimal @map("extra_user_price") @db.Decimal(10, 2) // Price per extra user
+  maxVehicles     Int     @default(-1) @map("max_vehicles") // -1 = unlimited
+  maxPosts        Int     @default(-1) @map("max_posts") // -1 = unlimited posts per month
+  features        Json? // JSON array of feature strings
+  isActive        Boolean @default(true) @map("is_active")
+  isPopular       Boolean @default(false) @map("is_popular") // Highlight as popular plan
+  displayOrder    Int     @default(0) @map("display_order")
+
   // Lifetime plan specifics
-  lifetimeDuration  Int?     @map("lifetime_duration") // In years (e.g., 4)
-  renewalPrice      Decimal? @map("renewal_price") @db.Decimal(10, 2) // Price to renew lifetime
-  revertToPlanId    String?  @map("revert_to_plan_id") // Plan ID to revert after lifetime expires
-  
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  lifetimeDuration Int?     @map("lifetime_duration") // In years (e.g., 4)
+  renewalPrice     Decimal? @map("renewal_price") @db.Decimal(10, 2) // Price to renew lifetime
+  revertToPlanId   String?  @map("revert_to_plan_id") // Plan ID to revert after lifetime expires
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  accounts          Account[]
-  revertPlan        SubscriptionPlan? @relation("PlanReversion", fields: [revertToPlanId], references: [id])
-  revertedPlans     SubscriptionPlan[] @relation("PlanReversion")
+  accounts      Account[]
+  revertPlan    SubscriptionPlan?  @relation("PlanReversion", fields: [revertToPlanId], references: [id])
+  revertedPlans SubscriptionPlan[] @relation("PlanReversion")
 
   @@map("subscription_plans")
 }
 
 model Payment {
-  id                String   @id @default(uuid())
-  accountId         String   @map("account_id")
-  stripePaymentId   String   @unique @map("stripe_payment_id")
-  stripeInvoiceId   String?  @map("stripe_invoice_id")
-  amount            Decimal  @db.Decimal(10, 2)
-  currency          String   @default("usd")
-  status            String   // succeeded, pending, failed, refunded
-  paymentMethod     String?  @map("payment_method") // card, bank_transfer, etc.
-  description       String?  @db.Text
-  metadata          Json?    // Extra data from Stripe
-  paidAt            DateTime? @map("paid_at")
-  createdAt         DateTime @default(now()) @map("created_at")
+  id              String    @id @default(uuid())
+  accountId       String    @map("account_id")
+  stripePaymentId String    @unique @map("stripe_payment_id")
+  stripeInvoiceId String?   @map("stripe_invoice_id")
+  amount          Decimal   @db.Decimal(10, 2)
+  currency        String    @default("usd")
+  status          String // succeeded, pending, failed, refunded
+  paymentMethod   String?   @map("payment_method") // card, bank_transfer, etc.
+  description     String?   @db.Text
+  metadata        Json? // Extra data from Stripe
+  paidAt          DateTime? @map("paid_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   // Relations
-  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   invoice Invoice? @relation(fields: [stripeInvoiceId], references: [stripeInvoiceId])
 
   @@index([accountId])
@@ -536,27 +537,27 @@ model Payment {
 }
 
 model Invoice {
-  id              String   @id @default(uuid())
-  accountId       String   @map("account_id")
-  stripeInvoiceId String   @unique @map("stripe_invoice_id")
-  invoiceNumber   String?  @unique @map("invoice_number")
-  amountDue       Decimal  @map("amount_due") @db.Decimal(10, 2)
-  amountPaid      Decimal  @map("amount_paid") @db.Decimal(10, 2)
-  currency        String   @default("usd")
-  status          String   // draft, open, paid, void, uncollectible
-  hostedUrl       String?  @map("hosted_url") @db.Text
-  pdfUrl          String?  @map("pdf_url") @db.Text
-  
+  id              String  @id @default(uuid())
+  accountId       String  @map("account_id")
+  stripeInvoiceId String  @unique @map("stripe_invoice_id")
+  invoiceNumber   String? @unique @map("invoice_number")
+  amountDue       Decimal @map("amount_due") @db.Decimal(10, 2)
+  amountPaid      Decimal @map("amount_paid") @db.Decimal(10, 2)
+  currency        String  @default("usd")
+  status          String // draft, open, paid, void, uncollectible
+  hostedUrl       String? @map("hosted_url") @db.Text
+  pdfUrl          String? @map("pdf_url") @db.Text
+
   // Line items breakdown
-  baseCharge      Decimal  @default(0) @map("base_charge") @db.Decimal(10, 2)
-  extraUserCharge Decimal  @default(0) @map("extra_user_charge") @db.Decimal(10, 2)
-  extraUserCount  Int      @default(0) @map("extra_user_count")
-  
-  periodStart     DateTime @map("period_start")
-  periodEnd       DateTime @map("period_end")
-  dueDate         DateTime? @map("due_date")
-  paidAt          DateTime? @map("paid_at")
-  createdAt       DateTime @default(now()) @map("created_at")
+  baseCharge      Decimal @default(0) @map("base_charge") @db.Decimal(10, 2)
+  extraUserCharge Decimal @default(0) @map("extra_user_charge") @db.Decimal(10, 2)
+  extraUserCount  Int     @default(0) @map("extra_user_count")
+
+  periodStart DateTime  @map("period_start")
+  periodEnd   DateTime  @map("period_end")
+  dueDate     DateTime? @map("due_date")
+  paidAt      DateTime? @map("paid_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
   // Relations
   account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -568,16 +569,16 @@ model Invoice {
 }
 
 model SubscriptionHistory {
-  id              String   @id @default(uuid())
-  accountId       String   @map("account_id")
-  planId          String?  @map("plan_id")
-  planName        String   @map("plan_name")
-  action          String   // created, upgraded, downgraded, canceled, renewed, expired
-  previousPlan    String?  @map("previous_plan")
-  newPlan         String?  @map("new_plan")
-  amount          Decimal? @db.Decimal(10, 2)
-  metadata        Json?
-  createdAt       DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  accountId    String   @map("account_id")
+  planId       String?  @map("plan_id")
+  planName     String   @map("plan_name")
+  action       String // created, upgraded, downgraded, canceled, renewed, expired
+  previousPlan String?  @map("previous_plan")
+  newPlan      String?  @map("new_plan")
+  amount       Decimal? @db.Decimal(10, 2)
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([accountId])
   @@index([createdAt])
@@ -585,46 +586,46 @@ model SubscriptionHistory {
 }
 
 model EmailLog {
-  id            String   @id @default(uuid())
-  recipient     String
-  subject       String
-  status        String   // QUEUED, SENDING, SENT, DELIVERED, BOUNCED, FAILED, DEFERRED
-  messageId     String?  @map("message_id")
-  errorMessage  String?  @map("error_message") @db.Text
-  metadata      Json?    // Additional data like template name, variables
-  
+  id           String  @id @default(uuid())
+  recipient    String
+  subject      String
+  status       String // QUEUED, SENDING, SENT, DELIVERED, BOUNCED, FAILED, DEFERRED
+  messageId    String? @map("message_id")
+  errorMessage String? @map("error_message") @db.Text
+  metadata     Json? // Additional data like template name, variables
+
   // MTA Tracking
-  mtaMessageId  String?  @map("mta_message_id") // Local MTA message ID
-  mtaResponse   String?  @map("mta_response") @db.Text // MTA response
-  
+  mtaMessageId String? @map("mta_message_id") // Local MTA message ID
+  mtaResponse  String? @map("mta_response") @db.Text // MTA response
+
   // Delivery Tracking
-  sentAt        DateTime? @map("sent_at")
-  deliveredAt   DateTime? @map("delivered_at")
-  bouncedAt     DateTime? @map("bounced_at")
-  
+  sentAt      DateTime? @map("sent_at")
+  deliveredAt DateTime? @map("delivered_at")
+  bouncedAt   DateTime? @map("bounced_at")
+
   // Engagement Tracking
-  openedAt      DateTime? @map("opened_at")
-  openCount     Int       @default(0) @map("open_count")
-  clickedAt     DateTime? @map("clicked_at")
-  clickCount    Int       @default(0) @map("click_count")
-  
+  openedAt   DateTime? @map("opened_at")
+  openCount  Int       @default(0) @map("open_count")
+  clickedAt  DateTime? @map("clicked_at")
+  clickCount Int       @default(0) @map("click_count")
+
   // Bounce/Complaint Info
-  bounceType    String?  @map("bounce_type") // HARD, SOFT
-  bounceReason  String?  @map("bounce_reason") @db.Text
-  isComplaint   Boolean  @default(false) @map("is_complaint")
-  complainedAt  DateTime? @map("complained_at")
-  
+  bounceType   String?   @map("bounce_type") // HARD, SOFT
+  bounceReason String?   @map("bounce_reason") @db.Text
+  isComplaint  Boolean   @default(false) @map("is_complaint")
+  complainedAt DateTime? @map("complained_at")
+
   // Retry Management
-  retryCount    Int       @default(0) @map("retry_count")
-  maxRetries    Int       @default(3) @map("max_retries")
-  nextRetryAt   DateTime? @map("next_retry_at")
-  
+  retryCount  Int       @default(0) @map("retry_count")
+  maxRetries  Int       @default(3) @map("max_retries")
+  nextRetryAt DateTime? @map("next_retry_at")
+
   // Reference
-  accountId     String?  @map("account_id")
-  userId        String?  @map("user_id") // Sent by
-  templateSlug  String?  @map("template_slug")
-  
-  createdAt     DateTime @default(now()) @map("created_at")
+  accountId    String? @map("account_id")
+  userId       String? @map("user_id") // Sent by
+  templateSlug String? @map("template_slug")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([recipient])
   @@index([status])
@@ -636,57 +637,57 @@ model EmailLog {
 
 // Email Queue - For reliable email delivery
 model EmailQueue {
-  id            String   @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Email Details
-  fromEmail     String   @map("from_email")
-  fromName      String?  @map("from_name")
-  toEmail       String   @map("to_email")
-  toName        String?  @map("to_name")
-  ccEmails      String[] @default([]) @map("cc_emails")
-  bccEmails     String[] @default([]) @map("bcc_emails")
-  replyTo       String?  @map("reply_to")
-  
+  fromEmail String   @map("from_email")
+  fromName  String?  @map("from_name")
+  toEmail   String   @map("to_email")
+  toName    String?  @map("to_name")
+  ccEmails  String[] @default([]) @map("cc_emails")
+  bccEmails String[] @default([]) @map("bcc_emails")
+  replyTo   String?  @map("reply_to")
+
   // Content
-  subject       String
-  htmlContent   String   @map("html_content") @db.Text
-  textContent   String?  @map("text_content") @db.Text
-  headers       Json?    // Custom headers including DKIM signature
-  
+  subject     String
+  htmlContent String  @map("html_content") @db.Text
+  textContent String? @map("text_content") @db.Text
+  headers     Json? // Custom headers including DKIM signature
+
   // Tracking
-  trackingId    String   @unique @map("tracking_id") // For open/click tracking
-  trackOpens    Boolean  @default(true) @map("track_opens")
-  trackClicks   Boolean  @default(true) @map("track_clicks")
-  
+  trackingId  String  @unique @map("tracking_id") // For open/click tracking
+  trackOpens  Boolean @default(true) @map("track_opens")
+  trackClicks Boolean @default(true) @map("track_clicks")
+
   // Status
-  status        String   @default("PENDING") // PENDING, PROCESSING, SENT, FAILED, DEFERRED
-  priority      Int      @default(5) // 1-10 (1 = highest)
-  
+  status   String @default("PENDING") // PENDING, PROCESSING, SENT, FAILED, DEFERRED
+  priority Int    @default(5) // 1-10 (1 = highest)
+
   // Delivery Tracking
-  messageId     String?  @map("message_id")
-  mtaMessageId  String?  @map("mta_message_id")
-  mtaResponse   String?  @map("mta_response") @db.Text
-  errorMessage  String?  @map("error_message") @db.Text
-  
+  messageId    String? @map("message_id")
+  mtaMessageId String? @map("mta_message_id")
+  mtaResponse  String? @map("mta_response") @db.Text
+  errorMessage String? @map("error_message") @db.Text
+
   // Retry Logic
-  attempts      Int      @default(0)
-  maxAttempts   Int      @default(3) @map("max_attempts")
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(3) @map("max_attempts")
   nextAttemptAt DateTime? @map("next_attempt_at")
   lastAttemptAt DateTime? @map("last_attempt_at")
-  lastError     String?  @map("last_error") @db.Text
-  
+  lastError     String?   @map("last_error") @db.Text
+
   // Scheduling
-  scheduledAt   DateTime? @map("scheduled_at")
-  processedAt   DateTime? @map("processed_at")
-  
+  scheduledAt DateTime? @map("scheduled_at")
+  processedAt DateTime? @map("processed_at")
+
   // Reference
-  accountId     String?  @map("account_id")
-  userId        String?  @map("user_id")
-  templateSlug  String?  @map("template_slug")
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
+  accountId    String? @map("account_id")
+  userId       String? @map("user_id")
+  templateSlug String? @map("template_slug")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   @@index([status, priority, scheduledAt])
   @@index([nextAttemptAt])
   @@index([toEmail])
@@ -696,32 +697,32 @@ model EmailQueue {
 
 // Email Tracking Events
 model EmailTrackingEvent {
-  id            String   @id @default(uuid())
-  trackingId    String   @map("tracking_id")
-  emailLogId    String?  @map("email_log_id")
-  
+  id         String  @id @default(uuid())
+  trackingId String  @map("tracking_id")
+  emailLogId String? @map("email_log_id")
+
   // Event Details
-  eventType     String   // OPEN, CLICK, BOUNCE, COMPLAINT, DELIVERY
-  
+  eventType String // OPEN, CLICK, BOUNCE, COMPLAINT, DELIVERY
+
   // Click Tracking
-  url           String?  @db.Text // Alias for clickedUrl 
-  clickedUrl    String?  @map("clicked_url") @db.Text
-  
+  url        String? @db.Text // Alias for clickedUrl 
+  clickedUrl String? @map("clicked_url") @db.Text
+
   // Bounce Info
-  bounceType    String?  @map("bounce_type")
-  bounceReason  String?  @map("bounce_reason") @db.Text
-  
+  bounceType   String? @map("bounce_type")
+  bounceReason String? @map("bounce_reason") @db.Text
+
   // Client Info
-  ipAddress     String?  @map("ip_address")
-  userAgent     String?  @map("user_agent") @db.Text
-  country       String?
-  city          String?
-  
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent") @db.Text
+  country   String?
+  city      String?
+
   // Metadata
-  metadata      Json?
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
   @@index([trackingId])
   @@index([eventType])
   @@index([createdAt])
@@ -730,74 +731,74 @@ model EmailTrackingEvent {
 
 // Email Domain Configuration - DKIM/SPF/DMARC
 model EmailDomain {
-  id                 String   @id @default(uuid())
-  domain             String   @unique
-  
+  id     String @id @default(uuid())
+  domain String @unique
+
   // DKIM Configuration
-  dkimSelector       String   @default("mail") @map("dkim_selector")
-  dkimPrivateKey     String?  @map("dkim_private_key") @db.Text // Encrypted
-  dkimPublicKey      String?  @map("dkim_public_key") @db.Text
-  dkimEnabled        Boolean  @default(false) @map("dkim_enabled")
-  
+  dkimSelector   String  @default("mail") @map("dkim_selector")
+  dkimPrivateKey String? @map("dkim_private_key") @db.Text // Encrypted
+  dkimPublicKey  String? @map("dkim_public_key") @db.Text
+  dkimEnabled    Boolean @default(false) @map("dkim_enabled")
+
   // DNS Records (for verification guidance)
-  spfRecord          String?  @map("spf_record") @db.Text
-  dmarcRecord        String?  @map("dmarc_record") @db.Text
-  dkimRecord         String?  @map("dkim_record") @db.Text
-  
+  spfRecord   String? @map("spf_record") @db.Text
+  dmarcRecord String? @map("dmarc_record") @db.Text
+  dkimRecord  String? @map("dkim_record") @db.Text
+
   // Verification Status
-  spfVerified        Boolean  @default(false) @map("spf_verified")
-  dkimVerified       Boolean  @default(false) @map("dkim_verified")
-  dmarcVerified      Boolean  @default(false) @map("dmarc_verified")
-  isVerified         Boolean  @default(false) @map("is_verified") // Overall verification
-  lastVerifiedAt     DateTime? @map("last_verified_at")
-  
+  spfVerified    Boolean   @default(false) @map("spf_verified")
+  dkimVerified   Boolean   @default(false) @map("dkim_verified")
+  dmarcVerified  Boolean   @default(false) @map("dmarc_verified")
+  isVerified     Boolean   @default(false) @map("is_verified") // Overall verification
+  lastVerifiedAt DateTime? @map("last_verified_at")
+
   // Domain Reputation
-  reputation         Int      @default(100) // Alias for reputationScore
-  reputationScore    Int      @default(100) @map("reputation_score") // 0-100
-  totalSent          Int      @default(0) @map("total_sent")
-  totalBounced       Int      @default(0) @map("total_bounced")
-  totalComplaints    Int      @default(0) @map("total_complaints")
-  bounceRate         Float    @default(0) @map("bounce_rate")
-  complaintRate      Float    @default(0) @map("complaint_rate")
-  
+  reputation      Int   @default(100) // Alias for reputationScore
+  reputationScore Int   @default(100) @map("reputation_score") // 0-100
+  totalSent       Int   @default(0) @map("total_sent")
+  totalBounced    Int   @default(0) @map("total_bounced")
+  totalComplaints Int   @default(0) @map("total_complaints")
+  bounceRate      Float @default(0) @map("bounce_rate")
+  complaintRate   Float @default(0) @map("complaint_rate")
+
   // Rate Limiting
-  hourlyLimit        Int      @default(100) @map("hourly_limit")
-  dailyLimit         Int      @default(1000) @map("daily_limit")
-  currentHourCount   Int      @default(0) @map("current_hour_count")
-  currentDayCount    Int      @default(0) @map("current_day_count")
-  hourResetAt        DateTime? @map("hour_reset_at")
-  dayResetAt         DateTime? @map("day_reset_at")
-  
+  hourlyLimit      Int       @default(100) @map("hourly_limit")
+  dailyLimit       Int       @default(1000) @map("daily_limit")
+  currentHourCount Int       @default(0) @map("current_hour_count")
+  currentDayCount  Int       @default(0) @map("current_day_count")
+  hourResetAt      DateTime? @map("hour_reset_at")
+  dayResetAt       DateTime? @map("day_reset_at")
+
   // Status
-  isActive           Boolean  @default(true) @map("is_active")
-  isDefault          Boolean  @default(false) @map("is_default")
-  
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-  
+  isActive  Boolean @default(true) @map("is_active")
+  isDefault Boolean @default(false) @map("is_default")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   @@map("email_domains")
 }
 
 // Email Suppression List - Bounces, Unsubscribes, Complaints
 model EmailSuppression {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  
+  id    String @id @default(uuid())
+  email String @unique
+
   // Suppression Reason
-  reason        String   // BOUNCE_HARD, BOUNCE_SOFT, UNSUBSCRIBE, COMPLAINT, MANUAL
-  details       String?  @db.Text
-  
+  reason  String // BOUNCE_HARD, BOUNCE_SOFT, UNSUBSCRIBE, COMPLAINT, MANUAL
+  details String? @db.Text
+
   // Source
-  sourceType    String?  @map("source_type") // EMAIL_LOG_ID, WEBHOOK, MANUAL
-  sourceId      String?  @map("source_id")
-  
+  sourceType String? @map("source_type") // EMAIL_LOG_ID, WEBHOOK, MANUAL
+  sourceId   String? @map("source_id")
+
   // Status
-  isActive      Boolean  @default(true) @map("is_active")
-  expiresAt     DateTime? @map("expires_at") // For soft bounces
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
+  isActive  Boolean   @default(true) @map("is_active")
+  expiresAt DateTime? @map("expires_at") // For soft bounces
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   @@index([email])
   @@index([reason])
   @@map("email_suppressions")
@@ -805,46 +806,46 @@ model EmailSuppression {
 
 // Email Statistics - Aggregated stats
 model EmailStats {
-  id            String   @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Time Period
-  period        String   // HOUR, DAY, WEEK, MONTH
-  periodStart   DateTime @map("period_start")
-  periodEnd     DateTime @map("period_end")
-  
+  period      String // HOUR, DAY, WEEK, MONTH
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+
   // Sending Stats
-  totalQueued   Int      @default(0) @map("total_queued")
-  totalSent     Int      @default(0) @map("total_sent")
-  totalFailed   Int      @default(0) @map("total_failed")
-  totalDeferred Int      @default(0) @map("total_deferred")
-  
+  totalQueued   Int @default(0) @map("total_queued")
+  totalSent     Int @default(0) @map("total_sent")
+  totalFailed   Int @default(0) @map("total_failed")
+  totalDeferred Int @default(0) @map("total_deferred")
+
   // Delivery Stats
-  totalDelivered Int     @default(0) @map("total_delivered")
-  totalBounced  Int      @default(0) @map("total_bounced")
-  hardBounces   Int      @default(0) @map("hard_bounces")
-  softBounces   Int      @default(0) @map("soft_bounces")
-  
+  totalDelivered Int @default(0) @map("total_delivered")
+  totalBounced   Int @default(0) @map("total_bounced")
+  hardBounces    Int @default(0) @map("hard_bounces")
+  softBounces    Int @default(0) @map("soft_bounces")
+
   // Engagement Stats
-  totalOpened   Int      @default(0) @map("total_opened")
-  uniqueOpens   Int      @default(0) @map("unique_opens")
-  totalClicked  Int      @default(0) @map("total_clicked")
-  uniqueClicks  Int      @default(0) @map("unique_clicks")
-  totalComplaints Int    @default(0) @map("total_complaints")
-  totalUnsubscribes Int  @default(0) @map("total_unsubscribes")
-  
+  totalOpened       Int @default(0) @map("total_opened")
+  uniqueOpens       Int @default(0) @map("unique_opens")
+  totalClicked      Int @default(0) @map("total_clicked")
+  uniqueClicks      Int @default(0) @map("unique_clicks")
+  totalComplaints   Int @default(0) @map("total_complaints")
+  totalUnsubscribes Int @default(0) @map("total_unsubscribes")
+
   // Rates
-  deliveryRate  Float    @default(0) @map("delivery_rate")
-  bounceRate    Float    @default(0) @map("bounce_rate")
-  openRate      Float    @default(0) @map("open_rate")
-  clickRate     Float    @default(0) @map("click_rate")
-  complaintRate Float    @default(0) @map("complaint_rate")
-  
+  deliveryRate  Float @default(0) @map("delivery_rate")
+  bounceRate    Float @default(0) @map("bounce_rate")
+  openRate      Float @default(0) @map("open_rate")
+  clickRate     Float @default(0) @map("click_rate")
+  complaintRate Float @default(0) @map("complaint_rate")
+
   // Domain
-  domain        String?
-  accountId     String?  @map("account_id")
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  
+  domain    String?
+  accountId String? @map("account_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
   @@unique([period, periodStart, domain, accountId])
   @@index([period, periodStart])
   @@index([domain])
@@ -856,28 +857,28 @@ model EmailStats {
 // ============================================
 
 model SystemSettings {
-  id                       String   @id @default(uuid())
-  key                      String   @unique // general, email, security, integrations
-  value                    Json     // JSON object with all settings for this category
-  createdAt                DateTime @default(now()) @map("created_at")
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  key       String   @unique // general, email, security, integrations
+  value     Json // JSON object with all settings for this category
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
 }
 
 model EmailTemplate {
-  id            String   @id @default(uuid())
-  name          String   // Human readable name
-  slug          String   @unique // welcome, password-reset, sync-complete, new-lead
-  subject       String
-  htmlContent   String   @map("html_content") @db.Text
-  textContent   String?  @map("text_content") @db.Text
-  variables     String[] @default([]) // Available template variables like firstName, siteName
-  description   String?  @db.Text // Template usage description
-  isActive      Boolean  @default(true) @map("is_active")
-  isSystem      Boolean  @default(false) @map("is_system") // System templates can't be deleted
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  name        String // Human readable name
+  slug        String   @unique // welcome, password-reset, sync-complete, new-lead
+  subject     String
+  htmlContent String   @map("html_content") @db.Text
+  textContent String?  @map("text_content") @db.Text
+  variables   String[] @default([]) // Available template variables like firstName, siteName
+  description String?  @db.Text // Template usage description
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(false) @map("is_system") // System templates can't be deleted
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("email_templates")
 }
@@ -888,15 +889,15 @@ model EmailTemplate {
 
 // Lead Status Enum
 enum LeadStatus {
-  NEW           // Just received, unassigned
-  ASSIGNED      // Assigned to a sales rep
-  CONTACTED     // Initial contact made
-  QUALIFIED     // Lead is qualified/interested
-  APPOINTMENT   // Appointment scheduled
-  NEGOTIATING   // In price negotiation
-  WON           // Sale completed
-  LOST          // Lead lost to competitor/no interest
-  ARCHIVED      // Old lead archived
+  NEW // Just received, unassigned
+  ASSIGNED // Assigned to a sales rep
+  CONTACTED // Initial contact made
+  QUALIFIED // Lead is qualified/interested
+  APPOINTMENT // Appointment scheduled
+  NEGOTIATING // In price negotiation
+  WON // Sale completed
+  LOST // Lead lost to competitor/no interest
+  ARCHIVED // Old lead archived
 }
 
 // Lead Source Enum
@@ -922,75 +923,75 @@ enum LeadPriority {
 }
 
 model ADFConfiguration {
-  id                    String   @id @default(uuid())
-  accountId             String   @unique @map("account_id")
-  
+  id        String @id @default(uuid())
+  accountId String @unique @map("account_id")
+
   // DMS Integration Settings
-  dmsProvider           String?  @map("dms_provider") // DealerSocket, CDK, Reynolds, etc.
-  dmsEndpoint           String?  @map("dms_endpoint") // ADF submission URL
-  dmsUsername           String?  @map("dms_username")
-  dmsPassword           String?  @map("dms_password") // Encrypted
-  dmsApiKey             String?  @map("dms_api_key") // Encrypted
-  
+  dmsProvider String? @map("dms_provider") // DealerSocket, CDK, Reynolds, etc.
+  dmsEndpoint String? @map("dms_endpoint") // ADF submission URL
+  dmsUsername String? @map("dms_username")
+  dmsPassword String? @map("dms_password") // Encrypted
+  dmsApiKey   String? @map("dms_api_key") // Encrypted
+
   // Email Settings for ADF
   adfEmailEnabled       Boolean  @default(true) @map("adf_email_enabled")
   adfEmailRecipients    String[] @default([]) @map("adf_email_recipients")
   adfEmailSender        String?  @map("adf_email_sender") // Verified sender email
   adfEmailSubjectPrefix String   @default("[New Lead]") @map("adf_email_subject_prefix")
-  
+
   // Auto Assignment Rules
-  autoAssignEnabled     Boolean  @default(true) @map("auto_assign_enabled")
-  roundRobinEnabled     Boolean  @default(false) @map("round_robin_enabled")
-  defaultAssigneeId     String?  @map("default_assignee_id") // User ID for default assignment
-  
+  autoAssignEnabled Boolean @default(true) @map("auto_assign_enabled")
+  roundRobinEnabled Boolean @default(false) @map("round_robin_enabled")
+  defaultAssigneeId String? @map("default_assignee_id") // User ID for default assignment
+
   // AI Communication Settings
-  aiAssistantEnabled    Boolean  @default(false) @map("ai_assistant_enabled")
-  aiResponseTemplate    String?  @map("ai_response_template") @db.Text
-  aiAutoResponse        Boolean  @default(false) @map("ai_auto_response")
-  aiDelayMinutes        Int      @default(5) @map("ai_delay_minutes") // Delay before AI responds
-  
+  aiAssistantEnabled Boolean @default(false) @map("ai_assistant_enabled")
+  aiResponseTemplate String? @map("ai_response_template") @db.Text
+  aiAutoResponse     Boolean @default(false) @map("ai_auto_response")
+  aiDelayMinutes     Int     @default(5) @map("ai_delay_minutes") // Delay before AI responds
+
   // Lead Processing
-  duplicateCheckEnabled Boolean  @default(true) @map("duplicate_check_enabled")
-  duplicateWindowHours  Int      @default(24) @map("duplicate_window_hours")
-  
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  duplicateCheckEnabled Boolean @default(true) @map("duplicate_check_enabled")
+  duplicateWindowHours  Int     @default(24) @map("duplicate_window_hours")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  account               Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  salesRepMappings      SalesRepMapping[]
+  account          Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  salesRepMappings SalesRepMapping[]
 
   @@map("adf_configurations")
 }
 
 // Sales Rep Mapping - Maps Facebook usernames to DMS sales rep IDs
 model SalesRepMapping {
-  id                    String   @id @default(uuid())
-  configurationId       String   @map("configuration_id")
-  userId                String   @map("user_id") // Internal user ID
-  
+  id              String @id @default(uuid())
+  configurationId String @map("configuration_id")
+  userId          String @map("user_id") // Internal user ID
+
   // Facebook Identifiers
-  facebookUsername      String?  @map("facebook_username")
-  facebookUserId        String?  @map("facebook_user_id")
-  facebookDisplayName   String?  @map("facebook_display_name")
-  
+  facebookUsername    String? @map("facebook_username")
+  facebookUserId      String? @map("facebook_user_id")
+  facebookDisplayName String? @map("facebook_display_name")
+
   // DMS Identifiers
-  dmsRepId              String?  @map("dms_rep_id") // Sales rep ID in DMS
-  dmsRepName            String?  @map("dms_rep_name")
-  dmsRepEmail           String?  @map("dms_rep_email")
-  
+  dmsRepId    String? @map("dms_rep_id") // Sales rep ID in DMS
+  dmsRepName  String? @map("dms_rep_name")
+  dmsRepEmail String? @map("dms_rep_email")
+
   // Assignment Settings
-  isActive              Boolean  @default(true) @map("is_active")
-  maxLeadsPerDay        Int?     @map("max_leads_per_day")
-  leadCount             Int      @default(0) @map("lead_count")
-  lastAssignedAt        DateTime? @map("last_assigned_at")
-  
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  maxLeadsPerDay Int?      @map("max_leads_per_day")
+  leadCount      Int       @default(0) @map("lead_count")
+  lastAssignedAt DateTime? @map("last_assigned_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  configuration         ADFConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  configuration ADFConfiguration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([configurationId, userId])
   @@map("sales_rep_mappings")
@@ -998,99 +999,99 @@ model SalesRepMapping {
 
 // Lead - Main lead entity
 model Lead {
-  id                    String      @id @default(uuid())
-  accountId             String      @map("account_id")
-  
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
   // Lead Identification
-  leadNumber            String      @unique @map("lead_number") // Auto-generated lead ID
-  externalLeadId        String?     @map("external_lead_id") // ID from external source
-  
+  leadNumber     String  @unique @map("lead_number") // Auto-generated lead ID
+  externalLeadId String? @map("external_lead_id") // ID from external source
+
   // Status & Priority
-  status                LeadStatus  @default(NEW)
-  priority              LeadPriority @default(MEDIUM)
-  source                LeadSource  @default(MANUAL)
-  
+  status   LeadStatus   @default(NEW)
+  priority LeadPriority @default(MEDIUM)
+  source   LeadSource   @default(MANUAL)
+
   // Assignment
-  assignedToId          String?     @map("assigned_to_id") // User ID of assigned sales rep
-  assignedAt            DateTime?   @map("assigned_at")
-  
+  assignedToId String?   @map("assigned_to_id") // User ID of assigned sales rep
+  assignedAt   DateTime? @map("assigned_at")
+
   // Customer Information
-  firstName             String?     @map("first_name")
-  lastName              String?     @map("last_name")
-  fullName              String?     @map("full_name")
-  email                 String?
-  phone                 String?
-  altPhone              String?     @map("alt_phone")
-  address               String?
-  city                  String?
-  state                 String?
-  zip                   String?
-  country               String?     @default("US")
-  
+  firstName String? @map("first_name")
+  lastName  String? @map("last_name")
+  fullName  String? @map("full_name")
+  email     String?
+  phone     String?
+  altPhone  String? @map("alt_phone")
+  address   String?
+  city      String?
+  state     String?
+  zip       String?
+  country   String? @default("US")
+
   // Facebook Information
-  facebookUserId        String?     @map("facebook_user_id")
-  facebookUsername      String?     @map("facebook_username")
-  facebookDisplayName   String?     @map("facebook_display_name")
-  facebookProfileUrl    String?     @map("facebook_profile_url")
-  facebookMessengerUrl  String?     @map("facebook_messenger_url")
-  
+  facebookUserId       String? @map("facebook_user_id")
+  facebookUsername     String? @map("facebook_username")
+  facebookDisplayName  String? @map("facebook_display_name")
+  facebookProfileUrl   String? @map("facebook_profile_url")
+  facebookMessengerUrl String? @map("facebook_messenger_url")
+
   // Vehicle Interest
-  vehicleId             String?     @map("vehicle_id") // Link to interested vehicle
-  interestedVehicle     String?     @map("interested_vehicle") // Text description
-  interestedYear        Int?        @map("interested_year")
-  interestedMake        String?     @map("interested_make")
-  interestedModel       String?     @map("interested_model")
-  interestedVin         String?     @map("interested_vin")
-  interestedStockNumber String?     @map("interested_stock_number")
-  
+  vehicleId             String? @map("vehicle_id") // Link to interested vehicle
+  interestedVehicle     String? @map("interested_vehicle") // Text description
+  interestedYear        Int?    @map("interested_year")
+  interestedMake        String? @map("interested_make")
+  interestedModel       String? @map("interested_model")
+  interestedVin         String? @map("interested_vin")
+  interestedStockNumber String? @map("interested_stock_number")
+
   // Trade-In Information
-  hasTradeIn            Boolean     @default(false) @map("has_trade_in")
-  tradeYear             Int?        @map("trade_year")
-  tradeMake             String?     @map("trade_make")
-  tradeModel            String?     @map("trade_model")
-  tradeVin              String?     @map("trade_vin")
-  tradeMileage          Int?        @map("trade_mileage")
-  tradePayoff           Decimal?    @map("trade_payoff") @db.Decimal(10, 2)
-  
+  hasTradeIn   Boolean  @default(false) @map("has_trade_in")
+  tradeYear    Int?     @map("trade_year")
+  tradeMake    String?  @map("trade_make")
+  tradeModel   String?  @map("trade_model")
+  tradeVin     String?  @map("trade_vin")
+  tradeMileage Int?     @map("trade_mileage")
+  tradePayoff  Decimal? @map("trade_payoff") @db.Decimal(10, 2)
+
   // Financial
-  budgetMin             Decimal?    @map("budget_min") @db.Decimal(10, 2)
-  budgetMax             Decimal?    @map("budget_max") @db.Decimal(10, 2)
-  creditRating          String?     @map("credit_rating")
-  preApproved           Boolean     @default(false) @map("pre_approved")
-  
+  budgetMin    Decimal? @map("budget_min") @db.Decimal(10, 2)
+  budgetMax    Decimal? @map("budget_max") @db.Decimal(10, 2)
+  creditRating String?  @map("credit_rating")
+  preApproved  Boolean  @default(false) @map("pre_approved")
+
   // Comments & Notes
-  customerComments      String?     @map("customer_comments") @db.Text
-  internalNotes         String?     @map("internal_notes") @db.Text
-  
+  customerComments String? @map("customer_comments") @db.Text
+  internalNotes    String? @map("internal_notes") @db.Text
+
   // ADF Tracking
-  adfSent               Boolean     @default(false) @map("adf_sent")
-  adfSentAt             DateTime?   @map("adf_sent_at")
-  adfMessageId          String?     @map("adf_message_id")
-  adfDeliveryStatus     String?     @map("adf_delivery_status") // PENDING, SENT, DELIVERED, FAILED
-  adfErrorMessage       String?     @map("adf_error_message") @db.Text
-  
+  adfSent           Boolean   @default(false) @map("adf_sent")
+  adfSentAt         DateTime? @map("adf_sent_at")
+  adfMessageId      String?   @map("adf_message_id")
+  adfDeliveryStatus String?   @map("adf_delivery_status") // PENDING, SENT, DELIVERED, FAILED
+  adfErrorMessage   String?   @map("adf_error_message") @db.Text
+
   // Tracking
-  lastContactedAt       DateTime?   @map("last_contacted_at")
-  nextFollowUpAt        DateTime?   @map("next_follow_up_at")
-  appointmentAt         DateTime?   @map("appointment_at")
-  closedAt              DateTime?   @map("closed_at")
-  closedReason          String?     @map("closed_reason")
-  
+  lastContactedAt DateTime? @map("last_contacted_at")
+  nextFollowUpAt  DateTime? @map("next_follow_up_at")
+  appointmentAt   DateTime? @map("appointment_at")
+  closedAt        DateTime? @map("closed_at")
+  closedReason    String?   @map("closed_reason")
+
   // Metadata
-  rawAdfXml             String?     @map("raw_adf_xml") @db.Text // Original ADF XML
-  metadata              Json?       // Additional data
-  
-  createdAt             DateTime    @default(now()) @map("created_at")
-  updatedAt             DateTime    @updatedAt @map("updated_at")
+  rawAdfXml String? @map("raw_adf_xml") @db.Text // Original ADF XML
+  metadata  Json? // Additional data
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  account               Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  assignedTo            User?       @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
-  vehicle               Vehicle?    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  communications        LeadCommunication[]
-  activities            LeadActivity[]
-  adfSubmissions        ADFSubmission[]
-  messages              Message[]
+  account        Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  assignedTo     User?               @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  vehicle        Vehicle?            @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  communications LeadCommunication[]
+  activities     LeadActivity[]
+  adfSubmissions ADFSubmission[]
+  messages       Message[]
 
   @@index([accountId, status])
   @@index([assignedToId])
@@ -1102,44 +1103,44 @@ model Lead {
 
 // Lead Communication - Track all communications
 model LeadCommunication {
-  id                    String   @id @default(uuid())
-  leadId                String   @map("lead_id")
-  
+  id     String @id @default(uuid())
+  leadId String @map("lead_id")
+
   // Communication Type
-  type                  String   // EMAIL, SMS, PHONE, FACEBOOK_MESSAGE, AI_RESPONSE
-  direction             String   // INBOUND, OUTBOUND
-  
+  type      String // EMAIL, SMS, PHONE, FACEBOOK_MESSAGE, AI_RESPONSE
+  direction String // INBOUND, OUTBOUND
+
   // Content
-  subject               String?
-  content               String   @db.Text
-  contentHtml           String?  @map("content_html") @db.Text
-  
+  subject     String?
+  content     String  @db.Text
+  contentHtml String? @map("content_html") @db.Text
+
   // Metadata
-  senderId              String?  @map("sender_id") // User ID or system
-  senderName            String?  @map("sender_name")
-  recipientEmail        String?  @map("recipient_email")
-  recipientPhone        String?  @map("recipient_phone")
-  
+  senderId       String? @map("sender_id") // User ID or system
+  senderName     String? @map("sender_name")
+  recipientEmail String? @map("recipient_email")
+  recipientPhone String? @map("recipient_phone")
+
   // Delivery Status
-  status                String   @default("PENDING") // PENDING, SENT, DELIVERED, READ, FAILED
-  sentAt                DateTime? @map("sent_at")
-  deliveredAt           DateTime? @map("delivered_at")
-  readAt                DateTime? @map("read_at")
-  errorMessage          String?  @map("error_message") @db.Text
-  
+  status       String    @default("PENDING") // PENDING, SENT, DELIVERED, READ, FAILED
+  sentAt       DateTime? @map("sent_at")
+  deliveredAt  DateTime? @map("delivered_at")
+  readAt       DateTime? @map("read_at")
+  errorMessage String?   @map("error_message") @db.Text
+
   // AI Generated
-  isAiGenerated         Boolean  @default(false) @map("is_ai_generated")
-  aiModel               String?  @map("ai_model")
-  aiPrompt              String?  @map("ai_prompt") @db.Text
-  
+  isAiGenerated Boolean @default(false) @map("is_ai_generated")
+  aiModel       String? @map("ai_model")
+  aiPrompt      String? @map("ai_prompt") @db.Text
+
   // External References
-  externalMessageId     String?  @map("external_message_id")
-  facebookMessageId     String?  @map("facebook_message_id")
-  
-  createdAt             DateTime @default(now()) @map("created_at")
+  externalMessageId String? @map("external_message_id")
+  facebookMessageId String? @map("facebook_message_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
   @@index([type])
@@ -1149,28 +1150,28 @@ model LeadCommunication {
 
 // Lead Activity - Track all lead activities
 model LeadActivity {
-  id                    String   @id @default(uuid())
-  leadId                String   @map("lead_id")
-  userId                String?  @map("user_id")
-  
+  id     String  @id @default(uuid())
+  leadId String  @map("lead_id")
+  userId String? @map("user_id")
+
   // Activity Type
-  type                  String   // STATUS_CHANGE, ASSIGNED, NOTE_ADDED, COMMUNICATION, ADF_SENT, etc.
-  title                 String
-  description           String?  @db.Text
-  
+  type        String // STATUS_CHANGE, ASSIGNED, NOTE_ADDED, COMMUNICATION, ADF_SENT, etc.
+  title       String
+  description String? @db.Text
+
   // Change Tracking
-  previousValue         String?  @map("previous_value")
-  newValue              String?  @map("new_value")
-  
+  previousValue String? @map("previous_value")
+  newValue      String? @map("new_value")
+
   // Metadata
-  metadata              Json?
-  isSystem              Boolean  @default(false) @map("is_system")
-  
-  createdAt             DateTime @default(now()) @map("created_at")
+  metadata Json?
+  isSystem Boolean @default(false) @map("is_system")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([leadId])
   @@index([type])
@@ -1180,48 +1181,48 @@ model LeadActivity {
 
 // ADF Submission - Track ADF sends to DMS
 model ADFSubmission {
-  id                    String   @id @default(uuid())
-  leadId                String   @map("lead_id")
-  accountId             String   @map("account_id")
-  
+  id        String @id @default(uuid())
+  leadId    String @map("lead_id")
+  accountId String @map("account_id")
+
   // Submission Type
-  method                String   // EMAIL, API, HTTP_POST
-  endpoint              String?  // DMS endpoint URL
-  
+  method   String // EMAIL, API, HTTP_POST
+  endpoint String? // DMS endpoint URL
+
   // ADF Content
-  adfXml                String   @map("adf_xml") @db.Text
-  adfVersion            String   @default("1.0") @map("adf_version")
-  
+  adfXml     String @map("adf_xml") @db.Text
+  adfVersion String @default("1.0") @map("adf_version")
+
   // Delivery Status
-  status                String   @default("PENDING") // PENDING, SENT, DELIVERED, ACKNOWLEDGED, FAILED
-  statusMessage         String?  @map("status_message") @db.Text
-  
+  status        String  @default("PENDING") // PENDING, SENT, DELIVERED, ACKNOWLEDGED, FAILED
+  statusMessage String? @map("status_message") @db.Text
+
   // Response
-  responseCode          Int?     @map("response_code")
-  responseBody          String?  @map("response_body") @db.Text
-  dmsLeadId             String?  @map("dms_lead_id") // Lead ID returned by DMS
-  
+  responseCode Int?    @map("response_code")
+  responseBody String? @map("response_body") @db.Text
+  dmsLeadId    String? @map("dms_lead_id") // Lead ID returned by DMS
+
   // Email Specific
-  emailTo               String[] @default([]) @map("email_to")
-  emailMessageId        String?  @map("email_message_id")
-  emailDeliveryStatus   String?  @map("email_delivery_status")
-  
+  emailTo             String[] @default([]) @map("email_to")
+  emailMessageId      String?  @map("email_message_id")
+  emailDeliveryStatus String?  @map("email_delivery_status")
+
   // Retry
-  retryCount            Int      @default(0) @map("retry_count")
-  maxRetries            Int      @default(3) @map("max_retries")
-  nextRetryAt           DateTime? @map("next_retry_at")
-  
+  retryCount  Int       @default(0) @map("retry_count")
+  maxRetries  Int       @default(3) @map("max_retries")
+  nextRetryAt DateTime? @map("next_retry_at")
+
   // Timestamps
-  sentAt                DateTime? @map("sent_at")
-  deliveredAt           DateTime? @map("delivered_at")
-  acknowledgedAt        DateTime? @map("acknowledged_at")
-  failedAt              DateTime? @map("failed_at")
-  
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  sentAt         DateTime? @map("sent_at")
+  deliveredAt    DateTime? @map("delivered_at")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  failedAt       DateTime? @map("failed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
   @@index([accountId])
@@ -1236,34 +1237,34 @@ model ADFSubmission {
 
 // Task queue for Chrome Extension automation
 model ExtensionTask {
-  id              String   @id @default(uuid())
-  accountId       String   @map("account_id")
-  
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
   // Task Type
-  type            String   // post_vehicle, scrape_inbox, scrape_conversation, respond_lead
-  status          String   @default("pending") // pending, processing, completed, failed, cancelled
-  priority        Int      @default(5) // 1-10, higher = more urgent
-  
+  type     String // post_vehicle, scrape_inbox, scrape_conversation, respond_lead
+  status   String @default("pending") // pending, processing, completed, failed, cancelled
+  priority Int    @default(5) // 1-10, higher = more urgent
+
   // Task Data
-  data            Json?    // Command data, vehicle info, etc
-  result          Json?    // Task execution result
-  
+  data   Json? // Command data, vehicle info, etc
+  result Json? // Task execution result
+
   // Related Entities
-  vehicleId       String?  @map("vehicle_id")
-  leadId          String?  @map("lead_id")
-  
+  vehicleId String? @map("vehicle_id")
+  leadId    String? @map("lead_id")
+
   // Scheduling
-  scheduledFor    DateTime? @map("scheduled_for")
-  startedAt       DateTime? @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-  
+  scheduledFor DateTime? @map("scheduled_for")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+
   // Retry
-  retryCount      Int      @default(0) @map("retry_count")
-  maxRetries      Int      @default(3) @map("max_retries")
-  
+  retryCount Int @default(0) @map("retry_count")
+  maxRetries Int @default(3) @map("max_retries")
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([accountId])
   @@index([status])
@@ -1275,31 +1276,31 @@ model ExtensionTask {
 
 // AI-generated responses for approval
 model AIResponse {
-  id              String   @id @default(uuid())
-  accountId       String   @map("account_id")
-  leadId          String   @map("lead_id")
-  
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+  leadId    String @map("lead_id")
+
   // Response Content
-  responseText    String   @map("response_text") @db.Text
-  responseType    String   @map("response_type") // initial, follow_up, price_negotiation, availability
-  
+  responseText String @map("response_text") @db.Text
+  responseType String @map("response_type") // initial, follow_up, price_negotiation, availability
+
   // Analysis
   conversationAnalysis Json? @map("conversation_analysis")
-  confidence      Float    @default(0)
-  
+  confidence           Float @default(0)
+
   // Approval Status
-  status          String   @default("pending") // pending, approved, rejected, sent
-  approvedBy      String?  @map("approved_by")
-  approvedAt      DateTime? @map("approved_at")
-  sentAt          DateTime? @map("sent_at")
-  
+  status     String    @default("pending") // pending, approved, rejected, sent
+  approvedBy String?   @map("approved_by")
+  approvedAt DateTime? @map("approved_at")
+  sentAt     DateTime? @map("sent_at")
+
   // Edit tracking
-  wasEdited       Boolean  @default(false) @map("was_edited")
-  editedText      String?  @map("edited_text") @db.Text
-  
+  wasEdited  Boolean @default(false) @map("was_edited")
+  editedText String? @map("edited_text") @db.Text
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([accountId])
   @@index([leadId])
@@ -1309,25 +1310,25 @@ model AIResponse {
 
 // Message history for conversation tracking
 model Message {
-  id                String   @id @default(uuid())
-  leadId            String   @map("lead_id")
-  facebookMessageId String?  @map("facebook_message_id")
-  
+  id                String  @id @default(uuid())
+  leadId            String  @map("lead_id")
+  facebookMessageId String? @map("facebook_message_id")
+
   // Content
-  text              String   @db.Text
-  sender            String   // buyer name or "dealer"
-  isOutgoing        Boolean  @default(false) @map("is_outgoing")
-  
+  text       String  @db.Text
+  sender     String // buyer name or "dealer"
+  isOutgoing Boolean @default(false) @map("is_outgoing")
+
   // AI Analysis
-  sentiment         String?  // positive, negative, neutral
-  intent            String?  // question, interest, negotiation, etc
-  
+  sentiment String? // positive, negative, neutral
+  intent    String? // question, interest, negotiation, etc
+
   // Timestamps
-  sentAt            DateTime @map("sent_at")
-  createdAt         DateTime @default(now()) @map("created_at")
+  sentAt    DateTime @map("sent_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  lead              Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@unique([leadId, facebookMessageId])
   @@index([leadId])
@@ -1337,49 +1338,49 @@ model Message {
 
 // Facebook session data for the extension
 model FacebookSession {
-  id              String   @id @default(uuid())
-  userId          String   @unique @map("user_id")
-  
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
   // Session cookies (encrypted)
-  cookies         String   @db.Text
-  userAgent       String   @map("user_agent")
-  
+  cookies   String @db.Text
+  userAgent String @map("user_agent")
+
   // Session Status
-  isValid         Boolean  @default(true) @map("is_valid")
-  lastValidated   DateTime @map("last_validated")
-  lastActivity    DateTime @map("last_activity")
-  
+  isValid       Boolean  @default(true) @map("is_valid")
+  lastValidated DateTime @map("last_validated")
+  lastActivity  DateTime @map("last_activity")
+
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("facebook_sessions")
 }
 
 // DealerAccount for extension integration
 model DealerAccount {
-  id                String   @id @default(uuid())
-  userId            String   @unique @map("user_id")
-  
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
   // Business Info
-  businessName      String?  @map("business_name")
-  businessAddress   String?  @map("business_address")
-  businessPhone     String?  @map("business_phone")
-  
+  businessName    String? @map("business_name")
+  businessAddress String? @map("business_address")
+  businessPhone   String? @map("business_phone")
+
   // Facebook Connection
-  facebookConnected Boolean  @default(false) @map("facebook_connected")
-  facebookUserId    String?  @map("facebook_user_id")
-  
+  facebookConnected Boolean @default(false) @map("facebook_connected")
+  facebookUserId    String? @map("facebook_user_id")
+
   // Settings
-  autoRespond       Boolean  @default(false) @map("auto_respond")
-  responseDelay     Int      @default(30) @map("response_delay") // seconds
-  
+  autoRespond   Boolean @default(false) @map("auto_respond")
+  responseDelay Int     @default(30) @map("response_delay") // seconds
+
   // Timestamps
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Relations
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("dealer_accounts")
 }
