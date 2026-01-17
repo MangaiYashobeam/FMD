@@ -13,12 +13,14 @@ import {
   ShieldAlert,
   Network,
   FileText,
+  Brain,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+  { name: 'AI Center', href: '/admin/ai-center', icon: Brain },
   { name: 'Accounts', href: '/admin/accounts', icon: Building2 },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },
