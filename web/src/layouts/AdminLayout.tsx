@@ -31,11 +31,6 @@ export default function AdminLayout() {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  // Check if user has admin role (for demo, checking if user exists)
-  // In production, check for SUPER_ADMIN role
-  // const isSuperAdmin = user?.accounts?.some(a => a.role === 'SUPER_ADMIN');
-  // if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
-
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}

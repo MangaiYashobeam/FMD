@@ -452,6 +452,30 @@ const startServer = async () => {
       logger.info('Continuing without IP access control...');
     }
 
+    // Auto-promote default super admin users
+    const DEFAULT_SUPER_ADMINS = ['admin@gadproductions.com'];
+    for (const email of DEFAULT_SUPER_ADMINS) {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { email: email.toLowerCase() },
+          include: { accountUsers: true },
+        });
+        
+        if (user) {
+          const isSuperAdmin = user.accountUsers.some(au => au.role === 'SUPER_ADMIN');
+          if (!isSuperAdmin && user.accountUsers.length > 0) {
+            await prisma.accountUser.updateMany({
+              where: { userId: user.id },
+              data: { role: 'SUPER_ADMIN' },
+            });
+            logger.info(`✅ Auto-promoted ${email} to SUPER_ADMIN`);
+          }
+        }
+      } catch (error) {
+        logger.warn(`⚠️  Failed to auto-promote ${email}:`, error);
+      }
+    }
+
     app.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       logger.info(`📡 Health check available at: http://localhost:${PORT}/health`);

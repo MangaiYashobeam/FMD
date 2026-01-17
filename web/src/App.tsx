@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import SuperAdminRoute from './components/SuperAdminRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import AdminLayout from './layouts/AdminLayout';
 // Public Pages
@@ -82,9 +83,9 @@ function App() {
             <Route
               path="/admin"
               element={
-                <ProtectedRoute>
+                <SuperAdminRoute>
                   <AdminLayout />
-                </ProtectedRoute>
+                </SuperAdminRoute>
               }
             >
               <Route index element={<AdminDashboardPage />} />
