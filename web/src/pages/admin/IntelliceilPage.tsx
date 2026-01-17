@@ -22,6 +22,14 @@ import {
   Eye,
   ExternalLink,
   Info,
+  Bug,
+  Bot,
+  FileWarning,
+  Fingerprint,
+  ShieldAlert,
+  Skull,
+  Repeat,
+  MousePointerClick,
 } from 'lucide-react';
 import { intelliceilApi } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
@@ -81,6 +89,25 @@ interface IntelliceilConfig {
   notifyEmail: string;
   maxRequestsPerIP: number;
   windowSeconds: number;
+  // Enterprise Security Settings
+  enableSignatureValidation: boolean;
+  enableTokenFingerprinting: boolean;
+  enableSQLInjectionDetection: boolean;
+  enableXSSDetection: boolean;
+  enableBotDetection: boolean;
+  enableIPReputation: boolean;
+  botDetectionThreshold: number;
+}
+
+interface SecurityMetrics {
+  sqlInjectionAttempts: number;
+  xssAttempts: number;
+  botDetections: number;
+  signatureFailures: number;
+  replayAttempts: number;
+  honeypotHits: number;
+  ipReputationCacheSize: number;
+  tokenFingerprintCacheSize: number;
 }
 
 interface IntelliceilStatus {
@@ -96,6 +123,7 @@ interface IntelliceilStatus {
   topSources: SourceCount[];
   topEndpoints: { endpoint: string; count: number }[];
   topCountries: CountryCount[];
+  securityMetrics: SecurityMetrics;
 }
 
 type ThreatLevelKey = 'NORMAL' | 'ELEVATED' | 'ATTACK' | 'CRITICAL';
@@ -233,7 +261,7 @@ function IPDetailsCard({ location, onBlock, isExpanded, onToggle }: IPDetailsCar
 export default function IntelliceilPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'config' | 'logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'config' | 'logs' | 'security'>('overview');
   const [newBlockIP, setNewBlockIP] = useState('');
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
   
@@ -420,6 +448,7 @@ export default function IntelliceilPage() {
           {[
             { id: 'overview' as const, label: 'Overview', icon: Activity },
             { id: 'map' as const, label: 'Traffic Map', icon: Globe },
+            { id: 'security' as const, label: 'Security Metrics', icon: ShieldAlert },
             { id: 'config' as const, label: 'Configuration', icon: Settings },
             { id: 'logs' as const, label: 'Blocked IPs', icon: Ban },
           ].map((tab) => (
@@ -1026,6 +1055,368 @@ export default function IntelliceilPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Security Metrics Tab - Enterprise Security Features */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          {/* Security Threat Metrics */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <ShieldAlert className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Security Threat Metrics</h3>
+                  <p className="text-sm text-gray-500">Real-time attack detection statistics</p>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                SUPER_ADMIN Only
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {/* SQL Injection Attempts */}
+              <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl border border-red-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bug className="w-4 h-4 text-red-600" />
+                  <span className="text-xs font-medium text-red-700">SQL Injection</span>
+                </div>
+                <p className="text-2xl font-bold text-red-600">
+                  {intelliceil.securityMetrics?.sqlInjectionAttempts || 0}
+                </p>
+                <p className="text-xs text-red-500 mt-1">Attempts Blocked</p>
+              </div>
+
+              {/* XSS Attempts */}
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileWarning className="w-4 h-4 text-orange-600" />
+                  <span className="text-xs font-medium text-orange-700">XSS Attacks</span>
+                </div>
+                <p className="text-2xl font-bold text-orange-600">
+                  {intelliceil.securityMetrics?.xssAttempts || 0}
+                </p>
+                <p className="text-xs text-orange-500 mt-1">Attempts Blocked</p>
+              </div>
+
+              {/* Bot Detections */}
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bot className="w-4 h-4 text-purple-600" />
+                  <span className="text-xs font-medium text-purple-700">Bot Traffic</span>
+                </div>
+                <p className="text-2xl font-bold text-purple-600">
+                  {intelliceil.securityMetrics?.botDetections || 0}
+                </p>
+                <p className="text-xs text-purple-500 mt-1">Bots Detected</p>
+              </div>
+
+              {/* Signature Failures */}
+              <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-4 rounded-xl border border-amber-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Fingerprint className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-medium text-amber-700">Signatures</span>
+                </div>
+                <p className="text-2xl font-bold text-amber-600">
+                  {intelliceil.securityMetrics?.signatureFailures || 0}
+                </p>
+                <p className="text-xs text-amber-500 mt-1">Invalid Signatures</p>
+              </div>
+
+              {/* Replay Attempts */}
+              <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-4 rounded-xl border border-pink-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Repeat className="w-4 h-4 text-pink-600" />
+                  <span className="text-xs font-medium text-pink-700">Replay Attacks</span>
+                </div>
+                <p className="text-2xl font-bold text-pink-600">
+                  {intelliceil.securityMetrics?.replayAttempts || 0}
+                </p>
+                <p className="text-xs text-pink-500 mt-1">Attempts Blocked</p>
+              </div>
+
+              {/* Honeypot Hits */}
+              <div className="bg-gradient-to-br from-rose-50 to-rose-100 p-4 rounded-xl border border-rose-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <MousePointerClick className="w-4 h-4 text-rose-600" />
+                  <span className="text-xs font-medium text-rose-700">Honeypot</span>
+                </div>
+                <p className="text-2xl font-bold text-rose-600">
+                  {intelliceil.securityMetrics?.honeypotHits || 0}
+                </p>
+                <p className="text-xs text-rose-500 mt-1">Traps Triggered</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Enterprise Security Features Status */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Security Features Toggle */}
+            <div className="bg-white p-6 rounded-xl border border-gray-200">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Shield className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Enterprise Security Features</h3>
+                  <p className="text-sm text-gray-500">Toggle security modules on/off</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* HMAC Signature Validation */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Fingerprint className="w-5 h-5 text-blue-500" />
+                    <div>
+                      <p className="font-medium text-gray-900">HMAC Signature Validation</p>
+                      <p className="text-xs text-gray-500">Validates request authenticity with SHA-256</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateConfigMutation.mutate({ enableSignatureValidation: !intelliceil.config.enableSignatureValidation })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      intelliceil.config.enableSignatureValidation ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      intelliceil.config.enableSignatureValidation ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Token Fingerprinting */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Lock className="w-5 h-5 text-purple-500" />
+                    <div>
+                      <p className="font-medium text-gray-900">Token Fingerprinting</p>
+                      <p className="text-xs text-gray-500">Binds tokens to device/browser to prevent theft</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateConfigMutation.mutate({ enableTokenFingerprinting: !intelliceil.config.enableTokenFingerprinting })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      intelliceil.config.enableTokenFingerprinting ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      intelliceil.config.enableTokenFingerprinting ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* SQL Injection Detection */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Bug className="w-5 h-5 text-red-500" />
+                    <div>
+                      <p className="font-medium text-gray-900">SQL Injection Detection</p>
+                      <p className="text-xs text-gray-500">24 pattern detection for SQL attacks</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateConfigMutation.mutate({ enableSQLInjectionDetection: !intelliceil.config.enableSQLInjectionDetection })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      intelliceil.config.enableSQLInjectionDetection ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      intelliceil.config.enableSQLInjectionDetection ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* XSS Detection */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <FileWarning className="w-5 h-5 text-orange-500" />
+                    <div>
+                      <p className="font-medium text-gray-900">XSS Attack Detection</p>
+                      <p className="text-xs text-gray-500">24 pattern detection for cross-site scripting</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateConfigMutation.mutate({ enableXSSDetection: !intelliceil.config.enableXSSDetection })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      intelliceil.config.enableXSSDetection ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      intelliceil.config.enableXSSDetection ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Bot Detection */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Bot className="w-5 h-5 text-purple-500" />
+                    <div>
+                      <p className="font-medium text-gray-900">Bot Detection</p>
+                      <p className="text-xs text-gray-500">User-agent + timing analysis for automation</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateConfigMutation.mutate({ enableBotDetection: !intelliceil.config.enableBotDetection })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      intelliceil.config.enableBotDetection ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      intelliceil.config.enableBotDetection ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* IP Reputation */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Globe className="w-5 h-5 text-cyan-500" />
+                    <div>
+                      <p className="font-medium text-gray-900">IP Reputation Check</p>
+                      <p className="text-xs text-gray-500">Threat intelligence lookup for malicious IPs</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateConfigMutation.mutate({ enableIPReputation: !intelliceil.config.enableIPReputation })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      intelliceil.config.enableIPReputation ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      intelliceil.config.enableIPReputation ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Security System Info */}
+            <div className="bg-white p-6 rounded-xl border border-gray-200">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Server className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">System Information</h3>
+                  <p className="text-sm text-gray-500">Cache sizes and thresholds</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* IP Reputation Cache */}
+                <div className="flex items-center justify-between p-4 bg-cyan-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">IP Reputation Cache</p>
+                    <p className="text-sm text-gray-500">Cached IP lookups (1 hour TTL)</p>
+                  </div>
+                  <span className="text-2xl font-bold text-cyan-600">
+                    {intelliceil.securityMetrics?.ipReputationCacheSize || 0}
+                  </span>
+                </div>
+
+                {/* Token Fingerprint Cache */}
+                <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-900">Token Fingerprints</p>
+                    <p className="text-sm text-gray-500">Active session fingerprints</p>
+                  </div>
+                  <span className="text-2xl font-bold text-purple-600">
+                    {intelliceil.securityMetrics?.tokenFingerprintCacheSize || 0}
+                  </span>
+                </div>
+
+                {/* Bot Detection Threshold */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium text-gray-900">Bot Detection Threshold</p>
+                    <span className="text-lg font-bold text-gray-700">
+                      {intelliceil.config.botDetectionThreshold || 70}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={intelliceil.config.botDetectionThreshold || 70}
+                    onChange={(e) => updateConfigMutation.mutate({ botDetectionThreshold: parseInt(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Lenient (0%)</span>
+                    <span>Strict (100%)</span>
+                  </div>
+                </div>
+
+                {/* Security Score */}
+                <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-100 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">Security Score</p>
+                      <p className="text-sm text-gray-500">Based on active features</p>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-3xl font-bold text-green-600">
+                        {(() => {
+                          let score = 0;
+                          if (intelliceil.config.enableSignatureValidation) score += 15;
+                          if (intelliceil.config.enableTokenFingerprinting) score += 15;
+                          if (intelliceil.config.enableSQLInjectionDetection) score += 20;
+                          if (intelliceil.config.enableXSSDetection) score += 15;
+                          if (intelliceil.config.enableBotDetection) score += 15;
+                          if (intelliceil.config.enableIPReputation) score += 10;
+                          if (intelliceil.config.autoMitigate) score += 10;
+                          return score;
+                        })()}
+                      </span>
+                      <span className="text-lg text-green-600">/100</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Honeypot Endpoints Info */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-rose-100 rounded-lg">
+                <Skull className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Honeypot Trap Endpoints</h3>
+                <p className="text-sm text-gray-500">These fake endpoints catch attackers and scanners</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {[
+                '/admin.php',
+                '/wp-admin',
+                '/wp-login.php',
+                '/phpmyadmin',
+                '/.env',
+                '/.git/config',
+                '/config.php',
+                '/backup.sql',
+                '/database.sql',
+                '/shell.php',
+                '/c99.php',
+                '/r57.php',
+              ].map((endpoint) => (
+                <div
+                  key={endpoint}
+                  className="px-3 py-2 bg-rose-50 text-rose-700 text-xs font-mono rounded-lg border border-rose-200"
+                >
+                  {endpoint}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

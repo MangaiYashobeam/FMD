@@ -575,6 +575,14 @@ export const intelliceilApi = {
     notifyEmail?: string;
     maxRequestsPerIP?: number;
     windowSeconds?: number;
+    // Enterprise Security Settings
+    enableSignatureValidation?: boolean;
+    enableTokenFingerprinting?: boolean;
+    enableSQLInjectionDetection?: boolean;
+    enableXSSDetection?: boolean;
+    enableBotDetection?: boolean;
+    enableIPReputation?: boolean;
+    botDetectionThreshold?: number;
   }) => api.put('/api/intelliceil/config', config),
   
   // Block an IP
