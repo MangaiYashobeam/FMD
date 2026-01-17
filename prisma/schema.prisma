@@ -20,25 +20,17 @@ model User {
   passwordHash   String?   @map("password_hash")
   firstName      String?   @map("first_name")
   lastName       String?   @map("last_name")
-  // name field removed - use firstName/lastName instead
   phone          String?
-  profilePicture String?   @map("profile_picture")
   isActive       Boolean   @default(true) @map("is_active")
   emailVerified  Boolean   @default(false) @map("email_verified")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   lastLoginAt    DateTime? @map("last_login_at")
 
-  // Personal Facebook Marketplace Credentials (for Chrome Extension)
-  fbUsername String?   @map("fb_username")
-  fbPassword String?   @map("fb_password") // Encrypted
-  fb2faCodes String[]  @map("fb_2fa_codes") // Array of backup codes
-  fbLastSync DateTime? @map("fb_last_sync")
-
-  // Facebook OAuth (new hybrid system)
-  facebookId          String?   @unique @map("facebook_id")
-  facebookAccessToken String?   @map("facebook_access_token") @db.Text
-  facebookTokenExpiry DateTime? @map("facebook_token_expiry")
+  // NOTE: The following fields were removed because they don't exist in production DB
+  // Run `npx prisma migrate deploy` on production to add them back
+  // profilePicture, fbUsername, fbPassword, fb2faCodes, fbLastSync
+  // facebookId, facebookAccessToken, facebookTokenExpiry
 
   // Relations
   accountUsers        AccountUser[]
