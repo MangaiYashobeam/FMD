@@ -146,12 +146,8 @@ export default function AdminLayout() {
 
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden md:pt-0 pt-14">
-        <main className="flex-1 relative overflow-y-auto focus:outline-none">
-          <div className="py-6 md:py-8">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-              <Outlet />
-            </div>
-          </div>
+        <main className="flex-1 relative overflow-y-auto focus:outline-none bg-gray-900">
+          <Outlet />
         </main>
       </div>
     </div>

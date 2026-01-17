@@ -160,9 +160,9 @@ export default function AICenterPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="h-full bg-gray-900 text-white flex flex-col">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700">
+      <header className="bg-gray-800 border-b border-gray-700 flex-shrink-0">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -222,7 +222,7 @@ export default function AICenterPage() {
       </header>
 
       {/* Main Content */}
-      <main className="p-6">
+      <main className="flex-1 p-6 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
