@@ -14,6 +14,7 @@ import {
   Network,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import ImpersonationBanner from '../components/ImpersonationBanner';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -29,10 +30,13 @@ const navigation = [
 
 export default function AdminLayout() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, impersonation } = useAuth();
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className={`flex h-screen bg-gray-50 ${impersonation.isImpersonating ? 'pt-10' : ''}`}>
+      {/* Impersonation Banner */}
+      <ImpersonationBanner />
+
       {/* Sidebar */}
       <div className="hidden md:flex md:w-64 md:flex-col">
         <div className="flex flex-col flex-grow pt-5 bg-slate-900 overflow-y-auto">
@@ -91,7 +95,12 @@ export default function AdminLayout() {
           </div>
 
           {/* User Section */}
-          <div className="flex-shrink-0 flex border-t border-slate-700 p-4">
+          <div className="flex-shrink-0 flex flex-col border-t border-slate-700 p-4 space-y-3">
+            {/* Impersonation Dropdown */}
+            <div className="flex justify-center">
+              <ImpersonationBanner />
+            </div>
+            
             <div className="flex-shrink-0 w-full">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">

@@ -520,4 +520,240 @@ export class AuthController {
       message: 'Password reset successfully. Please login with your new password.',
     });
   }
+
+  /**
+   * Super Admin Impersonation - Login as another user
+   * Only available to SUPER_ADMIN users
+   */
+  async impersonateUser(req: AuthRequest, res: Response) {
+    const userId = req.params.userId as string;
+    const impersonatorId = req.user!.id;
+
+    // Verify the requesting user is a SUPER_ADMIN
+    const impersonator = await prisma.user.findUnique({
+      where: { id: impersonatorId },
+      include: {
+        accountUsers: true,
+      },
+    });
+
+    if (!impersonator) {
+      throw new AppError('Impersonator not found', 404);
+    }
+
+    const isSuperAdmin = impersonator.accountUsers.some(au => au.role === 'SUPER_ADMIN');
+    if (!isSuperAdmin) {
+      throw new AppError('Only Super Admins can impersonate users', 403);
+    }
+
+    // Find the target user with their account associations
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        accountUsers: {
+          include: {
+            account: true,
+          },
+        },
+      },
+    });
+
+    if (!targetUser || !targetUser.isActive) {
+      throw new AppError('Target user not found or inactive', 404);
+    }
+
+    // Generate impersonation tokens (shorter expiry for security)
+    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const accessTokenOptions: SignOptions = { expiresIn: '2h' }; // Shorter for impersonation
+
+    const accessToken = jwt.sign(
+      { 
+        id: targetUser.id, 
+        email: targetUser.email,
+        impersonatedBy: impersonatorId, // Track who is impersonating
+      },
+      jwtSecret,
+      accessTokenOptions
+    );
+
+    // Log the impersonation action
+    await prisma.auditLog.create({
+      data: {
+        userId: impersonatorId,
+        action: 'USER_IMPERSONATION_STARTED',
+        entityType: 'user',
+        entityId: targetUser.id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        metadata: {
+          impersonatorEmail: impersonator.email,
+          targetUserEmail: targetUser.email,
+          targetUserId: targetUser.id,
+        },
+      },
+    });
+
+    logger.warn(`IMPERSONATION: ${impersonator.email} (${impersonatorId}) is impersonating ${targetUser.email} (${targetUser.id})`);
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: targetUser.id,
+          email: targetUser.email,
+          firstName: targetUser.firstName,
+          lastName: targetUser.lastName,
+        },
+        accounts: targetUser.accountUsers.map((au) => ({
+          id: au.account.id,
+          name: au.account.name,
+          role: au.role,
+        })),
+        accessToken,
+        // No refresh token for impersonation - must re-authenticate or end session
+        isImpersonating: true,
+        impersonator: {
+          id: impersonator.id,
+          email: impersonator.email,
+        },
+      },
+    });
+  }
+
+  /**
+   * End impersonation and restore original admin session
+   */
+  async endImpersonation(req: AuthRequest, res: Response) {
+    const adminId = req.user!.id;
+
+    // The admin should call this endpoint with their original token stored in frontend
+    const admin = await prisma.user.findUnique({
+      where: { id: adminId },
+      include: {
+        accountUsers: {
+          include: {
+            account: true,
+          },
+        },
+      },
+    });
+
+    if (!admin) {
+      throw new AppError('Admin not found', 404);
+    }
+
+    // Generate fresh token for admin
+    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
+
+    const accessToken = jwt.sign(
+      { id: admin.id, email: admin.email },
+      jwtSecret,
+      accessTokenOptions
+    );
+
+    // Log the impersonation end
+    await prisma.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'USER_IMPERSONATION_ENDED',
+        entityType: 'user',
+        entityId: admin.id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      },
+    });
+
+    logger.info(`IMPERSONATION ENDED: Admin ${admin.email} restored their session`);
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: admin.id,
+          email: admin.email,
+          firstName: admin.firstName,
+          lastName: admin.lastName,
+        },
+        accounts: admin.accountUsers.map((au) => ({
+          id: au.account.id,
+          name: au.account.name,
+          role: au.role,
+        })),
+        accessToken,
+      },
+    });
+  }
+
+  /**
+   * Get list of all users for impersonation dropdown
+   * Only available to SUPER_ADMIN users
+   */
+  async getImpersonationTargets(req: AuthRequest, res: Response) {
+    const requesterId = req.user!.id;
+
+    // Verify the requesting user is a SUPER_ADMIN
+    const requester = await prisma.user.findUnique({
+      where: { id: requesterId },
+      include: {
+        accountUsers: true,
+      },
+    });
+
+    if (!requester) {
+      throw new AppError('User not found', 404);
+    }
+
+    const isSuperAdmin = requester.accountUsers.some(au => au.role === 'SUPER_ADMIN');
+    if (!isSuperAdmin) {
+      throw new AppError('Only Super Admins can view impersonation targets', 403);
+    }
+
+    // Get all users with their accounts and roles
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        id: { not: requesterId }, // Exclude self
+      },
+      include: {
+        accountUsers: {
+          include: {
+            account: true,
+          },
+        },
+      },
+      orderBy: [
+        { lastName: 'asc' },
+        { firstName: 'asc' },
+      ],
+    });
+
+    const targets = users.map(user => ({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      accounts: user.accountUsers.map(au => ({
+        id: au.account.id,
+        name: au.account.name,
+        role: au.role,
+      })),
+      highestRole: getHighestRole(user.accountUsers.map(au => au.role)),
+      lastLoginAt: user.lastLoginAt,
+    }));
+
+    res.json({
+      success: true,
+      data: targets,
+    });
+  }
+}
+
+// Helper function to determine highest role
+function getHighestRole(roles: string[]): string {
+  const roleHierarchy = ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN', 'SALES_REP', 'VIEWER'];
+  for (const role of roleHierarchy) {
+    if (roles.includes(role)) return role;
+  }
+  return 'USER';
 }

@@ -148,6 +148,15 @@ export const authApi = {
   
   resetPassword: (token: string, password: string) =>
     api.post('/api/auth/reset-password', { token, password }),
+  
+  // Impersonation endpoints
+  getImpersonationTargets: () => api.get('/api/auth/impersonation/targets'),
+  
+  impersonateUser: (userId: string) =>
+    api.post(`/api/auth/impersonate/${userId}`),
+  
+  endImpersonation: () =>
+    api.post('/api/auth/end-impersonation'),
 };
 
 // Vehicles API

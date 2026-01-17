@@ -14,6 +14,14 @@ import {
   Ban,
   Plus,
   RefreshCw,
+  X,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  Server,
+  Eye,
+  ExternalLink,
+  Info,
 } from 'lucide-react';
 import { intelliceilApi } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
@@ -100,12 +108,143 @@ const threatLevelConfig: Record<ThreatLevelKey, { color: string; textColor: stri
   CRITICAL: { color: 'bg-red-500', textColor: 'text-red-500', icon: XCircle, label: 'Critical' },
 };
 
+// Detail Modal Component
+interface DetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  icon: typeof Zap;
+  children: React.ReactNode;
+  iconBgColor?: string;
+  iconColor?: string;
+}
+
+function DetailModal({ isOpen, onClose, title, icon: Icon, children, iconBgColor = 'bg-blue-100', iconColor = 'text-blue-600' }: DetailModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
+        <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={onClose} />
+        <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden transform transition-all">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 ${iconBgColor} rounded-lg`}>
+                <Icon className={`w-5 h-5 ${iconColor}`} />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+          {/* Content */}
+          <div className="p-6 overflow-y-auto max-h-[60vh]">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// IP Details Card Component
+interface IPDetailsCardProps {
+  location: GeoLocation;
+  onBlock: (ip: string) => void;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+function IPDetailsCard({ location, onBlock, isExpanded, onToggle }: IPDetailsCardProps) {
+  return (
+    <div className={`border rounded-lg overflow-hidden transition-all ${location.isTrusted ? 'border-green-200 bg-green-50/50' : 'border-gray-200'}`}>
+      <div 
+        className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${location.isTrusted ? 'bg-green-500' : 'bg-blue-500'} animate-pulse`} />
+          <div>
+            <span className="font-mono text-sm text-gray-900">{location.ip}</span>
+            <span className="ml-2 text-sm text-gray-500">{location.city}, {location.country}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
+            {location.requestCount} requests
+          </span>
+          {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </div>
+      </div>
+      
+      {isExpanded && (
+        <div className="px-4 pb-4 pt-2 border-t border-gray-100 space-y-3">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Country Code:</span>
+              <span className="ml-2 font-medium">{location.countryCode}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Coordinates:</span>
+              <span className="ml-2 font-medium">{location.lat.toFixed(2)}, {location.lon.toFixed(2)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Status:</span>
+              <span className={`ml-2 font-medium ${location.isTrusted ? 'text-green-600' : 'text-blue-600'}`}>
+                {location.isTrusted ? 'Trusted' : 'Regular'}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-500">Last Seen:</span>
+              <span className="ml-2 font-medium">{new Date(location.lastSeen).toLocaleTimeString()}</span>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); onBlock(location.ip); }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition-colors"
+            >
+              <Ban className="w-3 h-3" />
+              Block IP
+            </button>
+            <a
+              href={`https://whatismyipaddress.com/ip/${location.ip}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Lookup
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function IntelliceilPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'config' | 'logs'>('overview');
   const [newBlockIP, setNewBlockIP] = useState('');
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
+  
+  // Modal states for clickable stat cards
+  const [activeModal, setActiveModal] = useState<'rps' | 'ips' | 'allowed' | 'blocked' | null>(null);
+  
+  // Expanded IP cards state
+  const [expandedIPs, setExpandedIPs] = useState<Set<string>>(new Set());
+  
+  // Selected map marker state
+  const [selectedMapMarker, setSelectedMapMarker] = useState<GeoLocation | null>(null);
 
   // Fetch status with auto-refresh every 2 seconds
   const { data: statusResponse, isLoading, error } = useQuery({
@@ -117,6 +256,19 @@ export default function IntelliceilPage() {
   const intelliceil: IntelliceilStatus | undefined = statusResponse?.data?.data;
   const threatLevel: ThreatLevelKey = intelliceil?.threatLevel?.level ?? 'NORMAL';
   const threatConfig = threatLevelConfig[threatLevel];
+  
+  // Helper to toggle IP expansion
+  const toggleIPExpansion = (ip: string) => {
+    setExpandedIPs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(ip)) {
+        newSet.delete(ip);
+      } else {
+        newSet.add(ip);
+      }
+      return newSet;
+    });
+  };
 
   // Mutations
   const updateConfigMutation = useMutation({
@@ -290,65 +442,101 @@ export default function IntelliceilPage() {
       {/* Overview Tab */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Stats Grid */}
+          {/* Stats Grid - Clickable Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Current RPS */}
-            <div className="bg-white p-6 rounded-xl border border-gray-200">
+            {/* Current RPS - Clickable */}
+            <button
+              onClick={() => setActiveModal('rps')}
+              className="bg-white p-6 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all text-left group"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm">Requests/Second</p>
+                  <p className="text-gray-500 text-sm flex items-center gap-1">
+                    Requests/Second
+                    <Eye className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </p>
                   <p className="text-3xl font-bold text-gray-900">{intelliceil.currentRps}</p>
                 </div>
-                <div className="p-3 bg-blue-100 rounded-lg">
+                <div className="p-3 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
                   <Zap className="w-6 h-6 text-blue-600" />
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-2">
                 Baseline: {intelliceil.baseline.avgRequestsPerSecond.toFixed(1)} req/s
               </p>
-            </div>
+              <p className="text-xs text-blue-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for details →
+              </p>
+            </button>
 
-            {/* Unique IPs */}
-            <div className="bg-white p-6 rounded-xl border border-gray-200">
+            {/* Unique IPs - Clickable */}
+            <button
+              onClick={() => setActiveModal('ips')}
+              className="bg-white p-6 rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all text-left group"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm">Unique IPs</p>
+                  <p className="text-gray-500 text-sm flex items-center gap-1">
+                    Unique IPs
+                    <Eye className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </p>
                   <p className="text-3xl font-bold text-gray-900">{intelliceil.uniqueIPs}</p>
                 </div>
-                <div className="p-3 bg-purple-100 rounded-lg">
+                <div className="p-3 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
                   <Globe className="w-6 h-6 text-purple-600" />
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-2">
                 {intelliceil.geoLocations.filter((g: GeoLocation) => g.isTrusted).length} trusted
               </p>
-            </div>
+              <p className="text-xs text-purple-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for IP details →
+              </p>
+            </button>
 
-            {/* Allowed Requests */}
-            <div className="bg-white p-6 rounded-xl border border-gray-200">
+            {/* Allowed Requests - Clickable */}
+            <button
+              onClick={() => setActiveModal('allowed')}
+              className="bg-white p-6 rounded-xl border border-gray-200 hover:border-green-300 hover:shadow-lg transition-all text-left group"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm">Allowed</p>
+                  <p className="text-gray-500 text-sm flex items-center gap-1">
+                    Allowed
+                    <Eye className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </p>
                   <p className="text-3xl font-bold text-green-600">{intelliceil.allowedRequests.toLocaleString()}</p>
                 </div>
-                <div className="p-3 bg-green-100 rounded-lg">
+                <div className="p-3 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
                   <CheckCircle className="w-6 h-6 text-green-600" />
                 </div>
               </div>
-            </div>
+              <p className="text-xs text-green-500 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for traffic sources →
+              </p>
+            </button>
 
-            {/* Blocked Requests */}
-            <div className="bg-white p-6 rounded-xl border border-gray-200">
+            {/* Blocked Requests - Clickable */}
+            <button
+              onClick={() => setActiveModal('blocked')}
+              className="bg-white p-6 rounded-xl border border-gray-200 hover:border-red-300 hover:shadow-lg transition-all text-left group"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm">Blocked</p>
+                  <p className="text-gray-500 text-sm flex items-center gap-1">
+                    Blocked
+                    <Eye className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </p>
                   <p className="text-3xl font-bold text-red-600">{intelliceil.blockedRequests.toLocaleString()}</p>
                 </div>
-                <div className="p-3 bg-red-100 rounded-lg">
+                <div className="p-3 bg-red-100 rounded-lg group-hover:bg-red-200 transition-colors">
                   <Ban className="w-6 h-6 text-red-600" />
                 </div>
               </div>
-            </div>
+              <p className="text-xs text-red-500 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click for blocked details →
+              </p>
+            </button>
           </div>
 
           {/* Traffic Chart */}
@@ -454,93 +642,198 @@ export default function IntelliceilPage() {
 
       {/* Map Tab */}
       {activeTab === 'map' && (
-        <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold text-gray-900 mb-4">Live Traffic Map</h3>
-          <div className="relative h-96 bg-gray-100 rounded-lg overflow-hidden">
-            {/* World Map Background - Using a simple SVG placeholder */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <Globe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">
-                  Live traffic visualization
-                </p>
-                <p className="text-sm text-gray-400 mt-2">
-                  {intelliceil.geoLocations.length} active IPs from {intelliceil.topCountries.length} countries
-                </p>
+        <div className="space-y-6">
+          {/* Interactive World Map */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Live Traffic Map</h3>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span>Live updates every 2s</span>
               </div>
             </div>
             
-            {/* Traffic Points */}
-            <div className="absolute inset-0">
-              {intelliceil.geoLocations.slice(0, 50).map((loc: GeoLocation, i: number) => {
-                // Simple mapping: lat/lon to % position
-                const x = ((loc.lon + 180) / 360) * 100;
-                const y = ((90 - loc.lat) / 180) * 100;
-                return (
-                  <div
-                    key={loc.ip}
-                    className={`absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 ${
-                      loc.isTrusted ? 'bg-green-500' : 'bg-blue-500'
-                    } animate-ping`}
-                    style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${i * 100}ms` }}
-                    title={`${loc.ip} (${loc.city}, ${loc.country})`}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Legend */}
-            <div className="absolute bottom-4 left-4 bg-white/90 p-3 rounded-lg text-sm">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span>Trusted Source</span>
+            <div className="relative h-[500px] bg-gradient-to-b from-slate-100 to-slate-200 rounded-xl overflow-hidden">
+              {/* World Map SVG Background */}
+              <svg 
+                viewBox="0 0 1000 500" 
+                className="absolute inset-0 w-full h-full opacity-20"
+                preserveAspectRatio="xMidYMid slice"
+              >
+                <defs>
+                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#94a3b8" strokeWidth="0.5"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+                {/* Simplified continents outline */}
+                <ellipse cx="200" cy="200" rx="150" ry="100" fill="#cbd5e1" opacity="0.5" /> {/* North America */}
+                <ellipse cx="220" cy="330" rx="80" ry="80" fill="#cbd5e1" opacity="0.5" /> {/* South America */}
+                <ellipse cx="500" cy="200" rx="100" ry="70" fill="#cbd5e1" opacity="0.5" /> {/* Europe */}
+                <ellipse cx="520" cy="300" rx="130" ry="100" fill="#cbd5e1" opacity="0.5" /> {/* Africa */}
+                <ellipse cx="700" cy="200" rx="180" ry="80" fill="#cbd5e1" opacity="0.5" /> {/* Asia */}
+                <ellipse cx="850" cy="380" rx="80" ry="60" fill="#cbd5e1" opacity="0.5" /> {/* Australia */}
+              </svg>
+              
+              {/* Traffic Points with Tooltips */}
+              <div className="absolute inset-0">
+                {intelliceil.geoLocations.slice(0, 50).map((loc: GeoLocation, i: number) => {
+                  const x = ((loc.lon + 180) / 360) * 100;
+                  const y = ((90 - loc.lat) / 180) * 100;
+                  const isSelected = selectedMapMarker?.ip === loc.ip;
+                  
+                  return (
+                    <div key={loc.ip}>
+                      {/* Pulse Ring */}
+                      <div
+                        className={`absolute w-6 h-6 rounded-full transform -translate-x-1/2 -translate-y-1/2 ${
+                          loc.isTrusted ? 'bg-green-500/20' : 'bg-blue-500/20'
+                        }`}
+                        style={{ 
+                          left: `${x}%`, 
+                          top: `${y}%`,
+                          animation: `ping 2s cubic-bezier(0, 0, 0.2, 1) infinite`,
+                          animationDelay: `${i * 100}ms` 
+                        }}
+                      />
+                      {/* Main Point - Clickable */}
+                      <button
+                        onClick={() => setSelectedMapMarker(isSelected ? null : loc)}
+                        className={`absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all z-10 ${
+                          loc.isTrusted 
+                            ? 'bg-green-500 hover:bg-green-400 shadow-green-500/50' 
+                            : 'bg-blue-500 hover:bg-blue-400 shadow-blue-500/50'
+                        } ${isSelected ? 'ring-4 ring-white scale-150 z-20' : 'shadow-lg'}`}
+                        style={{ left: `${x}%`, top: `${y}%` }}
+                        title={`${loc.ip} (${loc.city}, ${loc.country})`}
+                      />
+                      
+                      {/* Popup Modal on Map */}
+                      {isSelected && (
+                        <div 
+                          className="absolute z-30 bg-white rounded-xl shadow-2xl p-4 w-72 transform -translate-x-1/2"
+                          style={{ 
+                            left: `${x}%`, 
+                            top: `${Math.min(y + 5, 70)}%`,
+                          }}
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <MapPin className={`w-4 h-4 ${loc.isTrusted ? 'text-green-500' : 'text-blue-500'}`} />
+                              <span className="font-medium text-gray-900">{loc.city}</span>
+                            </div>
+                            <button 
+                              onClick={() => setSelectedMapMarker(null)}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">IP Address:</span>
+                              <span className="font-mono text-gray-900">{loc.ip}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Country:</span>
+                              <span className="text-gray-900">{loc.country} ({loc.countryCode})</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Requests:</span>
+                              <span className="font-semibold text-gray-900">{loc.requestCount}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Status:</span>
+                              <span className={`font-medium ${loc.isTrusted ? 'text-green-600' : 'text-blue-600'}`}>
+                                {loc.isTrusted ? '✓ Trusted' : 'Regular'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Last Active:</span>
+                              <span className="text-gray-900">{new Date(loc.lastSeen).toLocaleTimeString()}</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
+                            <button
+                              onClick={() => { blockIPMutation.mutate(loc.ip); setSelectedMapMarker(null); }}
+                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition-colors"
+                            >
+                              <Ban className="w-3 h-3" />
+                              Block
+                            </button>
+                            <a
+                              href={`https://whatismyipaddress.com/ip/${loc.ip}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Lookup
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500" />
-                <span>Regular Traffic</span>
+
+              {/* Legend */}
+              <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Legend</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm" />
+                    <span className="text-sm text-gray-700">Trusted Source</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500 shadow-sm" />
+                    <span className="text-sm text-gray-700">Regular Traffic</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">Click markers for details</p>
+              </div>
+
+              {/* Stats Overlay */}
+              <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-100">
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{intelliceil.geoLocations.length}</p>
+                    <p className="text-xs text-gray-500">Active IPs</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">{intelliceil.topCountries.length}</p>
+                    <p className="text-xs text-gray-500">Countries</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Active Connections List */}
-          <div className="mt-6">
-            <h4 className="font-medium text-gray-700 mb-3">Active Connections</h4>
-            <div className="max-h-64 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-2 text-left">IP Address</th>
-                    <th className="px-4 py-2 text-left">Location</th>
-                    <th className="px-4 py-2 text-left">Requests</th>
-                    <th className="px-4 py-2 text-left">Status</th>
-                    <th className="px-4 py-2 text-left">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {intelliceil.geoLocations.slice(0, 20).map((loc: GeoLocation) => (
-                    <tr key={loc.ip} className="border-b">
-                      <td className="px-4 py-2 font-mono text-xs">{loc.ip}</td>
-                      <td className="px-4 py-2">{loc.city}, {loc.country}</td>
-                      <td className="px-4 py-2">{loc.requestCount}</td>
-                      <td className="px-4 py-2">
-                        {loc.isTrusted ? (
-                          <span className="text-green-600 text-xs font-medium">Trusted</span>
-                        ) : (
-                          <span className="text-gray-500 text-xs">Regular</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        <button
-                          onClick={() => blockIPMutation.mutate(loc.ip)}
-                          className="text-red-600 hover:text-red-800 text-xs"
-                        >
-                          Block
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Active Connections List with Expandable Cards */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-gray-900">Active Connections</h4>
+              <span className="text-sm text-gray-500">{intelliceil.geoLocations.length} connections</span>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {intelliceil.geoLocations.map((loc: GeoLocation) => (
+                <IPDetailsCard
+                  key={loc.ip}
+                  location={loc}
+                  onBlock={(ip) => blockIPMutation.mutate(ip)}
+                  isExpanded={expandedIPs.has(loc.ip)}
+                  onToggle={() => toggleIPExpansion(loc.ip)}
+                />
+              ))}
+              {intelliceil.geoLocations.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <Globe className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p>No active connections</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -736,6 +1029,254 @@ export default function IntelliceilPage() {
           </div>
         </div>
       )}
+
+      {/* ============================================ */}
+      {/* DETAIL MODALS FOR CLICKABLE STAT CARDS */}
+      {/* ============================================ */}
+
+      {/* Requests Per Second Modal */}
+      <DetailModal
+        isOpen={activeModal === 'rps'}
+        onClose={() => setActiveModal(null)}
+        title="Request Rate Details"
+        icon={Zap}
+        iconBgColor="bg-blue-100"
+        iconColor="text-blue-600"
+      >
+        <div className="space-y-6">
+          {/* Current Stats */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-blue-50 rounded-xl p-4 text-center">
+              <p className="text-3xl font-bold text-blue-600">{intelliceil.currentRps}</p>
+              <p className="text-sm text-blue-700">Current RPS</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4 text-center">
+              <p className="text-3xl font-bold text-gray-700">{intelliceil.baseline.avgRequestsPerSecond.toFixed(1)}</p>
+              <p className="text-sm text-gray-500">Baseline RPS</p>
+            </div>
+          </div>
+
+          {/* Baseline Info */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <h4 className="font-medium text-gray-700 mb-3 flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              Baseline Statistics
+            </h4>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-gray-500">Peak RPS:</span>
+                <span className="ml-2 font-medium">{intelliceil.baseline.peakRequestsPerSecond.toFixed(1)}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">Sample Count:</span>
+                <span className="ml-2 font-medium">{intelliceil.baseline.sampleCount}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-gray-500">Last Updated:</span>
+                <span className="ml-2 font-medium">{new Date(intelliceil.baseline.lastUpdated).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Top Endpoints */}
+          <div>
+            <h4 className="font-medium text-gray-700 mb-3 flex items-center gap-2">
+              <Server className="w-4 h-4" />
+              Top Endpoints
+            </h4>
+            <div className="space-y-2">
+              {intelliceil.topEndpoints?.slice(0, 10).map((ep: { endpoint: string; count: number }, i: number) => (
+                <div key={ep.endpoint} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs w-5">#{i + 1}</span>
+                    <code className="text-sm text-gray-700 truncate max-w-[300px]">{ep.endpoint}</code>
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">{ep.count}</span>
+                </div>
+              ))}
+              {(!intelliceil.topEndpoints || intelliceil.topEndpoints.length === 0) && (
+                <p className="text-gray-500 text-sm text-center py-4">No endpoint data available</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </DetailModal>
+
+      {/* Unique IPs Modal */}
+      <DetailModal
+        isOpen={activeModal === 'ips'}
+        onClose={() => setActiveModal(null)}
+        title="IP Address Details"
+        icon={Globe}
+        iconBgColor="bg-purple-100"
+        iconColor="text-purple-600"
+      >
+        <div className="space-y-4">
+          {/* Summary Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-purple-50 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-purple-600">{intelliceil.uniqueIPs}</p>
+              <p className="text-xs text-purple-700">Total IPs</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-green-600">
+                {intelliceil.geoLocations.filter((g: GeoLocation) => g.isTrusted).length}
+              </p>
+              <p className="text-xs text-green-700">Trusted</p>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-blue-600">
+                {intelliceil.geoLocations.filter((g: GeoLocation) => !g.isTrusted).length}
+              </p>
+              <p className="text-xs text-blue-700">Regular</p>
+            </div>
+          </div>
+
+          {/* IP List with Expandable Details */}
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {intelliceil.geoLocations.map((loc: GeoLocation) => (
+              <IPDetailsCard
+                key={loc.ip}
+                location={loc}
+                onBlock={(ip) => { blockIPMutation.mutate(ip); }}
+                isExpanded={expandedIPs.has(loc.ip)}
+                onToggle={() => toggleIPExpansion(loc.ip)}
+              />
+            ))}
+          </div>
+        </div>
+      </DetailModal>
+
+      {/* Allowed Requests Modal */}
+      <DetailModal
+        isOpen={activeModal === 'allowed'}
+        onClose={() => setActiveModal(null)}
+        title="Allowed Traffic Details"
+        icon={CheckCircle}
+        iconBgColor="bg-green-100"
+        iconColor="text-green-600"
+      >
+        <div className="space-y-6">
+          {/* Stats */}
+          <div className="bg-green-50 rounded-xl p-4 text-center">
+            <p className="text-4xl font-bold text-green-600">{intelliceil.allowedRequests.toLocaleString()}</p>
+            <p className="text-sm text-green-700">Total Allowed Requests</p>
+          </div>
+
+          {/* Top Sources */}
+          <div>
+            <h4 className="font-medium text-gray-700 mb-3">Top Traffic Sources</h4>
+            <div className="space-y-2">
+              {intelliceil.topSources.map((source: SourceCount, i: number) => {
+                const percentage = Math.round((source.count / intelliceil.allowedRequests) * 100) || 0;
+                return (
+                  <div key={source.source} className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-gray-700">#{i + 1} {source.source}</span>
+                      <span className="text-sm text-gray-500">{source.count.toLocaleString()} ({percentage}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-green-500 h-2 rounded-full transition-all"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {intelliceil.topSources.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-4">No source data available</p>
+              )}
+            </div>
+          </div>
+
+          {/* Top Countries */}
+          <div>
+            <h4 className="font-medium text-gray-700 mb-3">Traffic by Country</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {intelliceil.topCountries.map((country: CountryCount) => (
+                <div key={country.country} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                  <span className="text-sm text-gray-700">{country.country || 'Unknown'}</span>
+                  <span className="text-sm font-medium text-gray-600">{country.count.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </DetailModal>
+
+      {/* Blocked Requests Modal */}
+      <DetailModal
+        isOpen={activeModal === 'blocked'}
+        onClose={() => setActiveModal(null)}
+        title="Blocked Traffic Details"
+        icon={Ban}
+        iconBgColor="bg-red-100"
+        iconColor="text-red-600"
+      >
+        <div className="space-y-6">
+          {/* Stats */}
+          <div className="bg-red-50 rounded-xl p-4 text-center">
+            <p className="text-4xl font-bold text-red-600">{intelliceil.blockedRequests.toLocaleString()}</p>
+            <p className="text-sm text-red-700">Total Blocked Requests</p>
+          </div>
+
+          {/* Threat Info */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <h4 className="font-medium text-gray-700 mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Current Threat Status
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Threat Level:</span>
+                <span className={`font-medium ${threatConfig.textColor}`}>{threatConfig.label}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Above Baseline:</span>
+                <span className="font-medium">{intelliceil.threatLevel.percentage.toFixed(1)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Mitigation Active:</span>
+                <span className={`font-medium ${intelliceil.threatLevel.mitigationActive ? 'text-red-600' : 'text-green-600'}`}>
+                  {intelliceil.threatLevel.mitigationActive ? 'Yes' : 'No'}
+                </span>
+              </div>
+              {intelliceil.threatLevel.triggeredAt && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Triggered At:</span>
+                  <span className="font-medium">{new Date(intelliceil.threatLevel.triggeredAt).toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Blocked IPs List */}
+          <div>
+            <h4 className="font-medium text-gray-700 mb-3">Blocked IP Addresses</h4>
+            {intelliceil.config.blockedIPs.length === 0 ? (
+              <div className="text-center py-6 bg-gray-50 rounded-lg">
+                <Ban className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">No IPs currently blocked</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {intelliceil.config.blockedIPs.map((ip: string) => (
+                  <div key={ip} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
+                    <span className="font-mono text-sm text-red-800">{ip}</span>
+                    <button
+                      onClick={() => unblockIPMutation.mutate(ip)}
+                      className="text-xs text-red-600 hover:text-red-800 hover:underline"
+                    >
+                      Unblock
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </DetailModal>
     </div>
   );
 }

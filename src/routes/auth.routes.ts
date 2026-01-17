@@ -80,4 +80,41 @@ router.post(
   asyncHandler(authController.resetPassword)
 );
 
+// ============================================
+// Super Admin Impersonation Routes
+// ============================================
+
+/**
+ * @route   GET /api/auth/impersonation/targets
+ * @desc    Get list of users available for impersonation
+ * @access  Super Admin only
+ */
+router.get(
+  '/impersonation/targets',
+  authenticate,
+  asyncHandler(authController.getImpersonationTargets)
+);
+
+/**
+ * @route   POST /api/auth/impersonate/:userId
+ * @desc    Start impersonating another user
+ * @access  Super Admin only
+ */
+router.post(
+  '/impersonate/:userId',
+  authenticate,
+  asyncHandler(authController.impersonateUser)
+);
+
+/**
+ * @route   POST /api/auth/end-impersonation
+ * @desc    End impersonation and restore admin session
+ * @access  Private (called with stored admin token)
+ */
+router.post(
+  '/end-impersonation',
+  authenticate,
+  asyncHandler(authController.endImpersonation)
+);
+
 export default router;

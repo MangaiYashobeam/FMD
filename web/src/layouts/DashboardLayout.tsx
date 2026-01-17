@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import ImpersonationBanner from '../components/ImpersonationBanner';
 import {
   LayoutDashboard,
   Package,
@@ -35,7 +36,7 @@ const navigation = [
 ];
 
 export default function DashboardLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, impersonation } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -47,7 +48,10 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen bg-gray-50 ${impersonation.isImpersonating ? 'pt-10' : ''}`}>
+      {/* Impersonation Banner */}
+      <ImpersonationBanner />
+      
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
