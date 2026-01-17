@@ -80,36 +80,42 @@ export default function LandingPage() {
       title: 'Facebook Marketplace Integration',
       description: 'Automatically post your entire inventory to Facebook Marketplace with one click. Reach millions of local buyers instantly.',
       color: 'bg-blue-500',
+      slug: 'facebook-marketplace',
     },
     {
       icon: Database,
       title: 'DMS/FTP Auto-Sync',
       description: 'Connect directly to your DMS via FTP. Import CSV, Excel, or XML files. Inventory updates automatically.',
       color: 'bg-purple-500',
+      slug: 'dms-ftp-sync',
     },
     {
       icon: Users,
       title: 'Multi-Account Management',
       description: 'Manage multiple dealership locations from a single dashboard. Role-based access for your entire team.',
       color: 'bg-green-500',
+      slug: 'multi-account',
     },
     {
       icon: Mail,
       title: 'Lead Management & ADF',
       description: 'Capture leads from Facebook, send to your CRM via ADF (Auto-lead Data Format). Never miss a sale.',
       color: 'bg-orange-500',
+      slug: 'lead-management',
     },
     {
       icon: Chrome,
       title: 'Chrome Extension',
       description: 'Our powerful Chrome extension makes posting to Marketplace seamless. Login once, post forever.',
       color: 'bg-red-500',
+      slug: 'chrome-extension',
     },
     {
       icon: BarChart3,
       title: 'Analytics & Tracking',
       description: 'Track post performance, lead conversion, and email opens. Data-driven insights to boost sales.',
       color: 'bg-indigo-500',
+      slug: 'analytics',
     },
   ];
 
@@ -396,16 +402,20 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <div
+              <Link
                 key={index}
-                className="group p-8 bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-xl transition-all duration-300"
+                to={`/features/${feature.slug}`}
+                className="group p-8 bg-white rounded-2xl border border-gray-100 hover:border-blue-200 hover:shadow-xl transition-all duration-300 cursor-pointer"
               >
                 <div className={`w-14 h-14 ${feature.color} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
                   <feature.icon className="w-7 h-7 text-white" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
+                <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">{feature.title}</h3>
                 <p className="text-gray-600 leading-relaxed">{feature.description}</p>
-              </div>
+                <div className="mt-4 text-blue-600 font-semibold flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  Learn more <ArrowRight className="w-4 h-4 ml-2" />
+                </div>
+              </Link>
             ))}
           </div>
         </div>
