@@ -4,6 +4,7 @@ import { AuthController } from '@/controllers/auth.controller';
 import { authenticate } from '@/middleware/auth';
 import { validate, authValidators } from '@/middleware/validation';
 import prisma from '@/config/database';
+import bcrypt from 'bcryptjs';
 
 const router = Router();
 const authController = new AuthController();
@@ -60,6 +61,114 @@ router.get('/health', async (_req: Request, res: Response) => {
       success: false,
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+  }
+});
+
+/**
+ * @route   GET /api/auth/debug-login
+ * @desc    Debug login step by step
+ * @access  Public (TEMPORARY)
+ */
+router.get('/debug-login', async (_req: Request, res: Response) => {
+  const email = 'admin@gadproductions.com';
+  const password = 'GadAdmin2026!Temp';
+  const steps: Record<string, any> = {};
+  
+  try {
+    // Step 1: Find user
+    steps.step1_findUser = 'starting';
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        passwordHash: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+    steps.step1_findUser = user ? { found: true, active: user.isActive, hasPasswordHash: !!user.passwordHash } : { found: false };
+
+    if (!user) {
+      return res.json({ success: false, steps, error: 'User not found' });
+    }
+
+    // Step 2: Check password
+    steps.step2_passwordCheck = 'starting';
+    const isPasswordValid = user.passwordHash 
+      ? await bcrypt.compare(password, user.passwordHash)
+      : false;
+    steps.step2_passwordCheck = { valid: isPasswordValid };
+
+    if (!isPasswordValid) {
+      return res.json({ success: false, steps, error: 'Invalid password' });
+    }
+
+    // Step 3: Check JWT secrets
+    steps.step3_jwtSecrets = {
+      JWT_SECRET: !!process.env.JWT_SECRET,
+      JWT_REFRESH_SECRET: !!process.env.JWT_REFRESH_SECRET,
+      JWT_SECRET_LENGTH: process.env.JWT_SECRET?.length || 0,
+    };
+
+    // Step 4: Try to create refresh token record
+    steps.step4_refreshToken = 'starting';
+    try {
+      const testToken = await prisma.refreshToken.create({
+        data: {
+          userId: user.id,
+          token: 'test-debug-token-' + Date.now(),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+      // Clean up test token
+      await prisma.refreshToken.delete({ where: { id: testToken.id } });
+      steps.step4_refreshToken = { success: true };
+    } catch (err: any) {
+      steps.step4_refreshToken = { success: false, error: err.message };
+    }
+
+    // Step 5: Try to update user last login
+    steps.step5_updateUser = 'starting';
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+      steps.step5_updateUser = { success: true };
+    } catch (err: any) {
+      steps.step5_updateUser = { success: false, error: err.message };
+    }
+
+    // Step 6: Try to create audit log
+    steps.step6_auditLog = 'starting';
+    try {
+      const log = await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'DEBUG_TEST',
+          entityType: 'user',
+          entityId: user.id,
+          ipAddress: 'debug-test',
+          userAgent: 'debug-test',
+        },
+      });
+      // Clean up
+      await prisma.auditLog.delete({ where: { id: log.id } });
+      steps.step6_auditLog = { success: true };
+    } catch (err: any) {
+      steps.step6_auditLog = { success: false, error: err.message };
+    }
+
+    res.json({ success: true, steps, message: 'All steps passed - login should work' });
+  } catch (error: any) {
+    res.json({ 
+      success: false, 
+      steps, 
+      error: error.message,
+      stack: error.stack 
     });
   }
 });
