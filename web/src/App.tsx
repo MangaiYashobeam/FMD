@@ -44,6 +44,7 @@ import AuditLogsPage from './pages/admin/AuditLogsPage';
 import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import IntelliceilPage from './pages/admin/IntelliceilPage';
 import IIPCPage from './pages/admin/IIPCPage';
+import AICenterPage from './pages/admin/AICenterPage';
 import EmailSettingsPage from './pages/admin/EmailSettingsPage';
 import './index.css';
 
@@ -124,6 +125,7 @@ function App() {
               <Route path="settings" element={<SystemSettingsPage />} />
               <Route path="security" element={<IntelliceilPage />} />
               <Route path="iipc" element={<IIPCPage />} />
+              <Route path="ai-center" element={<AICenterPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

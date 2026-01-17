@@ -12,8 +12,15 @@
  */
 
 import { logger } from '@/utils/logger';
-import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+
+// Anthropic SDK is optional - only use if installed
+let Anthropic: any = null;
+try {
+  Anthropic = require('@anthropic-ai/sdk').default;
+} catch (e) {
+  logger.warn('Anthropic SDK not available, using OpenAI only');
+}
 
 // ============================================
 // Types
@@ -69,7 +76,7 @@ interface ResponseGeneration {
 // ============================================
 
 export class AINavigationAgent {
-  private anthropic: Anthropic | null = null;
+  private anthropic: any = null;  // Anthropic instance (dynamically loaded)
   private openai: OpenAI | null = null;
   private defaultProvider: AIProvider;
   

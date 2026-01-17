@@ -6,7 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import { FACEBOOK_CONFIG } from '../config/facebook';
-import prisma from '../config/database';
+import prisma from '@/config/database';
 import jwt from 'jsonwebtoken';
 
 const router = Router();

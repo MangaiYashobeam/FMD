@@ -1384,3 +1384,631 @@ model DealerAccount {
 
   @@map("dealer_accounts")
 }
+
+// ============================================
+// AI CENTER - COMPREHENSIVE AI MANAGEMENT
+// ============================================
+
+// AI Provider Configuration
+model AIProvider {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Provider Info
+  name        String // anthropic, openai, google, meta, custom
+  displayName String @map("display_name")
+  apiKey      String @map("api_key") @db.Text // Encrypted
+  apiEndpoint String? @map("api_endpoint") // For custom providers
+  
+  // Model Configuration
+  defaultModel   String  @map("default_model")
+  availableModels Json   @map("available_models") // Array of model configs
+  
+  // Capabilities
+  capabilities Json // { chat: true, vision: true, function_calling: true, etc }
+  
+  // Rate Limits
+  maxTokensPerMinute Int @default(100000) @map("max_tokens_per_minute")
+  maxRequestsPerMinute Int @default(60) @map("max_requests_per_minute")
+  currentUsage Json? @map("current_usage") // { tokens: 0, requests: 0, resetAt: date }
+  
+  // Status
+  isActive   Boolean @default(true) @map("is_active")
+  isDefault  Boolean @default(false) @map("is_default")
+  lastTested DateTime? @map("last_tested")
+  healthStatus String @default("unknown") @map("health_status") // healthy, degraded, down, unknown
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  memories AIMemory[]
+  trainingSessions AITrainingSession[]
+  conversations AIConversation[]
+  
+  @@unique([accountId, name])
+  @@index([accountId])
+  @@index([isActive])
+  @@map("ai_providers")
+}
+
+// AI Shared Memory - Persistent knowledge storage for each AI
+model AIMemory {
+  id         String @id @default(uuid())
+  providerId String @map("provider_id")
+  accountId  String @map("account_id")
+
+  // Memory Type
+  memoryType String @map("memory_type") // dealer_profile, inventory, customer_patterns, conversation_context, learned_responses, threat_patterns
+  
+  // Memory Content
+  key         String
+  value       Json
+  embedding   Float[] // Vector embedding for semantic search
+  confidence  Float @default(1.0)
+  source      String? // Where this memory came from
+  
+  // Context
+  context     Json? // Related context/metadata
+  tags        String[] @default([])
+  
+  // Importance & Decay
+  importance  Float @default(0.5) // 0-1, affects retrieval priority
+  accessCount Int @default(0) @map("access_count")
+  lastAccessed DateTime? @map("last_accessed")
+  expiresAt   DateTime? @map("expires_at")
+  
+  // Versioning
+  version     Int @default(1)
+  previousVersionId String? @map("previous_version_id")
+  
+  // Status
+  isActive    Boolean @default(true) @map("is_active")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  provider AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, memoryType, key])
+  @@index([providerId])
+  @@index([accountId])
+  @@index([memoryType])
+  @@index([tags])
+  @@map("ai_memories")
+}
+
+// AI Training Session - Training history and progress
+model AITrainingSession {
+  id         String @id @default(uuid())
+  providerId String @map("provider_id")
+  accountId  String @map("account_id")
+
+  // Training Info
+  name        String
+  description String? @db.Text
+  trainingType String @map("training_type") // fbm_specialist, customer_service, inventory_expert, threat_detection, navigation
+  
+  // Training Data
+  trainingData Json @map("training_data") // Training examples, prompts, etc
+  datasetSize  Int @map("dataset_size")
+  
+  // Training Configuration
+  config Json // { epochs: 3, learning_rate: 0.001, batch_size: 32, etc }
+  
+  // Progress
+  status      String @default("pending") // pending, in_progress, completed, failed, paused
+  progress    Float @default(0) // 0-100
+  currentStep Int @default(0) @map("current_step")
+  totalSteps  Int @map("total_steps")
+  
+  // Results
+  metrics     Json? // { accuracy: 0.95, loss: 0.05, f1_score: 0.92, etc }
+  evaluation  Json? // Test results
+  artifacts   Json? // Model weights, checkpoints, etc
+  
+  // Error Handling
+  errorLog    Json? @map("error_log")
+  lastError   String? @map("last_error") @db.Text
+  
+  // Timestamps
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  provider AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  trainingData2 AITrainingData[]
+
+  @@index([providerId])
+  @@index([accountId])
+  @@index([trainingType])
+  @@index([status])
+  @@map("ai_training_sessions")
+}
+
+// AI Training Data - Individual training examples
+model AITrainingData {
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+  accountId String @map("account_id")
+
+  // Data Type
+  dataType String @map("data_type") // conversation, scenario, knowledge, threat_example
+  category String // fbm_inquiry, price_negotiation, availability, complaint, threat, etc
+  
+  // Training Example
+  input      String @db.Text // The input/prompt
+  expectedOutput String @map("expected_output") @db.Text // Expected response
+  context    Json? // Additional context
+  
+  // Quality
+  quality    Float @default(1.0) // 0-1, quality score
+  isVerified Boolean @default(false) @map("is_verified")
+  verifiedBy String? @map("verified_by")
+  
+  // Usage Stats
+  usedInTraining Int @default(0) @map("used_in_training")
+  effectiveness Float? // How well this example performed
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  session AITrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([accountId])
+  @@index([category])
+  @@index([dataType])
+  @@map("ai_training_data")
+}
+
+// AI Conversation - Full conversation tracking with analysis
+model AIConversation {
+  id         String @id @default(uuid())
+  providerId String @map("provider_id")
+  accountId  String @map("account_id")
+  leadId     String? @map("lead_id")
+
+  // Conversation Info
+  conversationType String @map("conversation_type") // fbm_inquiry, support, negotiation, etc
+  channel          String // facebook_marketplace, messenger, web_chat
+  
+  // Participants
+  customerId   String? @map("customer_id")
+  customerName String? @map("customer_name")
+  agentMode    String @map("agent_mode") // autonomous, supervised, manual
+  
+  // Context
+  vehicleId    String? @map("vehicle_id")
+  vehicleInfo  Json? @map("vehicle_info")
+  dealerContext Json? @map("dealer_context")
+  
+  // Conversation State
+  status       String @default("active") // active, paused, completed, escalated, flagged
+  sentiment    String @default("neutral") // positive, neutral, negative, hostile
+  intentStack  Json @default("[]") @map("intent_stack") // Current conversation intents
+  
+  // Metrics
+  messageCount Int @default(0) @map("message_count")
+  avgResponseTime Float? @map("avg_response_time") // seconds
+  satisfactionScore Float? @map("satisfaction_score")
+  
+  // Threat Assessment
+  threatLevel  String @default("none") @map("threat_level") // none, low, medium, high, critical
+  threatFlags  Json @default("[]") @map("threat_flags")
+  
+  // Escalation
+  isEscalated  Boolean @default(false) @map("is_escalated")
+  escalatedAt  DateTime? @map("escalated_at")
+  escalatedTo  String? @map("escalated_to")
+  escalationReason String? @map("escalation_reason") @db.Text
+  
+  // Resolution
+  resolution   String? // sold, not_interested, follow_up, no_response, threat_ended
+  resolutionNotes String? @map("resolution_notes") @db.Text
+  
+  // Timestamps
+  startedAt   DateTime @default(now()) @map("started_at")
+  lastMessageAt DateTime? @map("last_message_at")
+  endedAt     DateTime? @map("ended_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  provider AIProvider @relation(fields: [providerId], references: [id])
+  messages AIConversationMessage[]
+  threats  AIThreat[]
+
+  @@index([providerId])
+  @@index([accountId])
+  @@index([leadId])
+  @@index([status])
+  @@index([threatLevel])
+  @@map("ai_conversations")
+}
+
+// AI Conversation Messages - Individual messages with full analysis
+model AIConversationMessage {
+  id             String @id @default(uuid())
+  conversationId String @map("conversation_id")
+
+  // Message Content
+  role       String // user, assistant, system
+  content    String @db.Text
+  contentType String @default("text") @map("content_type") // text, image, link, attachment
+  
+  // Analysis
+  intent       String? // question, statement, request, complaint, threat, etc
+  sentiment    Float? // -1 to 1
+  confidence   Float? // AI confidence in response
+  topics       String[] @default([])
+  entities     Json? // Extracted entities { names, phones, vehicles, etc }
+  
+  // AI Processing
+  tokensUsed   Int? @map("tokens_used")
+  modelUsed    String? @map("model_used")
+  processingTime Float? @map("processing_time") // ms
+  
+  // Memory Operations
+  memoriesUsed Json? @map("memories_used") // Which memories were accessed
+  memoriesCreated Json? @map("memories_created") // New memories created
+  
+  // Actions Taken
+  actions      Json? // { fetched_carfax: true, checked_inventory: true, etc }
+  externalCalls Json? @map("external_calls") // API calls made
+  
+  // Threat Detection
+  threatIndicators Json? @map("threat_indicators")
+  wasFlagged   Boolean @default(false) @map("was_flagged")
+  
+  // Human Review
+  needsReview  Boolean @default(false) @map("needs_review")
+  reviewedBy   String? @map("reviewed_by")
+  reviewNotes  String? @map("review_notes") @db.Text
+  wasEdited    Boolean @default(false) @map("was_edited")
+  originalContent String? @map("original_content") @db.Text
+  
+  // Timestamps
+  sentAt    DateTime @default(now()) @map("sent_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([role])
+  @@index([sentAt])
+  @@map("ai_conversation_messages")
+}
+
+// AI Threat Detection - Comprehensive threat tracking
+model AIThreat {
+  id             String @id @default(uuid())
+  conversationId String? @map("conversation_id")
+  accountId      String @map("account_id")
+
+  // Threat Info
+  threatType    String @map("threat_type") // harassment, scam, fraud, violence, discrimination, spam, phishing, profanity, manipulation
+  severity      String // low, medium, high, critical
+  
+  // Detection
+  detectedAt    DateTime @map("detected_at")
+  detectionMethod String @map("detection_method") // pattern_match, ml_classifier, keyword, sentiment, behavioral
+  confidence    Float @default(0.5)
+  
+  // Evidence
+  triggerContent String @map("trigger_content") @db.Text
+  context       Json? // Surrounding context
+  indicators    Json // List of threat indicators
+  
+  // Classification
+  category      String // legal_threat, personal_attack, competitive_sabotage, etc
+  subcategory   String?
+  tags          String[] @default([])
+  
+  // Response Taken
+  responseTaken String @map("response_taken") // warning_issued, conversation_ended, user_blocked, escalated, ignored
+  responseContent String? @map("response_content") @db.Text
+  responseAt    DateTime? @map("response_at")
+  
+  // Impact Assessment
+  businessImpact String? @map("business_impact") // none, low, medium, high
+  legalRisk     String? @map("legal_risk") // none, low, medium, high
+  
+  // Resolution
+  status        String @default("active") // active, resolved, escalated, false_positive
+  resolvedBy    String? @map("resolved_by")
+  resolvedAt    DateTime? @map("resolved_at")
+  resolutionNotes String? @map("resolution_notes") @db.Text
+  
+  // Learning
+  addedToTraining Boolean @default(false) @map("added_to_training")
+  patternId     String? @map("pattern_id") // Link to threat pattern
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  conversation AIConversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+  @@index([accountId])
+  @@index([threatType])
+  @@index([severity])
+  @@index([status])
+  @@map("ai_threats")
+}
+
+// AI Threat Pattern - Learned threat detection patterns
+model AIThreatPattern {
+  id        String @id @default(uuid())
+  accountId String? @map("account_id") // null = global pattern
+
+  // Pattern Info
+  name        String
+  description String? @db.Text
+  threatType  String @map("threat_type")
+  severity    String
+  
+  // Detection Rules
+  patternType String @map("pattern_type") // regex, keyword, semantic, behavioral, ml_classifier
+  pattern     Json // The actual pattern definition
+  examples    Json // Example matches
+  
+  // Effectiveness
+  matchCount  Int @default(0) @map("match_count")
+  falsePositives Int @default(0) @map("false_positives")
+  accuracy    Float? // Calculated accuracy
+  
+  // Response Template
+  defaultResponse String? @map("default_response") @db.Text
+  escalationRequired Boolean @default(false) @map("escalation_required")
+  
+  // Status
+  isActive    Boolean @default(true) @map("is_active")
+  isGlobal    Boolean @default(false) @map("is_global")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([accountId])
+  @@index([threatType])
+  @@index([isActive])
+  @@map("ai_threat_patterns")
+}
+
+// AI Learning Pattern - General learning from interactions
+model AILearningPattern {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Pattern Info
+  patternType String @map("pattern_type") // response_success, customer_preference, negotiation_tactic, objection_handling
+  category    String
+  
+  // Pattern Definition
+  trigger     Json // What triggers this pattern
+  response    Json // Successful response pattern
+  context     Json? // When to apply
+  
+  // Effectiveness
+  successRate Float @map("success_rate") // 0-1
+  sampleSize  Int @map("sample_size")
+  confidence  Float @default(0.5)
+  
+  // Usage
+  usageCount  Int @default(0) @map("usage_count")
+  lastUsed    DateTime? @map("last_used")
+  
+  // Status
+  isActive    Boolean @default(true) @map("is_active")
+  isVerified  Boolean @default(false) @map("is_verified")
+  verifiedBy  String? @map("verified_by")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([accountId])
+  @@index([patternType])
+  @@index([category])
+  @@map("ai_learning_patterns")
+}
+
+// AI Task - Todo/Task management for AI operations
+model AITask {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+  providerId String? @map("provider_id")
+
+  // Task Info
+  title       String
+  description String? @db.Text
+  taskType    String @map("task_type") // auto_respond, follow_up, inventory_update, carfax_fetch, listing_refresh, training, analysis
+  
+  // Assignment
+  assignedTo  String? @map("assigned_to") // AI provider or user
+  assignedBy  String? @map("assigned_by")
+  
+  // Priority & Scheduling
+  priority    Int @default(5) // 1-10
+  dueAt       DateTime? @map("due_at")
+  scheduledFor DateTime? @map("scheduled_for")
+  recurringConfig Json? @map("recurring_config") // { interval: "daily", time: "09:00", etc }
+  
+  // Dependencies
+  dependsOn   String[] @default([]) @map("depends_on") // Task IDs this depends on
+  blockedBy   String[] @default([]) @map("blocked_by")
+  
+  // Execution
+  status      String @default("pending") // pending, in_progress, completed, failed, cancelled, blocked
+  progress    Float @default(0)
+  
+  // Task Data
+  inputData   Json? @map("input_data")
+  outputData  Json? @map("output_data")
+  
+  // Results
+  result      Json?
+  errorLog    Json? @map("error_log")
+  
+  // Autonomy
+  autonomyLevel String @map("autonomy_level") // full, supervised, manual_approval
+  requiresApproval Boolean @default(false) @map("requires_approval")
+  approvedBy  String? @map("approved_by")
+  approvedAt  DateTime? @map("approved_at")
+  
+  // Limits
+  maxRetries  Int @default(3) @map("max_retries")
+  retryCount  Int @default(0) @map("retry_count")
+  timeout     Int? // seconds
+  
+  // Timestamps
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([accountId])
+  @@index([providerId])
+  @@index([taskType])
+  @@index([status])
+  @@index([priority])
+  @@index([dueAt])
+  @@map("ai_tasks")
+}
+
+// AI Capability - Defines what the AI can do
+model AICapability {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Capability Info
+  name        String
+  description String? @db.Text
+  category    String // navigation, communication, data_access, external_api, file_operations
+  
+  // Permissions
+  isEnabled   Boolean @default(true) @map("is_enabled")
+  requiresApproval Boolean @default(false) @map("requires_approval")
+  
+  // Limits
+  rateLimit   Int? @map("rate_limit") // per hour
+  dailyLimit  Int? @map("daily_limit")
+  monthlyLimit Int? @map("monthly_limit")
+  currentUsage Json? @map("current_usage")
+  
+  // Allowed Operations
+  allowedOperations Json @map("allowed_operations") // Specific operations allowed
+  blockedOperations Json? @map("blocked_operations") // Explicitly blocked
+  
+  // Scope
+  allowedUrls String[] @default([]) @map("allowed_urls") // For navigation
+  blockedUrls String[] @default([]) @map("blocked_urls")
+  allowedApis String[] @default([]) @map("allowed_apis") // For external calls
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([accountId, name])
+  @@index([accountId])
+  @@index([category])
+  @@map("ai_capabilities")
+}
+
+// AI Audit Log - Complete audit trail of AI actions
+model AIAuditLog {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+  providerId String? @map("provider_id")
+
+  // Action Info
+  action      String // memory_read, memory_write, api_call, navigation, file_upload, response_sent, etc
+  category    String // memory, communication, navigation, file, external_api
+  
+  // Details
+  target      String? // What was acted upon
+  targetType  String? @map("target_type") // memory, conversation, vehicle, lead, file
+  targetId    String? @map("target_id")
+  
+  // Request/Response
+  request     Json?
+  response    Json?
+  
+  // Context
+  conversationId String? @map("conversation_id")
+  taskId      String? @map("task_id")
+  triggeredBy String? @map("triggered_by") // What triggered this action
+  
+  // Results
+  status      String // success, failed, blocked, rate_limited
+  errorMessage String? @map("error_message") @db.Text
+  
+  // Performance
+  duration    Float? // ms
+  tokensUsed  Int? @map("tokens_used")
+  
+  // Security
+  ipAddress   String? @map("ip_address")
+  userAgent   String? @map("user_agent")
+  wasBlocked  Boolean @default(false) @map("was_blocked")
+  blockReason String? @map("block_reason")
+  
+  // Timestamps
+  performedAt DateTime @default(now()) @map("performed_at")
+
+  @@index([accountId])
+  @@index([providerId])
+  @@index([action])
+  @@index([performedAt])
+  @@index([status])
+  @@map("ai_audit_logs")
+}
+
+// AI External Service Integration - Carfax, AutoCheck, etc
+model AIExternalService {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Service Info
+  name        String // carfax, autocheck, kbb, nada, edmunds
+  displayName String @map("display_name")
+  serviceType String @map("service_type") // vehicle_history, valuation, market_data
+  
+  // Credentials (encrypted)
+  apiKey      String? @map("api_key") @db.Text
+  apiSecret   String? @map("api_secret") @db.Text
+  credentials Json? // Other credentials
+  
+  // Configuration
+  baseUrl     String @map("base_url")
+  config      Json? // Service-specific config
+  
+  // Rate Limits
+  rateLimit   Int? @map("rate_limit")
+  dailyLimit  Int? @map("daily_limit")
+  currentUsage Json? @map("current_usage")
+  
+  // Status
+  isActive    Boolean @default(true) @map("is_active")
+  lastTested  DateTime? @map("last_tested")
+  healthStatus String @default("unknown") @map("health_status")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([accountId, name])
+  @@index([accountId])
+  @@map("ai_external_services")
+}
