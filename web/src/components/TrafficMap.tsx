@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Popup, CircleMarker, useMap } from 'react-leaflet';
 import { Ban, ExternalLink } from 'lucide-react';
@@ -36,16 +36,19 @@ interface TrafficMapProps {
   onSelectIP: (ip: string | null) => void;
 }
 
-// Component to auto-fit bounds when markers change
-function FitBounds({ locations }: { locations: GeoLocation[] }) {
+// Component to auto-fit bounds ONLY on initial load
+function FitBoundsOnce({ locations }: { locations: GeoLocation[] }) {
   const map = useMap();
+  const hasFitted = useRef(false);
   
   useEffect(() => {
-    if (locations.length > 0) {
+    // Only fit bounds once when we first get locations
+    if (locations.length > 0 && !hasFitted.current) {
       const bounds = L.latLngBounds(
         locations.map(loc => [loc.lat, loc.lon] as [number, number])
       );
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 5 });
+      hasFitted.current = true;
     }
   }, [locations, map]);
   
@@ -78,8 +81,8 @@ export default function TrafficMap({ geoLocations, onBlockIP, selectedIP, onSele
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         /> */}
 
-        {/* Auto fit bounds */}
-        {geoLocations.length > 0 && <FitBounds locations={geoLocations} />}
+        {/* Auto fit bounds only on initial load */}
+        {geoLocations.length > 0 && <FitBoundsOnce locations={geoLocations} />}
 
         {/* Traffic markers */}
         {geoLocations.map((loc) => (
