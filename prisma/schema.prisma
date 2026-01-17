@@ -17,10 +17,12 @@ datasource db {
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
-  passwordHash  String   @map("password_hash")
+  passwordHash  String?  @map("password_hash")
   firstName     String?  @map("first_name")
   lastName      String?  @map("last_name")
+  name          String?
   phone         String?
+  profilePicture String? @map("profile_picture")
   isActive      Boolean  @default(true) @map("is_active")
   emailVerified Boolean  @default(false) @map("email_verified")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -32,6 +34,11 @@ model User {
   fbPassword    String?  @map("fb_password") // Encrypted
   fb2faCodes    String[] @map("fb_2fa_codes") // Array of backup codes
   fbLastSync    DateTime? @map("fb_last_sync")
+  
+  // Facebook OAuth (new hybrid system)
+  facebookId           String?   @unique @map("facebook_id")
+  facebookAccessToken  String?   @map("facebook_access_token") @db.Text
+  facebookTokenExpiry  DateTime? @map("facebook_token_expiry")
 
   // Relations
   accountUsers       AccountUser[]
@@ -44,6 +51,7 @@ model User {
   assignedLeads      Lead[] @relation("AssignedLeads")
   salesRepMappings   SalesRepMapping[]
   leadActivities     LeadActivity[]
+  dealerAccount      DealerAccount?
 
   @@map("users")
 }
@@ -1082,6 +1090,7 @@ model Lead {
   communications        LeadCommunication[]
   activities            LeadActivity[]
   adfSubmissions        ADFSubmission[]
+  messages              Message[]
 
   @@index([accountId, status])
   @@index([assignedToId])
@@ -1219,4 +1228,158 @@ model ADFSubmission {
   @@index([status])
   @@index([createdAt])
   @@map("adf_submissions")
+}
+
+// ============================================
+// Chrome Extension Integration
+// ============================================
+
+// Task queue for Chrome Extension automation
+model ExtensionTask {
+  id              String   @id @default(uuid())
+  accountId       String   @map("account_id")
+  
+  // Task Type
+  type            String   // post_vehicle, scrape_inbox, scrape_conversation, respond_lead
+  status          String   @default("pending") // pending, processing, completed, failed, cancelled
+  priority        Int      @default(5) // 1-10, higher = more urgent
+  
+  // Task Data
+  data            Json?    // Command data, vehicle info, etc
+  result          Json?    // Task execution result
+  
+  // Related Entities
+  vehicleId       String?  @map("vehicle_id")
+  leadId          String?  @map("lead_id")
+  
+  // Scheduling
+  scheduledFor    DateTime? @map("scheduled_for")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  
+  // Retry
+  retryCount      Int      @default(0) @map("retry_count")
+  maxRetries      Int      @default(3) @map("max_retries")
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([accountId])
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([scheduledFor])
+  @@map("extension_tasks")
+}
+
+// AI-generated responses for approval
+model AIResponse {
+  id              String   @id @default(uuid())
+  accountId       String   @map("account_id")
+  leadId          String   @map("lead_id")
+  
+  // Response Content
+  responseText    String   @map("response_text") @db.Text
+  responseType    String   @map("response_type") // initial, follow_up, price_negotiation, availability
+  
+  // Analysis
+  conversationAnalysis Json? @map("conversation_analysis")
+  confidence      Float    @default(0)
+  
+  // Approval Status
+  status          String   @default("pending") // pending, approved, rejected, sent
+  approvedBy      String?  @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  sentAt          DateTime? @map("sent_at")
+  
+  // Edit tracking
+  wasEdited       Boolean  @default(false) @map("was_edited")
+  editedText      String?  @map("edited_text") @db.Text
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([accountId])
+  @@index([leadId])
+  @@index([status])
+  @@map("ai_responses")
+}
+
+// Message history for conversation tracking
+model Message {
+  id                String   @id @default(uuid())
+  leadId            String   @map("lead_id")
+  facebookMessageId String?  @map("facebook_message_id")
+  
+  // Content
+  text              String   @db.Text
+  sender            String   // buyer name or "dealer"
+  isOutgoing        Boolean  @default(false) @map("is_outgoing")
+  
+  // AI Analysis
+  sentiment         String?  // positive, negative, neutral
+  intent            String?  // question, interest, negotiation, etc
+  
+  // Timestamps
+  sentAt            DateTime @map("sent_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  lead              Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, facebookMessageId])
+  @@index([leadId])
+  @@index([sentAt])
+  @@map("messages")
+}
+
+// Facebook session data for the extension
+model FacebookSession {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  
+  // Session cookies (encrypted)
+  cookies         String   @db.Text
+  userAgent       String   @map("user_agent")
+  
+  // Session Status
+  isValid         Boolean  @default(true) @map("is_valid")
+  lastValidated   DateTime @map("last_validated")
+  lastActivity    DateTime @map("last_activity")
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("facebook_sessions")
+}
+
+// DealerAccount for extension integration
+model DealerAccount {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  
+  // Business Info
+  businessName      String?  @map("business_name")
+  businessAddress   String?  @map("business_address")
+  businessPhone     String?  @map("business_phone")
+  
+  // Facebook Connection
+  facebookConnected Boolean  @default(false) @map("facebook_connected")
+  facebookUserId    String?  @map("facebook_user_id")
+  
+  // Settings
+  autoRespond       Boolean  @default(false) @map("auto_respond")
+  responseDelay     Int      @default(30) @map("response_delay") // seconds
+  
+  // Timestamps
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("dealer_accounts")
 }
