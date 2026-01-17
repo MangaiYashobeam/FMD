@@ -20,7 +20,7 @@ model User {
   passwordHash   String?   @map("password_hash")
   firstName      String?   @map("first_name")
   lastName       String?   @map("last_name")
-  name           String?
+  // name field removed - use firstName/lastName instead
   phone          String?
   profilePicture String?   @map("profile_picture")
   isActive       Boolean   @default(true) @map("is_active")
