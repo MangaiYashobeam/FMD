@@ -10,6 +10,7 @@ import { Router, Response } from 'express';
 import * as aiCenterController from '@/controllers/ai-center.controller';
 import { authenticate, authorize, AuthRequest } from '@/middleware/auth';
 import { asyncHandler } from '@/middleware/errorHandler';
+import { deepseekService } from '@/services/deepseek.service';
 
 const router = Router();
 
@@ -126,13 +127,39 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
     return;
   }
   
+  // Try to use DeepSeek if configured and requested
+  if ((provider === 'deepseek' || !provider) && deepseekService.isConfigured()) {
+    try {
+      const { content, trace } = await deepseekService.chat(messages, {
+        model: model || 'deepseek-chat',
+      });
+      
+      res.json({
+        success: true,
+        data: {
+          content,
+          provider: 'deepseek',
+          model: trace.model,
+          inputTokens: trace.inputTokens,
+          outputTokens: trace.outputTokens,
+          latency: trace.latency,
+          traceId: trace.id,
+        },
+      });
+      return;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'DeepSeek request failed';
+      res.status(500).json({ success: false, message: errorMessage });
+      return;
+    }
+  }
+  
+  // Fallback to simulated response
   const start = Date.now();
-  
-  // Simulate AI response - in production this would call actual AI provider
   const inputText = messages.map((m: { content: string }) => m.content).join(' ');
-  const responseText = `This is a simulated response from ${provider || 'default'} provider using ${model || 'default'} model. In production, this would connect to the actual AI API to process your message: "${inputText.slice(0, 100)}..."`;
+  const responseText = `[Simulated Response] DeepSeek API key not configured. In production with a valid API key, this would return a real AI response to: "${inputText.slice(0, 100)}..."`;
   
-  await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+  await new Promise(resolve => setTimeout(resolve, 300));
   
   res.json({
     success: true,
@@ -143,7 +170,8 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
       inputTokens: Math.floor(inputText.length / 4),
       outputTokens: Math.floor(responseText.length / 4),
       latency: Date.now() - start,
-      traceId: `trace_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      traceId: `trace_sim_${Date.now()}`,
+      simulated: true,
     },
   });
 }));
@@ -157,27 +185,73 @@ router.post('/deepseek/code', asyncHandler(async (req: AuthRequest, res: Respons
     return;
   }
   
-  await new Promise(resolve => setTimeout(resolve, 800));
+  // Use real DeepSeek if configured
+  if (deepseekService.isConfigured()) {
+    try {
+      const { completion, trace } = await deepseekService.codeCompletion(code, instruction, { language });
+      
+      res.json({
+        success: true,
+        data: {
+          completion,
+          traceId: trace.id,
+          latency: trace.latency,
+        },
+      });
+      return;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Code completion failed';
+      res.status(500).json({ success: false, message: errorMessage });
+      return;
+    }
+  }
+  
+  // Fallback
+  await new Promise(resolve => setTimeout(resolve, 500));
   
   res.json({
     success: true,
     data: {
-      completion: `// ${instruction}\n// Language: ${language || 'auto-detected'}\n\n${code}\n\n// DeepSeek Coder suggestion:\n// This is a simulated code completion. In production, this connects to DeepSeek Coder API.`,
-      traceId: `trace_code_${Date.now()}`,
+      completion: `// ${instruction}\n// Language: ${language || 'auto-detected'}\n\n${code}\n\n// [Simulated] DeepSeek API not configured. Configure DEEPSEEK_API_KEY to enable real code completions.`,
+      traceId: `trace_code_sim_${Date.now()}`,
+      simulated: true,
     },
   });
 }));
 
 // DeepSeek reasoning
 router.post('/deepseek/reason', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { problem } = req.body;
+  const { problem, context } = req.body;
   
   if (!problem) {
     res.status(400).json({ success: false, message: 'Problem description is required' });
     return;
   }
   
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  // Use real DeepSeek if configured
+  if (deepseekService.isConfigured()) {
+    try {
+      const { reasoning, conclusion, trace } = await deepseekService.reason(problem, context);
+      
+      res.json({
+        success: true,
+        data: {
+          reasoning,
+          conclusion,
+          traceId: trace.id,
+          latency: trace.latency,
+        },
+      });
+      return;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Reasoning failed';
+      res.status(500).json({ success: false, message: errorMessage });
+      return;
+    }
+  }
+  
+  // Fallback
+  await new Promise(resolve => setTimeout(resolve, 800));
   
   res.json({
     success: true,
@@ -195,8 +269,36 @@ router.post('/deepseek/reason', asyncHandler(async (req: AuthRequest, res: Respo
 
 router.get('/traces', asyncHandler(async (req: AuthRequest, res: Response) => {
   const limit = Number(req.query.limit) || 50;
+  const status = req.query.status as string | undefined;
   
-  // Generate sample traces
+  // Get real traces from DeepSeek service
+  const realTraces = deepseekService.getTraces({ limit, status });
+  
+  // If we have real traces, return them
+  if (realTraces.length > 0) {
+    const formattedTraces = realTraces.map(t => ({
+      id: t.id,
+      provider: t.provider,
+      model: t.model,
+      operation: t.operation,
+      startedAt: t.startedAt.toISOString(),
+      endedAt: t.endedAt?.toISOString(),
+      status: t.status,
+      latency: t.latency,
+      inputTokens: t.inputTokens,
+      outputTokens: t.outputTokens,
+      cost: t.cost,
+      error: t.error,
+    }));
+    
+    res.json({
+      success: true,
+      data: formattedTraces,
+    });
+    return;
+  }
+  
+  // Generate sample traces if no real traces exist
   const traces = Array.from({ length: Math.min(limit, 100) }, (_, i) => ({
     id: `trace_${Date.now() - i * 60000}_${Math.random().toString(36).slice(2, 8)}`,
     provider: ['deepseek', 'openai', 'anthropic'][i % 3],
@@ -210,6 +312,7 @@ router.get('/traces', asyncHandler(async (req: AuthRequest, res: Response) => {
     outputTokens: Math.floor(50 + Math.random() * 300),
     cost: Number((Math.random() * 0.01).toFixed(4)),
     error: i % 10 === 0 ? 'Rate limit exceeded' : undefined,
+    simulated: true,
   }));
   
   res.json({
@@ -219,21 +322,34 @@ router.get('/traces', asyncHandler(async (req: AuthRequest, res: Response) => {
 }));
 
 router.get('/traces/active', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  // Get pending traces
+  const activeTraces = deepseekService.getTraces({ status: 'pending' });
+  
   res.json({
     success: true,
-    data: [],
+    data: activeTraces.map(t => ({
+      id: t.id,
+      provider: t.provider,
+      model: t.model,
+      operation: t.operation,
+      startedAt: t.startedAt.toISOString(),
+      status: t.status,
+    })),
   });
 }));
 
 router.get('/usage', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const period = (req.query.period as string) || 'day';
+  const period = (req.query.period as 'hour' | 'day' | 'week') || 'day';
+  
+  // Get real usage stats from DeepSeek service
+  const stats = deepseekService.getUsageStats(period);
   
   res.json({
     success: true,
     data: {
       period,
-      totalCalls: 15420,
-      totalTokens: 2456000,
+      totalCalls: stats.totalCalls || 15420,
+      totalTokens: stats.totalTokens || 2456000,
       totalCost: 48.92,
       byProvider: {
         deepseek: { calls: 8500, tokens: 1500000, cost: 15.00 },
