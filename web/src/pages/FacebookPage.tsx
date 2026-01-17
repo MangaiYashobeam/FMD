@@ -110,6 +110,28 @@ export default function FacebookPage() {
   const queryClient = useQueryClient();
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
   const [newGroupUrl, setNewGroupUrl] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  // Handle Facebook Connect button
+  const handleConnectFacebook = async () => {
+    try {
+      setIsConnecting(true);
+      const response = await facebookApi.getAuthUrl();
+      const authUrl = response.data?.data?.url;
+      if (authUrl) {
+        // Redirect to Facebook OAuth
+        window.location.href = authUrl;
+      } else {
+        console.error('No auth URL received from server');
+        alert('Failed to get Facebook authorization URL. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Failed to connect to Facebook:', error?.response?.data || error.message);
+      alert('Failed to connect to Facebook. Please try again.');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   // Fetch connected Facebook accounts/groups
   const { data, isLoading, error, refetch } = useQuery({
@@ -120,7 +142,18 @@ export default function FacebookPage() {
     },
   });
 
+  // Fetch Facebook connection status
+  const { data: connectionData, isLoading: isLoadingConnection } = useQuery({
+    queryKey: ['facebook-connections'],
+    queryFn: async () => {
+      const response = await facebookApi.getConnections();
+      return response.data;
+    },
+  });
+
   const groups: FacebookGroup[] = data?.data?.groups || [];
+  const connections = connectionData?.data?.connections || [];
+  const isConnected = connections.length > 0;
 
   // Add group mutation
   const addGroupMutation = useMutation({
@@ -188,18 +221,56 @@ export default function FacebookPage() {
       {/* Connection status card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-            <Facebook className="w-6 h-6 text-blue-600" />
+          <div className={cn(
+            "w-12 h-12 rounded-xl flex items-center justify-center",
+            isConnected ? "bg-green-100" : "bg-blue-100"
+          )}>
+            <Facebook className={cn("w-6 h-6", isConnected ? "text-green-600" : "text-blue-600")} />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Facebook Connection</h3>
-            <p className="text-gray-500">
-              Connect your Facebook account to post vehicles to Marketplace groups
-            </p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">Facebook Connection</h3>
+              {isConnected && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                  <CheckCircle className="w-3 h-3" />
+                  Connected
+                </span>
+              )}
+            </div>
+            {isLoadingConnection ? (
+              <p className="text-gray-500">Checking connection status...</p>
+            ) : isConnected ? (
+              <p className="text-gray-500">
+                Connected as <span className="font-medium">{connections[0]?.pageName || connections[0]?.facebookUserName}</span>
+                {connections.length > 1 && ` (+${connections.length - 1} more)`}
+              </p>
+            ) : (
+              <p className="text-gray-500">
+                Connect your Facebook account to post vehicles to Marketplace groups
+              </p>
+            )}
           </div>
-          <button className="inline-flex items-center gap-2 px-4 py-2 bg-[#1877F2] hover:bg-[#166FE5] text-white font-medium rounded-lg transition-colors">
-            <Link className="w-4 h-4" />
-            Connect Facebook
+          <button 
+            onClick={handleConnectFacebook}
+            disabled={isConnecting}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 font-medium rounded-lg transition-colors disabled:opacity-50",
+              isConnected 
+                ? "bg-gray-100 hover:bg-gray-200 text-gray-700" 
+                : "bg-[#1877F2] hover:bg-[#166FE5] text-white"
+            )}
+          >
+            {isConnecting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              <>
+                <Link className="w-4 h-4" />
+                {isConnected ? 'Reconnect' : 'Connect Facebook'}
+              </>
+            )}
           </button>
         </div>
       </div>

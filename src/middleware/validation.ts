@@ -322,10 +322,13 @@ export const accountValidators = {
 export const facebookValidators = {
   getAuthUrl: [
     query('accountId')
-      .notEmpty()
-      .withMessage('Account ID is required')
+      .optional()
       .isUUID()
       .withMessage('Invalid account ID'),
+    query('returnUrl')
+      .optional()
+      .isString()
+      .withMessage('Invalid return URL'),
   ],
 
   callback: [
@@ -356,8 +359,7 @@ export const facebookValidators = {
 
   getProfiles: [
     query('accountId')
-      .notEmpty()
-      .withMessage('Account ID is required')
+      .optional()
       .isUUID()
       .withMessage('Invalid account ID'),
   ],

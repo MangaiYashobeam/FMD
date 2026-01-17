@@ -90,6 +90,7 @@ model Account {
   ftpConfigurations FtpConfiguration[]
   syncJobs          SyncJob[]
   facebookProfiles  FacebookProfile[]
+  facebookGroups    FacebookGroup[]
   settings          AccountSettings?
   subscriptionPlan  SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
   payments          Payment[]
@@ -178,6 +179,26 @@ model FacebookProfile {
 
   @@unique([accountId, pageId])
   @@map("facebook_profiles")
+}
+
+model FacebookGroup {
+  id                String   @id @default(uuid())
+  accountId         String   @map("account_id")
+  groupId           String   @map("group_id") // Facebook Group ID
+  name              String
+  url               String?
+  memberCount       Int?     @map("member_count")
+  isActive          Boolean  @default(true) @map("is_active")
+  autoPost          Boolean  @default(false) @map("auto_post")
+  lastPostedAt      DateTime? @map("last_posted_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, groupId])
+  @@map("facebook_groups")
 }
 
 model FacebookPost {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { authenticate } from '@/middleware/auth';
 import { FacebookController } from '@/controllers/facebook.controller';
 import { asyncHandler } from '@/utils/asyncHandler';
@@ -8,6 +8,17 @@ import { validate, facebookValidators } from '@/middleware/validation';
 const router = Router();
 const controller = new FacebookController();
 
+/**
+ * @route   GET /api/facebook/callback
+ * @desc    Handle Facebook OAuth callback (browser redirect)
+ * @access  Public (uses state token for auth)
+ */
+router.get(
+  '/callback',
+  asyncHandler(controller.handleOAuthCallback.bind(controller))
+);
+
+// All routes below require authentication
 router.use(authenticate);
 
 /**
@@ -23,7 +34,7 @@ router.get(
 
 /**
  * @route   POST /api/facebook/callback
- * @desc    Handle Facebook OAuth callback
+ * @desc    Handle Facebook OAuth callback (POST)
  * @access  Private
  */
 router.post(
@@ -41,6 +52,73 @@ router.get(
   '/profiles',
   validate(facebookValidators.getProfiles),
   asyncHandler(controller.getProfiles.bind(controller))
+);
+
+/**
+ * @route   GET /api/facebook/connections
+ * @desc    Get Facebook connections for current user's account
+ * @access  Private
+ */
+router.get(
+  '/connections',
+  asyncHandler(controller.getConnections.bind(controller))
+);
+
+/**
+ * @route   DELETE /api/facebook/connections/:id
+ * @desc    Disconnect a Facebook profile
+ * @access  Private
+ */
+router.delete(
+  '/connections/:id',
+  validate([param('id').isUUID().withMessage('Invalid connection ID')]),
+  asyncHandler(controller.disconnect.bind(controller))
+);
+
+/**
+ * @route   GET /api/facebook/groups
+ * @desc    Get Facebook groups for posting
+ * @access  Private
+ */
+router.get(
+  '/groups',
+  asyncHandler(controller.getGroups.bind(controller))
+);
+
+/**
+ * @route   POST /api/facebook/groups
+ * @desc    Add a Facebook group for posting
+ * @access  Private
+ */
+router.post(
+  '/groups',
+  validate([
+    body('groupId').notEmpty().withMessage('Group ID is required'),
+    body('groupName').optional().isString().isLength({ max: 255 }),
+  ]),
+  asyncHandler(controller.addGroup.bind(controller))
+);
+
+/**
+ * @route   DELETE /api/facebook/groups/:id
+ * @desc    Remove a Facebook group
+ * @access  Private
+ */
+router.delete(
+  '/groups/:id',
+  validate([param('id').isUUID().withMessage('Invalid group ID')]),
+  asyncHandler(controller.removeGroup.bind(controller))
+);
+
+/**
+ * @route   PUT /api/facebook/groups/:id/toggle-auto-post
+ * @desc    Toggle auto-post for a group
+ * @access  Private
+ */
+router.put(
+  '/groups/:id/toggle-auto-post',
+  validate([param('id').isUUID().withMessage('Invalid group ID')]),
+  asyncHandler(controller.toggleGroupAutoPost.bind(controller))
 );
 
 /**
@@ -63,6 +141,19 @@ router.delete(
   '/post/:id',
   validate([param('id').isUUID().withMessage('Invalid post ID')]),
   asyncHandler(controller.deletePost.bind(controller))
+);
+
+/**
+ * @route   GET /api/facebook/posts
+ * @desc    Get post history
+ * @access  Private
+ */
+router.get(
+  '/posts',
+  validate([
+    query('vehicleId').optional().isUUID().withMessage('Invalid vehicle ID'),
+  ]),
+  asyncHandler(controller.getPostHistory.bind(controller))
 );
 
 /**

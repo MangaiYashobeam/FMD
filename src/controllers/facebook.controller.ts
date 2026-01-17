@@ -7,10 +7,31 @@ import axios from 'axios';
 
 export class FacebookController {
   /**
+   * Get user's primary account ID
+   */
+  private async getUserAccountId(userId: string): Promise<string> {
+    const accountUser = await prisma.accountUser.findFirst({
+      where: { userId },
+      select: { accountId: true },
+    });
+    
+    if (!accountUser) {
+      throw new AppError('No account found for user', 404);
+    }
+    
+    return accountUser.accountId;
+  }
+
+  /**
    * Get Facebook OAuth URL
    */
   async getAuthUrl(req: AuthRequest, res: Response) {
-    const accountId = req.query.accountId as string;
+    let accountId = req.query.accountId as string;
+
+    // If no accountId provided, get user's primary account
+    if (!accountId) {
+      accountId = await this.getUserAccountId(req.user!.id);
+    }
 
     // Verify user has access
     const hasAccess = await prisma.accountUser.findFirst({
@@ -25,14 +46,34 @@ export class FacebookController {
     }
 
     const appId = process.env.FACEBOOK_APP_ID;
-    const redirectUri = `${process.env.API_URL}/api/facebook/callback`;
-    const state = Buffer.from(JSON.stringify({ accountId, userId: req.user!.id })).toString('base64');
+    if (!appId) {
+      throw new AppError('Facebook App ID not configured', 500);
+    }
+    
+    const redirectUri = `${process.env.API_URL || 'http://localhost:5000'}/api/facebook/callback`;
+    const state = Buffer.from(JSON.stringify({ 
+      accountId, 
+      userId: req.user!.id,
+      returnUrl: req.query.returnUrl || '/facebook'
+    })).toString('base64');
+
+    // Request permissions for pages and marketplace
+    const scopes = [
+      'pages_manage_posts',
+      'pages_read_engagement', 
+      'pages_show_list',
+      'public_profile',
+      'email'
+    ].join(',');
 
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
       `client_id=${appId}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&state=${state}` +
-      `&scope=pages_manage_posts,pages_read_engagement,pages_show_list`;
+      `&scope=${scopes}` +
+      `&response_type=code`;
+
+    logger.info(`Facebook auth URL generated for account ${accountId}`);
 
     res.json({
       success: true,
@@ -41,7 +82,133 @@ export class FacebookController {
   }
 
   /**
-   * Handle Facebook OAuth callback
+   * Handle Facebook OAuth callback (GET - browser redirect)
+   */
+  async handleOAuthCallback(req: AuthRequest, res: Response) {
+    const { code, state, error, error_description } = req.query;
+
+    // Handle user denial
+    if (error) {
+      logger.warn(`Facebook OAuth error: ${error} - ${error_description}`);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      return res.redirect(`${frontendUrl}/facebook?error=${encodeURIComponent(error_description as string || 'OAuth failed')}`);
+    }
+
+    if (!code || !state) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      return res.redirect(`${frontendUrl}/facebook?error=Missing authorization code`);
+    }
+
+    try {
+      // Decode state
+      const { accountId, userId, returnUrl } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+
+      // Exchange code for access token
+      const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
+        params: {
+          client_id: process.env.FACEBOOK_APP_ID,
+          client_secret: process.env.FACEBOOK_APP_SECRET,
+          redirect_uri: `${process.env.API_URL || 'http://localhost:5000'}/api/facebook/callback`,
+          code,
+        },
+      });
+
+      const { access_token: accessToken } = tokenResponse.data;
+
+      // Get user info
+      const userResponse = await axios.get('https://graph.facebook.com/v18.0/me', {
+        params: {
+          access_token: accessToken,
+          fields: 'id,name,email',
+        },
+      });
+
+      const fbUser = userResponse.data;
+
+      // Get user's pages
+      const pagesResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
+        params: {
+          access_token: accessToken,
+        },
+      });
+
+      // Store pages/profiles in database
+      const profiles = [];
+      
+      // If no pages, create a personal profile for Marketplace posting
+      if (!pagesResponse.data.data || pagesResponse.data.data.length === 0) {
+        const profile = await prisma.facebookProfile.upsert({
+          where: {
+            accountId_pageId: {
+              accountId,
+              pageId: fbUser.id,
+            },
+          },
+          create: {
+            facebookUserId: fbUser.id,
+            facebookUserName: fbUser.name,
+            accountId,
+            userId,
+            pageId: fbUser.id,
+            pageName: fbUser.name || 'Personal Profile',
+            accessToken,
+            tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
+            category: 'PERSONAL',
+          },
+          update: {
+            pageName: fbUser.name || 'Personal Profile',
+            facebookUserName: fbUser.name,
+            accessToken,
+            category: 'PERSONAL',
+          },
+        });
+        profiles.push(profile);
+      } else {
+        // Store each page
+        for (const page of pagesResponse.data.data) {
+          const profile = await prisma.facebookProfile.upsert({
+            where: {
+              accountId_pageId: {
+                accountId,
+                pageId: page.id,
+              },
+            },
+            create: {
+              facebookUserId: fbUser.id,
+              facebookUserName: fbUser.name,
+              accountId,
+              userId,
+              pageId: page.id,
+              pageName: page.name,
+              accessToken: page.access_token,
+              tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
+              category: page.category || 'Business',
+            },
+            update: {
+              pageName: page.name,
+              facebookUserName: fbUser.name,
+              accessToken: page.access_token,
+              category: page.category || 'Business',
+            },
+          });
+          profiles.push(profile);
+        }
+      }
+
+      logger.info(`Facebook connected: ${profiles.length} profile(s) for account ${accountId}`);
+
+      // Redirect back to frontend
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      res.redirect(`${frontendUrl}${returnUrl || '/facebook'}?success=true&connected=${profiles.length}`);
+    } catch (error: any) {
+      logger.error('Facebook OAuth callback error:', error.response?.data || error.message);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      res.redirect(`${frontendUrl}/facebook?error=${encodeURIComponent('Failed to connect Facebook')}`);
+    }
+  }
+
+  /**
+   * Handle Facebook OAuth callback (POST)
    */
   async handleCallback(req: AuthRequest, res: Response) {
     const { code, state } = req.body;
@@ -114,7 +281,12 @@ export class FacebookController {
    * Get connected Facebook profiles
    */
   async getProfiles(req: AuthRequest, res: Response) {
-    const accountId = req.query.accountId as string;
+    let accountId = req.query.accountId as string;
+
+    // If no accountId, get user's primary account
+    if (!accountId) {
+      accountId = await this.getUserAccountId(req.user!.id);
+    }
 
     // Verify user has access
     const hasAccess = await prisma.accountUser.findFirst({
@@ -134,6 +306,7 @@ export class FacebookController {
         id: true,
         pageId: true,
         pageName: true,
+        facebookUserName: true,
         category: true,
         isActive: true,
         createdAt: true,
@@ -148,6 +321,286 @@ export class FacebookController {
     res.json({
       success: true,
       data: profiles,
+    });
+  }
+
+  /**
+   * Get Facebook connections for current user's account
+   */
+  async getConnections(req: AuthRequest, res: Response) {
+    const accountId = await this.getUserAccountId(req.user!.id);
+
+    const profiles = await prisma.facebookProfile.findMany({
+      where: { accountId },
+      select: {
+        id: true,
+        pageId: true,
+        pageName: true,
+        facebookUserName: true,
+        category: true,
+        isActive: true,
+        lastSyncAt: true,
+        createdAt: true,
+        _count: {
+          select: {
+            posts: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        connections: profiles,
+        isConnected: profiles.length > 0,
+      },
+    });
+  }
+
+  /**
+   * Disconnect a Facebook profile
+   */
+  async disconnect(req: AuthRequest, res: Response) {
+    const id = req.params.id as string;
+
+    const profile = await prisma.facebookProfile.findUnique({
+      where: { id },
+    });
+
+    if (!profile) {
+      throw new AppError('Connection not found', 404);
+    }
+
+    // Verify user has access
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: profile.accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
+    // Delete the profile
+    await prisma.facebookProfile.delete({
+      where: { id: id as string },
+    });
+
+    logger.info(`Facebook profile disconnected: ${id}`);
+
+    res.json({
+      success: true,
+      message: 'Facebook disconnected successfully',
+    });
+  }
+
+  /**
+   * Get Facebook groups for posting
+   */
+  async getGroups(req: AuthRequest, res: Response) {
+    const accountId = await this.getUserAccountId(req.user!.id);
+
+    const groups = await (prisma as any).facebookGroup.findMany({
+      where: { accountId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        groups: groups.map((g: any) => ({
+          id: g.id,
+          groupId: g.groupId,
+          name: g.name,
+          url: g.url,
+          memberCount: g.memberCount,
+          isActive: g.isActive,
+          autoPost: g.autoPost,
+          lastPosted: g.lastPostedAt,
+        })),
+      },
+    });
+  }
+
+  /**
+   * Add a Facebook group for posting
+   */
+  async addGroup(req: AuthRequest, res: Response) {
+    const { groupId, groupName } = req.body;
+    const accountId = await this.getUserAccountId(req.user!.id);
+
+    // Extract group ID from URL if full URL provided
+    let extractedGroupId = groupId;
+    if (groupId.includes('facebook.com/groups/')) {
+      const match = groupId.match(/groups\/([^/?]+)/);
+      if (match) {
+        extractedGroupId = match[1];
+      }
+    }
+
+    // Check if group already exists
+    const existing = await (prisma as any).facebookGroup.findUnique({
+      where: {
+        accountId_groupId: {
+          accountId,
+          groupId: extractedGroupId,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new AppError('This group is already added', 400);
+    }
+
+    // Create group
+    const group = await (prisma as any).facebookGroup.create({
+      data: {
+        accountId,
+        groupId: extractedGroupId,
+        name: groupName || `Group ${extractedGroupId}`,
+        url: `https://www.facebook.com/groups/${extractedGroupId}`,
+        isActive: true,
+        autoPost: false,
+      },
+    });
+
+    logger.info(`Facebook group added: ${group.id} for account ${accountId}`);
+
+    res.json({
+      success: true,
+      data: {
+        id: group.id,
+        groupId: group.groupId,
+        name: group.name,
+        url: group.url,
+        isActive: group.isActive,
+        autoPost: group.autoPost,
+      },
+      message: 'Group added successfully',
+    });
+  }
+
+  /**
+   * Remove a Facebook group
+   */
+  async removeGroup(req: AuthRequest, res: Response) {
+    const id = req.params.id as string;
+
+    const group = await (prisma as any).facebookGroup.findUnique({
+      where: { id },
+    });
+
+    if (!group) {
+      throw new AppError('Group not found', 404);
+    }
+
+    // Verify user has access
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: group.accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
+    await (prisma as any).facebookGroup.delete({
+      where: { id },
+    });
+
+    logger.info(`Facebook group removed: ${id}`);
+
+    res.json({
+      success: true,
+      message: 'Group removed successfully',
+    });
+  }
+
+  /**
+   * Toggle auto-post for a group
+   */
+  async toggleGroupAutoPost(req: AuthRequest, res: Response) {
+    const id = req.params.id as string;
+
+    const group = await (prisma as any).facebookGroup.findUnique({
+      where: { id },
+    });
+
+    if (!group) {
+      throw new AppError('Group not found', 404);
+    }
+
+    // Verify user has access
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: group.accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
+    const updated = await (prisma as any).facebookGroup.update({
+      where: { id },
+      data: { autoPost: !group.autoPost },
+    });
+
+    res.json({
+      success: true,
+      data: { autoPost: updated.autoPost },
+      message: `Auto-post ${updated.autoPost ? 'enabled' : 'disabled'}`,
+    });
+  }
+
+  /**
+   * Get post history
+   */
+  async getPostHistory(req: AuthRequest, res: Response) {
+    const { vehicleId } = req.query;
+    const accountId = await this.getUserAccountId(req.user!.id);
+
+    const where: any = {
+      vehicle: { accountId },
+    };
+
+    if (vehicleId) {
+      where.vehicleId = vehicleId;
+    }
+
+    const posts = await prisma.facebookPost.findMany({
+      where,
+      include: {
+        vehicle: {
+          select: {
+            id: true,
+            year: true,
+            make: true,
+            model: true,
+            stockNumber: true,
+          },
+        },
+        profile: {
+          select: {
+            id: true,
+            pageName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    res.json({
+      success: true,
+      data: posts,
     });
   }
 
