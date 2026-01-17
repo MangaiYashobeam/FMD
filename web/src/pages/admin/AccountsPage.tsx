@@ -209,7 +209,7 @@ export default function AccountsPage() {
       </div>
 
       {/* Accounts Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
@@ -288,24 +288,27 @@ export default function AccountsPage() {
                       {new Date(account.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2 relative z-10">
                         <button
+                          type="button"
                           onClick={() => { setSelectedAccount(account); setActiveTab('overview'); }}
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => { setSelectedAccount(account); setActiveTab('users'); }}
-                          className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                          className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
                           title="View Users & Impersonate"
                         >
                           <LogIn className="w-4 h-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleToggleStatus(account)}
-                          className={`p-2 rounded-lg transition-colors ${
+                          className={`p-2 rounded-lg transition-colors cursor-pointer ${
                             account.isActive
                               ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
                               : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
@@ -319,8 +322,9 @@ export default function AccountsPage() {
                           )}
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleDeleteAccount(account)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />
