@@ -144,13 +144,16 @@ export class AuthController {
    */
   async login(req: Request, res: Response) {
     try {
+      logger.info('Login attempt started', { body: { email: req.body?.email } });
+      
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        logger.warn('Login validation failed', { errors: errors.array() });
         throw new AppError('Validation failed', 400);
       }
 
       const { email, password } = req.body;
-      logger.info(`Login attempt for: ${email}`);
+      logger.info(`Login step 1: Finding user: ${email}`);
 
       // Find user
       const user = await prisma.user.findUnique({
@@ -164,20 +167,28 @@ export class AuthController {
         },
       });
 
+      logger.info(`Login step 2: User lookup result`, { found: !!user, active: user?.isActive });
+
       if (!user || !user.isActive) {
         logger.warn(`Login failed - user not found or inactive: ${email}`);
         throw new AppError('Invalid credentials', 401);
       }
 
+      logger.info(`Login step 3: Verifying password`);
+      
       // Verify password
       const isPasswordValid = user.passwordHash 
         ? await bcrypt.compare(password, user.passwordHash)
         : false;
 
+      logger.info(`Login step 4: Password check result`, { valid: isPasswordValid });
+
       if (!isPasswordValid) {
         logger.warn(`Login failed - invalid password: ${email}`);
         throw new AppError('Invalid credentials', 401);
       }
+
+      logger.info(`Login step 5: Generating tokens`);
 
       // Generate tokens
       const jwtSecret = process.env.JWT_SECRET;
@@ -203,6 +214,8 @@ export class AuthController {
         refreshTokenOptions
       );
 
+      logger.info(`Login step 6: Saving refresh token`);
+
       // Save refresh token
       await prisma.refreshToken.create({
         data: {
@@ -212,11 +225,15 @@ export class AuthController {
         },
       });
 
+      logger.info(`Login step 7: Updating last login`);
+
       // Update last login
       await prisma.user.update({
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
       });
+
+      logger.info(`Login step 8: Creating audit log`);
 
       // Log login
       await prisma.auditLog.create({
@@ -225,12 +242,12 @@ export class AuthController {
           action: 'USER_LOGIN',
           entityType: 'user',
           entityId: user.id,
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
+          ipAddress: req.ip || 'unknown',
+          userAgent: req.get('user-agent') || 'unknown',
         },
       });
 
-      logger.info(`User logged in successfully: ${user.email}`);
+      logger.info(`Login step 9: Sending response for ${user.email}`);
 
       res.json({
         success: true,
@@ -250,8 +267,12 @@ export class AuthController {
           refreshToken,
         },
       });
-    } catch (error) {
-      logger.error('Login error:', error);
+    } catch (error: any) {
+      logger.error('Login error at step:', { 
+        message: error.message, 
+        stack: error.stack,
+        name: error.name 
+      });
       throw error;
     }
   }
