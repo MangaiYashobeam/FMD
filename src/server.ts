@@ -187,6 +187,114 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/forgot-password', passwordResetLimiter);
 
 // ============================================
+// IIPC Emergency Endpoints (BEFORE gateway - No auth, IP verified only)
+// These must be defined before the secure gateway so they bypass auth
+// ============================================
+
+// Body parser for emergency endpoints only
+app.use('/api/iipc/emergency-reset', express.json());
+app.use('/api/iipc/promote-super-admin', express.json());
+
+// Emergency Rate Limit Reset
+app.post('/api/iipc/emergency-reset', async (req, res): Promise<void> => {
+  const { resetRateLimitsForIP } = await import('@/middleware/security');
+  
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const clientIP = forwardedFor 
+    ? (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0]).trim()
+    : req.ip || 'unknown';
+  
+  if (!iipcService.isSuperAdminIP(clientIP)) {
+    logger.warn(`Unauthorized emergency reset attempt from IP: ${clientIP}`);
+    res.status(403).json({ 
+      success: false, 
+      error: 'Forbidden - IP not authorized',
+      yourIP: clientIP,
+    });
+    return;
+  }
+  
+  const result = await resetRateLimitsForIP(clientIP);
+  logger.info(`Emergency rate limit reset by super admin IP: ${clientIP}`);
+  
+  res.json({
+    success: true,
+    message: `Rate limits cleared for your IP (${clientIP})`,
+    data: result,
+  });
+});
+
+// Emergency Super Admin Promotion
+app.post('/api/iipc/promote-super-admin', async (req, res): Promise<void> => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const clientIP = forwardedFor 
+    ? (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0]).trim()
+    : req.ip || 'unknown';
+  
+  if (!iipcService.isSuperAdminIP(clientIP)) {
+    logger.warn(`Unauthorized super admin promotion attempt from IP: ${clientIP}`);
+    res.status(403).json({ 
+      success: false, 
+      error: 'Forbidden - IP not authorized',
+      yourIP: clientIP,
+    });
+    return;
+  }
+  
+  const { email } = req.body;
+  
+  if (!email) {
+    res.status(400).json({ success: false, error: 'Email is required' });
+    return;
+  }
+  
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      include: { accountUsers: true },
+    });
+    
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    
+    if (user.accountUsers.length > 0) {
+      await prisma.accountUser.updateMany({
+        where: { userId: user.id },
+        data: { role: 'SUPER_ADMIN' },
+      });
+    } else {
+      const account = await prisma.account.create({
+        data: {
+          name: 'System Admin Account',
+          dealershipName: 'FaceMyDealer Admin',
+        },
+      });
+      
+      await prisma.accountUser.create({
+        data: {
+          userId: user.id,
+          accountId: account.id,
+          role: 'SUPER_ADMIN',
+        },
+      });
+    }
+    
+    logger.info(`User ${email} promoted to SUPER_ADMIN by IP: ${clientIP}`);
+    
+    res.json({
+      success: true,
+      message: `User ${email} has been promoted to SUPER_ADMIN`,
+      userId: user.id,
+    });
+  } catch (error: any) {
+    logger.error('Failed to promote super admin:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
 // 7-Ring Secure API Gateway
 // ============================================
 // All API routes go through the secure gateway with 7 layers of protection:
@@ -232,120 +340,6 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
-});
-
-// ============================================
-// IIPC Emergency Rate Limit Reset (No auth - IP verified only)
-// This allows super admin IPs to reset their rate limits even when locked out
-// ============================================
-app.post('/api/iipc/emergency-reset', async (req, res): Promise<void> => {
-  const { resetRateLimitsForIP } = await import('@/middleware/security');
-  
-  // Get client IP
-  const forwardedFor = req.headers['x-forwarded-for'];
-  const clientIP = forwardedFor 
-    ? (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0]).trim()
-    : req.ip || 'unknown';
-  
-  // Check if this is a super admin IP
-  if (!iipcService.isSuperAdminIP(clientIP)) {
-    logger.warn(`Unauthorized emergency reset attempt from IP: ${clientIP}`);
-    res.status(403).json({ 
-      success: false, 
-      error: 'Forbidden - IP not authorized',
-      yourIP: clientIP,
-    });
-    return;
-  }
-  
-  // Reset rate limits for this IP
-  const result = await resetRateLimitsForIP(clientIP);
-  
-  logger.info(`Emergency rate limit reset by super admin IP: ${clientIP}`);
-  
-  res.json({
-    success: true,
-    message: `Rate limits cleared for your IP (${clientIP})`,
-    data: result,
-  });
-});
-
-// ============================================
-// IIPC Emergency Super Admin Promotion (No auth - IP verified only)
-// This allows promoting a user to SUPER_ADMIN when you're locked out
-// ============================================
-app.post('/api/iipc/promote-super-admin', async (req, res): Promise<void> => {
-  // Get client IP
-  const forwardedFor = req.headers['x-forwarded-for'];
-  const clientIP = forwardedFor 
-    ? (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0]).trim()
-    : req.ip || 'unknown';
-  
-  // Only super admin IPs can use this
-  if (!iipcService.isSuperAdminIP(clientIP)) {
-    logger.warn(`Unauthorized super admin promotion attempt from IP: ${clientIP}`);
-    res.status(403).json({ 
-      success: false, 
-      error: 'Forbidden - IP not authorized',
-      yourIP: clientIP,
-    });
-    return;
-  }
-  
-  const { email } = req.body;
-  
-  if (!email) {
-    res.status(400).json({ success: false, error: 'Email is required' });
-    return;
-  }
-  
-  try {
-    // Find user by email
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: { accountUsers: true },
-    });
-    
-    if (!user) {
-      res.status(404).json({ success: false, error: 'User not found' });
-      return;
-    }
-    
-    // Update all their account user records to SUPER_ADMIN
-    if (user.accountUsers.length > 0) {
-      await prisma.accountUser.updateMany({
-        where: { userId: user.id },
-        data: { role: 'SUPER_ADMIN' },
-      });
-    } else {
-      // User has no accounts - create one
-      const account = await prisma.account.create({
-        data: {
-          name: 'System Admin Account',
-          dealershipName: 'FaceMyDealer Admin',
-        },
-      });
-      
-      await prisma.accountUser.create({
-        data: {
-          userId: user.id,
-          accountId: account.id,
-          role: 'SUPER_ADMIN',
-        },
-      });
-    }
-    
-    logger.info(`User ${email} promoted to SUPER_ADMIN by IP: ${clientIP}`);
-    
-    res.json({
-      success: true,
-      message: `User ${email} has been promoted to SUPER_ADMIN`,
-      userId: user.id,
-    });
-  } catch (error: any) {
-    logger.error('Failed to promote super admin:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
 });
 
 // ============================================
