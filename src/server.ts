@@ -403,9 +403,13 @@ app.get('/health', (_req, res) => {
 // All routes under /api are secured by the gateway middleware
 // Individual routes add Ring 5 (Auth) as needed
 app.use('/api/auth', authRoutes);                                              // Auth routes (public)
+
+// Facebook OAuth callback must be public (browser redirect)
+app.get('/api/facebook/callback', facebookRoutes);                             // Public callback route
+app.use('/api/facebook', ring5AuthBarrier, facebookRoutes);                    // Other facebook routes require auth
+
 app.use('/api/vehicles', ring5AuthBarrier, vehicleRoutes);                     // Requires auth
 app.use('/api/accounts', ring5AuthBarrier, accountRoutes);                     // Requires auth
-app.use('/api/facebook', ring5AuthBarrier, facebookRoutes);                    // Requires auth
 app.use('/api/sync', ring5AuthBarrier, syncRoutes);                            // Requires auth
 app.use('/api/users/me', ring5AuthBarrier, userCredentialsRoutes);             // Requires auth
 app.use('/api/users/me/api-keys', ring5AuthBarrier, require('./routes/apiKey.routes').default);
