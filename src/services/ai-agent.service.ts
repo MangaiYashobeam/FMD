@@ -7,14 +7,24 @@
  * 3. Generate human-like responses to leads
  * 4. Extract and qualify lead information
  * 5. Adapt to UI changes automatically
+ * 
+ * Supports both Anthropic Claude and OpenAI GPT-4
  */
 
 import { logger } from '@/utils/logger';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 // ============================================
 // Types
 // ============================================
+
+export type AIProvider = 'anthropic' | 'openai';
+
+export interface AIConfig {
+  provider?: AIProvider;
+  model?: string;
+}
 
 interface ElementFindRequest {
   description: string;
@@ -55,22 +65,143 @@ interface ResponseGeneration {
 }
 
 // ============================================
-// AI Navigation Agent
+// AI Navigation Agent (Multi-Provider)
 // ============================================
 
 export class AINavigationAgent {
-  private anthropic: Anthropic;
+  private anthropic: Anthropic | null = null;
+  private openai: OpenAI | null = null;
+  private defaultProvider: AIProvider;
   
-  constructor() {
-    this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || '',
-    });
+  // Model configurations
+  private readonly models = {
+    anthropic: {
+      default: 'claude-sonnet-4-20250514',
+      fast: 'claude-3-haiku-20240307',
+      powerful: 'claude-sonnet-4-20250514',
+    },
+    openai: {
+      default: 'gpt-4o',
+      fast: 'gpt-4o-mini',
+      powerful: 'gpt-4o',
+    },
+  };
+  
+  constructor(config?: AIConfig) {
+    // Initialize Anthropic if key exists
+    if (process.env.ANTHROPIC_API_KEY) {
+      this.anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+      });
+    }
+    
+    // Initialize OpenAI if key exists
+    if (process.env.OPENAI_API_KEY) {
+      this.openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+    }
+    
+    // Set default provider based on what's available
+    if (config?.provider) {
+      this.defaultProvider = config.provider;
+    } else if (this.anthropic) {
+      this.defaultProvider = 'anthropic';
+    } else if (this.openai) {
+      this.defaultProvider = 'openai';
+    } else {
+      logger.warn('No AI API keys configured. AI features will be disabled.');
+      this.defaultProvider = 'anthropic'; // Fallback
+    }
+    
+    logger.info(`AI Agent initialized with provider: ${this.defaultProvider}`);
+  }
+  
+  /**
+   * Generic completion method that works with both providers
+   */
+  private async complete(
+    prompt: string,
+    options: {
+      maxTokens?: number;
+      provider?: AIProvider;
+      modelType?: 'default' | 'fast' | 'powerful';
+      systemPrompt?: string;
+    } = {}
+  ): Promise<string> {
+    const provider = options.provider || this.defaultProvider;
+    const maxTokens = options.maxTokens || 1000;
+    const modelType = options.modelType || 'default';
+    
+    if (provider === 'anthropic' && this.anthropic) {
+      const model = this.models.anthropic[modelType];
+      
+      const response = await this.anthropic.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system: options.systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      
+      return response.content[0].type === 'text' ? response.content[0].text : '';
+    } else if (provider === 'openai' && this.openai) {
+      const model = this.models.openai[modelType];
+      
+      const messages: OpenAI.ChatCompletionMessageParam[] = [];
+      
+      if (options.systemPrompt) {
+        messages.push({ role: 'system', content: options.systemPrompt });
+      }
+      messages.push({ role: 'user', content: prompt });
+      
+      const response = await this.openai.chat.completions.create({
+        model,
+        max_tokens: maxTokens,
+        messages,
+      });
+      
+      return response.choices[0]?.message?.content || '';
+    } else {
+      throw new Error(`AI provider ${provider} not available. Check API keys.`);
+    }
+  }
+  
+  /**
+   * Parse JSON from AI response (handles markdown code blocks)
+   */
+  private parseJSON<T>(text: string): T | null {
+    // Try to find JSON in markdown code blocks
+    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      try {
+        return JSON.parse(codeBlockMatch[1].trim());
+      } catch {
+        // Continue to other methods
+      }
+    }
+    
+    // Try to find raw JSON object
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        // Continue to other methods
+      }
+    }
+    
+    // Try parsing the whole response
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
   
   /**
    * Find element using AI when CSS selector fails
    */
-  async findElement(request: ElementFindRequest): Promise<ElementFindResult> {
+  async findElement(request: ElementFindRequest, provider?: AIProvider): Promise<ElementFindResult> {
     const prompt = `You are a web automation expert. A user is trying to find an element on a Facebook Marketplace page.
 
 Element Description: "${request.description}"
@@ -101,17 +232,16 @@ Return JSON only:
 }`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
+      const text = await this.complete(prompt, {
+        maxTokens: 1000,
+        provider,
+        modelType: 'fast',
       });
       
-      const text = response.content[0].type === 'text' ? response.content[0].text : '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const result = this.parseJSON<ElementFindResult>(text);
       
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      if (result) {
+        return result;
       }
       
       throw new Error('Failed to parse AI response');
@@ -129,19 +259,27 @@ Return JSON only:
   /**
    * Analyze conversation and extract lead information
    */
-  async analyzeConversation(messages: { sender: string; text: string; timestamp: string }[], vehicleInfo: {
-    year: number;
-    make: string;
-    model: string;
-    price: number;
-    mileage: number;
-  }): Promise<LeadAnalysis> {
-    const prompt = `You are an expert automotive sales AI assistant. Analyze this Facebook Marketplace conversation about a vehicle.
-
-Vehicle Being Discussed:
+  async analyzeConversation(
+    messages: { sender: string; text: string; timestamp?: string }[],
+    vehicleInfo: {
+      year: number;
+      make: string;
+      model: string;
+      price: number;
+      mileage: number;
+    } | null,
+    provider?: AIProvider
+  ): Promise<LeadAnalysis> {
+    const vehicleDescription = vehicleInfo 
+      ? `Vehicle Being Discussed:
 - ${vehicleInfo.year} ${vehicleInfo.make} ${vehicleInfo.model}
 - Price: $${vehicleInfo.price.toLocaleString()}
-- Mileage: ${vehicleInfo.mileage.toLocaleString()} miles
+- Mileage: ${vehicleInfo.mileage.toLocaleString()} miles`
+      : 'Vehicle: Unknown (general inquiry)';
+
+    const prompt = `You are an expert automotive sales AI assistant. Analyze this Facebook Marketplace conversation about a vehicle.
+
+${vehicleDescription}
 
 Conversation:
 ${messages.map(m => `${m.sender}: ${m.text}`).join('\n')}
@@ -167,17 +305,16 @@ Return JSON only:
 }`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
+      const text = await this.complete(prompt, {
+        maxTokens: 1500,
+        provider,
+        modelType: 'default',
       });
       
-      const text = response.content[0].type === 'text' ? response.content[0].text : '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const result = this.parseJSON<LeadAnalysis>(text);
       
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      if (result) {
+        return result;
       }
       
       throw new Error('Failed to parse AI response');
@@ -199,16 +336,19 @@ Return JSON only:
   /**
    * Generate response to lead message
    */
-  async generateLeadResponse(context: {
-    dealerName: string;
-    dealerPhone: string;
-    dealerAddress: string;
-    vehicleInfo: { year: number; make: string; model: string; price: number };
-    conversationHistory: { sender: string; text: string }[];
-    lastBuyerMessage: string;
-    leadAnalysis: LeadAnalysis;
-    tone?: 'friendly' | 'professional' | 'urgent';
-  }): Promise<ResponseGeneration> {
+  async generateLeadResponse(
+    context: {
+      dealerName: string;
+      dealerPhone: string;
+      dealerAddress: string;
+      vehicleInfo: { year: number; make: string; model: string; price: number };
+      conversationHistory: { sender: string; text: string }[];
+      lastBuyerMessage: string;
+      leadAnalysis: LeadAnalysis;
+      tone?: 'friendly' | 'professional' | 'urgent';
+    },
+    provider?: AIProvider
+  ): Promise<ResponseGeneration> {
     const prompt = `You are a friendly, professional auto sales assistant for ${context.dealerName}.
 
 Vehicle: ${context.vehicleInfo.year} ${context.vehicleInfo.make} ${context.vehicleInfo.model} - $${context.vehicleInfo.price.toLocaleString()}
@@ -243,17 +383,16 @@ Return JSON only:
 }`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: prompt }],
+      const text = await this.complete(prompt, {
+        maxTokens: 500,
+        provider,
+        modelType: 'default',
       });
       
-      const text = response.content[0].type === 'text' ? response.content[0].text : '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const result = this.parseJSON<ResponseGeneration>(text);
       
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      if (result) {
+        return result;
       }
       
       throw new Error('Failed to parse AI response');
@@ -270,7 +409,11 @@ Return JSON only:
   /**
    * Detect UI changes and update selectors
    */
-  async detectUIChanges(oldSelectors: Record<string, string>, newPageHtml: string): Promise<{
+  async detectUIChanges(
+    oldSelectors: Record<string, string>,
+    newPageHtml: string,
+    provider?: AIProvider
+  ): Promise<{
     hasChanges: boolean;
     updatedSelectors: Record<string, string>;
     changes: string[];
@@ -295,17 +438,20 @@ Return JSON only:
 }`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
+      const text = await this.complete(prompt, {
+        maxTokens: 2000,
+        provider,
+        modelType: 'powerful',
       });
       
-      const text = response.content[0].type === 'text' ? response.content[0].text : '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const result = this.parseJSON<{
+        hasChanges: boolean;
+        updatedSelectors: Record<string, string>;
+        changes: string[];
+      }>(text);
       
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      if (result) {
+        return result;
       }
       
       throw new Error('Failed to parse AI response');
@@ -322,16 +468,19 @@ Return JSON only:
   /**
    * Generate vehicle description from images and data
    */
-  async generateVehicleDescription(vehicle: {
-    year: number;
-    make: string;
-    model: string;
-    trim?: string;
-    mileage: number;
-    price: number;
-    features?: string[];
-    condition?: string;
-  }): Promise<string> {
+  async generateVehicleDescription(
+    vehicle: {
+      year: number;
+      make: string;
+      model: string;
+      trim?: string;
+      mileage: number;
+      price: number;
+      features?: string[];
+      condition?: string;
+    },
+    provider?: AIProvider
+  ): Promise<string> {
     const prompt = `Write a compelling but honest Facebook Marketplace listing description for this vehicle:
 
 Vehicle: ${vehicle.year} ${vehicle.make} ${vehicle.model} ${vehicle.trim || ''}
@@ -352,17 +501,54 @@ Guidelines:
 Write the description only, no explanations:`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 300,
-        messages: [{ role: 'user', content: prompt }],
+      const text = await this.complete(prompt, {
+        maxTokens: 300,
+        provider,
+        modelType: 'fast',
       });
       
-      return response.content[0].type === 'text' ? response.content[0].text : '';
+      return text.trim();
     } catch (error) {
       logger.error('AI description generation failed:', error);
       return `${vehicle.year} ${vehicle.make} ${vehicle.model} - ${vehicle.mileage.toLocaleString()} miles. Great condition! Message for details.`;
     }
+  }
+  
+  /**
+   * Get current AI provider and available providers
+   */
+  getProviderInfo(): {
+    current: AIProvider;
+    available: AIProvider[];
+    models: {
+      anthropic: { default: string; fast: string; powerful: string };
+      openai: { default: string; fast: string; powerful: string };
+    };
+  } {
+    const available: AIProvider[] = [];
+    if (this.anthropic) available.push('anthropic');
+    if (this.openai) available.push('openai');
+    
+    return {
+      current: this.defaultProvider,
+      available,
+      models: this.models,
+    };
+  }
+  
+  /**
+   * Switch default provider
+   */
+  setProvider(provider: AIProvider): boolean {
+    if (provider === 'anthropic' && this.anthropic) {
+      this.defaultProvider = 'anthropic';
+      return true;
+    }
+    if (provider === 'openai' && this.openai) {
+      this.defaultProvider = 'openai';
+      return true;
+    }
+    return false;
   }
 }
 

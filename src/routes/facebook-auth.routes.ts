@@ -4,12 +4,39 @@
  * Handles Facebook OAuth authentication flow for the Chrome Extension
  */
 
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { FACEBOOK_CONFIG } from '../config/facebook';
-import { prisma } from '../lib/prisma';
+import prisma from '../config/database';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
+
+// Facebook API response types
+interface FacebookTokenResponse {
+  access_token?: string;
+  expires_in?: number;
+  error?: {
+    message: string;
+    type: string;
+    code: number;
+  };
+}
+
+interface FacebookUserResponse {
+  id?: string;
+  name?: string;
+  email?: string;
+  picture?: {
+    data?: {
+      url?: string;
+    };
+  };
+  error?: {
+    message: string;
+    type: string;
+    code: number;
+  };
+}
 
 // ============================================
 // OAuth Callback
@@ -19,65 +46,76 @@ const router = Router();
  * POST /api/auth/facebook/callback
  * Exchange authorization code for access token
  */
-router.post('/callback', async (req, res) => {
+router.post('/callback', async (req: Request, res: Response) => {
   try {
     const { code, redirectUri } = req.body;
     
     if (!code) {
-      return res.status(400).json({ error: 'Authorization code required' });
+      res.status(400).json({ error: 'Authorization code required' });
+      return;
     }
     
     // Exchange code for token with Facebook
     const tokenUrl = new URL('https://graph.facebook.com/v18.0/oauth/access_token');
     tokenUrl.searchParams.set('client_id', FACEBOOK_CONFIG.appId);
-    tokenUrl.searchParams.set('client_secret', process.env.FACEBOOK_APP_SECRET!);
+    tokenUrl.searchParams.set('client_secret', process.env.FACEBOOK_APP_SECRET || '');
     tokenUrl.searchParams.set('redirect_uri', redirectUri);
     tokenUrl.searchParams.set('code', code);
     
     const tokenResponse = await fetch(tokenUrl.toString());
-    const tokenData = await tokenResponse.json();
+    const tokenData = await tokenResponse.json() as FacebookTokenResponse;
     
     if (tokenData.error) {
       console.error('Facebook token error:', tokenData.error);
-      return res.status(400).json({ error: tokenData.error.message });
+      res.status(400).json({ error: tokenData.error.message });
+      return;
     }
     
     const { access_token, expires_in } = tokenData;
+    
+    if (!access_token) {
+      res.status(400).json({ error: 'Failed to get access token' });
+      return;
+    }
     
     // Get long-lived token
     const longLivedTokenUrl = new URL('https://graph.facebook.com/v18.0/oauth/access_token');
     longLivedTokenUrl.searchParams.set('grant_type', 'fb_exchange_token');
     longLivedTokenUrl.searchParams.set('client_id', FACEBOOK_CONFIG.appId);
-    longLivedTokenUrl.searchParams.set('client_secret', process.env.FACEBOOK_APP_SECRET!);
+    longLivedTokenUrl.searchParams.set('client_secret', process.env.FACEBOOK_APP_SECRET || '');
     longLivedTokenUrl.searchParams.set('fb_exchange_token', access_token);
     
     const longLivedResponse = await fetch(longLivedTokenUrl.toString());
-    const longLivedData = await longLivedResponse.json();
+    const longLivedData = await longLivedResponse.json() as FacebookTokenResponse;
     
     const longLivedToken = longLivedData.access_token || access_token;
-    const tokenExpiry = longLivedData.expires_in || expires_in;
+    const tokenExpiry = longLivedData.expires_in || expires_in || 3600;
     
     // Get user profile from Facebook
     const userResponse = await fetch(
       `https://graph.facebook.com/v18.0/me?fields=id,name,email,picture&access_token=${longLivedToken}`
     );
-    const userData = await userResponse.json();
+    const userData = await userResponse.json() as FacebookUserResponse;
     
     if (userData.error) {
       console.error('Facebook user error:', userData.error);
-      return res.status(400).json({ error: userData.error.message });
+      res.status(400).json({ error: userData.error.message });
+      return;
+    }
+    
+    if (!userData.id) {
+      res.status(400).json({ error: 'Failed to get Facebook user ID' });
+      return;
     }
     
     // Find or create user in our database
+    // First, try to find by Facebook ID stored in settings or by email
     let user = await prisma.user.findFirst({
       where: {
         OR: [
           { facebookId: userData.id },
-          { email: userData.email },
+          ...(userData.email ? [{ email: userData.email }] : []),
         ],
-      },
-      include: {
-        dealerAccount: true,
       },
     });
     
@@ -86,208 +124,166 @@ router.post('/callback', async (req, res) => {
       user = await prisma.user.create({
         data: {
           facebookId: userData.id,
-          email: userData.email,
-          name: userData.name,
-          profilePicture: userData.picture?.data?.url,
+          email: userData.email || `${userData.id}@facebook.placeholder`,
+          firstName: userData.name?.split(' ')[0] || 'Facebook',
+          lastName: userData.name?.split(' ').slice(1).join(' ') || 'User',
+          passwordHash: '', // No password for OAuth users
           facebookAccessToken: longLivedToken,
           facebookTokenExpiry: new Date(Date.now() + tokenExpiry * 1000),
         },
-        include: {
-          dealerAccount: true,
-        },
       });
     } else {
-      // Update existing user
+      // Update existing user with Facebook token
       user = await prisma.user.update({
         where: { id: user.id },
         data: {
           facebookId: userData.id,
           facebookAccessToken: longLivedToken,
           facebookTokenExpiry: new Date(Date.now() + tokenExpiry * 1000),
-          profilePicture: userData.picture?.data?.url,
-        },
-        include: {
-          dealerAccount: true,
         },
       });
     }
     
-    // Create dealer account if not exists
-    let dealerAccount = user.dealerAccount;
-    
-    if (!dealerAccount) {
-      dealerAccount = await prisma.dealerAccount.create({
-        data: {
-          userId: user.id,
-          businessName: user.name,
-          facebookConnected: true,
-          facebookUserId: userData.id,
-        },
-      });
-    } else {
-      dealerAccount = await prisma.dealerAccount.update({
-        where: { id: dealerAccount.id },
-        data: {
-          facebookConnected: true,
-          facebookUserId: userData.id,
-        },
-      });
-    }
-    
-    // Generate JWT for extension
-    const serverToken = jwt.sign(
-      {
-        userId: user.id,
-        dealerAccountId: dealerAccount.id,
-        facebookId: userData.id,
-      },
-      process.env.JWT_SECRET!,
+    // Generate JWT tokens
+    const jwtToken = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET || 'fallback-secret',
       { expiresIn: '7d' }
+    );
+    
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'fallback-secret',
+      { expiresIn: '30d' }
     );
     
     res.json({
       success: true,
-      accessToken: longLivedToken,
-      expiresIn: tokenExpiry,
-      serverToken,
       user: {
         id: user.id,
-        name: user.name,
         email: user.email,
-        profilePicture: user.profilePicture,
-        facebookId: userData.id,
+        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
+        facebookConnected: true,
       },
-      dealerAccount: {
-        id: dealerAccount.id,
-        businessName: dealerAccount.businessName,
+      tokens: {
+        accessToken: jwtToken,
+        refreshToken,
+        expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
+      },
+      facebook: {
+        userId: userData.id,
+        name: userData.name,
+        picture: userData.picture?.data?.url,
+        tokenExpiry: new Date(Date.now() + tokenExpiry * 1000).toISOString(),
       },
     });
   } catch (error) {
-    console.error('OAuth callback error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error('Facebook OAuth error:', error);
+    res.status(500).json({ error: 'Failed to process Facebook authentication' });
   }
+});
+
+/**
+ * GET /api/auth/facebook/config
+ * Get Facebook OAuth configuration (safe to expose)
+ */
+router.get('/config', (_req: Request, res: Response) => {
+  res.json({
+    appId: FACEBOOK_CONFIG.appId,
+    scope: FACEBOOK_CONFIG.oauth.scope.join(','),
+    version: FACEBOOK_CONFIG.oauth.graphVersion,
+  });
 });
 
 /**
  * POST /api/auth/facebook/refresh
- * Refresh access token
+ * Refresh Facebook access token
  */
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', async (req: Request, res: Response) => {
   try {
-    const { accessToken } = req.body;
+    const { userId, currentToken } = req.body;
     
-    if (!accessToken) {
-      return res.status(400).json({ error: 'Access token required' });
+    if (!userId || !currentToken) {
+      res.status(400).json({ error: 'userId and currentToken are required' });
+      return;
     }
     
-    // Exchange for new long-lived token
-    const tokenUrl = new URL('https://graph.facebook.com/v18.0/oauth/access_token');
-    tokenUrl.searchParams.set('grant_type', 'fb_exchange_token');
-    tokenUrl.searchParams.set('client_id', FACEBOOK_CONFIG.appId);
-    tokenUrl.searchParams.set('client_secret', process.env.FACEBOOK_APP_SECRET!);
-    tokenUrl.searchParams.set('fb_exchange_token', accessToken);
+    // Verify user exists and token matches
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
     
-    const response = await fetch(tokenUrl.toString());
-    const data = await response.json();
+    if (!user || user.facebookAccessToken !== currentToken) {
+      res.status(401).json({ error: 'Invalid user or token' });
+      return;
+    }
+    
+    // Get new long-lived token
+    const longLivedTokenUrl = new URL('https://graph.facebook.com/v18.0/oauth/access_token');
+    longLivedTokenUrl.searchParams.set('grant_type', 'fb_exchange_token');
+    longLivedTokenUrl.searchParams.set('client_id', FACEBOOK_CONFIG.appId);
+    longLivedTokenUrl.searchParams.set('client_secret', process.env.FACEBOOK_APP_SECRET || '');
+    longLivedTokenUrl.searchParams.set('fb_exchange_token', currentToken);
+    
+    const response = await fetch(longLivedTokenUrl.toString());
+    const data = await response.json() as FacebookTokenResponse;
     
     if (data.error) {
-      return res.status(400).json({ error: data.error.message });
+      res.status(400).json({ error: data.error.message });
+      return;
     }
     
+    if (!data.access_token) {
+      res.status(400).json({ error: 'Failed to refresh token' });
+      return;
+    }
+    
+    // Update user's token
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        facebookAccessToken: data.access_token,
+        facebookTokenExpiry: new Date(Date.now() + (data.expires_in || 3600) * 1000),
+      },
+    });
+    
     res.json({
-      accessToken: data.access_token,
+      success: true,
+      token: data.access_token,
       expiresIn: data.expires_in,
     });
   } catch (error) {
     console.error('Token refresh error:', error);
-    res.status(500).json({ error: 'Token refresh failed' });
-  }
-});
-
-/**
- * GET /api/auth/facebook/verify
- * Verify access token is still valid
- */
-router.get('/verify', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ valid: false, error: 'No token provided' });
-    }
-    
-    // Verify with our server first
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    
-    // Get user and their Facebook token
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-    
-    if (!user?.facebookAccessToken) {
-      return res.status(401).json({ valid: false, error: 'No Facebook token' });
-    }
-    
-    // Verify Facebook token
-    const debugUrl = `https://graph.facebook.com/debug_token?input_token=${user.facebookAccessToken}&access_token=${FACEBOOK_CONFIG.appId}|${process.env.FACEBOOK_APP_SECRET}`;
-    const response = await fetch(debugUrl);
-    const data = await response.json();
-    
-    if (data.data?.is_valid) {
-      res.json({
-        valid: true,
-        expiresAt: data.data.expires_at,
-        userId: user.facebookId,
-      });
-    } else {
-      res.json({
-        valid: false,
-        error: data.data?.error?.message || 'Token invalid',
-      });
-    }
-  } catch (error) {
-    console.error('Token verify error:', error);
-    res.status(401).json({ valid: false, error: 'Verification failed' });
+    res.status(500).json({ error: 'Failed to refresh token' });
   }
 });
 
 /**
  * POST /api/auth/facebook/disconnect
- * Disconnect Facebook account
+ * Disconnect Facebook from user account
  */
-router.post('/disconnect', async (req, res) => {
+router.post('/disconnect', async (req: Request, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.split(' ')[1];
+    const { userId } = req.body;
     
-    if (!token) {
-      return res.status(401).json({ error: 'Not authenticated' });
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' });
+      return;
     }
     
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    
-    // Update user
     await prisma.user.update({
-      where: { id: decoded.userId },
+      where: { id: userId },
       data: {
+        facebookId: null,
         facebookAccessToken: null,
         facebookTokenExpiry: null,
-      },
-    });
-    
-    // Update dealer account
-    await prisma.dealerAccount.update({
-      where: { id: decoded.dealerAccountId },
-      data: {
-        facebookConnected: false,
       },
     });
     
     res.json({ success: true });
   } catch (error) {
     console.error('Disconnect error:', error);
-    res.status(500).json({ error: 'Disconnect failed' });
+    res.status(500).json({ error: 'Failed to disconnect Facebook' });
   }
 });
 

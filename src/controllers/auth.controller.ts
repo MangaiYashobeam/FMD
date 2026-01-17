@@ -167,7 +167,9 @@ export class AuthController {
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    const isPasswordValid = user.passwordHash 
+      ? await bcrypt.compare(password, user.passwordHash)
+      : false;
 
     if (!isPasswordValid) {
       throw new AppError('Invalid credentials', 401);

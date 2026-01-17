@@ -41,25 +41,6 @@ interface MarketplaceTask {
   createdAt: Date;
 }
 
-interface ConversationMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  text: string;
-  timestamp: Date;
-  isFromBuyer: boolean;
-}
-
-interface LeadData {
-  name: string;
-  phone?: string;
-  email?: string;
-  vehicleInterest: string;
-  messages: ConversationMessage[];
-  score: number;
-  intent: 'hot' | 'warm' | 'cold';
-}
-
 // ============================================
 // OAuth Service
 // ============================================
@@ -244,7 +225,7 @@ export class ExtensionTaskQueue {
       accountId: t.accountId,
       data: t.data,
       status: t.status as MarketplaceTask['status'],
-      retries: t.retries,
+      retries: t.retryCount,
       createdAt: t.createdAt,
     }));
   }
