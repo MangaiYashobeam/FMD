@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { logger } from '../utils/logger';
 import nodemailer from 'nodemailer';
 
 interface SystemSettingsRecord {
@@ -948,6 +949,206 @@ export const revokeFacebookProfile = async (req: Request, res: Response, next: N
     res.json({
       success: true,
       message: `Facebook profile "${profile.pageName}" has been revoked`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ============================================
+// Extension Configuration (SUPER_ADMIN only)
+// ============================================
+
+// Get Extension configuration
+export const getExtensionConfig = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { key: 'integrations' },
+    });
+
+    const integrations = settings?.value as any || {};
+
+    // Get extension usage stats from audit logs
+    const [totalSessions, activeSessions, totalPosts, recentPosts] = await Promise.all([
+      // Count unique extension sessions (from audit logs with extension source)
+      prisma.auditLog.count({
+        where: { action: { contains: 'extension' } },
+      }),
+      // Active sessions in last 24 hours
+      prisma.auditLog.count({
+        where: {
+          action: { contains: 'extension' },
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }),
+      // Total posts (all sources as proxy)
+      prisma.facebookPost.count(),
+      // Recent posts
+      prisma.facebookPost.count({
+        where: {
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+    ]);
+
+    // Get extension Facebook App ID (separate from web app)
+    const extensionAppId = integrations.extensionFacebookAppId || 
+                          process.env.FACEBOOK_EXTENSION_APP_ID || 
+                          '';
+    const extensionAppSecret = integrations.extensionFacebookAppSecret || 
+                              process.env.FACEBOOK_EXTENSION_APP_SECRET || 
+                              '';
+    const extensionId = integrations.chromeExtensionId || 
+                        process.env.EXTENSION_ID || 
+                        '';
+
+    res.json({
+      success: true,
+      data: {
+        config: {
+          extensionId: extensionId,
+          facebookAppId: extensionAppId,
+          facebookAppSecret: extensionAppSecret ? '********' : '',
+          hasSecret: !!extensionAppSecret,
+          configured: !!(extensionAppId && extensionId),
+          apiUrl: process.env.API_URL || 'https://dealersface.com',
+          oauthRedirectPattern: 'https://*.chromiumapp.org/*',
+          chromeWebStoreUrl: extensionId 
+            ? `https://chrome.google.com/webstore/detail/${extensionId}`
+            : null,
+        },
+        status: {
+          extensionId: extensionId ? 'configured' : 'not-configured',
+          facebookAppId: extensionAppId ? 'configured' : 'not-configured',
+          facebookAppSecret: extensionAppSecret ? 'configured' : 'not-configured',
+          oauthReady: !!(extensionAppId && extensionAppSecret),
+        },
+        stats: {
+          totalSessions,
+          activeSessions,
+          totalPosts,
+          recentPosts,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update Extension configuration
+export const updateExtensionConfig = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { extensionId, facebookAppId, facebookAppSecret } = req.body;
+
+    // Get existing settings
+    const existing = await prisma.systemSettings.findUnique({
+      where: { key: 'integrations' },
+    });
+
+    const currentIntegrations = existing?.value as any || {};
+
+    // Build updated settings
+    const updatedIntegrations = {
+      ...currentIntegrations,
+    };
+
+    // Update extension ID if provided
+    if (extensionId !== undefined) {
+      const sanitizedExtId = sanitizeInput(extensionId);
+      if (sanitizedExtId && (sanitizedExtId.length < 20 || sanitizedExtId.length > 40)) {
+        throw new AppError('Invalid Chrome Extension ID format', 400);
+      }
+      updatedIntegrations.chromeExtensionId = sanitizedExtId || '';
+    }
+
+    // Update Facebook App ID if provided
+    if (facebookAppId !== undefined) {
+      const sanitizedAppId = sanitizeInput(facebookAppId);
+      if (sanitizedAppId && !isValidFacebookAppId(sanitizedAppId)) {
+        throw new AppError('Invalid Facebook App ID format. Must be 10-20 digits.', 400);
+      }
+      updatedIntegrations.extensionFacebookAppId = sanitizedAppId || '';
+    }
+
+    // Only update secret if provided and not masked
+    if (facebookAppSecret && facebookAppSecret !== '********') {
+      const sanitizedSecret = sanitizeInput(facebookAppSecret);
+      if (sanitizedSecret.length < 20 || sanitizedSecret.length > 64) {
+        throw new AppError('Invalid Facebook App Secret format', 400);
+      }
+      updatedIntegrations.extensionFacebookAppSecret = sanitizedSecret;
+    }
+
+    // Upsert settings
+    await prisma.systemSettings.upsert({
+      where: { key: 'integrations' },
+      update: { value: updatedIntegrations },
+      create: { key: 'integrations', value: updatedIntegrations },
+    });
+
+    logger.info('Extension configuration updated by super admin');
+
+    res.json({
+      success: true,
+      message: 'Extension configuration updated successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Test Extension configuration
+export const testExtensionConfig = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { key: 'integrations' },
+    });
+
+    const integrations = settings?.value as any || {};
+
+    const extensionAppId = integrations.extensionFacebookAppId || 
+                          process.env.FACEBOOK_EXTENSION_APP_ID || '';
+    const extensionAppSecret = integrations.extensionFacebookAppSecret || 
+                              process.env.FACEBOOK_EXTENSION_APP_SECRET || '';
+    const extensionId = integrations.chromeExtensionId || 
+                        process.env.EXTENSION_ID || '';
+
+    if (!extensionAppId || !extensionAppSecret) {
+      throw new AppError('Extension Facebook App credentials not configured', 400);
+    }
+
+    if (!extensionId) {
+      throw new AppError('Chrome Extension ID not configured', 400);
+    }
+
+    // Test Facebook credentials by getting app access token
+    const response = await fetch(
+      `https://graph.facebook.com/oauth/access_token?client_id=${extensionAppId}&client_secret=${extensionAppSecret}&grant_type=client_credentials`
+    );
+
+    const data = await response.json() as { 
+      error?: { message: string }; 
+      access_token?: string; 
+      token_type?: string;
+    };
+
+    if (data.error) {
+      throw new AppError(`Facebook API Error: ${data.error.message}`, 400);
+    }
+
+    if (!data.access_token) {
+      throw new AppError('Failed to get app access token from Facebook', 400);
+    }
+
+    res.json({
+      success: true,
+      message: 'Extension configuration is valid! Facebook credentials verified.',
+      data: {
+        extensionIdConfigured: !!extensionId,
+        facebookCredentialsValid: true,
+        tokenType: data.token_type || 'bearer',
+      },
     });
   } catch (error) {
     next(error);

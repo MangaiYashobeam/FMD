@@ -390,6 +390,17 @@ export const adminApi = {
   
   revokeFacebookProfile: (profileId: string) =>
     api.post(`/api/admin/facebook/profiles/${profileId}/revoke`),
+
+  // Extension Configuration Management
+  getExtensionConfig: () => api.get('/api/admin/extension/config'),
+  
+  updateExtensionConfig: (data: { 
+    extensionId?: string; 
+    facebookAppId?: string; 
+    facebookAppSecret?: string;
+  }) => api.put('/api/admin/extension/config', data),
+  
+  testExtensionConfig: () => api.post('/api/admin/extension/config/test'),
 };
 
 // Leads API

@@ -15,6 +15,7 @@ import {
   FileText,
   Brain,
   Facebook,
+  Puzzle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },
   { name: 'Facebook', href: '/admin/facebook', icon: Facebook },
+  { name: 'Extension', href: '/admin/extension', icon: Puzzle },
   { name: 'Email', href: '/admin/email', icon: Mail },
   { name: 'Reports & Alerts', href: '/admin/email-settings', icon: FileText },
   { name: 'Audit Logs', href: '/admin/audit', icon: Activity },

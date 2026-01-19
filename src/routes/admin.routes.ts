@@ -347,4 +347,37 @@ router.post(
   asyncHandler(systemController.revokeFacebookProfile)
 );
 
+// ============================================
+// Extension Configuration Routes (SUPER_ADMIN)
+// ============================================
+
+/**
+ * @route   GET /api/admin/extension/config
+ * @desc    Get Chrome Extension configuration and stats
+ * @access  Super Admin
+ */
+router.get('/extension/config', asyncHandler(systemController.getExtensionConfig));
+
+/**
+ * @route   PUT /api/admin/extension/config
+ * @desc    Update Extension configuration (Extension ID, Facebook App credentials)
+ * @access  Super Admin
+ */
+router.put(
+  '/extension/config',
+  validate([
+    body('extensionId').optional().trim().isLength({ min: 20, max: 40 }).withMessage('Invalid Extension ID format'),
+    body('facebookAppId').optional().trim().isLength({ min: 10, max: 20 }).withMessage('Invalid App ID format'),
+    body('facebookAppSecret').optional().trim().isLength({ min: 20, max: 64 }).withMessage('Invalid App Secret format'),
+  ]),
+  asyncHandler(systemController.updateExtensionConfig)
+);
+
+/**
+ * @route   POST /api/admin/extension/config/test
+ * @desc    Test Extension configuration
+ * @access  Super Admin
+ */
+router.post('/extension/config/test', asyncHandler(systemController.testExtensionConfig));
+
 export default router;
