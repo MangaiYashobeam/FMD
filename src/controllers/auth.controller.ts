@@ -784,9 +784,8 @@ export class AuthController {
       data: targets,
     });
   }
-}
 
-/**
+  /**
    * Update user profile (name, email, phone)
    */
   async updateProfile(req: AuthRequest, res: Response) {
@@ -920,9 +919,8 @@ export class AuthController {
         id: true,
         createdAt: true,
         expiresAt: true,
-        lastUsedAt: true,
       },
-      orderBy: { lastUsedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     res.json({
@@ -931,8 +929,7 @@ export class AuthController {
         id: s.id,
         createdAt: s.createdAt,
         expiresAt: s.expiresAt,
-        lastUsedAt: s.lastUsedAt,
-        isCurrent: index === 0, // Most recently used is likely current
+        isCurrent: index === 0, // Most recently created is likely current
       })),
     });
   }
