@@ -37,7 +37,7 @@ const DEFAULT_PROVIDERS = [
     defaultModel: 'claude-3-5-sonnet-latest',
     availableModels: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
     healthStatus: process.env.ANTHROPIC_API_KEY ? 'healthy' : 'unknown',
-    capabilities: { text: true, analysis: true, reasoning: true },
+    capabilities: ['text', 'analysis', 'reasoning'],
     apiKey: process.env.ANTHROPIC_API_KEY ? '***configured***' : null,
   },
   {
@@ -49,7 +49,7 @@ const DEFAULT_PROVIDERS = [
     defaultModel: 'gpt-4-turbo',
     availableModels: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
     healthStatus: process.env.OPENAI_API_KEY ? 'healthy' : 'unknown',
-    capabilities: { text: true, embeddings: true, vision: true },
+    capabilities: ['text', 'embeddings', 'vision'],
     apiKey: process.env.OPENAI_API_KEY ? '***configured***' : null,
   },
   {
@@ -61,7 +61,7 @@ const DEFAULT_PROVIDERS = [
     defaultModel: 'deepseek-chat',
     availableModels: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
     healthStatus: process.env.DEEPSEEK_API_KEY ? 'healthy' : 'unknown',
-    capabilities: { text: true, code: true, reasoning: true },
+    capabilities: ['text', 'code', 'reasoning'],
     apiKey: process.env.DEEPSEEK_API_KEY ? '***configured***' : null,
   },
 ];
