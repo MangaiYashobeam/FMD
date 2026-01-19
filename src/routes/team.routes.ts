@@ -238,7 +238,41 @@ router.post(
     });
 
     if (existingUser) {
-      throw new AppError('A user with this email already exists', 409);
+      // Check if already a member of THIS account
+      const existingMember = await prisma.accountUser.findFirst({
+        where: {
+          userId: existingUser.id,
+          accountId,
+        },
+      });
+      
+      if (existingMember) {
+        throw new AppError('This user is already a member of your team', 409);
+      }
+      
+      // User exists but not in this account - add them
+      await prisma.accountUser.create({
+        data: {
+          userId: existingUser.id,
+          accountId,
+          role: role.toUpperCase(),
+        },
+      });
+      
+      logger.info(`Existing user ${existingUser.id} added to account ${accountId} by ${userId}`);
+      
+      return res.json({
+        success: true,
+        message: 'Existing user added to your team successfully',
+        data: {
+          id: existingUser.id,
+          email: existingUser.email,
+          firstName: existingUser.firstName,
+          lastName: existingUser.lastName,
+          role: role.toLowerCase(),
+          status: 'active',
+        },
+      });
     }
 
     // Create new user

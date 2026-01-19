@@ -47,7 +47,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.facebook.com/*", "https://m.facebook.com/*", "https://web.facebook.com/*"],
-      "js": ["content-ai.js"],
+      "js": ["iai-soldier.js", "content-ai.js"],
       "run_at": "document_idle"
     }
   ],
