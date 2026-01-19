@@ -192,8 +192,14 @@ export default function AICenterPage() {
     loadDashboardData();
   }, [refreshKey]);
 
-  // Auto-refresh traces
+  // Auto-refresh traces - disabled by default, only manual refresh now
+  // This was causing rate limit issues by polling every 5 seconds
+  // Users can manually refresh using the refresh button
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  
   useEffect(() => {
+    if (!autoRefreshEnabled) return;
+    
     const interval = setInterval(async () => {
       try {
         const activeTraces = await aiCenterService.traces.getActive();
@@ -208,13 +214,16 @@ export default function AICenterPage() {
             return updated.slice(0, 100);
           });
         }
-      } catch (err) {
-        // Silently fail for background refresh
+      } catch (err: any) {
+        // Stop auto-refresh on rate limit
+        if (err?.response?.status === 429) {
+          setAutoRefreshEnabled(false);
+        }
       }
-    }, 5000);
+    }, 30000); // Changed from 5000ms to 30000ms (30 seconds)
 
     return () => clearInterval(interval);
-  }, []);
+  }, [autoRefreshEnabled]);
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Activity },
@@ -873,8 +882,12 @@ function TracesTab() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ provider: '', status: '' });
   const [selectedTrace, setSelectedTrace] = useState<APITrace | null>(null);
+  const [pollError, setPollError] = useState(false);
 
   const loadTraces = useCallback(async () => {
+    // Skip if we hit a rate limit error
+    if (pollError) return;
+    
     setLoading(true);
     try {
       const data = await aiCenterService.traces.getAll({
@@ -883,15 +896,21 @@ function TracesTab() {
         limit: 100,
       });
       setTraces(data);
-    } catch (error) {
+      setPollError(false);
+    } catch (error: any) {
       console.error('Failed to load traces:', error);
+      // Stop polling on rate limit errors
+      if (error.message?.includes('Too many requests') || error.response?.status === 429) {
+        setPollError(true);
+      }
     }
     setLoading(false);
-  }, [filter]);
+  }, [filter, pollError]);
 
   useEffect(() => {
     loadTraces();
-    const interval = setInterval(loadTraces, 10000);
+    // Poll every 30 seconds instead of 10 (reduced API calls)
+    const interval = setInterval(loadTraces, 30000);
     return () => clearInterval(interval);
   }, [loadTraces]);
 

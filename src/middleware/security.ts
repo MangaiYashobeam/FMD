@@ -125,11 +125,11 @@ function getClientIPForRateLimit(req: Request): string {
 // ============================================
 
 /**
- * General API rate limiter - 100 requests per 15 minutes
+ * General API rate limiter - 500 requests per 15 minutes (increased for admin dashboard)
  */
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 500, // Increased from 100 to handle admin dashboard polling
   store: generalStore as any,
   message: {
     success: false,
