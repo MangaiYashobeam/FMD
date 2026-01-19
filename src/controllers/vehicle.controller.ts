@@ -286,4 +286,73 @@ export class VehicleController {
       data: { updated: result.count },
     });
   }
+
+  /**
+   * Post vehicle to Facebook via IAI (extension automation)
+   */
+  async postToFacebook(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+    const { title, price, description, photos, method } = req.body;
+
+    // Get the vehicle
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: id as string },
+      include: { account: true },
+    });
+
+    if (!vehicle) {
+      throw new AppError('Vehicle not found', 404);
+    }
+
+    // Verify access
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: vehicle.accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
+    // Create a task for the extension to process (IAI method)
+    if (method === 'iai') {
+      const task = await prisma.extensionTask.create({
+        data: {
+          accountId: vehicle.accountId,
+          type: 'POST_TO_MARKETPLACE',
+          status: 'pending',
+          vehicleId: vehicle.id,
+          data: {
+            title,
+            price,
+            description,
+            photos,
+            year: vehicle.year,
+            make: vehicle.make,
+            model: vehicle.model,
+            mileage: vehicle.mileage,
+            vin: vehicle.vin,
+          },
+        },
+      });
+
+      logger.info(`IAI task created for vehicle ${id}: ${task.id}`);
+
+      res.json({
+        success: true,
+        message: 'Task created for extension to process',
+        data: { taskId: task.id, method: 'iai' },
+      });
+      return;
+    }
+
+    // For API or Pixel methods (future implementation)
+    res.json({
+      success: true,
+      message: `${method} posting method not yet implemented`,
+      data: { method },
+    });
+  }
 }

@@ -82,4 +82,22 @@ router.post(
   asyncHandler(controller.bulkUpdateStatus.bind(controller))
 );
 
+/**
+ * @route   POST /api/vehicles/:id/post-to-facebook
+ * @desc    Post vehicle to Facebook via IAI/API/Pixel
+ * @access  Private
+ */
+router.post(
+  '/:id/post-to-facebook',
+  validate([
+    param('id').isUUID().withMessage('Invalid vehicle ID'),
+    body('title').isString().notEmpty().withMessage('Title is required'),
+    body('price').isNumeric().withMessage('Price must be a number'),
+    body('description').isString().notEmpty().withMessage('Description is required'),
+    body('photos').isArray().withMessage('Photos must be an array'),
+    body('method').isIn(['iai', 'api', 'pixel']).withMessage('Invalid posting method'),
+  ]),
+  asyncHandler(controller.postToFacebook.bind(controller))
+);
+
 export default router;

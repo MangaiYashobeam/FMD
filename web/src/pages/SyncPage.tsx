@@ -104,7 +104,7 @@ function SyncJobCard({ job }: { job: SyncJob }) {
         <p className="mt-3 text-xs text-gray-500">Duration: {duration}s</p>
       )}
 
-      {job.errors.length > 0 && (
+      {job.errors && job.errors.length > 0 && (
         <div className="mt-3 p-2 bg-red-50 rounded border border-red-200">
           <div className="flex items-center gap-2 text-red-700">
             <AlertTriangle className="w-4 h-4" />

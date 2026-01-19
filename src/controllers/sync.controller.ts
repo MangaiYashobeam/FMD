@@ -153,7 +153,7 @@ export class SyncController {
       throw new AppError('Access denied', 403);
     }
 
-    const [jobs, total] = await Promise.all([
+    const [jobsRaw, total] = await Promise.all([
       prisma.syncJob.findMany({
         where: { accountId },
         skip,
@@ -162,6 +162,20 @@ export class SyncController {
       }),
       prisma.syncJob.count({ where: { accountId } }),
     ]);
+
+    // Transform jobs to match frontend expected format
+    const jobs = jobsRaw.map(job => ({
+      id: job.id,
+      status: job.status.toLowerCase() as 'pending' | 'running' | 'completed' | 'failed',
+      type: job.type as 'full' | 'incremental',
+      startedAt: job.startedAt?.toISOString() || job.createdAt.toISOString(),
+      completedAt: job.completedAt?.toISOString(),
+      vehiclesProcessed: job.recordsImported + job.recordsUpdated + job.recordsFailed,
+      vehiclesAdded: job.vehiclesAdded,
+      vehiclesUpdated: job.vehiclesUpdated,
+      vehiclesRemoved: job.vehiclesMarkedSold,
+      errors: job.errorMessage ? [job.errorMessage] : [],
+    }));
 
     res.json({
       success: true,

@@ -169,11 +169,18 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
+    // Allow requests with no origin (mobile apps, curl, Postman, etc.) or empty origin
+    if (!origin || origin === '') {
+      return callback(null, true);
+    }
     
     // Allow Chrome extension requests
     if (origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
+    
+    // Allow moz-extension (Firefox)
+    if (origin.startsWith('moz-extension://')) {
       return callback(null, true);
     }
     

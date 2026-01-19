@@ -146,6 +146,14 @@ export const vehiclesApi = {
   bulkDelete: (ids: string[]) => api.post('/api/vehicles/bulk-delete', { ids }),
   
   generateDescription: (id: string) => api.post(`/api/vehicles/${id}/generate-description`),
+  
+  postToFacebook: (id: string, data: {
+    title: string;
+    price: number;
+    description: string;
+    photos: string[];
+    method: string;
+  }) => api.post(`/api/vehicles/${id}/post-to-facebook`, data),
 };
 
 // Accounts API
