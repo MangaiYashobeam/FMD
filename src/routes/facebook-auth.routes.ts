@@ -45,11 +45,22 @@ router.post('/callback', async (req: Request, res: Response) => {
     
     logger.info('Extension OAuth callback received');
     
+    // Use extension-specific credentials if redirect is from Chrome extension
+    const isExtensionCallback = redirectUri?.includes('chromiumapp.org');
+    const appId = isExtensionCallback 
+      ? (process.env.FACEBOOK_EXTENSION_APP_ID || process.env.FACEBOOK_APP_ID)
+      : process.env.FACEBOOK_APP_ID;
+    const appSecret = isExtensionCallback 
+      ? (process.env.FACEBOOK_EXTENSION_APP_SECRET || process.env.FACEBOOK_APP_SECRET)
+      : process.env.FACEBOOK_APP_SECRET;
+    
+    logger.info(`Using ${isExtensionCallback ? 'extension' : 'web'} Facebook credentials for callback`);
+    
     // Exchange code for access token with Facebook
     const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
       params: {
-        client_id: process.env.FACEBOOK_APP_ID,
-        client_secret: process.env.FACEBOOK_APP_SECRET,
+        client_id: appId,
+        client_secret: appSecret,
         redirect_uri: redirectUri,
         code,
       },

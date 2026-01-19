@@ -17,7 +17,7 @@ const CONFIG = {
   // API_URL: 'http://localhost:5000/api', // Development
   FACEBOOK_APP_ID: null, // Fetched from server - not hardcoded
   POLL_INTERVAL_MS: 10000,
-  OAUTH_REDIRECT_URI: chrome.identity.getRedirectURL('oauth2'),
+  OAUTH_REDIRECT_URI: chrome.identity.getRedirectURL(), // No suffix - matches Facebook config
 };
 
 console.log('OAuth Redirect URI:', CONFIG.OAUTH_REDIRECT_URI);

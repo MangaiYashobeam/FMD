@@ -304,8 +304,14 @@ export class SyncController {
     const file = req.file;
     const { accountId, skipHeader, updateExisting, markMissingSold, delimiter } = req.body;
 
+    logger.info(`📤 Upload request: accountId=${accountId}, file=${file?.originalname}, size=${file?.size}`);
+
     if (!file) {
       throw new AppError('No file uploaded', 400);
+    }
+
+    if (!accountId) {
+      throw new AppError('Account ID is required', 400);
     }
 
     // Verify user has access (check for SUPER_ADMIN first, then account-level roles)
