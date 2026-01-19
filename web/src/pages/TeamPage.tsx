@@ -97,7 +97,7 @@ export default function TeamPage() {
       toast.success(response.data?.message || 'Invitation sent successfully!');
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.error || error?.message || 'Failed to send invitation';
+      const message = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Failed to send invitation';
       setInviteError(message);
       toast.error(message);
     },
@@ -116,7 +116,7 @@ export default function TeamPage() {
       toast.success(response.data?.message || 'Team member created successfully!');
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.error || error?.message || 'Failed to create team member';
+      const message = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Failed to create team member';
       setAddError(message);
       toast.error(message);
     },
@@ -132,7 +132,7 @@ export default function TeamPage() {
       toast.success('Team member removed');
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.error || error?.message || 'Failed to remove team member';
+      const message = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Failed to remove team member';
       toast.error(message);
     },
   });
