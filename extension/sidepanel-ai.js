@@ -14,6 +14,7 @@ const elements = {
   dashboard: document.getElementById('dashboard'),
   loginBtn: document.getElementById('loginBtn'),
   logoutBtn: document.getElementById('logoutBtn'),
+  disconnectFbBtn: document.getElementById('disconnectFbBtn'),
   
   // User info
   userAvatar: document.getElementById('userAvatar'),
@@ -179,6 +180,32 @@ elements.logoutBtn.addEventListener('click', async () => {
       showAuthSection();
     } catch (error) {
       console.error('Logout error:', error);
+    }
+  }
+});
+
+// Disconnect Facebook & Connect Another Account
+elements.disconnectFbBtn?.addEventListener('click', async () => {
+  if (confirm('Disconnect current Facebook account and connect a different one?')) {
+    try {
+      // First disconnect
+      await sendMessage({ type: 'DISCONNECT_FACEBOOK' });
+      addActivity('info', 'Facebook account disconnected');
+      
+      // Clear local state
+      authState = null;
+      await chrome.storage.local.remove(['authState', 'accountId', 'authToken']);
+      
+      // Then immediately show login again
+      showAuthSection();
+      
+      // Optionally auto-trigger login
+      setTimeout(() => {
+        elements.loginBtn.click();
+      }, 500);
+    } catch (error) {
+      console.error('Disconnect error:', error);
+      addActivity('error', `Disconnect failed: ${error.message}`);
     }
   }
 });

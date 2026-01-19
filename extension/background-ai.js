@@ -346,6 +346,48 @@ async function handleMessage(message, sender) {
       };
       await chrome.storage.local.clear();
       return { success: true };
+    
+    case 'DISCONNECT_FACEBOOK':
+      // Disconnect Facebook and clear all tokens
+      try {
+        const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+        
+        // Call server to disconnect
+        if (authToken) {
+          await fetch(`${CONFIG.API_URL}/auth/facebook/disconnect`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ accountId }),
+          });
+        }
+        
+        // Clear local state
+        authState = {
+          isAuthenticated: false,
+          accessToken: null,
+          userId: null,
+          dealerAccountId: null,
+          tokenExpiry: null,
+        };
+        await chrome.storage.local.clear();
+        
+        return { success: true, message: 'Facebook disconnected successfully' };
+      } catch (error) {
+        console.error('Disconnect error:', error);
+        // Still clear local state even if server call fails
+        authState = {
+          isAuthenticated: false,
+          accessToken: null,
+          userId: null,
+          dealerAccountId: null,
+          tokenExpiry: null,
+        };
+        await chrome.storage.local.clear();
+        return { success: true, message: 'Local state cleared' };
+      }
       
     case 'GET_AUTH_STATE':
       return authState;

@@ -230,13 +230,45 @@ router.post('/refresh', (_req: Request, res: Response) => {
 /**
  * POST /api/auth/facebook/disconnect
  * Disconnect Facebook from user account
- * TODO: Implement when needed
  */
-router.post('/disconnect', (_req: Request, res: Response) => {
-  res.status(501).json({
-    success: false,
-    error: 'Disconnect not yet implemented',
-  });
+router.post('/disconnect', async (req: Request, res: Response) => {
+  try {
+    const { userId, profileId } = req.body;
+    
+    if (!userId && !profileId) {
+      res.status(400).json({
+        success: false,
+        error: 'userId or profileId is required',
+      });
+      return;
+    }
+    
+    // Delete Facebook profiles
+    if (profileId) {
+      await prisma.facebookProfile.delete({
+        where: { id: profileId },
+      });
+      logger.info(`Facebook profile disconnected: ${profileId}`);
+    } else if (userId) {
+      // Delete all profiles for this user
+      await prisma.facebookProfile.deleteMany({
+        where: { userId },
+      });
+      logger.info(`All Facebook profiles disconnected for user: ${userId}`);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Facebook account disconnected successfully',
+    });
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    logger.error('Disconnect error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to disconnect Facebook account',
+    });
+  }
 });
 
 export default router;
