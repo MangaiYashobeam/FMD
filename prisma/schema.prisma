@@ -147,6 +147,13 @@ model AccountSettings {
   vehicleCategory    String   @default("Car/Truck") @map("vehicle_category")
   emojiSuffix        String   @default("🤘") @map("emoji_suffix")
   mileageUnit        String   @default("Miles") @map("mileage_unit")
+  
+  // Notification settings
+  emailSyncComplete  Boolean  @default(true) @map("email_sync_complete")
+  emailSyncError     Boolean  @default(true) @map("email_sync_error")
+  emailNewLead       Boolean  @default(true) @map("email_new_lead")
+  pushNotifications  Boolean  @default(false) @map("push_notifications")
+  
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 

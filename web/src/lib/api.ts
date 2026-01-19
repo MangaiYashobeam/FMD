@@ -205,8 +205,60 @@ export const accountsApi = {
     syncInterval?: number;
   }) => api.put(`/api/accounts/${id}/settings`, data),
   
+  updateDealership: (id: string, data: {
+    name?: string;
+    dealershipName?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    phone?: string;
+    website?: string;
+    logo?: string;
+  }) => api.put(`/api/accounts/${id}/dealership`, data),
+  
+  getNotificationSettings: (id: string) => api.get(`/api/accounts/${id}/notifications`),
+  
+  updateNotificationSettings: (id: string, data: {
+    emailSyncComplete?: boolean;
+    emailSyncError?: boolean;
+    emailNewLead?: boolean;
+    pushNotifications?: boolean;
+  }) => api.put(`/api/accounts/${id}/notifications`, data),
+  
   testFtp: (data: { host: string; port?: number; username: string; password: string; path: string }) =>
     api.post('/api/accounts/test-ftp', data),
+};
+
+// Auth API (extended)
+export const authApi = {
+  login: (email: string, password: string) =>
+    api.post('/api/auth/login', { email, password }),
+    
+  register: (data: { email: string; password: string; firstName: string; lastName: string; accountName?: string }) =>
+    api.post('/api/auth/register', data),
+    
+  logout: () => api.post('/api/auth/logout'),
+  
+  getProfile: () => api.get('/api/auth/me'),
+  
+  updateProfile: (data: { firstName?: string; lastName?: string; email?: string; phone?: string }) =>
+    api.put('/api/auth/profile', data),
+  
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post('/api/auth/change-password', { currentPassword, newPassword }),
+  
+  getSessions: () => api.get('/api/auth/sessions'),
+  
+  revokeOtherSessions: () => api.post('/api/auth/sessions/revoke-others'),
+  
+  forgotPassword: (email: string) => api.post('/api/auth/forgot-password', { email }),
+  
+  resetPassword: (token: string, password: string) =>
+    api.post('/api/auth/reset-password', { token, password }),
+  
+  refreshToken: (refreshToken: string) =>
+    api.post('/api/auth/refresh-token', { refreshToken }),
 };
 
 // Facebook API

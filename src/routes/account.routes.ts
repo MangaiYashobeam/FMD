@@ -87,5 +87,44 @@ router.delete(
   asyncHandler(controller.removeUser.bind(controller))
 );
 
+/**
+ * @route   PUT /api/accounts/:id/dealership
+ * @desc    Update dealership information
+ * @access  Private
+ */
+router.put(
+  '/:id/dealership',
+  validate([
+    param('id').isUUID().withMessage('Invalid account ID'),
+  ]),
+  asyncHandler(controller.updateDealership.bind(controller))
+);
+
+/**
+ * @route   GET /api/accounts/:id/notifications
+ * @desc    Get notification settings
+ * @access  Private
+ */
+router.get(
+  '/:id/notifications',
+  validate([
+    param('id').isUUID().withMessage('Invalid account ID'),
+  ]),
+  asyncHandler(controller.getNotificationSettings.bind(controller))
+);
+
+/**
+ * @route   PUT /api/accounts/:id/notifications
+ * @desc    Update notification settings
+ * @access  Private
+ */
+router.put(
+  '/:id/notifications',
+  validate([
+    param('id').isUUID().withMessage('Invalid account ID'),
+  ]),
+  asyncHandler(controller.updateNotificationSettings.bind(controller))
+);
+
 export default router;
 

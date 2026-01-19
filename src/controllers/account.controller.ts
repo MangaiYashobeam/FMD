@@ -311,4 +311,152 @@ export class AccountController {
       message: 'User removed successfully',
     });
   }
+
+  /**
+   * Update dealership information
+   */
+  async updateDealership(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const { name, dealershipName, address, city, state, zip, phone, website, logo } = req.body;
+
+    // Verify user has access
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: id as string,
+        role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
+      },
+    });
+
+    if (!accountUser) {
+      throw new AppError('Access denied', 403);
+    }
+
+    const updated = await prisma.account.update({
+      where: { id: id as string },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(dealershipName !== undefined && { dealershipName }),
+        ...(address !== undefined && { address }),
+        ...(city !== undefined && { city }),
+        ...(state !== undefined && { state }),
+        ...(zip !== undefined && { zip }),
+        ...(phone !== undefined && { phone }),
+        ...(website !== undefined && { website }),
+        ...(logo !== undefined && { logo }),
+      },
+      select: {
+        id: true,
+        name: true,
+        dealershipName: true,
+        address: true,
+        city: true,
+        state: true,
+        zip: true,
+        phone: true,
+        website: true,
+        logo: true,
+        updatedAt: true,
+      },
+    });
+
+    logger.info(`Dealership info updated: ${id} by user ${req.user!.id}`);
+
+    res.json({
+      success: true,
+      data: updated,
+    });
+  }
+
+  /**
+   * Get notification settings
+   */
+  async getNotificationSettings(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+
+    // Verify user has access
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: id as string,
+      },
+    });
+
+    if (!accountUser) {
+      throw new AppError('Access denied', 403);
+    }
+
+    const settings = await prisma.accountSettings.findUnique({
+      where: { accountId: id as string },
+      select: {
+        emailSyncComplete: true,
+        emailSyncError: true,
+        emailNewLead: true,
+        pushNotifications: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: settings || {
+        emailSyncComplete: true,
+        emailSyncError: true,
+        emailNewLead: true,
+        pushNotifications: false,
+      },
+    });
+  }
+
+  /**
+   * Update notification settings
+   */
+  async updateNotificationSettings(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const { emailSyncComplete, emailSyncError, emailNewLead, pushNotifications } = req.body;
+
+    // Verify user has access
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: id as string,
+        role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
+      },
+    });
+
+    if (!accountUser) {
+      throw new AppError('Access denied', 403);
+    }
+
+    const settings = await prisma.accountSettings.upsert({
+      where: { accountId: id as string },
+      update: {
+        ...(emailSyncComplete !== undefined && { emailSyncComplete }),
+        ...(emailSyncError !== undefined && { emailSyncError }),
+        ...(emailNewLead !== undefined && { emailNewLead }),
+        ...(pushNotifications !== undefined && { pushNotifications }),
+      },
+      create: {
+        accountId: id as string,
+        emailSyncComplete: emailSyncComplete ?? true,
+        emailSyncError: emailSyncError ?? true,
+        emailNewLead: emailNewLead ?? true,
+        pushNotifications: pushNotifications ?? false,
+      },
+      select: {
+        emailSyncComplete: true,
+        emailSyncError: true,
+        emailNewLead: true,
+        pushNotifications: true,
+        updatedAt: true,
+      },
+    });
+
+    logger.info(`Notification settings updated: ${id} by user ${req.user!.id}`);
+
+    res.json({
+      success: true,
+      data: settings,
+    });
+  }
 }

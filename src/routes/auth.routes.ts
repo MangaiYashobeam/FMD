@@ -286,4 +286,36 @@ router.post(
   asyncHandler(authController.endImpersonation)
 );
 
+// ============================================
+// Profile & Security Routes
+// ============================================
+
+/**
+ * @route   PUT /api/auth/profile
+ * @desc    Update user profile
+ * @access  Private
+ */
+router.put('/profile', authenticate, asyncHandler(authController.updateProfile));
+
+/**
+ * @route   POST /api/auth/change-password
+ * @desc    Change user password
+ * @access  Private
+ */
+router.post('/change-password', authenticate, asyncHandler(authController.changePassword));
+
+/**
+ * @route   GET /api/auth/sessions
+ * @desc    Get active sessions
+ * @access  Private
+ */
+router.get('/sessions', authenticate, asyncHandler(authController.getActiveSessions));
+
+/**
+ * @route   POST /api/auth/sessions/revoke-others
+ * @desc    Revoke all other sessions
+ * @access  Private
+ */
+router.post('/sessions/revoke-others', authenticate, asyncHandler(authController.revokeOtherSessions));
+
 export default router;

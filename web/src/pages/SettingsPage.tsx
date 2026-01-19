@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { accountsApi, api } from '../lib/api';
+import { accountsApi, authApi, api } from '../lib/api';
 import { sanitizeString } from '../lib/sanitize';
 import {
   Building2,
@@ -50,7 +50,7 @@ interface ApiKey {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [showPassword, setShowPassword] = useState(false);
@@ -63,11 +63,20 @@ export default function SettingsPage() {
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
 
+  // Password change state
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
   // Form states
   const [profileForm, setProfileForm] = useState({
-    name: user?.name || '',
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
     email: user?.email || '',
-    phone: '',
+    phone: user?.phone || '',
   });
 
   const [dealershipForm, setDealershipForm] = useState({
@@ -239,6 +248,97 @@ export default function SettingsPage() {
   // State for error messages
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Initialize profile form from user data
+  useEffect(() => {
+    if (user) {
+      setProfileForm({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phone: user.phone || '',
+      });
+    }
+  }, [user]);
+
+  // Update profile mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: () => authApi.updateProfile({
+      firstName: profileForm.firstName,
+      lastName: profileForm.lastName,
+      email: profileForm.email,
+      phone: profileForm.phone,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+      if (refreshUser) refreshUser();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    },
+    onError: (error: any) => {
+      setSaveError(error?.response?.data?.error || 'Failed to update profile');
+    },
+  });
+
+  // Change password mutation
+  const changePasswordMutation = useMutation({
+    mutationFn: () => authApi.changePassword(passwordForm.currentPassword, passwordForm.newPassword),
+    onSuccess: () => {
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordError(null);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    },
+    onError: (error: any) => {
+      setPasswordError(error?.response?.data?.error || 'Failed to change password');
+    },
+  });
+
+  // Update dealership mutation
+  const updateDealershipMutation = useMutation({
+    mutationFn: async () => {
+      const accountId = user?.accounts?.[0]?.id;
+      if (!accountId) throw new Error('No account found');
+      return accountsApi.updateDealership(accountId, dealershipForm);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['account-settings'] });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    },
+    onError: (error: any) => {
+      setSaveError(error?.response?.data?.error || 'Failed to update dealership');
+    },
+  });
+
+  // Update notification settings mutation
+  const updateNotificationsMutation = useMutation({
+    mutationFn: async () => {
+      const accountId = user?.accounts?.[0]?.id;
+      if (!accountId) throw new Error('No account found');
+      return accountsApi.updateNotificationSettings(accountId, notificationSettings);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notification-settings'] });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    },
+    onError: (error: any) => {
+      setSaveError(error?.response?.data?.error || 'Failed to update notification settings');
+    },
+  });
+
+  // Revoke other sessions mutation
+  const revokeSessionsMutation = useMutation({
+    mutationFn: () => authApi.revokeOtherSessions(),
+    onSuccess: () => {
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    },
+    onError: (error: any) => {
+      setSaveError(error?.response?.data?.error || 'Failed to revoke sessions');
+    },
+  });
+
   // Save settings - now properly formats data for FTP
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -287,6 +387,41 @@ export default function SettingsPage() {
       // Don't redirect to login on save errors
     },
   });
+
+  // Handle save based on active tab
+  const handleSave = () => {
+    setSaveError(null);
+    switch (activeTab) {
+      case 'profile':
+        updateProfileMutation.mutate();
+        break;
+      case 'dealership':
+        updateDealershipMutation.mutate();
+        break;
+      case 'ftp':
+        saveMutation.mutate();
+        break;
+      case 'notifications':
+        updateNotificationsMutation.mutate();
+        break;
+      default:
+        saveMutation.mutate();
+    }
+  };
+
+  // Handle password change
+  const handlePasswordChange = () => {
+    setPasswordError(null);
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters');
+      return;
+    }
+    changePasswordMutation.mutate();
+  };
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
@@ -391,12 +526,6 @@ export default function SettingsPage() {
     return date.toLocaleDateString();
   };
 
-  // Handle save based on active tab
-  const handleSave = () => {
-    setSaveError(null);
-    saveMutation.mutate();
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -469,12 +598,23 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Name
+                    First Name
                   </label>
                   <input
                     type="text"
-                    value={profileForm.name}
-                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                    value={profileForm.firstName}
+                    onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={profileForm.lastName}
+                    onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -1055,6 +1195,12 @@ export default function SettingsPage() {
               
               <div className="space-y-4">
                 <h3 className="font-medium text-gray-900">Change Password</h3>
+                {passwordError && (
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {passwordError}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-4 max-w-md">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1062,6 +1208,8 @@ export default function SettingsPage() {
                     </label>
                     <input
                       type="password"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -1071,6 +1219,8 @@ export default function SettingsPage() {
                     </label>
                     <input
                       type="password"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
@@ -1080,10 +1230,17 @@ export default function SettingsPage() {
                     </label>
                     <input
                       type="password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
-                  <button className="w-fit px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  <button 
+                    onClick={handlePasswordChange}
+                    disabled={changePasswordMutation.isPending}
+                    className="w-fit px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {changePasswordMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                     Update Password
                   </button>
                 </div>
@@ -1115,7 +1272,12 @@ export default function SettingsPage() {
                     </span>
                   </div>
                 </div>
-                <button className="mt-4 text-red-600 text-sm hover:underline">
+                <button 
+                  onClick={() => revokeSessionsMutation.mutate()}
+                  disabled={revokeSessionsMutation.isPending}
+                  className="mt-4 text-red-600 text-sm hover:underline disabled:opacity-50 flex items-center gap-2"
+                >
+                  {revokeSessionsMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
                   Sign out of all other sessions
                 </button>
               </div>

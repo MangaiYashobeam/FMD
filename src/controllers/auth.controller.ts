@@ -786,6 +786,195 @@ export class AuthController {
   }
 }
 
+/**
+   * Update user profile (name, email, phone)
+   */
+  async updateProfile(req: AuthRequest, res: Response) {
+    const userId = req.user!.id;
+    const { firstName, lastName, email, phone } = req.body;
+
+    // Check if email is being changed and if it's already taken
+    if (email) {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: email.toLowerCase(),
+          id: { not: userId },
+        },
+      });
+
+      if (existingUser) {
+        throw new AppError('Email is already in use', 409);
+      }
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(email && { email: email.toLowerCase() }),
+        ...(phone !== undefined && { phone }),
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        updatedAt: true,
+      },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'PROFILE_UPDATED',
+        entityType: 'user',
+        entityId: userId,
+        metadata: { fields: Object.keys(req.body) },
+        ipAddress: req.ip || req.socket.remoteAddress,
+        userAgent: req.get('user-agent'),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: updatedUser,
+    });
+  }
+
+  /**
+   * Change user password
+   */
+  async changePassword(req: AuthRequest, res: Response) {
+    const userId = req.user!.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      throw new AppError('Current password and new password are required', 400);
+    }
+
+    if (newPassword.length < 8) {
+      throw new AppError('New password must be at least 8 characters', 400);
+    }
+
+    // Get current user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+
+    if (!user || !user.passwordHash) {
+      throw new AppError('User not found', 404);
+    }
+
+    // Verify current password
+    const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentValid) {
+      throw new AppError('Current password is incorrect', 401);
+    }
+
+    // Hash and update new password
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'PASSWORD_CHANGED',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip || req.socket.remoteAddress,
+        userAgent: req.get('user-agent'),
+      },
+    });
+
+    // Optionally revoke all other sessions
+    await prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully. Please login again.',
+    });
+  }
+
+  /**
+   * Get active sessions for user
+   */
+  async getActiveSessions(req: AuthRequest, res: Response) {
+    const userId = req.user!.id;
+
+    const sessions = await prisma.refreshToken.findMany({
+      where: {
+        userId,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        expiresAt: true,
+        lastUsedAt: true,
+      },
+      orderBy: { lastUsedAt: 'desc' },
+    });
+
+    res.json({
+      success: true,
+      data: sessions.map((s, index) => ({
+        id: s.id,
+        createdAt: s.createdAt,
+        expiresAt: s.expiresAt,
+        lastUsedAt: s.lastUsedAt,
+        isCurrent: index === 0, // Most recently used is likely current
+      })),
+    });
+  }
+
+  /**
+   * Revoke all other sessions (logout everywhere else)
+   */
+  async revokeOtherSessions(req: AuthRequest, res: Response) {
+    const userId = req.user!.id;
+    const currentToken = req.headers.authorization?.replace('Bearer ', '');
+
+    // Get the current session to preserve it
+    const decoded = jwt.verify(currentToken || '', process.env.JWT_SECRET || 'secret') as { sessionId?: string };
+
+    // Delete all other refresh tokens except the current one
+    const result = await prisma.refreshToken.deleteMany({
+      where: {
+        userId,
+        ...(decoded.sessionId && { id: { not: decoded.sessionId } }),
+      },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'SESSIONS_REVOKED',
+        entityType: 'user',
+        entityId: userId,
+        metadata: { revokedCount: result.count },
+        ipAddress: req.ip || req.socket.remoteAddress,
+        userAgent: req.get('user-agent'),
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Revoked ${result.count} other session(s)`,
+    });
+  }
+}
+
 // Helper function to determine highest role
 function getHighestRole(roles: string[]): string {
   const roleHierarchy = ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN', 'SALES_REP', 'VIEWER'];
