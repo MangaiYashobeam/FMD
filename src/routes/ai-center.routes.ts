@@ -225,6 +225,94 @@ router.post('/providers/set-default', asyncHandler(async (req: AuthRequest, res:
 }));
 
 // ============================================
+// NOVA CONTEXT INJECTION - Real System Data
+// ============================================
+
+/**
+ * Gathers REAL system data to inject into Nova's context
+ * This is what makes Nova actually useful - she gets real data, not just a prompt
+ */
+async function getNovaSystemContext(): Promise<string> {
+  const context: string[] = ['=== REAL-TIME SYSTEM STATUS (Injected at query time) ==='];
+  
+  // Environment & Config Status
+  context.push('\n📦 ENVIRONMENT STATUS:');
+  context.push(`- NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+  context.push(`- Server uptime: ${Math.floor(process.uptime() / 60)} minutes`);
+  context.push(`- Memory usage: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
+  
+  // API Keys Status (configured or not, not the actual keys!)
+  context.push('\n🔑 API KEY STATUS:');
+  context.push(`- ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+  context.push(`- OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+  context.push(`- DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+  context.push(`- FACEBOOK_APP_ID: ${process.env.FACEBOOK_APP_ID ? '✅ Configured' : '❌ Missing'}`);
+  context.push(`- FACEBOOK_APP_SECRET: ${process.env.FACEBOOK_APP_SECRET ? '✅ Configured' : '❌ Missing'}`);
+  
+  // Database Status
+  context.push('\n🗄️ DATABASE STATUS:');
+  context.push(`- DATABASE_URL: ${process.env.DATABASE_URL ? '✅ Configured (PostgreSQL on Railway)' : '❌ Missing'}`);
+  
+  // Facebook Integration Status
+  context.push('\n📱 FACEBOOK INTEGRATION STATUS:');
+  if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+    context.push('- OAuth App: ✅ Configured');
+    context.push('- Available APIs: Pages API, Messenger API, Lead Ads API');
+    context.push('- Endpoints:');
+    context.push('  • GET /api/facebook/status - Check connection');
+    context.push('  • POST /api/facebook/connect - Start OAuth flow');
+    context.push('  • GET /api/facebook/pages - List connected pages');
+    context.push('  • POST /api/facebook/disconnect - Remove connection');
+    context.push('- Files:');
+    context.push('  • /src/routes/facebook.routes.ts');
+    context.push('  • /src/controllers/facebook.controller.ts');
+  } else {
+    context.push('- OAuth App: ❌ NOT CONFIGURED');
+    context.push('- Required: Set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET in Railway env vars');
+    context.push('- To configure: Create app at developers.facebook.com');
+  }
+  
+  // AI Center Status
+  context.push('\n🤖 AI CENTER STATUS:');
+  context.push('- Primary Provider: Anthropic (Claude Sonnet 4)');
+  context.push('- Model: claude-sonnet-4-20250514');
+  context.push('- Backup: OpenAI GPT-4, DeepSeek');
+  context.push('- Rate Limit: 500 requests per 15 minutes');
+  context.push('- Files:');
+  context.push('  • /src/routes/ai-center.routes.ts');
+  context.push('  • /web/src/config/ai-training.ts (your prompts)');
+  
+  // Available Routes
+  context.push('\n🛣️ AVAILABLE API ROUTES:');
+  context.push('- Auth: /api/auth/login, /api/auth/register, /api/auth/me');
+  context.push('- Inventory: /api/inventory (CRUD)');
+  context.push('- Leads: /api/leads (CRUD)');
+  context.push('- Messages: /api/messages');
+  context.push('- Facebook: /api/facebook/*');
+  context.push('- AI Center: /api/ai-center/*');
+  context.push('- Admin: /api/admin/*');
+  context.push('- Webhooks: /api/webhooks/*');
+  
+  context.push('\n=== END REAL-TIME STATUS ===');
+  context.push('\nYou MUST use this real data in your response. Do NOT make up status information.');
+  
+  return context.join('\n');
+}
+
+/**
+ * Detects if the user is asking about system/status topics
+ */
+function needsSystemContext(userMessage: string): boolean {
+  const triggers = [
+    'status', 'check', 'system', 'facebook', 'connection', 'connected',
+    'api', 'database', 'env', 'config', 'diagnose', 'debug', 'health',
+    'working', 'configured', 'setup', 'integration', 'provider'
+  ];
+  const lower = userMessage.toLowerCase();
+  return triggers.some(t => lower.includes(t));
+}
+
+// ============================================
 // Chat / AI Interaction Routes
 // ============================================
 
@@ -322,11 +410,19 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
     
     try {
       // Extract system message if present
-      const systemMessage = messages.find((m: any) => m.role === 'system')?.content || '';
+      let systemMessage = messages.find((m: any) => m.role === 'system')?.content || '';
       const chatMessages = messages.filter((m: any) => m.role !== 'system').map((m: any) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content,
       }));
+      
+      // NOVA CONTEXT INJECTION: If user is asking about system status, inject REAL data
+      const lastUserMessage = chatMessages.filter((m: any) => m.role === 'user').pop()?.content || '';
+      if (needsSystemContext(lastUserMessage)) {
+        const realContext = await getNovaSystemContext();
+        systemMessage = systemMessage + '\n\n' + realContext;
+        console.log('[Nova] Injected real-time system context');
+      }
       
       // Use Claude Sonnet 4 (January 2026 current model)
       const anthropicModel = model || 'claude-sonnet-4-20250514';
