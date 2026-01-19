@@ -42,6 +42,7 @@ import TeamPage from './pages/TeamPage';
 import LeadsPage from './pages/LeadsPage';
 import MessagesPage from './pages/MessagesPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import PostingSettingsPage from './pages/PostingSettingsPage';
 // Admin Pages
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AccountsPage from './pages/admin/AccountsPage';
@@ -120,6 +121,7 @@ function App() {
               <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="team" element={<TeamPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="posting" element={<PostingSettingsPage />} />
             </Route>
 
             {/* Admin routes (Super Admin only) */}

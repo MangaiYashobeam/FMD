@@ -158,9 +158,76 @@ model AccountSettings {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Relations
-  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account        Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  postingSettings PostingSettings?
 
   @@map("account_settings")
+}
+
+// ============================================
+// Facebook Auto-Posting Settings (like Glo3D)
+// ============================================
+
+model PostingSettings {
+  id                  String   @id @default(uuid())
+  accountSettingsId   String   @unique @map("account_settings_id")
+  
+  // Post Schedule - Days
+  postOnSunday        Boolean  @default(true) @map("post_on_sunday")
+  postOnMonday        Boolean  @default(true) @map("post_on_monday")
+  postOnTuesday       Boolean  @default(true) @map("post_on_tuesday")
+  postOnWednesday     Boolean  @default(true) @map("post_on_wednesday")
+  postOnThursday      Boolean  @default(true) @map("post_on_thursday")
+  postOnFriday        Boolean  @default(true) @map("post_on_friday")
+  postOnSaturday      Boolean  @default(true) @map("post_on_saturday")
+  
+  // Post Schedule - Hours
+  postFromHour        Int      @default(8) @map("post_from_hour")    // 8 AM
+  postUntilHour       Int      @default(20) @map("post_until_hour")  // 8 PM
+  
+  // Posting Frequency
+  postIntervalMinutes Int      @default(20) @map("post_interval_minutes") // Post every X minutes
+  dailyPostLimit      Int      @default(0) @map("daily_post_limit")       // 0 = unlimited
+  
+  // Posting Priority
+  postingPriority     String   @default("descending") @map("posting_priority") // ascending (oldest first) or descending (newest first)
+  
+  // Content Settings
+  includeVideos       Boolean  @default(true) @map("include_videos")
+  videoSource         String   @default("videotour") @map("video_source") // walkaround, videotour
+  
+  // Vehicle Condition Template
+  conditionTemplate   String?  @map("condition_template") @db.Text
+  
+  // Location Settings
+  postingLocation     String?  @map("posting_location") // Address override
+  postingRadius       Int      @default(40) @map("posting_radius") // miles
+  
+  // Auto-Renew Settings (refresh existing listings)
+  autoRenewEnabled    Boolean  @default(true) @map("auto_renew_enabled")
+  renewFrequencyDays  Int      @default(7) @map("renew_frequency_days")
+  
+  // Auto-Repost Settings (relist after deletion/expiration)
+  autoRepostEnabled   Boolean  @default(true) @map("auto_repost_enabled")
+  repostFrequencyDays Int      @default(30) @map("repost_frequency_days")
+  
+  // Price Update Settings
+  autoUpdatePrices    Boolean  @default(true) @map("auto_update_prices")
+  priceChangeThreshold Decimal @default(100) @map("price_change_threshold") @db.Decimal(10, 2) // Min change to trigger update
+  
+  // Status Tracking
+  isActive            Boolean  @default(true) @map("is_active")
+  lastPostAt          DateTime? @map("last_post_at")
+  postsToday          Int      @default(0) @map("posts_today")
+  totalPosts          Int      @default(0) @map("total_posts")
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  accountSettings AccountSettings @relation(fields: [accountSettingsId], references: [id], onDelete: Cascade)
+
+  @@map("posting_settings")
 }
 
 // ============================================

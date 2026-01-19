@@ -20,6 +20,7 @@ import {
   UserCheck,
   MessageCircle,
   BarChart3,
+  Send,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DealersFaceIcon } from '../components/ui/Logo';
@@ -31,6 +32,7 @@ const navigation = [
   { name: 'Messages', href: '/app/messages', icon: MessageCircle },
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Facebook', href: '/app/facebook', icon: Facebook },
+  { name: 'Auto-Post', href: '/app/posting', icon: Send },
   { name: 'Sync', href: '/app/sync', icon: RefreshCw },
   { name: 'Team', href: '/app/team', icon: Users },
   { name: 'Settings', href: '/app/settings', icon: Settings },

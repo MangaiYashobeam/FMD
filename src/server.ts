@@ -51,6 +51,8 @@ import intelliceilRoutes from '@/routes/intelliceil.routes';
 import { iipcService } from '@/services/iipc.service';
 import { iipcCheck } from '@/middleware/iipc';
 import iipcRoutes from '@/routes/iipc.routes';
+import postingRoutes from '@/routes/posting.routes';
+import { autoPostService } from '@/services/autopost.service';
 
 console.log('🔵 All modules loaded successfully');
 
@@ -527,6 +529,7 @@ app.use('/api/analytics', ring5AuthBarrier, require('./routes/analytics.routes')
 app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications
+app.use('/api/posting', ring5AuthBarrier, postingRoutes);                      // Auto-posting settings & triggers
 
 // Chrome Extension AI Hybrid System
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (public callback)
@@ -623,6 +626,15 @@ const startServer = async () => {
       logger.info('Continuing without IP access control...');
     }
 
+    // Initialize Auto-Post Service (Glo3D-style auto-posting)
+    try {
+      autoPostService.initialize();
+      logger.info('✅ AutoPost service initialized (Glo3D-style scheduling)');
+    } catch (error) {
+      logger.warn('⚠️  AutoPost service initialization failed:', error);
+      logger.info('Continuing without auto-posting...');
+    }
+
     // Auto-promote default super admin users
     const DEFAULT_SUPER_ADMINS = ['admin@gadproductions.com'];
     for (const email of DEFAULT_SUPER_ADMINS) {
@@ -671,6 +683,7 @@ const startServer = async () => {
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   schedulerService.shutdown();
+  autoPostService.shutdown();
   intelliceilService.shutdown();
   iipcService.shutdown();
   const { stopAllJobs } = require('./services/scheduled-jobs.service');
@@ -682,6 +695,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   schedulerService.shutdown();
+  autoPostService.shutdown();
   intelliceilService.shutdown();
   iipcService.shutdown();
   const { stopAllJobs } = require('./services/scheduled-jobs.service');
