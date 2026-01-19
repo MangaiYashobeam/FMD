@@ -644,13 +644,19 @@ export const getPublicFacebookConfig = async (_req: Request, res: Response, next
     const integrations = settings?.value as any || {};
     
     // Only return public, non-sensitive values
+    // For extension, prefer FACEBOOK_EXTENSION_APP_ID if set
+    const appId = integrations.facebookExtensionAppId || 
+                  process.env.FACEBOOK_EXTENSION_APP_ID || 
+                  integrations.facebookAppId || 
+                  process.env.FACEBOOK_APP_ID || '';
+    
     res.json({
       success: true,
       data: {
-        appId: integrations.facebookAppId || process.env.FACEBOOK_APP_ID || '',
+        appId,
         scope: 'email,public_profile',
         version: 'v18.0',
-        configured: !!(integrations.facebookAppId || process.env.FACEBOOK_APP_ID),
+        configured: !!appId,
       },
     });
   } catch (error) {
