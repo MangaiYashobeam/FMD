@@ -406,11 +406,6 @@ export class VehicleController {
     // METHOD 2: PIXEL (Conversion Tracking Only)
     // =====================================================
     if (method === 'pixel') {
-      // Get account settings for Pixel ID (for future use with custom Pixel ID)
-      const _settings = await prisma.accountSettings.findUnique({
-        where: { accountId: vehicle.accountId },
-      });
-
       // Fire a "ViewContent" and "InitiateCheckout" event for the vehicle
       // This helps with retargeting and conversion tracking
       const pixelEventData = {
@@ -553,9 +548,6 @@ export class VehicleController {
 
     const task = await prisma.extensionTask.findUnique({
       where: { id: taskId },
-      include: {
-        // vehicle: true, // If relation exists
-      },
     });
 
     if (!task) {
