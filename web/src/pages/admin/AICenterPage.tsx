@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain,
   Database,
@@ -45,8 +46,11 @@ import {
   Edit,
   Send,
   Terminal,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import aiCenterService from '../../services/ai-center.service';
+import { parseAIResponse, type ParsedAIResponse } from '../../utils/ai-response-parser';
 import type {
   AIProvider,
   DashboardStats,
@@ -692,12 +696,19 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
 
 function ChatTab({ selectedProvider, providers }: { selectedProvider: string | null; providers: AIProvider[] }) {
   const toast = useToast();
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; parsed?: ParsedAIResponse; showThoughts?: boolean }[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [provider, setProvider] = useState(selectedProvider || 'anthropic');
   const [mode, setMode] = useState<'chat' | 'code' | 'reason'>('chat');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Toggle thoughts visibility
+  const toggleThoughts = (index: number) => {
+    setMessages(prev => prev.map((msg, i) => 
+      i === index ? { ...msg, showThoughts: !msg.showThoughts } : msg
+    ));
+  };
 
   // Keep focus on input after sending
   useEffect(() => {
@@ -792,7 +803,9 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
         response = result.content;
       }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      // Parse response to separate thoughts from answer
+      const parsed = parseAIResponse(response);
+      setMessages(prev => [...prev, { role: 'assistant', content: response, parsed, showThoughts: false }]);
     } catch (error: any) {
       toast.error(error.message || 'Failed to get response');
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
@@ -809,7 +822,7 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value as any)}
-            className="px-3 py-2 bg-gray-700 rounded-lg text-sm"
+            className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-800"
           >
             <option value="chat">Chat Mode</option>
             <option value="code">Code Mode (DeepSeek)</option>
@@ -818,7 +831,7 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
           <select
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
-            className="px-3 py-2 bg-gray-700 rounded-lg text-sm"
+            className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-800"
             disabled={mode !== 'chat'}
           >
             {providers.map(p => (
@@ -835,9 +848,9 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
       </div>
 
       {/* Messages */}
-      <div className="flex-1 bg-gray-800 rounded-lg p-4 overflow-y-auto mb-4 space-y-4">
+      <div className="flex-1 bg-white rounded-lg p-4 overflow-y-auto mb-4 space-y-4 border border-gray-200">
         {messages.length === 0 && (
-          <div className="text-center text-gray-400 py-12">
+          <div className="text-center text-gray-500 py-12">
             <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>Start a conversation with the AI</p>
             <p className="text-sm mt-2">
@@ -849,16 +862,59 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-3xl rounded-lg p-4 ${
-              msg.role === 'user' ? 'bg-purple-600' : 'bg-gray-700'
+            <div className={`max-w-3xl rounded-lg ${
+              msg.role === 'user' ? 'bg-purple-600 text-white p-4' : 'bg-gray-100 border border-gray-200'
             }`}>
-              <pre className="whitespace-pre-wrap font-sans text-sm">{msg.content}</pre>
+              {/* AI Thoughts Section - Collapsible */}
+              {msg.role === 'assistant' && msg.parsed?.hasTools && (
+                <div className="border-b border-gray-300">
+                  <button
+                    onClick={() => toggleThoughts(i)}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50 transition"
+                  >
+                    {msg.showThoughts ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    <Brain className="w-3 h-3" />
+                    <span>AI Thoughts ({msg.parsed.thoughts.length} tool calls)</span>
+                  </button>
+                  
+                  <AnimatePresence>
+                    {msg.showThoughts && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-4 pb-3 space-y-2 bg-gray-50 text-xs font-mono max-h-64 overflow-y-auto">
+                          {msg.parsed.thoughts.map((thought, ti) => (
+                            <div key={ti} className="text-amber-600">{thought}</div>
+                          ))}
+                          {msg.parsed.toolResults.map((result, ri) => (
+                            <div key={ri} className="text-green-600 whitespace-pre-wrap border-l-2 border-green-400 pl-2 mt-2">
+                              {result}
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+              
+              {/* Main Answer - Different color for AI responses */}
+              <div className={`p-4 ${msg.role === 'assistant' ? 'text-gray-800' : ''}`}>
+                <pre className={`whitespace-pre-wrap font-sans text-sm ${
+                  msg.role === 'assistant' && msg.parsed?.hasTools ? 'text-emerald-700 font-medium' : ''
+                }`}>
+                  {msg.role === 'assistant' && msg.parsed ? msg.parsed.answer : msg.content}
+                </pre>
+              </div>
             </div>
           </div>
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-700 rounded-lg p-4">
+            <div className="bg-gray-100 rounded-lg p-4 border border-gray-200">
               <div className="flex space-x-2">
                 <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
                 <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
@@ -882,7 +938,7 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
             mode === 'reason' ? 'Describe a problem to reason about...' :
             'Type your message...'
           }
-          className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-purple-500"
+          className="flex-1 px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-gray-800"
           disabled={loading}
           autoFocus
         />

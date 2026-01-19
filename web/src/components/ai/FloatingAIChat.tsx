@@ -25,12 +25,23 @@ import {
   Sparkles,
   Maximize2,
   GripHorizontal,
+  ChevronDown,
+  ChevronRight,
+  Brain,
 } from 'lucide-react';
 import { aiCenterService, type ChatMessage } from '../../services/ai-center.service';
 import { AI_TRAINING_CONFIG, type AIRole, type AIRoleConfig } from '../../config/ai-training';
+import { parseAIResponse, type ParsedAIResponse } from '../../utils/ai-response-parser';
 
 // Use comprehensive AI training from config
 const AI_ROLES: Record<AIRole, AIRoleConfig> = AI_TRAINING_CONFIG;
+
+interface MessageWithThoughts {
+  role: 'user' | 'assistant';
+  content: string;
+  parsed?: ParsedAIResponse;
+  showThoughts?: boolean;
+}
 
 interface FloatingAIChatProps {
   userRole?: AIRole;
@@ -45,7 +56,7 @@ export default function FloatingAIChat({
 }: FloatingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [messages, setMessages] = useState<MessageWithThoughts[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [position, setPosition] = useState({ x: window.innerWidth - 420, y: window.innerHeight - 600 });
@@ -55,6 +66,13 @@ export default function FloatingAIChat({
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const roleConfig = AI_ROLES[userRole];
+
+  // Toggle thoughts visibility for a message
+  const toggleThoughts = (index: number) => {
+    setMessages(prev => prev.map((msg, i) => 
+      i === index ? { ...msg, showThoughts: !msg.showThoughts } : msg
+    ));
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -118,7 +136,16 @@ export default function FloatingAIChat({
       ];
 
       const result = await aiCenterService.chat.send(chatMessages, { provider: 'anthropic' });
-      setMessages(prev => [...prev, { role: 'assistant', content: result.content }]);
+      
+      // Parse the response to separate thoughts from answer
+      const parsed = parseAIResponse(result.content);
+      
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: result.content,
+        parsed,
+        showThoughts: false // Collapsed by default
+      }]);
     } catch (error: any) {
       setMessages(prev => [...prev, { 
         role: 'assistant', 
@@ -273,13 +300,55 @@ export default function FloatingAIChat({
                     className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2 ${
+                      className={`max-w-[85%] rounded-2xl ${
                         msg.role === 'user'
-                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
+                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2'
                           : 'bg-gray-800/80 text-gray-100 border border-white/5'
                       }`}
                     >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      {/* AI Response with Thoughts */}
+                      {msg.role === 'assistant' && msg.parsed?.hasTools && (
+                        <div className="border-b border-white/10">
+                          <button
+                            onClick={() => toggleThoughts(i)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-xs text-purple-400 hover:text-purple-300 transition"
+                          >
+                            {msg.showThoughts ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                            <Brain className="w-3 h-3" />
+                            <span>AI Thoughts ({msg.parsed.thoughts.length} tools)</span>
+                          </button>
+                          
+                          {/* Collapsible Thoughts Section */}
+                          <AnimatePresence>
+                            {msg.showThoughts && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="px-4 pb-3 space-y-2 bg-gray-900/50 text-xs font-mono">
+                                  {msg.parsed.thoughts.map((thought, ti) => (
+                                    <div key={ti} className="text-yellow-400/80">{thought}</div>
+                                  ))}
+                                  {msg.parsed.toolResults.map((result, ri) => (
+                                    <div key={ri} className="text-green-400/70 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                      {result}
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
+                      
+                      {/* Main Answer */}
+                      <div className={`px-4 py-2 ${msg.role === 'assistant' && msg.parsed?.hasTools ? 'text-emerald-100' : ''}`}>
+                        <p className="text-sm whitespace-pre-wrap">
+                          {msg.role === 'assistant' && msg.parsed ? msg.parsed.answer : msg.content}
+                        </p>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
