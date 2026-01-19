@@ -348,8 +348,15 @@ const INJECTION_PATTERNS = [
 
 /**
  * Check for potential injection attacks
+ * NOTE: Bypasses AI chat routes since they contain legitimate SQL/code terms in prompts
  */
 export const injectionGuard = (req: Request, res: Response, next: NextFunction) => {
+  // BYPASS: AI chat routes need SQL terms in prompts for context
+  if (req.path.includes('/ai-center/chat') || req.path.includes('/ai/')) {
+    next();
+    return;
+  }
+  
   const checkValue = (value: any, path: string): boolean => {
     if (typeof value !== 'string') return false;
     
