@@ -4,6 +4,38 @@ import prisma from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import axios from 'axios';
+import crypto from 'crypto';
+
+// Sign OAuth state to prevent tampering
+function signState(data: object): string {
+  const payload = JSON.stringify(data);
+  const signature = crypto
+    .createHmac('sha256', process.env.JWT_SECRET || 'fallback-secret')
+    .update(payload)
+    .digest('hex');
+  return Buffer.from(JSON.stringify({ payload, signature })).toString('base64');
+}
+
+// Verify and decode signed state
+function verifyState(state: string): { accountId: string; userId: string; returnUrl: string } | null {
+  try {
+    const { payload, signature } = JSON.parse(Buffer.from(state, 'base64').toString());
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.JWT_SECRET || 'fallback-secret')
+      .update(payload)
+      .digest('hex');
+    
+    if (signature !== expectedSignature) {
+      logger.warn('OAuth state signature mismatch - possible tampering attempt');
+      return null;
+    }
+    
+    return JSON.parse(payload);
+  } catch (error) {
+    logger.error('Failed to verify OAuth state:', error);
+    return null;
+  }
+}
 
 export class FacebookController {
   /**
@@ -51,19 +83,26 @@ export class FacebookController {
     }
     
     const redirectUri = `${process.env.API_URL || 'http://localhost:5000'}/api/facebook/callback`;
-    const state = Buffer.from(JSON.stringify({ 
+    
+    // Sign the state to prevent tampering (HMAC signed)
+    const state = signState({ 
       accountId, 
       userId: req.user!.id,
-      returnUrl: req.query.returnUrl || '/facebook'
-    })).toString('base64');
+      returnUrl: req.query.returnUrl || '/app/facebook',
+      timestamp: Date.now() // Add timestamp for expiry check
+    });
 
     // Request permissions for pages and marketplace
+    // Note: Advanced permissions (pages_*) require App Review
+    // For Development Mode, we use basic scopes + pages_show_list
+    // After App Review approval, uncomment the full scopes
     const scopes = [
-      'pages_manage_posts',
-      'pages_read_engagement', 
-      'pages_show_list',
       'public_profile',
-      'email'
+      'email',
+      // These require App Review:
+      // 'pages_manage_posts',
+      // 'pages_read_engagement', 
+      // 'pages_show_list',
     ].join(',');
 
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
@@ -91,17 +130,24 @@ export class FacebookController {
     if (error) {
       logger.warn(`Facebook OAuth error: ${error} - ${error_description}`);
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      return res.redirect(`${frontendUrl}/facebook?error=${encodeURIComponent(error_description as string || 'OAuth failed')}`);
+      return res.redirect(`${frontendUrl}/app/facebook?error=${encodeURIComponent(error_description as string || 'OAuth failed')}`);
     }
 
     if (!code || !state) {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      return res.redirect(`${frontendUrl}/facebook?error=Missing authorization code`);
+      return res.redirect(`${frontendUrl}/app/facebook?error=Missing authorization code`);
     }
 
     try {
-      // Decode state
-      const { accountId, userId, returnUrl } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+      // Verify and decode signed state (prevents tampering)
+      const stateData = verifyState(state as string);
+      
+      if (!stateData) {
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        return res.redirect(`${frontendUrl}/app/facebook?error=Invalid or tampered state`);
+      }
+      
+      const { accountId, userId, returnUrl } = stateData;
 
       // Exchange code for access token
       const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
@@ -203,7 +249,7 @@ export class FacebookController {
     } catch (error: any) {
       logger.error('Facebook OAuth callback error:', error.response?.data || error.message);
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      res.redirect(`${frontendUrl}/facebook?error=${encodeURIComponent('Failed to connect Facebook')}`);
+      res.redirect(`${frontendUrl}/app/facebook?error=${encodeURIComponent('Failed to connect Facebook')}`);
     }
   }
 
@@ -217,8 +263,14 @@ export class FacebookController {
       throw new AppError('Missing code or state parameter', 400);
     }
 
-    // Decode state
-    const { accountId } = JSON.parse(Buffer.from(state, 'base64').toString());
+    // Verify and decode signed state (prevents tampering)
+    const stateData = verifyState(state);
+    
+    if (!stateData) {
+      throw new AppError('Invalid or tampered state parameter', 400);
+    }
+    
+    const { accountId } = stateData;
 
     // Exchange code for access token
     const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {

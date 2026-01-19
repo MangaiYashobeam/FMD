@@ -94,63 +94,8 @@ export default function MessagesPage() {
     },
   });
 
-  // Mock conversations for demo
-  const mockConversations: Conversation[] = [
-    {
-      id: 'c1',
-      contact: { id: 'u1', name: 'John Smith', isOnline: true },
-      lastMessage: {
-        text: 'Hi, I\'m interested in the 2024 Toyota Camry you posted. Is it still available?',
-        timestamp: new Date().toISOString(),
-        isRead: false,
-        isFromMe: false,
-      },
-      unreadCount: 2,
-      source: 'facebook',
-      vehicleContext: { id: 'v1', year: 2024, make: 'Toyota', model: 'Camry' },
-      isStarred: true,
-    },
-    {
-      id: 'c2',
-      contact: { id: 'u2', name: 'Sarah Johnson', isOnline: false },
-      lastMessage: {
-        text: 'Great, I\'ll come by tomorrow at 2pm for a test drive.',
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        isRead: true,
-        isFromMe: true,
-      },
-      unreadCount: 0,
-      source: 'messenger',
-      vehicleContext: { id: 'v2', year: 2023, make: 'Honda', model: 'Accord' },
-    },
-    {
-      id: 'c3',
-      contact: { id: 'u3', name: 'Mike Davis', isOnline: true },
-      lastMessage: {
-        text: 'What\'s your best price on the Ford F-150?',
-        timestamp: new Date(Date.now() - 7200000).toISOString(),
-        isRead: false,
-        isFromMe: false,
-      },
-      unreadCount: 1,
-      source: 'facebook',
-      vehicleContext: { id: 'v3', year: 2024, make: 'Ford', model: 'F-150' },
-    },
-    {
-      id: 'c4',
-      contact: { id: 'u4', name: 'Emily Chen' },
-      lastMessage: {
-        text: 'Thank you for the quick response!',
-        timestamp: new Date(Date.now() - 86400000).toISOString(),
-        isRead: true,
-        isFromMe: false,
-      },
-      unreadCount: 0,
-      source: 'messenger',
-    },
-  ];
-
-  const conversations = conversationsData?.data?.conversations || mockConversations;
+  // Use real data only - no mock data fallback
+  const conversations: Conversation[] = conversationsData?.data || [];
 
   // Fetch messages for selected conversation
   const { data: messagesData, isLoading: messagesLoading } = useQuery({
@@ -163,48 +108,8 @@ export default function MessagesPage() {
     enabled: !!selectedConversation,
   });
 
-  // Mock messages for demo
-  const mockMessages: Message[] = selectedConversation ? [
-    {
-      id: 'm1',
-      text: 'Hi, I saw your listing for the ' + (selectedConversation.vehicleContext 
-        ? `${selectedConversation.vehicleContext.year} ${selectedConversation.vehicleContext.make} ${selectedConversation.vehicleContext.model}` 
-        : 'car') + '. Is it still available?',
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      isFromMe: false,
-      status: 'read',
-    },
-    {
-      id: 'm2',
-      text: 'Yes, it\'s still available! Would you like to schedule a test drive?',
-      timestamp: new Date(Date.now() - 3500000).toISOString(),
-      isFromMe: true,
-      status: 'read',
-    },
-    {
-      id: 'm3',
-      text: 'That would be great! What times are available?',
-      timestamp: new Date(Date.now() - 3400000).toISOString(),
-      isFromMe: false,
-      status: 'read',
-    },
-    {
-      id: 'm4',
-      text: 'We\'re open Monday-Saturday 9am-7pm. Would any of those times work for you?',
-      timestamp: new Date(Date.now() - 3300000).toISOString(),
-      isFromMe: true,
-      status: 'read',
-    },
-    {
-      id: 'm5',
-      text: selectedConversation.lastMessage.text,
-      timestamp: selectedConversation.lastMessage.timestamp,
-      isFromMe: selectedConversation.lastMessage.isFromMe,
-      status: selectedConversation.lastMessage.isRead ? 'read' : 'delivered',
-    },
-  ] : [];
-
-  const messages = messagesData?.data?.messages || mockMessages;
+  // Use real messages data
+  const messages = messagesData?.data?.messages || [];
 
   // Send message mutation
   const sendMessageMutation = useMutation({
@@ -223,7 +128,7 @@ export default function MessagesPage() {
   // Archive conversation mutation
   const archiveMutation = useMutation({
     mutationFn: async (conversationId: string) => {
-      return api.put(`/api/messages/conversations/${conversationId}/archive`);
+      return api.post(`/api/messages/conversations/${conversationId}/archive`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -236,7 +141,7 @@ export default function MessagesPage() {
   // Star conversation mutation
   const starMutation = useMutation({
     mutationFn: async ({ conversationId, starred }: { conversationId: string; starred: boolean }) => {
-      return api.put(`/api/messages/conversations/${conversationId}`, { isStarred: starred });
+      return api.post(`/api/messages/conversations/${conversationId}/star`, { starred });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });

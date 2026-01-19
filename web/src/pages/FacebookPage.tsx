@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { facebookApi } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
 import {
   Facebook,
   Link,
@@ -108,9 +110,36 @@ function GroupCard({
 
 export default function FacebookPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const toast = useToast();
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
   const [newGroupUrl, setNewGroupUrl] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
+
+  // Handle OAuth callback success/error messages
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    const connected = searchParams.get('connected');
+
+    if (success === 'true') {
+      const profileCount = connected ? parseInt(connected, 10) : 1;
+      toast.success(
+        profileCount > 1
+          ? `Successfully connected ${profileCount} Facebook profiles!`
+          : 'Successfully connected to Facebook!'
+      );
+      // Clear the URL params
+      setSearchParams({}, { replace: true });
+      // Refetch connections
+      queryClient.invalidateQueries({ queryKey: ['facebook-connections'] });
+      queryClient.invalidateQueries({ queryKey: ['facebook-groups'] });
+    } else if (error) {
+      toast.error(`Facebook connection failed: ${decodeURIComponent(error)}`);
+      // Clear the URL params
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams, toast, queryClient]);
 
   // Handle Facebook Connect button
   const handleConnectFacebook = async () => {
@@ -123,11 +152,11 @@ export default function FacebookPage() {
         window.location.href = authUrl;
       } else {
         console.error('No auth URL received from server');
-        alert('Failed to get Facebook authorization URL. Please try again.');
+        toast.error('Failed to get Facebook authorization URL. Please try again.');
       }
     } catch (error: any) {
       console.error('Failed to connect to Facebook:', error?.response?.data || error.message);
-      alert('Failed to connect to Facebook. Please try again.');
+      toast.error('Failed to connect to Facebook. Please try again.');
     } finally {
       setIsConnecting(false);
     }

@@ -24,6 +24,13 @@ import {
 } from './pages/features';
 // Market Pages
 import { MarketsIndexPage, StateMarketPage } from './pages/markets';
+// Legal Pages
+import {
+  PrivacyPolicyPage,
+  TermsOfServicePage,
+  CookiePolicyPage,
+  DMCAPolicyPage,
+} from './pages/legal';
 // Dashboard Pages
 import DashboardPage from './pages/DashboardPage';
 import InventoryPage from './pages/InventoryPage';
@@ -84,6 +91,12 @@ function App() {
               {/* Market Pages (52 states) */}
               <Route path="/markets" element={<MarketsIndexPage />} />
               <Route path="/markets/:stateSlug" element={<StateMarketPage />} />
+
+              {/* Legal Pages */}
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsOfServicePage />} />
+              <Route path="/cookies" element={<CookiePolicyPage />} />
+              <Route path="/dmca" element={<DMCAPolicyPage />} />
 
               {/* Protected dashboard routes */}
               <Route

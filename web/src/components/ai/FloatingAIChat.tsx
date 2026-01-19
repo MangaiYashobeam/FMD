@@ -18,7 +18,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MessageCircle,
   X,
   Minus,
   Send,
@@ -47,12 +46,14 @@ interface FloatingAIChatProps {
   userRole?: AIRole;
   isAICenterTab?: boolean;
   onMaximize?: () => void;
+  isImpersonating?: boolean;
 }
 
 export default function FloatingAIChat({ 
   userRole = 'super_admin', 
   isAICenterTab = false,
-  onMaximize 
+  onMaximize,
+  isImpersonating = false
 }: FloatingAIChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -66,6 +67,9 @@ export default function FloatingAIChat({
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const roleConfig = AI_ROLES[userRole];
+  
+  // Nova follows Super Admin even in impersonation mode
+  const isNovaFollowing = userRole === 'super_admin' && isImpersonating;
 
   // Toggle thoughts visibility for a message
   const toggleThoughts = (index: number) => {
@@ -88,6 +92,8 @@ export default function FloatingAIChat({
 
   // Handle drag
   const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
     setDragOffset({
       x: e.clientX - position.x,
@@ -98,10 +104,28 @@ export default function FloatingAIChat({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDragging) {
-        setPosition({
-          x: Math.max(0, Math.min(window.innerWidth - 400, e.clientX - dragOffset.x)),
-          y: Math.max(0, Math.min(window.innerHeight - 500, e.clientY - dragOffset.y)),
-        });
+        // Different bounds for minimized sphere vs expanded chat
+        const sphereSize = 56; // w-14 = 56px
+        const chatWidth = 400;
+        const chatHeight = 500;
+        const sphereOffsetX = 175;
+        const sphereOffsetY = 225;
+        
+        if (isMinimized) {
+          // For sphere: calculate bounds based on sphere position with offset
+          const newX = e.clientX - dragOffset.x - sphereOffsetX;
+          const newY = e.clientY - dragOffset.y - sphereOffsetY;
+          setPosition({
+            x: Math.max(-sphereOffsetX, Math.min(window.innerWidth - sphereSize - sphereOffsetX, newX)),
+            y: Math.max(-sphereOffsetY, Math.min(window.innerHeight - sphereSize - sphereOffsetY, newY)),
+          });
+        } else {
+          // For chat window: use chat dimensions
+          setPosition({
+            x: Math.max(0, Math.min(window.innerWidth - chatWidth, e.clientX - dragOffset.x)),
+            y: Math.max(0, Math.min(window.innerHeight - chatHeight, e.clientY - dragOffset.y)),
+          });
+        }
       }
     };
 
@@ -110,15 +134,19 @@ export default function FloatingAIChat({
     };
 
     if (isDragging) {
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'grabbing';
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
 
     return () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragOffset, isMinimized]);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -160,6 +188,7 @@ export default function FloatingAIChat({
 
   // Handle sphere drag
   const handleSphereDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
     setDragOffset({
@@ -177,11 +206,11 @@ export default function FloatingAIChat({
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            className="fixed z-50"
+            className="fixed z-50 select-none"
             style={{ left: position.x + 175, top: position.y + 225 }}
           >
             <div 
-              className="relative cursor-grab active:cursor-grabbing"
+              className="relative cursor-grab active:cursor-grabbing select-none"
               onMouseDown={handleSphereDrag}
               onClick={(e) => {
                 if (!isDragging) setIsMinimized(false);
@@ -189,8 +218,8 @@ export default function FloatingAIChat({
               }}
             >
               {/* Radioactive glow effect */}
-              <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 blur-lg opacity-60 animate-pulse" />
-              <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 blur-md opacity-40 animate-ping" />
+              <div className={`absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-r ${roleConfig.color} blur-lg opacity-60 animate-pulse`} />
+              <div className={`absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-r ${roleConfig.color} blur-md opacity-40 animate-ping`} />
               
               {/* Main sphere */}
               <motion.div
@@ -220,9 +249,9 @@ export default function FloatingAIChat({
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg flex items-center justify-center hover:shadow-purple-500/50 transition-shadow"
+          className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-r ${roleConfig.color} shadow-lg flex items-center justify-center hover:shadow-lg transition-shadow`}
         >
-          <MessageCircle className="w-6 h-6 text-white" />
+          <span className="text-2xl">{roleConfig.icon}</span>
           <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-900" />
         </motion.button>
       )}
@@ -250,7 +279,16 @@ export default function FloatingAIChat({
                   <span className="text-xl">{roleConfig.icon}</span>
                   <div>
                     <h3 className="text-sm font-semibold text-white">{roleConfig.name}</h3>
-                    <p className="text-[10px] text-white/70">AI Assistant</p>
+                    <p className="text-[10px] text-white/70">
+                      {isNovaFollowing ? (
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                          Following Super Admin
+                        </span>
+                      ) : (
+                        'AI Assistant'
+                      )}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">

@@ -27,6 +27,11 @@ model User {
   updatedAt      DateTime  @updatedAt @map("updated_at")
   lastLoginAt    DateTime? @map("last_login_at")
 
+  // Two-Factor Authentication
+  twoFactorEnabled     Boolean  @default(false) @map("two_factor_enabled")
+  twoFactorSecret      String?  @map("two_factor_secret")
+  twoFactorBackupCodes String[] @default([]) @map("two_factor_backup_codes")
+
   // NOTE: The following fields were removed because they don't exist in production DB
   // Run `npx prisma migrate deploy` on production to add them back
   // profilePicture, fbUsername, fbPassword, fb2faCodes, fbLastSync

@@ -60,7 +60,7 @@ router.get(
 router.get(
   '/history',
   validate([
-    query('accountId').isUUID().withMessage('Invalid account ID'),
+    query('accountId').optional().isUUID().withMessage('Invalid account ID'),
     query('limit').optional().isInt({ min: 1, max: 100 }),
   ]),
   asyncHandler(controller.getHistory.bind(controller))

@@ -420,7 +420,7 @@ export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunct
     }
 
     // For public endpoints, skip API key requirement
-    const publicPaths = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/refresh-token', '/auth/health', '/auth/debug-login', '/subscriptions/plans', '/subscriptions/webhook', '/health'];
+    const publicPaths = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/refresh-token', '/auth/health', '/auth/debug-login', '/subscriptions/plans', '/subscriptions/webhook', '/health', '/facebook/callback', '/facebook/deauthorize'];
     const isPublicPath = publicPaths.some(p => req.path.includes(p));
     
     if (isPublicPath) {

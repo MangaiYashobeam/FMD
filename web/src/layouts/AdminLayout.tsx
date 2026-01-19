@@ -151,7 +151,7 @@ export default function AdminLayout() {
 
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden md:pt-0 pt-14">
-        <main className="flex-1 relative overflow-y-auto focus:outline-none bg-gray-900">
+        <main className="flex-1 relative overflow-y-auto focus:outline-none bg-gray-50">
           <Outlet />
         </main>
       </div>

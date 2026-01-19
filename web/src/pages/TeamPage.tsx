@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi } from '../lib/api';
+import { teamApi } from '../lib/api';
 import {
   Users,
   UserPlus,
@@ -13,8 +13,11 @@ import {
   Loader2,
   Search,
   X,
+  AlertCircle,
+  Plus,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useToast } from '../contexts/ToastContext';
 
 interface TeamMember {
   id: string;
@@ -42,7 +45,9 @@ const roleDescriptions = {
 
 export default function TeamPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState<TeamMember | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [inviteForm, setInviteForm] = useState({
@@ -50,44 +55,85 @@ export default function TeamPage() {
     name: '',
     role: 'sales' as TeamMember['role'],
   });
+  const [addForm, setAddForm] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    password: '',
+    role: 'sales' as TeamMember['role'],
+  });
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
 
   // Fetch team members
   const { data, isLoading, error } = useQuery({
     queryKey: ['team-members'],
     queryFn: async () => {
-      const response = await adminApi.getUsers({});
+      const response = await teamApi.getMembers();
       return response.data;
     },
   });
 
-  const members: TeamMember[] = data?.data?.users || [];
+  const members: TeamMember[] = data?.data?.members || [];
 
   // Invite member mutation
   const inviteMutation = useMutation({
-    mutationFn: async (_data: typeof inviteForm) => {
-      // This would call an invite endpoint
-      return new Promise((resolve) => setTimeout(resolve, 1000));
+    mutationFn: async (data: typeof inviteForm) => {
+      const nameParts = data.name.split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      return teamApi.invite({
+        email: data.email,
+        firstName,
+        lastName,
+        role: data.role,
+      });
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['team-members'] });
       setShowInviteModal(false);
       setInviteForm({ email: '', name: '', role: 'sales' });
+      setInviteError(null);
+      toast.success(response.data?.message || 'Invitation sent successfully!');
     },
     onError: (error: any) => {
-      console.error('Invite member failed:', error?.response?.data || error.message);
+      const message = error?.response?.data?.error || error?.message || 'Failed to send invitation';
+      setInviteError(message);
+      toast.error(message);
+    },
+  });
+
+  // Add member manually mutation
+  const addMemberMutation = useMutation({
+    mutationFn: async (data: typeof addForm) => {
+      return teamApi.createMember(data);
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['team-members'] });
+      setShowAddModal(false);
+      setAddForm({ email: '', firstName: '', lastName: '', password: '', role: 'sales' });
+      setAddError(null);
+      toast.success(response.data?.message || 'Team member created successfully!');
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || error?.message || 'Failed to create team member';
+      setAddError(message);
+      toast.error(message);
     },
   });
 
   // Delete member mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return adminApi.deleteUser(id);
+      return teamApi.removeMember(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-members'] });
+      toast.success('Team member removed');
     },
     onError: (error: any) => {
-      console.error('Delete member failed:', error?.response?.data || error.message);
+      const message = error?.response?.data?.error || error?.message || 'Failed to remove team member';
+      toast.error(message);
     },
   });
 
@@ -99,7 +145,14 @@ export default function TeamPage() {
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
+    setInviteError(null);
     inviteMutation.mutate(inviteForm);
+  };
+
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError(null);
+    addMemberMutation.mutate(addForm);
   };
 
   return (
@@ -110,13 +163,22 @@ export default function TeamPage() {
           <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
           <p className="text-gray-500">Manage your dealership team members and permissions</p>
         </div>
-        <button
-          onClick={() => setShowInviteModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-        >
-          <UserPlus className="w-5 h-5" />
-          Invite Team Member
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium rounded-lg transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            Add Member
+          </button>
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+          >
+            <UserPlus className="w-5 h-5" />
+            Invite Team Member
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -380,10 +442,17 @@ export default function TeamPage() {
                   {roleDescriptions[inviteForm.role]}
                 </p>
               </div>
+              {/* Error message */}
+              {inviteError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{inviteError}</span>
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowInviteModal(false)}
+                  onClick={() => { setShowInviteModal(false); setInviteError(null); }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50"
                 >
                   Cancel
@@ -391,9 +460,124 @@ export default function TeamPage() {
                 <button
                   type="submit"
                   disabled={inviteMutation.isPending}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {inviteMutation.isPending ? 'Sending...' : 'Send Invite'}
+                  {inviteMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Invite'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Member Manually Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Add Team Member</h3>
+              <button onClick={() => { setShowAddModal(false); setAddError(null); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleAddMember} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <input
+                    type="text"
+                    value={addForm.firstName}
+                    onChange={(e) => setAddForm({ ...addForm, firstName: e.target.value })}
+                    placeholder="John"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    value={addForm.lastName}
+                    onChange={(e) => setAddForm({ ...addForm, lastName: e.target.value })}
+                    placeholder="Doe"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={addForm.email}
+                  onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                  placeholder="john@dealership.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={addForm.password}
+                  onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+                  placeholder="Min 8 characters"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <select
+                  value={addForm.role}
+                  onChange={(e) => setAddForm({ ...addForm, role: e.target.value as TeamMember['role'] })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="sales">Sales</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <p className="mt-1 text-sm text-gray-500">
+                  {roleDescriptions[addForm.role]}
+                </p>
+              </div>
+              {/* Error message */}
+              {addError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{addError}</span>
+                </div>
+              )}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowAddModal(false); setAddError(null); }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addMemberMutation.isPending}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {addMemberMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create Member'
+                  )}
                 </button>
               </div>
             </form>

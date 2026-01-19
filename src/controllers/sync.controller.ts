@@ -15,7 +15,19 @@ export class SyncController {
    * Trigger manual sync
    */
   async triggerSync(req: AuthRequest, res: Response) {
-    const { accountId } = req.body;
+    let { accountId } = req.body;
+
+    // If no accountId provided, get user's first account
+    if (!accountId) {
+      const userAccount = await prisma.accountUser.findFirst({
+        where: { userId: req.user!.id },
+        select: { accountId: true },
+      });
+      if (!userAccount) {
+        throw new AppError('No account found for user', 404);
+      }
+      accountId = userAccount.accountId;
+    }
 
     // Verify user has access
     const hasAccess = await prisma.accountUser.findFirst({
@@ -112,10 +124,22 @@ export class SyncController {
    * Get sync history
    */
   async getHistory(req: AuthRequest, res: Response) {
-    const accountId = req.query.accountId as string;
+    let accountId = req.query.accountId as string;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
+
+    // If no accountId provided, get user's first account
+    if (!accountId) {
+      const userAccount = await prisma.accountUser.findFirst({
+        where: { userId: req.user!.id },
+        select: { accountId: true },
+      });
+      if (!userAccount) {
+        throw new AppError('No account found for user', 404);
+      }
+      accountId = userAccount.accountId;
+    }
 
     // Verify user has access
     const hasAccess = await prisma.accountUser.findFirst({

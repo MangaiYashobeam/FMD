@@ -233,11 +233,11 @@ export const facebookApi = {
 
 // Sync API
 export const syncApi = {
-  triggerSync: () => api.post('/api/sync/trigger'),
+  triggerSync: (accountId?: string) => api.post('/api/sync/manual', { accountId }),
   
-  getStatus: () => api.get('/api/sync/status'),
+  getStatus: (jobId: string) => api.get(`/api/sync/status/${jobId}`),
   
-  getHistory: (params?: { page?: number; limit?: number }) =>
+  getHistory: (params?: { page?: number; limit?: number; accountId?: string }) =>
     api.get('/api/sync/history', { params }),
   
   getJobDetails: (jobId: string) => api.get(`/api/sync/jobs/${jobId}`),
@@ -376,6 +376,7 @@ export const messagesApi = {
     page?: number;
     limit?: number;
     search?: string;
+    source?: string;
     unreadOnly?: boolean;
     starred?: boolean;
     archived?: boolean;
@@ -388,28 +389,30 @@ export const messagesApi = {
     page?: number; 
     limit?: number; 
     before?: string;
-  }) => api.get(`/api/messages/conversations/${conversationId}/messages`, { params }),
+  }) => api.get(`/api/messages/conversations/${conversationId}`, { params }),
   
   sendMessage: (conversationId: string, data: { 
-    content: string; 
+    text: string; 
     attachments?: string[];
-  }) => api.post(`/api/messages/conversations/${conversationId}/messages`, data),
+  }) => api.post(`/api/messages/conversations/${conversationId}`, data),
   
   markAsRead: (conversationId: string) => 
     api.patch(`/api/messages/conversations/${conversationId}/read`),
   
   toggleStar: (conversationId: string) => 
-    api.patch(`/api/messages/conversations/${conversationId}/star`),
+    api.post(`/api/messages/conversations/${conversationId}/star`),
   
   archive: (conversationId: string) => 
-    api.patch(`/api/messages/conversations/${conversationId}/archive`),
+    api.post(`/api/messages/conversations/${conversationId}/archive`),
   
   unarchive: (conversationId: string) => 
     api.patch(`/api/messages/conversations/${conversationId}/unarchive`),
   
-  getUnreadCount: () => api.get('/api/messages/unread-count'),
+  getUnreadCount: () => api.get('/api/messages/stats'),
   
   syncFromFacebook: () => api.post('/api/messages/sync'),
+  
+  getStats: () => api.get('/api/messages/stats'),
 };
 
 // Analytics API
@@ -485,6 +488,15 @@ export const teamApi = {
     lastName: string; 
     role: string;
   }) => api.post('/api/team/invite', data),
+  
+  // Manual create member with password
+  createMember: (data: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    password: string;
+    role: string;
+  }) => api.post('/api/team/members', data),
   
   updateMember: (userId: string, data: { role?: string; isActive?: boolean }) =>
     api.put(`/api/team/members/${userId}`, data),

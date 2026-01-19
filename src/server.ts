@@ -25,6 +25,11 @@ import {
   passwordResetLimiter,
 } from '@/middleware/security';
 import {
+  csrfTokenProvider,
+  csrfProtection,
+  attachSecurityContext,
+} from '@/middleware/security.middleware';
+import {
   createSecureGateway,
   ring5AuthBarrier,
 } from '@/middleware/apiGateway';
@@ -181,7 +186,8 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Request-Signature', 'X-Request-Timestamp'],
+  exposedHeaders: ['X-CSRF-Token'],
   maxAge: 86400, // 24 hours
 }));
 
@@ -383,6 +389,66 @@ app.use('/api', sanitizeRequest);
 app.use('/api', injectionGuard);
 
 // ============================================
+// Security Context & CSRF Protection
+// ============================================
+// Attach security context (request ID, IP, user agent) for audit logging
+app.use('/api', attachSecurityContext);
+
+// Provide CSRF tokens on all requests
+app.use('/api', csrfTokenProvider);
+
+// Apply CSRF protection to state-changing operations
+// Skip for webhook endpoints, OAuth callbacks, and public auth endpoints
+app.use('/api', (req, res, next) => {
+  // Skip CSRF for webhooks, OAuth callbacks, and public auth endpoints
+  // Note: req.path doesn't include /api since middleware is mounted at /api
+  const skipPaths = [
+    '/subscriptions/webhook',
+    '/facebook/callback',
+    '/facebook/deauthorize',
+    '/facebook/data-deletion',
+    '/auth/facebook/callback',
+    '/extension/sync', // Extension uses API keys
+    // Public auth endpoints (no CSRF token available yet)
+    '/auth/login',
+    '/auth/register',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+    '/auth/refresh-token',
+    '/auth/verify-email',
+    '/auth/health',
+    '/auth/debug-login',
+    // AI Center endpoints (uses auth token)
+    '/ai-center/chat',
+    '/ai-center/models',
+    '/ai-center/settings',
+    // File upload endpoints (multipart/form-data doesn't work well with CSRF)
+    '/sync/upload',
+    '/sync/manual',
+    '/sync/trigger',
+    '/vehicles/import',
+    // Messages endpoints
+    '/messages/',
+    // Analytics endpoints
+    '/analytics',
+    // Team management endpoints
+    '/team/',
+  ];
+  
+  if (skipPaths.some(p => req.path.startsWith(p))) {
+    return next();
+  }
+  
+  // Skip CSRF for API key authenticated requests
+  if (req.headers['x-api-key']) {
+    return next();
+  }
+  
+  // Apply CSRF protection
+  csrfProtection(req, res, next);
+});
+
+// ============================================
 // Request Logging (API only)
 // ============================================
 app.use('/api', (req, _res, next) => {
@@ -410,13 +476,20 @@ app.get('/health', (_req, res) => {
 // All routes under /api are secured by the gateway middleware
 // Individual routes add Ring 5 (Auth) as needed
 app.use('/api/auth', authRoutes);                                              // Auth routes (public)
+app.use('/api/auth/2fa', ring5AuthBarrier, require('./routes/two-factor.routes').default); // 2FA routes (requires auth)
 
 // Facebook OAuth callback must be public (browser redirect)
-app.get('/api/facebook/callback', facebookRoutes);                             // Public callback route
+// IMPORTANT: This specific route MUST be before the general /api/facebook routes
+app.get('/api/facebook/callback', (req, res, next) => {
+  // Skip auth for callback - handled via signed state
+  const controller = new (require('./controllers/facebook.controller').FacebookController)();
+  controller.handleOAuthCallback(req, res).catch(next);
+});
 app.use('/api/facebook', ring5AuthBarrier, facebookRoutes);                    // Other facebook routes require auth
 
 app.use('/api/vehicles', ring5AuthBarrier, vehicleRoutes);                     // Requires auth
 app.use('/api/accounts', ring5AuthBarrier, accountRoutes);                     // Requires auth
+app.use('/api/team', ring5AuthBarrier, require('./routes/team.routes').default); // Team management (requires auth)
 app.use('/api/sync', ring5AuthBarrier, syncRoutes);                            // Requires auth
 app.use('/api/users/me', ring5AuthBarrier, userCredentialsRoutes);             // Requires auth
 app.use('/api/users/me/api-keys', ring5AuthBarrier, require('./routes/apiKey.routes').default);
@@ -424,6 +497,8 @@ app.use('/api/subscriptions', require('./routes/subscription.routes').default); 
 app.use('/api/admin', ring5AuthBarrier, require('./routes/admin.routes').default); // Requires admin
 app.use('/api/email', ring5AuthBarrier, emailRoutes);                          // Requires auth
 app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
+app.use('/api/messages', ring5AuthBarrier, require('./routes/message.routes').default); // Messages/conversations (requires auth)
+app.use('/api/analytics', ring5AuthBarrier, require('./routes/analytics.routes').default); // Analytics dashboard (requires auth)
 app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications

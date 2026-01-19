@@ -650,7 +650,7 @@ export default function LandingPage() {
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
                 <li><Link to="/login" className="hover:text-white transition-colors">Dashboard</Link></li>
-                <li><a href="#" className="hover:text-white transition-colors">Chrome Extension</a></li>
+                <li><Link to="/features/chrome-extension" className="hover:text-white transition-colors">Chrome Extension</Link></li>
               </ul>
             </div>
             <div>
@@ -665,10 +665,10 @@ export default function LandingPage() {
             <div>
               <h4 className="text-white font-semibold mb-4">Legal</h4>
               <ul className="space-y-3">
-                <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Cookie Policy</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">DMCA</a></li>
+                <li><Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+                <li><Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+                <li><Link to="/cookies" className="hover:text-white transition-colors">Cookie Policy</Link></li>
+                <li><Link to="/dmca" className="hover:text-white transition-colors">DMCA</Link></li>
               </ul>
             </div>
           </div>

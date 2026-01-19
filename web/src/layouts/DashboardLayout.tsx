@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
+import FloatingAIChat from '../components/ai/FloatingAIChat';
 import {
   LayoutDashboard,
   Package,
@@ -41,6 +42,26 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  // Determine if current user is actually a Super Admin (or impersonating)
+  // Super Admin ALWAYS gets Nova, even when impersonating a user
+  const isSuperAdmin = () => {
+    // If impersonating, the REAL user is a Super Admin
+    if (impersonation.isImpersonating) return true;
+    // Otherwise check user's role
+    return user?.accounts?.some(a => a.role === 'SUPER_ADMIN') || false;
+  };
+
+  // Determine AI role based on user role (for display purposes)
+  // Super Admins ALWAYS see Nova, but we might show as different AI if not impersonating
+  const getUserAIRole = () => {
+    // If Super Admin (or impersonating), always use Nova
+    if (isSuperAdmin()) return 'super_admin';
+    
+    const userRole = user?.accounts?.[0]?.role;
+    if (userRole === 'ADMIN') return 'admin';
+    return 'user';
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -229,6 +250,14 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Floating AI Chat - Available to all users with role-based AI */}
+      {/* Super Admin's Nova follows them everywhere, even in impersonation mode */}
+      <FloatingAIChat 
+        userRole={getUserAIRole()} 
+        isImpersonating={impersonation.isImpersonating}
+        onMaximize={isSuperAdmin() ? () => navigate('/admin/ai-center') : undefined}
+      />
     </div>
   );
 }
