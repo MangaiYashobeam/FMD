@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
 import FloatingAIChat from '../components/ai/FloatingAIChat';
+import { FacebookConnectionStatus } from '../components/FacebookConnectionStatus';
 import {
   LayoutDashboard,
   Package,
@@ -190,6 +191,9 @@ export default function DashboardLayout() {
 
             {/* Right side actions */}
             <div className="flex items-center gap-4">
+              {/* Facebook Connection Status */}
+              <FacebookConnectionStatus variant="mini" />
+              
               {/* Notifications */}
               <button className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
                 <Bell className="w-5 h-5" />

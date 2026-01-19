@@ -53,6 +53,7 @@ import IntelliceilPage from './pages/admin/IntelliceilPage';
 import IIPCPage from './pages/admin/IIPCPage';
 import AICenterPage from './pages/admin/AICenterPage';
 import EmailSettingsPage from './pages/admin/EmailSettingsPage';
+import FacebookConfigPage from './pages/admin/FacebookConfigPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -139,6 +140,7 @@ function App() {
               <Route path="security" element={<IntelliceilPage />} />
               <Route path="iipc" element={<IIPCPage />} />
               <Route path="ai-center" element={<AICenterPage />} />
+              <Route path="facebook" element={<FacebookConfigPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

@@ -490,6 +490,16 @@ app.get('/api/facebook/callback', (req, res, next) => {
   const controller = new (require('./controllers/facebook.controller').FacebookController)();
   controller.handleOAuthCallback(req, res).catch(next);
 });
+
+// Public Facebook config endpoint for extension (no auth required)
+// Returns only public, non-sensitive config (App ID, version, etc.)
+app.get('/api/config/facebook', async (_req, res) => {
+  const systemController = require('./controllers/system.controller');
+  systemController.getPublicFacebookConfig(_req, res, (err: Error) => {
+    res.status(500).json({ success: false, error: err.message });
+  });
+});
+
 app.use('/api/facebook', ring5AuthBarrier, facebookRoutes);                    // Other facebook routes require auth
 
 app.use('/api/vehicles', ring5AuthBarrier, vehicleRoutes);                     // Requires auth

@@ -15,7 +15,7 @@
 const CONFIG = {
   API_URL: 'https://dealersface.com/api',
   // API_URL: 'http://localhost:5000/api', // Development
-  FACEBOOK_APP_ID: '505778791605869',
+  FACEBOOK_APP_ID: null, // Fetched from server - not hardcoded
   POLL_INTERVAL_MS: 10000,
   OAUTH_REDIRECT_URI: chrome.identity.getRedirectURL('oauth2'),
 };
@@ -34,7 +34,40 @@ let authState = {
   tokenExpiry: null,
 };
 
+let facebookConfig = null; // Cached Facebook config from server
 let activeTabs = new Map(); // tabId -> { accountId, url }
+
+// ============================================
+// Facebook Config Fetcher
+// ============================================
+
+/**
+ * Fetch Facebook configuration from server
+ * This allows the App ID to be managed from the web dashboard
+ */
+async function fetchFacebookConfig() {
+  try {
+    const response = await fetch(`${CONFIG.API_URL}/config/facebook`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    if (data.success && data.data) {
+      facebookConfig = data.data;
+      CONFIG.FACEBOOK_APP_ID = data.data.appId;
+      console.log('Facebook config loaded:', { 
+        appId: data.data.appId ? data.data.appId.slice(0, 5) + '...' : 'not set',
+        configured: data.data.configured 
+      });
+      return data.data;
+    }
+    throw new Error('Invalid config response');
+  } catch (error) {
+    console.error('Failed to fetch Facebook config:', error);
+    // Return cached config if available
+    return facebookConfig;
+  }
+}
 
 // ============================================
 // OAuth Flow
@@ -44,6 +77,13 @@ let activeTabs = new Map(); // tabId -> { accountId, url }
  * Initiate Facebook OAuth login
  */
 async function initiateOAuth() {
+  // Ensure we have the latest Facebook config
+  await fetchFacebookConfig();
+  
+  if (!CONFIG.FACEBOOK_APP_ID) {
+    throw new Error('Facebook App ID not configured. Please contact administrator.');
+  }
+  
   const state = generateRandomState();
   
   const authUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
@@ -278,6 +318,16 @@ async function handleMessage(message, sender) {
       
     case 'GET_AUTH_STATE':
       return authState;
+    
+    case 'GET_FACEBOOK_CONFIG':
+      // Return current Facebook config (fetch if not loaded)
+      if (!facebookConfig) {
+        await fetchFacebookConfig();
+      }
+      return {
+        config: facebookConfig,
+        configured: !!(CONFIG.FACEBOOK_APP_ID),
+      };
       
     case 'SCRAPE_RESULT':
       // Forward scrape results to server
@@ -427,12 +477,34 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Initialize
 // ============================================
 
-// Load saved auth state on startup
-chrome.storage.local.get('authState', (result) => {
+// Handle extension icon click - open side panel
+chrome.action.onClicked.addListener(async (tab) => {
+  try {
+    await chrome.sidePanel.open({ tabId: tab.id });
+  } catch (error) {
+    console.error('Failed to open side panel:', error);
+    // Fallback: try to open without tabId
+    try {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+    } catch (e) {
+      console.error('Fallback also failed:', e);
+    }
+  }
+});
+
+// Enable side panel for all tabs
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.error('Failed to set panel behavior:', error));
+
+// Load saved auth state and fetch Facebook config on startup
+chrome.storage.local.get('authState', async (result) => {
   if (result.authState) {
     authState = result.authState;
     console.log('Auth state loaded:', authState.isAuthenticated);
   }
+  
+  // Fetch Facebook config from server
+  await fetchFacebookConfig();
 });
 
 // Handle extension install/update

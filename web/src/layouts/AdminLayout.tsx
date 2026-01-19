@@ -14,10 +14,12 @@ import {
   Network,
   FileText,
   Brain,
+  Facebook,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
 import FloatingAIChat from '../components/ai/FloatingAIChat';
+import { FacebookConnectionStatus } from '../components/FacebookConnectionStatus';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -25,6 +27,7 @@ const navigation = [
   { name: 'Accounts', href: '/admin/accounts', icon: Building2 },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },
+  { name: 'Facebook', href: '/admin/facebook', icon: Facebook },
   { name: 'Email', href: '/admin/email', icon: Mail },
   { name: 'Reports & Alerts', href: '/admin/email-settings', icon: FileText },
   { name: 'Audit Logs', href: '/admin/audit', icon: Activity },
@@ -104,8 +107,14 @@ export default function AdminLayout() {
           </div>
 
           {/* User Section */}
-          <div className="flex-shrink-0 flex border-t border-slate-700 p-4">
-            <div className="flex-shrink-0 w-full">
+          <div className="flex-shrink-0 border-t border-slate-700">
+            {/* Facebook Status */}
+            <div className="px-4 py-3 border-b border-slate-700">
+              <FacebookConnectionStatus variant="compact" className="text-slate-300" />
+            </div>
+            
+            {/* User Info */}
+            <div className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-slate-700 rounded-full flex items-center justify-center">

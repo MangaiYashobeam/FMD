@@ -616,3 +616,409 @@ export const deleteEmailTemplate = async (req: Request, res: Response, next: Nex
     next(error);
   }
 };
+// ============================================
+// Facebook Configuration (SUPER_ADMIN)
+// ============================================
+
+// Input sanitization helper
+function sanitizeInput(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  return input
+    .trim()
+    .replace(/[<>]/g, '') // Remove potential HTML tags
+    .slice(0, 500); // Limit length
+}
+
+// Validate Facebook App ID format (numeric string, typically 15-16 digits)
+function isValidFacebookAppId(appId: string): boolean {
+  return /^\d{10,20}$/.test(appId);
+}
+
+// Get Facebook configuration (public - for extension)
+export const getPublicFacebookConfig = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { key: 'integrations' },
+    });
+
+    const integrations = settings?.value as any || {};
+    
+    // Only return public, non-sensitive values
+    res.json({
+      success: true,
+      data: {
+        appId: integrations.facebookAppId || process.env.FACEBOOK_APP_ID || '',
+        scope: 'email,public_profile',
+        version: 'v18.0',
+        configured: !!(integrations.facebookAppId || process.env.FACEBOOK_APP_ID),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get full Facebook configuration (SUPER_ADMIN only)
+export const getFacebookConfig = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { key: 'integrations' },
+    });
+
+    const integrations = settings?.value as any || {};
+
+    // Get global Facebook stats
+    const [totalProfiles, activeProfiles, totalPosts, recentPosts] = await Promise.all([
+      prisma.facebookProfile.count(),
+      prisma.facebookProfile.count({ where: { isActive: true } }),
+      prisma.facebookPost.count(),
+      prisma.facebookPost.count({
+        where: {
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+    ]);
+
+    // Get accounts with Facebook connected
+    const accountsWithFacebook = await prisma.account.findMany({
+      where: {
+        facebookProfiles: { some: { isActive: true } },
+      },
+      select: {
+        id: true,
+        name: true,
+        facebookProfiles: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            pageName: true,
+            facebookUserId: true,
+            isActive: true,
+            tokenExpiresAt: true,
+            lastSyncAt: true,
+          },
+        },
+      },
+      take: 50,
+    });
+
+    // Check for expiring tokens (within 7 days)
+    const expiringTokens = await prisma.facebookProfile.count({
+      where: {
+        isActive: true,
+        tokenExpiresAt: {
+          lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          gte: new Date(),
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        config: {
+          appId: integrations.facebookAppId || process.env.FACEBOOK_APP_ID || '',
+          appSecret: integrations.facebookAppSecret ? '********' : '',
+          hasSecret: !!(integrations.facebookAppSecret || process.env.FACEBOOK_APP_SECRET),
+          configured: !!(integrations.facebookAppId || process.env.FACEBOOK_APP_ID),
+          oauthRedirectUri: `${process.env.API_URL || 'https://dealersface.com/api'}/facebook/callback`,
+          extensionRedirectPattern: 'https://*.chromiumapp.org/*',
+        },
+        stats: {
+          totalProfiles,
+          activeProfiles,
+          totalPosts,
+          recentPosts,
+          expiringTokens,
+          accountsWithFacebook: accountsWithFacebook.length,
+        },
+        accounts: accountsWithFacebook.map(acc => ({
+          id: acc.id,
+          name: acc.name,
+          profiles: acc.facebookProfiles.map(p => ({
+            id: p.id,
+            pageName: p.pageName,
+            facebookUserId: p.facebookUserId,
+            isActive: p.isActive,
+            tokenExpiring: p.tokenExpiresAt ? new Date(p.tokenExpiresAt) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : false,
+            lastSync: p.lastSyncAt,
+          })),
+        })),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update Facebook configuration (SUPER_ADMIN only)
+export const updateFacebookConfig = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { appId, appSecret } = req.body;
+
+    // Sanitize inputs
+    const sanitizedAppId = sanitizeInput(appId);
+    
+    // Validate App ID format
+    if (sanitizedAppId && !isValidFacebookAppId(sanitizedAppId)) {
+      throw new AppError('Invalid Facebook App ID format. Must be 10-20 digits.', 400);
+    }
+
+    // Get existing settings
+    const existing = await prisma.systemSettings.findUnique({
+      where: { key: 'integrations' },
+    });
+
+    const currentIntegrations = existing?.value as any || {};
+
+    // Build updated settings
+    const updatedIntegrations = {
+      ...currentIntegrations,
+      facebookAppId: sanitizedAppId || currentIntegrations.facebookAppId || '',
+    };
+
+    // Only update secret if provided and not masked
+    if (appSecret && appSecret !== '********') {
+      // Validate secret format (typically 32 hex characters)
+      const sanitizedSecret = sanitizeInput(appSecret);
+      if (sanitizedSecret.length < 20 || sanitizedSecret.length > 64) {
+        throw new AppError('Invalid Facebook App Secret format', 400);
+      }
+      updatedIntegrations.facebookAppSecret = sanitizedSecret;
+    }
+
+    // Upsert settings
+    await prisma.systemSettings.upsert({
+      where: { key: 'integrations' },
+      update: { value: updatedIntegrations },
+      create: { key: 'integrations', value: updatedIntegrations },
+    });
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user?.id,
+        action: 'FACEBOOK_CONFIG_UPDATE',
+        entityType: 'system_settings',
+        entityId: 'integrations',
+        metadata: { 
+          appIdUpdated: !!sanitizedAppId,
+          secretUpdated: !!(appSecret && appSecret !== '********'),
+        },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Facebook configuration updated successfully',
+      data: {
+        appId: updatedIntegrations.facebookAppId,
+        hasSecret: !!updatedIntegrations.facebookAppSecret,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Test Facebook configuration
+export const testFacebookConfig = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const settings = await prisma.systemSettings.findUnique({
+      where: { key: 'integrations' },
+    });
+
+    const integrations = settings?.value as any || {};
+    const appId = integrations.facebookAppId || process.env.FACEBOOK_APP_ID;
+    const appSecret = integrations.facebookAppSecret || process.env.FACEBOOK_APP_SECRET;
+
+    if (!appId) {
+      throw new AppError('Facebook App ID not configured', 400);
+    }
+
+    if (!appSecret) {
+      throw new AppError('Facebook App Secret not configured', 400);
+    }
+
+    // Test by getting an app access token
+    const axios = (await import('axios')).default;
+    const response = await axios.get('https://graph.facebook.com/oauth/access_token', {
+      params: {
+        client_id: appId,
+        client_secret: appSecret,
+        grant_type: 'client_credentials',
+      },
+    });
+
+    if (response.data.access_token) {
+      // Log success
+      await prisma.auditLog.create({
+        data: {
+          userId: (req as any).user?.id,
+          action: 'FACEBOOK_CONFIG_TEST_SUCCESS',
+          entityType: 'system_settings',
+          entityId: 'integrations',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'Facebook configuration is valid',
+        data: {
+          appId,
+          tokenType: response.data.token_type,
+        },
+      });
+    } else {
+      throw new AppError('Could not obtain app access token', 400);
+    }
+  } catch (error: any) {
+    // Log failure
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user?.id,
+        action: 'FACEBOOK_CONFIG_TEST_FAILED',
+        entityType: 'system_settings',
+        entityId: 'integrations',
+        metadata: { error: error.message },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+
+    if (error.response?.data?.error) {
+      const fbError = error.response.data.error;
+      throw new AppError(`Facebook API Error: ${fbError.message || fbError.type}`, 400);
+    }
+    next(error);
+  }
+};
+
+// Revoke Facebook profile access
+export const revokeFacebookProfile = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profileId = req.params.profileId as string;
+
+    if (!profileId) {
+      throw new AppError('Profile ID is required', 400);
+    }
+
+    const profile = await prisma.facebookProfile.findUnique({
+      where: { id: profileId },
+      include: { account: true },
+    });
+
+    if (!profile) {
+      throw new AppError('Facebook profile not found', 404);
+    }
+
+    // Deactivate the profile
+    await prisma.facebookProfile.update({
+      where: { id: profileId },
+      data: { isActive: false },
+    });
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user?.id,
+        action: 'FACEBOOK_PROFILE_REVOKED',
+        entityType: 'facebook_profile',
+        entityId: profileId,
+        metadata: { 
+          accountId: profile.accountId,
+          accountName: profile.account?.name,
+          pageName: profile.pageName,
+        },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Facebook profile "${profile.pageName}" has been revoked`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get all Facebook profiles (SUPER_ADMIN dashboard)
+export const getAllFacebookProfiles = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { status, search, limit = 50, offset = 0 } = req.query;
+
+    const where: any = {};
+    
+    if (status === 'active') {
+      where.isActive = true;
+    } else if (status === 'inactive') {
+      where.isActive = false;
+    } else if (status === 'expiring') {
+      where.isActive = true;
+      where.tokenExpiresAt = {
+        lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        gte: new Date(),
+      };
+    }
+
+    if (search) {
+      const searchTerm = sanitizeInput(search as string);
+      where.OR = [
+        { pageName: { contains: searchTerm, mode: 'insensitive' } },
+        { facebookUserName: { contains: searchTerm, mode: 'insensitive' } },
+        { account: { name: { contains: searchTerm, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [profiles, total] = await Promise.all([
+      prisma.facebookProfile.findMany({
+        where,
+        include: {
+          account: { select: { id: true, name: true } },
+          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          _count: { select: { posts: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(Number(limit), 100),
+        skip: Number(offset),
+      }),
+      prisma.facebookProfile.count({ where }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        profiles: profiles.map(p => ({
+          id: p.id,
+          pageName: p.pageName,
+          pageId: p.pageId,
+          facebookUserId: p.facebookUserId,
+          facebookUserName: p.facebookUserName,
+          category: p.category,
+          isActive: p.isActive,
+          tokenExpiresAt: p.tokenExpiresAt,
+          tokenExpiring: p.tokenExpiresAt ? new Date(p.tokenExpiresAt) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : false,
+          lastSyncAt: p.lastSyncAt,
+          postCount: p._count.posts,
+          account: p.account,
+          user: p.user,
+          createdAt: p.createdAt,
+        })),
+        pagination: {
+          total,
+          limit: Number(limit),
+          offset: Number(offset),
+          hasMore: Number(offset) + profiles.length < total,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

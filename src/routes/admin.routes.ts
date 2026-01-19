@@ -286,4 +286,65 @@ router.delete(
   asyncHandler(systemController.deleteEmailTemplate)
 );
 
+// ============================================
+// Facebook Configuration Routes (SUPER_ADMIN)
+// ============================================
+
+/**
+ * @route   GET /api/admin/facebook/config
+ * @desc    Get Facebook configuration and stats
+ * @access  Super Admin
+ */
+router.get('/facebook/config', asyncHandler(systemController.getFacebookConfig));
+
+/**
+ * @route   PUT /api/admin/facebook/config
+ * @desc    Update Facebook App ID and Secret
+ * @access  Super Admin
+ */
+router.put(
+  '/facebook/config',
+  validate([
+    body('appId').optional().trim().isLength({ min: 10, max: 20 }).withMessage('Invalid App ID format'),
+    body('appSecret').optional().trim().isLength({ min: 20, max: 64 }).withMessage('Invalid App Secret format'),
+  ]),
+  asyncHandler(systemController.updateFacebookConfig)
+);
+
+/**
+ * @route   POST /api/admin/facebook/config/test
+ * @desc    Test Facebook configuration by getting app access token
+ * @access  Super Admin
+ */
+router.post('/facebook/config/test', asyncHandler(systemController.testFacebookConfig));
+
+/**
+ * @route   GET /api/admin/facebook/profiles
+ * @desc    Get all Facebook profiles across all accounts
+ * @access  Super Admin
+ */
+router.get(
+  '/facebook/profiles',
+  validate([
+    query('status').optional().isIn(['active', 'inactive', 'expiring']).withMessage('Invalid status filter'),
+    query('search').optional().trim().isLength({ max: 100 }),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('offset').optional().isInt({ min: 0 }),
+  ]),
+  asyncHandler(systemController.getAllFacebookProfiles)
+);
+
+/**
+ * @route   POST /api/admin/facebook/profiles/:profileId/revoke
+ * @desc    Revoke/deactivate a Facebook profile
+ * @access  Super Admin
+ */
+router.post(
+  '/facebook/profiles/:profileId/revoke',
+  validate([
+    param('profileId').isUUID().withMessage('Invalid profile ID'),
+  ]),
+  asyncHandler(systemController.revokeFacebookProfile)
+);
+
 export default router;

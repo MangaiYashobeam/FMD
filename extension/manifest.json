@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "DF-Auto Sim",
-  "version": "2.5.0",
-  "description": "Dealers Face - Facebook Marketplace automation for auto dealers",
+  "name": "DealersFace Pro",
+  "version": "3.0.0",
+  "description": "DealersFace - Professional Facebook Marketplace automation for auto dealers",
   "author": "Dealers Face",
   "permissions": [
     "storage",
@@ -29,7 +29,7 @@
       "48": "icons/icon48.svg",
       "128": "icons/icon128.svg"
     },
-    "default_title": "DF-Auto Sim"
+    "default_title": "Open DealersFace Pro"
   },
   "icons": {
     "16": "icons/icon16.svg",
@@ -51,10 +51,6 @@
       "run_at": "document_idle"
     }
   ],
-  "oauth2": {
-    "client_id": "505778791605869",
-    "scopes": ["email", "public_profile"]
-  },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
   },

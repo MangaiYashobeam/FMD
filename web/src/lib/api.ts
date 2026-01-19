@@ -318,6 +318,20 @@ export const adminApi = {
   
   deleteEmailTemplate: (templateId: string) =>
     api.delete(`/api/admin/email-templates/${templateId}`),
+
+  // Facebook Configuration Management
+  getFacebookConfig: () => api.get('/api/admin/facebook/config'),
+  
+  updateFacebookConfig: (data: { appId?: string; appSecret?: string }) =>
+    api.put('/api/admin/facebook/config', data),
+  
+  testFacebookConfig: () => api.post('/api/admin/facebook/config/test'),
+  
+  getFacebookProfiles: (params?: { status?: string; search?: string; limit?: number; offset?: number }) =>
+    api.get('/api/admin/facebook/profiles', { params }),
+  
+  revokeFacebookProfile: (profileId: string) =>
+    api.post(`/api/admin/facebook/profiles/${profileId}/revoke`),
 };
 
 // Leads API
