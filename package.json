@@ -83,6 +83,10 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.19.2"
   },
+  "overrides": {
+    "glob": "^10.0.0",
+    "inflight": "npm:lru-cache@^10.0.0"
+  },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"

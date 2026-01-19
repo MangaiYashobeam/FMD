@@ -422,17 +422,22 @@ app.use('/api', (req, res, next) => {
     '/ai-center/chat',
     '/ai-center/models',
     '/ai-center/settings',
+    '/ai/',  // All AI endpoints
     // File upload endpoints (multipart/form-data doesn't work well with CSRF)
     '/sync/upload',
     '/sync/manual',
     '/sync/trigger',
-    '/vehicles/import',
+    '/vehicles', // Vehicle management
     // Messages endpoints
     '/messages/',
     // Analytics endpoints
     '/analytics',
     // Team management endpoints
     '/team/',
+    // Lead management
+    '/leads',
+    // Accounts management
+    '/accounts',
   ];
   
   if (skipPaths.some(p => req.path.startsWith(p))) {
