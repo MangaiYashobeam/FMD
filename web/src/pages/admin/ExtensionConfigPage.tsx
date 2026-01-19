@@ -23,7 +23,6 @@ import {
   Puzzle,
   Zap,
 } from 'lucide-react';
-import { cn } from '../../lib/utils';
 
 interface ExtensionConfig {
   extensionId: string;
