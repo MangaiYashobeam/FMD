@@ -53,5 +53,5 @@ COPY --from=builder /app/web/dist ./web/dist
 # Expose port
 EXPOSE 3000
 
-# Start the server
-CMD ["node", "dist/server.js"]
+# Start the server with migrations
+CMD npx prisma migrate deploy && node dist/server.js
