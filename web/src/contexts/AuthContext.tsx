@@ -87,6 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             id: userData.id,
             email: userData.email,
             name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            phone: userData.phone,
             role: userData.accounts?.[0]?.role || 'USER',
             accounts: userData.accounts || [],
           });
@@ -137,6 +140,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       id: userData.id,
       email: userData.email,
       name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      phone: userData.phone,
       role: accounts?.[0]?.role || 'USER',
       accounts: accounts || [],
     });
@@ -153,6 +159,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       id: userData.id,
       email: userData.email,
       name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      phone: userData.phone,
       role: 'ACCOUNT_OWNER',
       accounts: account ? [{ id: account.id, name: account.name, role: 'ACCOUNT_OWNER' }] : [],
     });
@@ -179,7 +188,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     try {
       const response = await authApi.getProfile();
-      setUser(response.data.data.user);
+      const userData = response.data.data;
+      setUser({
+        id: userData.id,
+        email: userData.email,
+        name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        phone: userData.phone,
+        role: userData.accounts?.[0]?.role || 'USER',
+        accounts: userData.accounts || [],
+      });
     } catch (error) {
       setUser(null);
     }
@@ -215,6 +234,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       id: userData.id,
       email: userData.email,
       name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      phone: userData.phone,
       role: accounts?.[0]?.role || 'USER',
       accounts: accounts || [],
     });
@@ -242,6 +264,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: userData.id,
         email: userData.email,
         name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        phone: userData.phone,
         role: userData.accounts?.[0]?.role || 'USER',
         accounts: userData.accounts || [],
       });
