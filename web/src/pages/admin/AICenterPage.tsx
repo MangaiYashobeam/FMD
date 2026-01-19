@@ -13,7 +13,7 @@
  * PRODUCTION VERSION - Connected to real APIs
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Brain,
   Database,
@@ -149,8 +149,8 @@ export default function AICenterPage() {
           displayName: 'Anthropic',
           type: 'anthropic',
           isActive: true,
-          defaultModel: 'claude-3-sonnet-20240229',
-          availableModels: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+          defaultModel: 'claude-3-5-sonnet-latest',
+          availableModels: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
           healthStatus: 'healthy',
           capabilities: ['text', 'analysis', 'reasoning'],
         },
@@ -683,6 +683,14 @@ function ChatTab({ selectedProvider, providers }: { selectedProvider: string | n
   const [loading, setLoading] = useState(false);
   const [provider, setProvider] = useState(selectedProvider || 'anthropic');
   const [mode, setMode] = useState<'chat' | 'code' | 'reason'>('chat');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep focus on input after sending
+  useEffect(() => {
+    if (!loading && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [loading, messages]);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -793,6 +801,7 @@ function ChatTab({ selectedProvider, providers }: { selectedProvider: string | n
       {/* Input */}
       <div className="flex space-x-2">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -804,6 +813,7 @@ function ChatTab({ selectedProvider, providers }: { selectedProvider: string | n
           }
           className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-purple-500"
           disabled={loading}
+          autoFocus
         />
         <button
           onClick={handleSend}

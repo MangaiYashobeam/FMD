@@ -1,4 +1,4 @@
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Building2,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
+import FloatingAIChat from '../components/ai/FloatingAIChat';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -34,7 +35,11 @@ const navigation = [
 
 export default function AdminLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout, impersonation } = useAuth();
+  
+  // Check if we're on the AI Center page
+  const isAICenterPage = location.pathname === '/admin/ai-center';
 
   return (
     <div className={`flex h-screen bg-gray-50 ${impersonation.isImpersonating ? 'pt-10' : ''}`}>
@@ -150,6 +155,13 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Floating AI Chat - Hidden on AI Center page */}
+      <FloatingAIChat 
+        userRole="super_admin" 
+        isAICenterTab={isAICenterPage}
+        onMaximize={() => navigate('/admin/ai-center')}
+      />
     </div>
   );
 }

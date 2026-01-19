@@ -309,7 +309,7 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
         data: {
           content: `[Simulated Response] Anthropic API key not configured. Configure ANTHROPIC_API_KEY to enable real AI responses.`,
           provider: 'anthropic',
-          model: model || 'claude-3-sonnet-20240229',
+          model: model || 'claude-3-5-sonnet-latest',
           inputTokens: 0,
           outputTokens: 0,
           latency: Date.now() - start,
@@ -336,7 +336,7 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: model || 'claude-3-sonnet-20240229',
+          model: model || 'claude-3-5-sonnet-latest',
           max_tokens: 1000,
           system: systemMessage || 'You are a helpful AI assistant.',
           messages: chatMessages,
@@ -356,7 +356,7 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
         data: {
           content,
           provider: 'anthropic',
-          model: data.model || model || 'claude-3-sonnet-20240229',
+          model: data.model || model || 'claude-3-5-sonnet-latest',
           inputTokens: data.usage?.input_tokens || 0,
           outputTokens: data.usage?.output_tokens || 0,
           latency: Date.now() - start,
