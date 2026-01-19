@@ -328,6 +328,9 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
         content: m.content,
       }));
       
+      // Use exact versioned model name - claude-3-5-sonnet-20241022 is the current stable version
+      const anthropicModel = model || 'claude-3-5-sonnet-20241022';
+      
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -336,8 +339,8 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: model || 'claude-3-5-sonnet-latest',
-          max_tokens: 1000,
+          model: anthropicModel,
+          max_tokens: 4096,
           system: systemMessage || 'You are a helpful AI assistant.',
           messages: chatMessages,
         }),
