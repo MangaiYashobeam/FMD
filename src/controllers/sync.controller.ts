@@ -683,7 +683,7 @@ export class SyncController {
       optionCodes: vehicle.optionCodes,
       dealerComments: vehicle.dealerComments,
       videoUrl: vehicle.videoUrl,
-      photoUrls: vehicle.photoUrls,
+      imageUrls: vehicle.photoUrls,
       instockDate: vehicle.instockDate,
       lastModifiedDate: vehicle.lastModifiedDate,
     };
