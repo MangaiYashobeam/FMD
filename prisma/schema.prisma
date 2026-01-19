@@ -2166,3 +2166,140 @@ model AIUserMemory {
   @@index([userRole])
   @@map("ai_user_memories")
 }
+
+// ============================================
+// AI Conversation Oversight (Super Admin)
+// ============================================
+
+// AI Conversation Checkpoints - Snapshots for reversion
+model AIConversationCheckpoint {
+  id         String @id @default(uuid())
+  sessionId  String @map("session_id")
+  messageId  String @map("message_id") // Message that created this checkpoint
+  
+  // Checkpoint Info
+  checkpointNumber Int @map("checkpoint_number")
+  name       String? // Optional name for the checkpoint
+  description String? @db.Text
+  
+  // Conversation State
+  conversationState Json @map("conversation_state") // Full messages up to this point
+  memoryState Json? @map("memory_state") // Memories at this point
+  
+  // File Changes
+  fileChanges AIFileChange[]
+  
+  // Who created it
+  createdBy  String @map("created_by") // User who created (auto or super admin)
+  isAutomatic Boolean @default(true) @map("is_automatic") // Auto-created or manual
+  
+  // Status
+  isActive   Boolean @default(true) @map("is_active")
+  revertedAt DateTime? @map("reverted_at") // If this was reverted from
+  revertedBy String? @map("reverted_by")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@index([sessionId])
+  @@index([messageId])
+  @@index([checkpointNumber])
+  @@map("ai_conversation_checkpoints")
+}
+
+// AI File Changes - Track file modifications during conversations
+model AIFileChange {
+  id           String @id @default(uuid())
+  checkpointId String @map("checkpoint_id")
+  messageId    String @map("message_id")
+  
+  // File Info
+  filePath     String @map("file_path")
+  fileType     String @map("file_type") // ts, tsx, json, etc
+  
+  // Change Details
+  changeType   String @map("change_type") // create, modify, delete
+  beforeContent String? @db.Text @map("before_content") // Content before change
+  afterContent  String? @db.Text @map("after_content") // Content after change
+  diff          String? @db.Text // Unified diff format
+  
+  // Metadata
+  linesAdded   Int @default(0) @map("lines_added")
+  linesRemoved Int @default(0) @map("lines_removed")
+  
+  // Reversion Status
+  isReverted   Boolean @default(false) @map("is_reverted")
+  revertedAt   DateTime? @map("reverted_at")
+  revertedBy   String? @map("reverted_by")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  checkpoint AIConversationCheckpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  
+  @@index([checkpointId])
+  @@index([messageId])
+  @@index([filePath])
+  @@map("ai_file_changes")
+}
+
+// AI Thought Logs - Stream of AI reasoning (visible to super admin)
+model AIThoughtLog {
+  id         String @id @default(uuid())
+  sessionId  String @map("session_id")
+  messageId  String? @map("message_id") // Associated message (null while streaming)
+  
+  // Thought Content
+  thoughtType String @map("thought_type") // reasoning, tool_call, tool_result, decision, reflection
+  content    String @db.Text
+  sequence   Int // Order in the thought chain
+  
+  // Tool Usage
+  toolName   String? @map("tool_name")
+  toolInput  Json? @map("tool_input")
+  toolOutput Json? @map("tool_output")
+  
+  // Timing
+  durationMs Int? @map("duration_ms")
+  
+  // Status
+  isVisible  Boolean @default(true) @map("is_visible") // Can be hidden by super admin
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@index([sessionId])
+  @@index([messageId])
+  @@index([sequence])
+  @@map("ai_thought_logs")
+}
+
+// AI Conversation Control - Active conversation states
+model AIConversationControl {
+  id         String @id @default(uuid())
+  sessionId  String @unique @map("session_id")
+  
+  // Current State
+  status     String @default("idle") // idle, thinking, streaming, stopped, completed
+  currentMessageId String? @map("current_message_id")
+  
+  // Control
+  stopRequested Boolean @default(false) @map("stop_requested")
+  stopRequestedBy String? @map("stop_requested_by")
+  stopRequestedAt DateTime? @map("stop_requested_at")
+  
+  // Super Admin Watching
+  watchingUsers String[] @default([]) @map("watching_users") // User IDs watching this conversation
+  
+  // Last Activity
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@index([sessionId])
+  @@index([status])
+  @@map("ai_conversation_controls")
+}

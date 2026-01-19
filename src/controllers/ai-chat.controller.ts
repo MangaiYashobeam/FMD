@@ -7,6 +7,8 @@
  * - File attachments
  * - Memory management
  * - AI processing with context
+ * - Conversation control (stop, revert) for super admin
+ * - Thought streaming for super admin oversight
  */
 
 import { Response } from 'express';
@@ -14,6 +16,7 @@ import { AuthRequest } from '@/middleware/auth';
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
 import { aiMemoryService, MemoryScope, MemoryCategory, UserRole } from '@/services/ai-memory.service';
+import { aiConversationControlService, conversationEvents } from '@/services/ai-conversation-control.service';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
@@ -321,12 +324,40 @@ export class AIChatController {
         },
       });
 
+      // Start conversation control (for super admin oversight)
+      await aiConversationControlService.startConversation(sessionId, userMessage.id);
+
+      // Log initial thought
+      await aiConversationControlService.logThought(
+        sessionId,
+        'reasoning',
+        `Processing user message: "${content?.substring(0, 100)}${content?.length > 100 ? '...' : ''}"`,
+        { messageId: userMessage.id }
+      );
+
       // Link attachments if any
       if (attachmentIds.length > 0) {
         await prisma.aIChatAttachment.updateMany({
           where: { id: { in: attachmentIds } },
           data: { messageId: userMessage.id },
         });
+        
+        await aiConversationControlService.logThought(
+          sessionId,
+          'reasoning',
+          `Processing ${attachmentIds.length} attachment(s)`,
+          { messageId: userMessage.id }
+        );
+      }
+
+      // Check if stop was requested
+      if (aiConversationControlService.isStopRequested(sessionId)) {
+        await aiConversationControlService.completeConversation(sessionId);
+        res.status(200).json({
+          success: true,
+          data: { userMessage, stopped: true },
+        });
+        return;
       }
 
       // Get conversation history
@@ -337,8 +368,22 @@ export class AIChatController {
         include: { attachments: true },
       });
 
+      await aiConversationControlService.logThought(
+        sessionId,
+        'reasoning',
+        `Retrieved ${history.length} messages from conversation history`,
+        { messageId: userMessage.id }
+      );
+
       // Get memory context for AI
       const memoryContextStr = await aiMemoryService.getContextForAI(memoryContext);
+
+      await aiConversationControlService.logThought(
+        sessionId,
+        'reasoning',
+        `Loaded memory context for user role: ${memoryContext.userRole}`,
+        { messageId: userMessage.id }
+      );
 
       // Get attachments content for this message
       const attachmentContext = await this.getAttachmentContext(attachmentIds);
@@ -346,10 +391,37 @@ export class AIChatController {
       // Build AI prompt
       const systemPrompt = this.buildSystemPrompt(memoryContext.userRole, user, memoryContextStr);
 
+      // Check stop again before API call
+      if (aiConversationControlService.isStopRequested(sessionId)) {
+        await aiConversationControlService.completeConversation(sessionId);
+        res.status(200).json({
+          success: true,
+          data: { userMessage, stopped: true },
+        });
+        return;
+      }
+
+      // Update status to streaming
+      await aiConversationControlService.updateStatus(sessionId, 'streaming');
+
+      await aiConversationControlService.logThought(
+        sessionId,
+        'tool_call',
+        'Calling AI model for response generation',
+        { messageId: userMessage.id, toolName: 'AI_API' }
+      );
+
       // Process with AI
       const startTime = Date.now();
-      const aiResponse = await this.callAI(systemPrompt, history, content, attachmentContext);
+      const aiResponse = await this.callAI(systemPrompt, history, content, attachmentContext, sessionId);
       const processingMs = Date.now() - startTime;
+
+      await aiConversationControlService.logThought(
+        sessionId,
+        'tool_result',
+        `AI response generated in ${processingMs}ms using ${aiResponse.model}`,
+        { messageId: userMessage.id, toolName: 'AI_API', durationMs: processingMs }
+      );
 
       // Create assistant message
       const assistantMessage = await prisma.aIChatMessage.create({
@@ -369,6 +441,22 @@ export class AIChatController {
         },
       });
 
+      // Create automatic checkpoint
+      const conversationState = [...history, userMessage, assistantMessage].map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+      }));
+
+      await aiConversationControlService.createCheckpoint({
+        sessionId,
+        messageId: assistantMessage.id,
+        conversationState,
+        createdBy: userId,
+        isAutomatic: true,
+      });
+
       // Update session
       await prisma.aIChatSession.update({
         where: { id: sessionId },
@@ -385,7 +473,17 @@ export class AIChatController {
           userMessage.id,
           aiResponse.learnings
         );
+
+        await aiConversationControlService.logThought(
+          sessionId,
+          'reflection',
+          `Learned ${aiResponse.learnings.length} new items from conversation`,
+          { messageId: assistantMessage.id }
+        );
       }
+
+      // Complete conversation
+      await aiConversationControlService.completeConversation(sessionId);
 
       res.json({
         success: true,
@@ -399,8 +497,20 @@ export class AIChatController {
           assistantMessage,
         },
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to send message:', error);
+      
+      // Log error thought
+      const sessionId = req.params.sessionId as string;
+      if (sessionId) {
+        await aiConversationControlService.logThought(
+          sessionId,
+          'reflection',
+          `Error occurred: ${error.message}`,
+        ).catch(() => {});
+        await aiConversationControlService.completeConversation(sessionId).catch(() => {});
+      }
+      
       res.status(500).json({ success: false, error: 'Failed to process message' });
     }
   }
@@ -696,7 +806,8 @@ Remember to be helpful, accurate, and build a positive relationship with this us
     systemPrompt: string,
     history: any[],
     userMessage: string,
-    attachmentContext: string
+    attachmentContext: string,
+    sessionId?: string
   ): Promise<{ content: string; tokensUsed?: number; model: string; memoriesAccessed?: string[]; learnings?: any[] }> {
     
     // Format conversation history
@@ -712,9 +823,26 @@ Remember to be helpful, accurate, and build a positive relationship with this us
 
     messages.push({ role: 'user', content: currentContent });
 
+    // Check if stop was requested
+    if (sessionId && aiConversationControlService.isStopRequested(sessionId)) {
+      return {
+        content: '[Conversation stopped by administrator]',
+        model: 'stopped',
+      };
+    }
+
     // Try Anthropic first, fall back to OpenAI
     if (anthropic) {
       try {
+        if (sessionId) {
+          await aiConversationControlService.logThought(
+            sessionId,
+            'tool_call',
+            'Sending request to Claude API',
+            { toolName: 'anthropic' }
+          );
+        }
+
         const response = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 4096,
@@ -729,13 +857,30 @@ Remember to be helpful, accurate, and build a positive relationship with this us
           tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
           model: 'claude-sonnet-4-20250514',
         };
-      } catch (err) {
+      } catch (err: any) {
         logger.error('Anthropic API error:', err);
+        if (sessionId) {
+          await aiConversationControlService.logThought(
+            sessionId,
+            'reflection',
+            `Anthropic API error: ${err.message}, falling back to OpenAI`,
+            { toolName: 'anthropic' }
+          );
+        }
       }
     }
 
     if (openai) {
       try {
+        if (sessionId) {
+          await aiConversationControlService.logThought(
+            sessionId,
+            'tool_call',
+            'Sending request to OpenAI API',
+            { toolName: 'openai' }
+          );
+        }
+
         const response = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
@@ -750,8 +895,16 @@ Remember to be helpful, accurate, and build a positive relationship with this us
           tokensUsed: response.usage?.total_tokens,
           model: 'gpt-4o-mini',
         };
-      } catch (err) {
+      } catch (err: any) {
         logger.error('OpenAI API error:', err);
+        if (sessionId) {
+          await aiConversationControlService.logThought(
+            sessionId,
+            'reflection',
+            `OpenAI API error: ${err.message}`,
+            { toolName: 'openai' }
+          );
+        }
       }
     }
 
@@ -783,6 +936,313 @@ Remember to be helpful, accurate, and build a positive relationship with this us
     }
 
     return contexts.join('\n');
+  }
+
+  // ============================================
+  // Super Admin Conversation Control
+  // ============================================
+
+  /**
+   * Stop an active conversation (super admin only)
+   */
+  async stopConversation(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      const stopped = await aiConversationControlService.requestStop(sessionId, userId);
+
+      res.json({
+        success: true,
+        data: { stopped },
+      });
+    } catch (error) {
+      logger.error('Failed to stop conversation:', error);
+      res.status(500).json({ success: false, error: 'Failed to stop conversation' });
+    }
+  }
+
+  /**
+   * Get conversation thoughts (super admin only)
+   */
+  async getConversationThoughts(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+      const { messageId, limit = 100 } = req.query;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      const thoughts = await aiConversationControlService.getThoughts(sessionId, {
+        messageId: messageId as string,
+        limit: Number(limit),
+      });
+
+      res.json({
+        success: true,
+        data: thoughts,
+      });
+    } catch (error) {
+      logger.error('Failed to get conversation thoughts:', error);
+      res.status(500).json({ success: false, error: 'Failed to get thoughts' });
+    }
+  }
+
+  /**
+   * Get conversation checkpoints
+   */
+  async getCheckpoints(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+
+      // Verify session access (owner or super admin)
+      const session = await prisma.aIChatSession.findFirst({
+        where: { id: sessionId },
+      });
+
+      if (!session) {
+        res.status(404).json({ success: false, error: 'Session not found' });
+        return;
+      }
+
+      const userRole = await this.getUserRole(userId);
+      if (session.userId !== userId && userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+
+      const checkpoints = await aiConversationControlService.getCheckpoints(sessionId);
+
+      res.json({
+        success: true,
+        data: checkpoints,
+      });
+    } catch (error) {
+      logger.error('Failed to get checkpoints:', error);
+      res.status(500).json({ success: false, error: 'Failed to get checkpoints' });
+    }
+  }
+
+  /**
+   * Revert to a checkpoint (super admin only)
+   */
+  async revertToCheckpoint(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const checkpointId = req.params.checkpointId as string;
+      const { revertFiles = false, revertConversation = true } = req.body;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      const result = await aiConversationControlService.revertToCheckpoint(
+        checkpointId,
+        userId,
+        { revertFiles, revertConversation }
+      );
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      logger.error('Failed to revert to checkpoint:', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to revert' });
+    }
+  }
+
+  /**
+   * Get file changes for a session (super admin only)
+   */
+  async getFileChanges(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+      const { messageId, filePath } = req.query;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      const fileChanges = await aiConversationControlService.getFileChanges(sessionId, {
+        messageId: messageId as string,
+        filePath: filePath as string,
+      });
+
+      res.json({
+        success: true,
+        data: fileChanges,
+      });
+    } catch (error) {
+      logger.error('Failed to get file changes:', error);
+      res.status(500).json({ success: false, error: 'Failed to get file changes' });
+    }
+  }
+
+  /**
+   * Watch a conversation in real-time (super admin only)
+   */
+  async watchConversation(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      await aiConversationControlService.addWatcher(sessionId, userId);
+
+      res.json({
+        success: true,
+        data: { watching: true },
+      });
+    } catch (error) {
+      logger.error('Failed to watch conversation:', error);
+      res.status(500).json({ success: false, error: 'Failed to watch conversation' });
+    }
+  }
+
+  /**
+   * Stop watching a conversation
+   */
+  async unwatchConversation(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+
+      await aiConversationControlService.removeWatcher(sessionId, userId);
+
+      res.json({
+        success: true,
+        data: { watching: false },
+      });
+    } catch (error) {
+      logger.error('Failed to unwatch conversation:', error);
+      res.status(500).json({ success: false, error: 'Failed to unwatch conversation' });
+    }
+  }
+
+  /**
+   * Get active conversations (super admin only)
+   */
+  async getActiveConversations(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      const conversations = await aiConversationControlService.getActiveConversations();
+
+      res.json({
+        success: true,
+        data: conversations,
+      });
+    } catch (error) {
+      logger.error('Failed to get active conversations:', error);
+      res.status(500).json({ success: false, error: 'Failed to get active conversations' });
+    }
+  }
+
+  /**
+   * Get full conversation state (super admin only)
+   */
+  async getConversationState(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      const state = await aiConversationControlService.getConversationState(sessionId);
+
+      res.json({
+        success: true,
+        data: state,
+      });
+    } catch (error) {
+      logger.error('Failed to get conversation state:', error);
+      res.status(500).json({ success: false, error: 'Failed to get conversation state' });
+    }
+  }
+
+  /**
+   * SSE endpoint for real-time thought streaming (super admin only)
+   */
+  async streamThoughts(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const sessionId = req.params.sessionId as string;
+
+      // Verify super admin
+      const userRole = await this.getUserRole(userId);
+      if (userRole !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Super admin access required' });
+        return;
+      }
+
+      // Set up SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+      // Add watcher
+      await aiConversationControlService.addWatcher(sessionId, userId);
+
+      // Send initial connection event
+      res.write(`data: ${JSON.stringify({ type: 'connected', sessionId })}\n\n`);
+
+      // Listen for events
+      const eventHandler = (event: any) => {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      };
+
+      conversationEvents.on(`conversation:${sessionId}`, eventHandler);
+
+      // Clean up on close
+      req.on('close', async () => {
+        conversationEvents.off(`conversation:${sessionId}`, eventHandler);
+        await aiConversationControlService.removeWatcher(sessionId, userId);
+      });
+
+    } catch (error) {
+      logger.error('Failed to stream thoughts:', error);
+      res.status(500).json({ success: false, error: 'Failed to stream thoughts' });
+    }
   }
 }
 

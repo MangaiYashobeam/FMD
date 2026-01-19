@@ -14,6 +14,18 @@
  * - GET /api/ai/memories - Get user's memories
  * - POST /api/ai/memories - Create memory
  * - DELETE /api/ai/memories/:memoryId - Delete memory
+ * 
+ * Super Admin Conversation Control:
+ * - POST /api/ai/sessions/:sessionId/stop - Stop active conversation
+ * - GET /api/ai/sessions/:sessionId/thoughts - Get AI thoughts
+ * - GET /api/ai/sessions/:sessionId/thoughts/stream - SSE for real-time thoughts
+ * - GET /api/ai/sessions/:sessionId/checkpoints - Get conversation checkpoints
+ * - POST /api/ai/checkpoints/:checkpointId/revert - Revert to checkpoint
+ * - GET /api/ai/sessions/:sessionId/file-changes - Get file changes
+ * - POST /api/ai/sessions/:sessionId/watch - Start watching conversation
+ * - DELETE /api/ai/sessions/:sessionId/watch - Stop watching conversation
+ * - GET /api/ai/sessions/:sessionId/state - Get full conversation state
+ * - GET /api/ai/active-conversations - Get all active conversations
  */
 
 import { Router } from 'express';
@@ -133,5 +145,79 @@ router.post('/memories', aiChatController.createMemory.bind(aiChatController));
  * @access Private
  */
 router.delete('/memories/:memoryId', aiChatController.deleteMemory.bind(aiChatController));
+
+// ============================================
+// Super Admin Conversation Control
+// ============================================
+
+/**
+ * @route GET /api/ai/active-conversations
+ * @desc Get all active conversations (super admin only)
+ * @access Super Admin
+ */
+router.get('/active-conversations', aiChatController.getActiveConversations.bind(aiChatController));
+
+/**
+ * @route POST /api/ai/sessions/:sessionId/stop
+ * @desc Stop an active conversation
+ * @access Super Admin
+ */
+router.post('/sessions/:sessionId/stop', aiChatController.stopConversation.bind(aiChatController));
+
+/**
+ * @route GET /api/ai/sessions/:sessionId/thoughts
+ * @desc Get AI thoughts for a session
+ * @access Super Admin
+ */
+router.get('/sessions/:sessionId/thoughts', aiChatController.getConversationThoughts.bind(aiChatController));
+
+/**
+ * @route GET /api/ai/sessions/:sessionId/thoughts/stream
+ * @desc SSE endpoint for real-time thought streaming
+ * @access Super Admin
+ */
+router.get('/sessions/:sessionId/thoughts/stream', aiChatController.streamThoughts.bind(aiChatController));
+
+/**
+ * @route GET /api/ai/sessions/:sessionId/checkpoints
+ * @desc Get conversation checkpoints
+ * @access Private (owner or super admin)
+ */
+router.get('/sessions/:sessionId/checkpoints', aiChatController.getCheckpoints.bind(aiChatController));
+
+/**
+ * @route POST /api/ai/checkpoints/:checkpointId/revert
+ * @desc Revert to a checkpoint
+ * @access Super Admin
+ */
+router.post('/checkpoints/:checkpointId/revert', aiChatController.revertToCheckpoint.bind(aiChatController));
+
+/**
+ * @route GET /api/ai/sessions/:sessionId/file-changes
+ * @desc Get file changes for a session
+ * @access Super Admin
+ */
+router.get('/sessions/:sessionId/file-changes', aiChatController.getFileChanges.bind(aiChatController));
+
+/**
+ * @route POST /api/ai/sessions/:sessionId/watch
+ * @desc Start watching a conversation
+ * @access Super Admin
+ */
+router.post('/sessions/:sessionId/watch', aiChatController.watchConversation.bind(aiChatController));
+
+/**
+ * @route DELETE /api/ai/sessions/:sessionId/watch
+ * @desc Stop watching a conversation
+ * @access Private
+ */
+router.delete('/sessions/:sessionId/watch', aiChatController.unwatchConversation.bind(aiChatController));
+
+/**
+ * @route GET /api/ai/sessions/:sessionId/state
+ * @desc Get full conversation state
+ * @access Super Admin
+ */
+router.get('/sessions/:sessionId/state', aiChatController.getConversationState.bind(aiChatController));
 
 export default router;
