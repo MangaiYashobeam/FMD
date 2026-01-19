@@ -228,12 +228,217 @@ router.post('/providers/set-default', asyncHandler(async (req: AuthRequest, res:
 // NOVA CONTEXT INJECTION - Real System Data
 // ============================================
 
+import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const prisma = new PrismaClient();
+
+/**
+ * NOVA TOOL SYSTEM - Gives Nova real access to the codebase
+ * Nova can request actions using [[TOOL:action:params]] syntax
+ */
+
+interface NovaToolResult {
+  tool: string;
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
+/**
+ * Execute a Nova tool command
+ */
+async function executeNovaTool(toolCommand: string): Promise<NovaToolResult> {
+  // Parse [[TOOL:action:params]] format
+  const match = toolCommand.match(/\[\[TOOL:(\w+):?(.*?)\]\]/);
+  if (!match) return { tool: 'unknown', success: false, error: 'Invalid tool format' };
+  
+  const [, action, params] = match;
+  const projectRoot = process.cwd();
+  
+  try {
+    switch (action.toLowerCase()) {
+      case 'read_file': {
+        const filePath = params.trim();
+        const fullPath = path.join(projectRoot, filePath);
+        if (!fs.existsSync(fullPath)) {
+          return { tool: 'read_file', success: false, error: `File not found: ${filePath}` };
+        }
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        // Limit to 500 lines to avoid token overflow
+        const lines = content.split('\n').slice(0, 500);
+        return { 
+          tool: 'read_file', 
+          success: true, 
+          data: { path: filePath, content: lines.join('\n'), truncated: content.split('\n').length > 500 }
+        };
+      }
+      
+      case 'list_dir': {
+        const dirPath = params.trim() || '.';
+        const fullPath = path.join(projectRoot, dirPath);
+        if (!fs.existsSync(fullPath)) {
+          return { tool: 'list_dir', success: false, error: `Directory not found: ${dirPath}` };
+        }
+        const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+        const items = entries.map(e => ({
+          name: e.name,
+          type: e.isDirectory() ? 'directory' : 'file'
+        }));
+        return { tool: 'list_dir', success: true, data: { path: dirPath, items } };
+      }
+      
+      case 'search_code': {
+        const searchTerm = params.trim();
+        const results: { file: string; line: number; content: string }[] = [];
+        
+        function searchDir(dir: string) {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build'].includes(entry.name)) {
+              searchDir(fullPath);
+            } else if (entry.isFile() && /\.(ts|tsx|js|jsx|json|css|html)$/.test(entry.name)) {
+              try {
+                const content = fs.readFileSync(fullPath, 'utf-8');
+                const lines = content.split('\n');
+                lines.forEach((line, idx) => {
+                  if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
+                    results.push({
+                      file: fullPath.replace(projectRoot, '').replace(/\\/g, '/'),
+                      line: idx + 1,
+                      content: line.trim().substring(0, 200)
+                    });
+                  }
+                });
+              } catch {}
+            }
+          }
+        }
+        
+        searchDir(projectRoot);
+        return { tool: 'search_code', success: true, data: { term: searchTerm, results: results.slice(0, 50) } };
+      }
+      
+      case 'db_query': {
+        const table = params.trim().toLowerCase();
+        let data: any;
+        
+        switch (table) {
+          case 'users':
+            data = await prisma.user.findMany({ 
+              select: { id: true, email: true, firstName: true, lastName: true, isActive: true, createdAt: true },
+              take: 20 
+            });
+            break;
+          case 'accounts':
+            data = await prisma.account.findMany({ 
+              select: { id: true, name: true, dealershipName: true, isActive: true, createdAt: true },
+              take: 20 
+            });
+            break;
+          case 'vehicles':
+            data = await prisma.vehicle.findMany({ 
+              select: { id: true, vin: true, make: true, model: true, year: true, price: true, status: true },
+              take: 20 
+            });
+            break;
+          case 'leads':
+            data = await prisma.lead.findMany({ 
+              select: { id: true, firstName: true, lastName: true, email: true, phone: true, source: true, status: true, createdAt: true },
+              take: 20 
+            });
+            break;
+          case 'facebookprofiles':
+            data = await prisma.facebookProfile.findMany({ 
+              select: { id: true, pageId: true, pageName: true, facebookUserId: true, isActive: true, createdAt: true },
+              take: 20 
+            });
+            break;
+          case 'schema':
+            // Return table names
+            data = ['users', 'accounts', 'vehicles', 'leads', 'facebookProfiles', 'facebookGroups', 'accountUsers', 'accountSettings'];
+            break;
+          default:
+            return { tool: 'db_query', success: false, error: `Unknown table: ${table}. Use 'schema' to see available tables.` };
+        }
+        
+        return { tool: 'db_query', success: true, data: { table, records: data, count: Array.isArray(data) ? data.length : 1 } };
+      }
+      
+      case 'edit_file': {
+        // Format: filepath|||oldContent|||newContent
+        const parts = params.split('|||');
+        if (parts.length !== 3) {
+          return { tool: 'edit_file', success: false, error: 'Format: filepath|||oldContent|||newContent' };
+        }
+        const [filePath, oldContent, newContent] = parts;
+        const fullPath = path.join(projectRoot, filePath.trim());
+        
+        if (!fs.existsSync(fullPath)) {
+          return { tool: 'edit_file', success: false, error: `File not found: ${filePath}` };
+        }
+        
+        let content = fs.readFileSync(fullPath, 'utf-8');
+        if (!content.includes(oldContent.trim())) {
+          return { tool: 'edit_file', success: false, error: 'Old content not found in file' };
+        }
+        
+        content = content.replace(oldContent.trim(), newContent.trim());
+        fs.writeFileSync(fullPath, content, 'utf-8');
+        
+        return { tool: 'edit_file', success: true, data: { path: filePath, message: 'File updated successfully' } };
+      }
+      
+      case 'create_file': {
+        // Format: filepath|||content
+        const parts = params.split('|||');
+        if (parts.length !== 2) {
+          return { tool: 'create_file', success: false, error: 'Format: filepath|||content' };
+        }
+        const [filePath, content] = parts;
+        const fullPath = path.join(projectRoot, filePath.trim());
+        
+        // Create directory if needed
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        
+        fs.writeFileSync(fullPath, content.trim(), 'utf-8');
+        return { tool: 'create_file', success: true, data: { path: filePath, message: 'File created successfully' } };
+      }
+      
+      default:
+        return { tool: action, success: false, error: `Unknown tool: ${action}` };
+    }
+  } catch (error: any) {
+    return { tool: action, success: false, error: error.message };
+  }
+}
+
 /**
  * Gathers REAL system data to inject into Nova's context
  * This is what makes Nova actually useful - she gets real data, not just a prompt
  */
 async function getNovaSystemContext(): Promise<string> {
   const context: string[] = ['=== REAL-TIME SYSTEM STATUS (Injected at query time) ==='];
+  
+  // NOVA TOOL INSTRUCTIONS
+  context.push('\n🛠️ YOUR TOOLS - You have ROOT ACCESS to the codebase:');
+  context.push('You can execute commands using [[TOOL:action:params]] syntax.');
+  context.push('Available tools:');
+  context.push('  • [[TOOL:read_file:path/to/file.ts]] - Read a file');
+  context.push('  • [[TOOL:list_dir:path/to/dir]] - List directory contents');
+  context.push('  • [[TOOL:search_code:searchTerm]] - Search codebase for a term');
+  context.push('  • [[TOOL:db_query:tablename]] - Query database (users, accounts, inventory, leads, facebookprofiles, schema)');
+  context.push('  • [[TOOL:edit_file:path|||oldContent|||newContent]] - Edit a file');
+  context.push('  • [[TOOL:create_file:path|||content]] - Create a new file');
+  context.push('');
+  context.push('IMPORTANT: When you use a tool, the system will execute it and show results.');
+  context.push('Use tools to get REAL data before answering questions about the system.');
+  context.push('For file edits, first READ the file, then EDIT with exact content matches.');
   
   // Environment & Config Status
   context.push('\n📦 ENVIRONMENT STATUS:');
@@ -301,15 +506,11 @@ async function getNovaSystemContext(): Promise<string> {
 
 /**
  * Detects if the user is asking about system/status topics
+ * For Super Admin (ROOT), ALWAYS inject context and tools
  */
-function needsSystemContext(userMessage: string): boolean {
-  const triggers = [
-    'status', 'check', 'system', 'facebook', 'connection', 'connected',
-    'api', 'database', 'env', 'config', 'diagnose', 'debug', 'health',
-    'working', 'configured', 'setup', 'integration', 'provider'
-  ];
-  const lower = userMessage.toLowerCase();
-  return triggers.some(t => lower.includes(t));
+function needsSystemContext(_userMessage: string): boolean {
+  // Always inject for ROOT access - Super Admin gets full tools
+  return true;
 }
 
 // ============================================
@@ -453,7 +654,54 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
       }
       
       const data = await response.json() as any;
-      const content = data.content?.[0]?.text || 'No response';
+      let content = data.content?.[0]?.text || 'No response';
+      
+      // NOVA TOOL EXECUTION: Check if Nova requested any tools
+      const toolPattern = /\[\[TOOL:\w+:?.*?\]\]/g;
+      const toolMatches = content.match(toolPattern) || [];
+      
+      if (toolMatches.length > 0) {
+        console.log('[Nova] Executing tools:', toolMatches);
+        const toolResults: any[] = [];
+        
+        for (const toolCmd of toolMatches) {
+          const result = await executeNovaTool(toolCmd);
+          toolResults.push(result);
+          console.log('[Nova] Tool result:', result.tool, result.success);
+        }
+        
+        // Inject tool results and get Nova's final response
+        const toolResultsText = toolResults.map(r => 
+          `\n=== TOOL RESULT: ${r.tool} ===\n${r.success ? JSON.stringify(r.data, null, 2) : `ERROR: ${r.error}`}\n=== END TOOL RESULT ===`
+        ).join('\n');
+        
+        // Make a follow-up call with tool results
+        const followUpMessages = [
+          ...chatMessages,
+          { role: 'assistant', content },
+          { role: 'user', content: `Here are the results of the tools you requested:\n${toolResultsText}\n\nNow provide your final response to the user based on this real data. Do NOT use [[TOOL:...]] syntax in your response - just give the answer.` }
+        ];
+        
+        const followUpResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: anthropicModel,
+            max_tokens: 4096,
+            system: systemMessage || 'You are a helpful AI assistant.',
+            messages: followUpMessages,
+          }),
+        });
+        
+        if (followUpResponse.ok) {
+          const followUpData = await followUpResponse.json() as any;
+          content = followUpData.content?.[0]?.text || content;
+        }
+      }
       
       res.json({
         success: true,
