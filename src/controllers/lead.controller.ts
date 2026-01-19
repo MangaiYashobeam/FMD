@@ -154,12 +154,14 @@ export class LeadController {
       throw new AppError('Account ID required', 400);
     }
 
-    // Verify user has access
+    // Verify user has access (SUPER_ADMIN has access to all accounts)
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: str(accountId),
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+        OR: [
+          { role: 'SUPER_ADMIN' },
+          { accountId: str(accountId), role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] } },
+        ],
       },
     });
 

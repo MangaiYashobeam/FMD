@@ -111,12 +111,14 @@ export class VehicleController {
   async createVehicle(req: AuthRequest, res: Response) {
     const { accountId, vin, stockNumber, year, make, model, trim, price, mileage, description, imageUrls } = req.body;
 
-    // Verify user has access
+    // Verify user has access (SUPER_ADMIN has access to all accounts)
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
+        OR: [
+          { role: 'SUPER_ADMIN' },
+          { accountId, role: { in: ['ACCOUNT_OWNER', 'ADMIN'] } },
+        ],
       },
     });
 

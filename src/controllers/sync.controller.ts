@@ -308,12 +308,17 @@ export class SyncController {
       throw new AppError('No file uploaded', 400);
     }
 
-    // Verify user has access
+    // Verify user has access (check for SUPER_ADMIN first, then account-level roles)
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+        OR: [
+          { role: 'SUPER_ADMIN' }, // Super admin has access to all accounts
+          { 
+            accountId,
+            role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+          },
+        ],
       },
     });
 
