@@ -9,7 +9,8 @@
  * - Type safety
  */
 
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
+import { api } from '../lib/api';
 
 const API_BASE = '/api/ai-center';
 
@@ -225,7 +226,7 @@ export const dashboardApi = {
    */
   async getStats(accountId?: string): Promise<DashboardStats> {
     const params = accountId ? { accountId } : {};
-    return handleRequest(axios.get(`${API_BASE}/dashboard`, { params }));
+    return handleRequest(api.get(`${API_BASE}/dashboard`, { params }));
   },
 };
 
@@ -238,49 +239,49 @@ export const providersApi = {
    * Get all AI providers
    */
   async getAll(): Promise<AIProvider[]> {
-    return handleRequest(axios.get(`${API_BASE}/providers`));
+    return handleRequest(api.get(`${API_BASE}/providers`));
   },
 
   /**
    * Get provider by ID
    */
   async getById(id: string): Promise<AIProvider> {
-    return handleRequest(axios.get(`${API_BASE}/providers/${id}`));
+    return handleRequest(api.get(`${API_BASE}/providers/${id}`));
   },
 
   /**
    * Wake up / initialize a provider
    */
   async wakeUp(id: string): Promise<{ success: boolean; message: string; latency: number }> {
-    return handleRequest(axios.post(`${API_BASE}/providers/${id}/wake-up`));
+    return handleRequest(api.post(`${API_BASE}/providers/${id}/wake-up`));
   },
 
   /**
    * Wake up all providers
    */
   async wakeUpAll(): Promise<{ providerId: string; success: boolean; message: string; latency: number }[]> {
-    return handleRequest(axios.post(`${API_BASE}/providers/wake-up-all`));
+    return handleRequest(api.post(`${API_BASE}/providers/wake-up-all`));
   },
 
   /**
    * Check provider health
    */
   async checkHealth(id: string): Promise<{ status: string; latency: number; lastCheck: string }> {
-    return handleRequest(axios.get(`${API_BASE}/providers/${id}/health`));
+    return handleRequest(api.get(`${API_BASE}/providers/${id}/health`));
   },
 
   /**
    * Update provider configuration
    */
   async update(id: string, data: Partial<AIProvider>): Promise<void> {
-    return handleRequest(axios.put(`${API_BASE}/providers/${id}`, data));
+    return handleRequest(api.put(`${API_BASE}/providers/${id}`, data));
   },
 
   /**
    * Set default provider
    */
   async setDefault(providerId: string): Promise<void> {
-    return handleRequest(axios.post(`${API_BASE}/providers/set-default`, { providerId }));
+    return handleRequest(api.post(`${API_BASE}/providers/set-default`, { providerId }));
   },
 };
 
@@ -302,7 +303,7 @@ export const chatApi = {
       systemPrompt?: string;
     }
   ): Promise<ChatResponse> {
-    return handleRequest(axios.post(`${API_BASE}/chat`, { messages, ...options }));
+    return handleRequest(api.post(`${API_BASE}/chat`, { messages, ...options }));
   },
 
   /**
@@ -313,7 +314,7 @@ export const chatApi = {
     instruction: string,
     language?: string
   ): Promise<{ completion: string; traceId: string }> {
-    return handleRequest(axios.post(`${API_BASE}/deepseek/code`, { code, instruction, language }));
+    return handleRequest(api.post(`${API_BASE}/deepseek/code`, { code, instruction, language }));
   },
 
   /**
@@ -323,7 +324,7 @@ export const chatApi = {
     problem: string,
     context?: string
   ): Promise<{ reasoning: string; conclusion: string; traceId: string }> {
-    return handleRequest(axios.post(`${API_BASE}/deepseek/reason`, { problem, context }));
+    return handleRequest(api.post(`${API_BASE}/deepseek/reason`, { problem, context }));
   },
 };
 
@@ -341,21 +342,21 @@ export const tracesApi = {
     limit?: number;
     since?: string;
   }): Promise<APITrace[]> {
-    return handleRequest(axios.get(`${API_BASE}/traces`, { params: options }));
+    return handleRequest(api.get(`${API_BASE}/traces`, { params: options }));
   },
 
   /**
    * Get active traces
    */
   async getActive(): Promise<APITrace[]> {
-    return handleRequest(axios.get(`${API_BASE}/traces/active`));
+    return handleRequest(api.get(`${API_BASE}/traces/active`));
   },
 
   /**
    * Get usage statistics
    */
   async getUsage(period?: 'hour' | 'day' | 'week' | 'month'): Promise<any> {
-    return handleRequest(axios.get(`${API_BASE}/usage`, { params: { period } }));
+    return handleRequest(api.get(`${API_BASE}/usage`, { params: { period } }));
   },
 };
 
@@ -374,7 +375,7 @@ export const memoryApi = {
     limit?: number;
     minImportance?: number;
   }): Promise<MemoryItem[]> {
-    return handleRequest(axios.get(`${API_BASE}/memory`, { params: options }));
+    return handleRequest(api.get(`${API_BASE}/memory`, { params: options }));
   },
 
   /**
@@ -388,28 +389,28 @@ export const memoryApi = {
     importance?: number;
     expiresIn?: number;
   }): Promise<MemoryItem> {
-    return handleRequest(axios.post(`${API_BASE}/memory`, data));
+    return handleRequest(api.post(`${API_BASE}/memory`, data));
   },
 
   /**
    * Get memory statistics
    */
   async getStats(): Promise<any> {
-    return handleRequest(axios.get(`${API_BASE}/memory/stats`));
+    return handleRequest(api.get(`${API_BASE}/memory/stats`));
   },
 
   /**
    * Delete memory
    */
   async delete(id: string): Promise<void> {
-    return handleRequest(axios.delete(`${API_BASE}/memory/${id}`));
+    return handleRequest(api.delete(`${API_BASE}/memory/${id}`));
   },
 
   /**
    * Clean expired memories
    */
   async cleanExpired(): Promise<{ cleaned: number }> {
-    return handleRequest(axios.post(`${API_BASE}/memory/clean`));
+    return handleRequest(api.post(`${API_BASE}/memory/clean`));
   },
 };
 
@@ -426,14 +427,14 @@ export const patternsApi = {
     isActive?: boolean;
     minSuccessRate?: number;
   }): Promise<LearningPattern[]> {
-    return handleRequest(axios.get(`${API_BASE}/patterns`, { params: options }));
+    return handleRequest(api.get(`${API_BASE}/patterns`, { params: options }));
   },
 
   /**
    * Get pattern statistics
    */
   async getStats(): Promise<any> {
-    return handleRequest(axios.get(`${API_BASE}/patterns/stats`));
+    return handleRequest(api.get(`${API_BASE}/patterns/stats`));
   },
 
   /**
@@ -448,28 +449,28 @@ export const patternsApi = {
     actions?: string[];
     isActive?: boolean;
   }): Promise<LearningPattern> {
-    return handleRequest(axios.post(`${API_BASE}/patterns`, data));
+    return handleRequest(api.post(`${API_BASE}/patterns`, data));
   },
 
   /**
    * Update pattern
    */
   async update(id: string, data: Partial<LearningPattern>): Promise<LearningPattern> {
-    return handleRequest(axios.put(`${API_BASE}/patterns/${id}`, data));
+    return handleRequest(api.put(`${API_BASE}/patterns/${id}`, data));
   },
 
   /**
    * Delete pattern
    */
   async delete(id: string): Promise<void> {
-    return handleRequest(axios.delete(`${API_BASE}/patterns/${id}`));
+    return handleRequest(api.delete(`${API_BASE}/patterns/${id}`));
   },
 
   /**
    * Record pattern usage
    */
   async recordUsage(id: string, success: boolean): Promise<void> {
-    return handleRequest(axios.post(`${API_BASE}/patterns/${id}/record`, { success }));
+    return handleRequest(api.post(`${API_BASE}/patterns/${id}/record`, { success }));
   },
 };
 
@@ -485,7 +486,7 @@ export const trainingApi = {
     status?: string;
     type?: string;
   }): Promise<TrainingSession[]> {
-    return handleRequest(axios.get(`${API_BASE}/training`, { params: options }));
+    return handleRequest(api.get(`${API_BASE}/training`, { params: options }));
   },
 
   /**
@@ -496,21 +497,21 @@ export const trainingApi = {
     type: string;
     datasetSize?: number;
   }): Promise<TrainingSession> {
-    return handleRequest(axios.post(`${API_BASE}/training`, data));
+    return handleRequest(api.post(`${API_BASE}/training`, data));
   },
 
   /**
    * Start training session
    */
   async startSession(id: string): Promise<TrainingSession> {
-    return handleRequest(axios.post(`${API_BASE}/training/${id}/start`));
+    return handleRequest(api.post(`${API_BASE}/training/${id}/start`));
   },
 
   /**
    * Cancel training session
    */
   async cancelSession(id: string): Promise<void> {
-    return handleRequest(axios.post(`${API_BASE}/training/${id}/cancel`));
+    return handleRequest(api.post(`${API_BASE}/training/${id}/cancel`));
   },
 };
 
@@ -528,14 +529,14 @@ export const tasksApi = {
     priority?: string;
     limit?: number;
   }): Promise<AITask[]> {
-    return handleRequest(axios.get(`${API_BASE}/tasks`, { params: options }));
+    return handleRequest(api.get(`${API_BASE}/tasks`, { params: options }));
   },
 
   /**
    * Get task statistics
    */
   async getStats(): Promise<any> {
-    return handleRequest(axios.get(`${API_BASE}/tasks/stats`));
+    return handleRequest(api.get(`${API_BASE}/tasks/stats`));
   },
 
   /**
@@ -550,28 +551,28 @@ export const tasksApi = {
     scheduledFor?: string;
     dueAt?: string;
   }): Promise<AITask> {
-    return handleRequest(axios.post(`${API_BASE}/tasks`, data));
+    return handleRequest(api.post(`${API_BASE}/tasks`, data));
   },
 
   /**
    * Execute task
    */
   async execute(id: string): Promise<AITask> {
-    return handleRequest(axios.post(`${API_BASE}/tasks/${id}/execute`));
+    return handleRequest(api.post(`${API_BASE}/tasks/${id}/execute`));
   },
 
   /**
    * Cancel task
    */
   async cancel(id: string): Promise<void> {
-    return handleRequest(axios.post(`${API_BASE}/tasks/${id}/cancel`));
+    return handleRequest(api.post(`${API_BASE}/tasks/${id}/cancel`));
   },
 
   /**
    * Update task
    */
   async update(id: string, data: Partial<AITask>): Promise<AITask> {
-    return handleRequest(axios.put(`${API_BASE}/tasks/${id}`, data));
+    return handleRequest(api.put(`${API_BASE}/tasks/${id}`, data));
   },
 };
 
@@ -590,14 +591,14 @@ export const threatsApi = {
     limit?: number;
     since?: string;
   }): Promise<Threat[]> {
-    return handleRequest(axios.get(`${API_BASE}/threats`, { params: options }));
+    return handleRequest(api.get(`${API_BASE}/threats`, { params: options }));
   },
 
   /**
    * Get threat statistics
    */
   async getStats(): Promise<any> {
-    return handleRequest(axios.get(`${API_BASE}/threats/stats`));
+    return handleRequest(api.get(`${API_BASE}/threats/stats`));
   },
 
   /**
@@ -612,21 +613,21 @@ export const threatsApi = {
     evidence?: string[];
     affectedEntities?: string[];
   }): Promise<Threat> {
-    return handleRequest(axios.post(`${API_BASE}/threats`, data));
+    return handleRequest(api.post(`${API_BASE}/threats`, data));
   },
 
   /**
    * Update threat
    */
   async update(id: string, data: Partial<Threat>): Promise<Threat> {
-    return handleRequest(axios.put(`${API_BASE}/threats/${id}`, data));
+    return handleRequest(api.put(`${API_BASE}/threats/${id}`, data));
   },
 
   /**
    * Run threat detection on data
    */
   async detect(data: any): Promise<Threat[]> {
-    return handleRequest(axios.post(`${API_BASE}/threats/detect`, { data }));
+    return handleRequest(api.post(`${API_BASE}/threats/detect`, { data }));
   },
 };
 
@@ -642,7 +643,7 @@ export const threatRulesApi = {
     isActive?: boolean;
     type?: string;
   }): Promise<ThreatRule[]> {
-    return handleRequest(axios.get(`${API_BASE}/threat-rules`, { params: options }));
+    return handleRequest(api.get(`${API_BASE}/threat-rules`, { params: options }));
   },
 
   /**
@@ -657,21 +658,21 @@ export const threatRulesApi = {
     actions: string[];
     isActive?: boolean;
   }): Promise<ThreatRule> {
-    return handleRequest(axios.post(`${API_BASE}/threat-rules`, data));
+    return handleRequest(api.post(`${API_BASE}/threat-rules`, data));
   },
 
   /**
    * Update threat rule
    */
   async update(id: string, data: Partial<ThreatRule>): Promise<ThreatRule> {
-    return handleRequest(axios.put(`${API_BASE}/threat-rules/${id}`, data));
+    return handleRequest(api.put(`${API_BASE}/threat-rules/${id}`, data));
   },
 
   /**
    * Delete threat rule
    */
   async delete(id: string): Promise<void> {
-    return handleRequest(axios.delete(`${API_BASE}/threat-rules/${id}`));
+    return handleRequest(api.delete(`${API_BASE}/threat-rules/${id}`));
   },
 };
 
@@ -689,7 +690,7 @@ export const contextApi = {
     topic?: string;
     maxTokens?: number;
   }): Promise<{ context: string }> {
-    return handleRequest(axios.post(`${API_BASE}/context/build`, options));
+    return handleRequest(api.post(`${API_BASE}/context/build`, options));
   },
 
   /**
@@ -703,7 +704,7 @@ export const contextApi = {
     accountId?: string;
     userId?: string;
   }): Promise<void> {
-    return handleRequest(axios.post(`${API_BASE}/learn`, data));
+    return handleRequest(api.post(`${API_BASE}/learn`, data));
   },
 };
 

@@ -8,7 +8,8 @@
 
 import { Router, Response } from 'express';
 import * as aiCenterController from '@/controllers/ai-center.controller';
-import { authenticate, authorize, AuthRequest } from '@/middleware/auth';
+import { authenticate, AuthRequest } from '@/middleware/auth';
+import { requireSuperAdmin } from '@/middleware/rbac';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { deepseekService } from '@/services/deepseek.service';
 
@@ -16,7 +17,7 @@ const router = Router();
 
 // All routes require authentication and super admin
 router.use(authenticate);
-router.use(authorize('superadmin'));
+router.use(requireSuperAdmin);
 
 // ============================================
 // Dashboard - Get all stats in one call
