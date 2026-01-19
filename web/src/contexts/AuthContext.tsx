@@ -5,6 +5,9 @@ interface User {
   id: string;
   email: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
   role: string;
   accounts: Array<{
     id: string;

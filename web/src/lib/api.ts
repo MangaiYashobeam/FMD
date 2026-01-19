@@ -128,36 +128,7 @@ api.interceptors.response.use(
   }
 );
 
-// Auth API
-export const authApi = {
-  login: (email: string, password: string) =>
-    api.post('/api/auth/login', { email, password }),
-  
-  register: (data: { email: string; password: string; firstName: string; lastName: string; accountName?: string }) =>
-    api.post('/api/auth/register', data),
-  
-  logout: () => {
-    const refreshToken = localStorage.getItem('refreshToken');
-    return api.post('/api/auth/logout', { refreshToken });
-  },
-  
-  getProfile: () => api.get('/api/auth/me'),
-  
-  forgotPassword: (email: string) =>
-    api.post('/api/auth/forgot-password', { email }),
-  
-  resetPassword: (token: string, password: string) =>
-    api.post('/api/auth/reset-password', { token, password }),
-  
-  // Impersonation endpoints
-  getImpersonationTargets: () => api.get('/api/auth/impersonation/targets'),
-  
-  impersonateUser: (userId: string) =>
-    api.post(`/api/auth/impersonate/${userId}`),
-  
-  endImpersonation: () =>
-    api.post('/api/auth/end-impersonation'),
-};
+// Auth API is defined below with extended methods
 
 // Vehicles API
 export const vehiclesApi = {
@@ -230,7 +201,7 @@ export const accountsApi = {
     api.post('/api/accounts/test-ftp', data),
 };
 
-// Auth API (extended)
+// Auth API
 export const authApi = {
   login: (email: string, password: string) =>
     api.post('/api/auth/login', { email, password }),
@@ -238,7 +209,10 @@ export const authApi = {
   register: (data: { email: string; password: string; firstName: string; lastName: string; accountName?: string }) =>
     api.post('/api/auth/register', data),
     
-  logout: () => api.post('/api/auth/logout'),
+  logout: () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    return api.post('/api/auth/logout', { refreshToken });
+  },
   
   getProfile: () => api.get('/api/auth/me'),
   
@@ -247,6 +221,15 @@ export const authApi = {
   
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post('/api/auth/change-password', { currentPassword, newPassword }),
+  
+  // Impersonation endpoints
+  getImpersonationTargets: () => api.get('/api/auth/impersonation/targets'),
+  
+  impersonateUser: (userId: string) =>
+    api.post(`/api/auth/impersonate/${userId}`),
+  
+  endImpersonation: () =>
+    api.post('/api/auth/end-impersonation'),
   
   getSessions: () => api.get('/api/auth/sessions'),
   
