@@ -6,7 +6,7 @@
  */
 
 import { Router, Response } from 'express';
-import { body, param } from 'express-validator';
+import { body } from 'express-validator';
 import { authenticate, AuthRequest } from '@/middleware/auth';
 import { asyncHandler } from '@/utils/asyncHandler';
 import { validate } from '@/middleware/validation';
@@ -346,7 +346,7 @@ router.post(
             fuelType: vehicle.fuelType,
             bodyStyle: vehicle.bodyStyle,
             description: vehicle.dealerComments,
-            photos: vehicle.photoUrls || [],
+            photos: vehicle.imageUrls || [],
           },
           triggeredBy: userId,
           manual: true,

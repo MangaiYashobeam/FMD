@@ -5,47 +5,30 @@
  * Features: Day selector, hours, frequency, limits, auto-renew, auto-repost
  */
 
-import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Switch,
-  FormControlLabel,
-  Slider,
-  Button,
-  Grid,
-  Divider,
-  Alert,
-  Chip,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Paper,
-  Stack,
-  CircularProgress,
-  Tooltip,
-  IconButton,
-} from '@mui/material';
-import {
-  PlayArrow as PlayIcon,
-  Pause as PauseIcon,
-  Refresh as RefreshIcon,
-  Settings as SettingsIcon,
-  Schedule as ScheduleIcon,
-  Loop as LoopIcon,
-  TrendingUp as TrendingUpIcon,
-  Save as SaveIcon,
-  Info as InfoIcon,
-} from '@mui/icons-material';
-import { toast } from 'react-hot-toast';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
+import { cn } from '../lib/utils';
+import {
+  Play,
+  Pause,
+  RefreshCw,
+  Settings,
+  Clock,
+  RotateCw,
+  TrendingUp,
+  Save,
+  Info,
+  Send,
+  Calendar,
+  Target,
+  Video,
+  MapPin,
+  DollarSign,
+} from 'lucide-react';
 
 interface PostingSettings {
-  // Schedule
   postOnSunday: boolean;
   postOnMonday: boolean;
   postOnTuesday: boolean;
@@ -57,30 +40,18 @@ interface PostingSettings {
   postUntilHour: number;
   postIntervalMinutes: number;
   dailyPostLimit: number;
-  
-  // Options
   postingPriority: string;
   includeVideos: boolean;
   videoSource: string;
   conditionTemplate: string | null;
-  
-  // Location
   postingLocation: string | null;
   postingRadius: number;
-  
-  // Auto-renewal
   autoRenewEnabled: boolean;
   renewFrequencyDays: number;
-  
-  // Auto-repost
   autoRepostEnabled: boolean;
   repostFrequencyDays: number;
-  
-  // Price updates
   autoUpdatePrices: boolean;
   priceChangeThreshold: number;
-  
-  // Status
   isActive: boolean;
   postsToday: number;
   totalPosts: number;
@@ -105,13 +76,13 @@ interface PostingStatus {
 }
 
 const DAYS = [
-  { key: 'postOnSunday', label: 'Sun' },
-  { key: 'postOnMonday', label: 'Mon' },
-  { key: 'postOnTuesday', label: 'Tue' },
-  { key: 'postOnWednesday', label: 'Wed' },
-  { key: 'postOnThursday', label: 'Thu' },
-  { key: 'postOnFriday', label: 'Fri' },
-  { key: 'postOnSaturday', label: 'Sat' },
+  { key: 'postOnSunday', label: 'Sun', full: 'Sunday' },
+  { key: 'postOnMonday', label: 'Mon', full: 'Monday' },
+  { key: 'postOnTuesday', label: 'Tue', full: 'Tuesday' },
+  { key: 'postOnWednesday', label: 'Wed', full: 'Wednesday' },
+  { key: 'postOnThursday', label: 'Thu', full: 'Thursday' },
+  { key: 'postOnFriday', label: 'Fri', full: 'Friday' },
+  { key: 'postOnSaturday', label: 'Sat', full: 'Saturday' },
 ];
 
 const HOURS = Array.from({ length: 24 }, (_, i) => ({
@@ -120,82 +91,84 @@ const HOURS = Array.from({ length: 24 }, (_, i) => ({
 }));
 
 export default function PostingSettingsPage() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
   const [settings, setSettings] = useState<PostingSettings | null>(null);
-  const [status, setStatus] = useState<PostingStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  useEffect(() => {
-    fetchSettings();
-    fetchStatus();
-  }, []);
+  // Fetch settings
+  const { data: settingsData, isLoading: loadingSettings } = useQuery({
+    queryKey: ['posting-settings'],
+    queryFn: async () => {
+      const res = await api.get('/posting/settings');
+      return res.data.data.settings;
+    },
+  });
 
-  const fetchSettings = async () => {
-    try {
-      const response = await api.get('/posting/settings');
-      setSettings(response.data.data.settings);
-    } catch (error) {
-      console.error('Failed to fetch settings:', error);
-      toast.error('Failed to load posting settings');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch status
+  const { data: statusData, refetch: refetchStatus } = useQuery({
+    queryKey: ['posting-status'],
+    queryFn: async () => {
+      const res = await api.get('/posting/status');
+      return res.data.data as PostingStatus;
+    },
+  });
 
-  const fetchStatus = async () => {
-    try {
-      const response = await api.get('/posting/status');
-      setStatus(response.data.data);
-    } catch (error) {
-      console.error('Failed to fetch status:', error);
-    }
-  };
-
-  const saveSettings = async () => {
-    if (!settings) return;
-    
-    setSaving(true);
-    try {
-      await api.put('/posting/settings', settings);
-      toast.success('Posting settings saved!');
+  // Save settings mutation
+  const saveMutation = useMutation({
+    mutationFn: async (data: Partial<PostingSettings>) => {
+      const res = await api.put('/posting/settings', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posting-settings'] });
+      toast.success('Settings saved!');
       setHasChanges(false);
-    } catch (error) {
-      console.error('Failed to save settings:', error);
+    },
+    onError: () => {
       toast.error('Failed to save settings');
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+  });
 
-  const toggleActive = async () => {
-    if (!settings) return;
-    
-    try {
-      if (settings.isActive) {
-        await api.post('/posting/pause');
-        toast.success('Auto-posting paused');
-      } else {
+  // Toggle active mutation
+  const toggleMutation = useMutation({
+    mutationFn: async (active: boolean) => {
+      if (active) {
         await api.post('/posting/resume');
-        toast.success('Auto-posting resumed!');
+      } else {
+        await api.post('/posting/pause');
       }
-      setSettings({ ...settings, isActive: !settings.isActive });
-    } catch (error) {
-      console.error('Failed to toggle posting:', error);
+    },
+    onSuccess: (_, active) => {
+      queryClient.invalidateQueries({ queryKey: ['posting-settings'] });
+      toast.success(active ? 'Auto-posting resumed!' : 'Auto-posting paused');
+    },
+    onError: () => {
       toast.error('Failed to update posting status');
-    }
-  };
+    },
+  });
 
-  const triggerManualPost = async () => {
-    try {
-      const response = await api.post('/posting/trigger');
-      toast.success(`Posting queued: ${response.data.data.vehicle.title}`);
-      fetchStatus();
-    } catch (error: any) {
-      console.error('Failed to trigger post:', error);
-      toast.error(error.response?.data?.error || 'Failed to trigger post');
+  // Trigger manual post mutation
+  const triggerMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/posting/trigger');
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(`Posting queued: ${data.data.vehicle.title}`);
+      refetchStatus();
+    },
+    onError: (err: Error & { response?: { data?: { error?: string } } }) => {
+      toast.error(err?.response?.data?.error || 'Failed to trigger post');
+    },
+  });
+
+  // Initialize settings from fetch
+  useEffect(() => {
+    if (settingsData && !settings) {
+      setSettings(settingsData);
     }
-  };
+  }, [settingsData, settings]);
 
   const updateSetting = <K extends keyof PostingSettings>(key: K, value: PostingSettings[K]) => {
     if (!settings) return;
@@ -203,540 +176,532 @@ export default function PostingSettingsPage() {
     setHasChanges(true);
   };
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const handleSave = () => {
+    if (settings) {
+      saveMutation.mutate(settings);
+    }
+  };
 
-  if (!settings) {
+  const handleToggle = () => {
+    if (settings) {
+      toggleMutation.mutate(!settings.isActive);
+      setSettings({ ...settings, isActive: !settings.isActive });
+    }
+  };
+
+  if (loadingSettings || !settings) {
     return (
-      <Alert severity="error">Failed to load settings. Please refresh the page.</Alert>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
     );
   }
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1400, mx: 'auto' }}>
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Settings className="w-6 h-6" />
             Auto-Posting Settings
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Configure automatic Facebook Marketplace posting like Glo3D
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={2}>
-          <Button
-            variant="outlined"
-            color={settings.isActive ? 'warning' : 'success'}
-            startIcon={settings.isActive ? <PauseIcon /> : <PlayIcon />}
-            onClick={toggleActive}
-            size="large"
+          </h1>
+          <p className="text-gray-500 mt-1">
+            Configure automatic Facebook Marketplace posting (Glo3D-style)
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={handleToggle}
+            className={cn(
+              'px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors',
+              settings.isActive
+                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                : 'bg-green-100 text-green-700 hover:bg-green-200'
+            )}
           >
-            {settings.isActive ? 'Pause Auto-Post' : 'Start Auto-Post'}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<SaveIcon />}
-            onClick={saveSettings}
-            disabled={!hasChanges || saving}
-            size="large"
+            {settings.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {settings.isActive ? 'Pause' : 'Start'}
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!hasChanges || saveMutation.isPending}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium flex items-center gap-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? 'Saving...' : 'Save Settings'}
-          </Button>
-        </Stack>
-      </Box>
+            <Save className="w-4 h-4" />
+            {saveMutation.isPending ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
+      </div>
 
       {/* Status Banner */}
-      <Paper
-        sx={{
-          p: 2,
-          mb: 3,
-          bgcolor: settings.isActive ? 'success.main' : 'grey.700',
-          color: 'white',
-        }}
+      <div
+        className={cn(
+          'rounded-xl p-4 mb-6 text-white',
+          settings.isActive ? 'bg-green-600' : 'bg-gray-600'
+        )}
       >
-        <Grid container spacing={3} alignItems="center">
-          <Grid item xs={12} md={3}>
-            <Typography variant="h6">
-              Status: {settings.isActive ? '🟢 Active' : '⏸️ Paused'}
-            </Typography>
-            <Typography variant="body2">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-center">
+          <div>
+            <p className="text-lg font-semibold">
+              {settings.isActive ? '🟢 Active' : '⏸️ Paused'}
+            </p>
+            <p className="text-sm opacity-90">
               Posts today: {settings.postsToday} / {settings.dailyPostLimit || '∞'}
-            </Typography>
-          </Grid>
-          {status && (
+            </p>
+          </div>
+          {statusData && (
             <>
-              <Grid item xs={6} md={2}>
-                <Typography variant="h4">{status.stats.totalVehicles}</Typography>
-                <Typography variant="body2">Total Vehicles</Typography>
-              </Grid>
-              <Grid item xs={6} md={2}>
-                <Typography variant="h4">{status.stats.postedVehicles}</Typography>
-                <Typography variant="body2">Posted</Typography>
-              </Grid>
-              <Grid item xs={6} md={2}>
-                <Typography variant="h4">{status.stats.unpostedVehicles}</Typography>
-                <Typography variant="body2">Ready to Post</Typography>
-              </Grid>
-              <Grid item xs={6} md={3}>
-                <Button
-                  variant="contained"
-                  color="inherit"
-                  onClick={triggerManualPost}
-                  sx={{ color: settings.isActive ? 'success.dark' : 'grey.900' }}
+              <div className="text-center">
+                <p className="text-3xl font-bold">{statusData.stats.totalVehicles}</p>
+                <p className="text-sm opacity-90">Total Vehicles</p>
+              </div>
+              <div className="text-center">
+                <p className="text-3xl font-bold">{statusData.stats.postedVehicles}</p>
+                <p className="text-sm opacity-90">Posted</p>
+              </div>
+              <div className="text-center">
+                <p className="text-3xl font-bold">{statusData.stats.unpostedVehicles}</p>
+                <p className="text-sm opacity-90">Ready to Post</p>
+              </div>
+              <div className="flex justify-center">
+                <button
+                  onClick={() => triggerMutation.mutate()}
+                  disabled={triggerMutation.isPending}
+                  className="px-4 py-2 bg-white/20 rounded-lg font-medium hover:bg-white/30 flex items-center gap-2"
                 >
-                  Post Next Vehicle Now
-                </Button>
-              </Grid>
+                  <Send className="w-4 h-4" />
+                  Post Next Now
+                </button>
+              </div>
             </>
           )}
-        </Grid>
-      </Paper>
+        </div>
+      </div>
 
-      <Grid container spacing={3}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Schedule Settings */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                <ScheduleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Posting Schedule
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-600" />
+            Posting Schedule
+          </h2>
 
-              {/* Day Selection */}
-              <Typography variant="subtitle2" gutterBottom>
-                Post On Days:
-              </Typography>
-              <Stack direction="row" spacing={1} mb={3} flexWrap="wrap">
-                {DAYS.map((day) => (
-                  <Chip
-                    key={day.key}
-                    label={day.label}
-                    color={settings[day.key as keyof PostingSettings] ? 'primary' : 'default'}
-                    onClick={() =>
-                      updateSetting(
-                        day.key as keyof PostingSettings,
-                        !settings[day.key as keyof PostingSettings]
-                      )
-                    }
-                    sx={{ cursor: 'pointer', mb: 1 }}
-                  />
+          {/* Day Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Post On Days:
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {DAYS.map((day) => (
+                <button
+                  key={day.key}
+                  onClick={() =>
+                    updateSetting(
+                      day.key as keyof PostingSettings,
+                      !settings[day.key as keyof PostingSettings]
+                    )
+                  }
+                  className={cn(
+                    'px-3 py-2 rounded-lg font-medium text-sm transition-colors',
+                    settings[day.key as keyof PostingSettings]
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  )}
+                >
+                  {day.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hour Range */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
+              <select
+                value={settings.postFromHour}
+                onChange={(e) => updateSetting('postFromHour', Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                {HOURS.map((hour) => (
+                  <option key={hour.value} value={hour.value}>
+                    {hour.label}
+                  </option>
                 ))}
-              </Stack>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Until</label>
+              <select
+                value={settings.postUntilHour}
+                onChange={(e) => updateSetting('postUntilHour', Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                {HOURS.map((hour) => (
+                  <option key={hour.value} value={hour.value}>
+                    {hour.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-              {/* Hour Range */}
-              <Grid container spacing={2} mb={3}>
-                <Grid item xs={6}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>From</InputLabel>
-                    <Select
-                      value={settings.postFromHour}
-                      label="From"
-                      onChange={(e) => updateSetting('postFromHour', Number(e.target.value))}
-                    >
-                      {HOURS.map((hour) => (
-                        <MenuItem key={hour.value} value={hour.value}>
-                          {hour.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={6}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Until</InputLabel>
-                    <Select
-                      value={settings.postUntilHour}
-                      label="Until"
-                      onChange={(e) => updateSetting('postUntilHour', Number(e.target.value))}
-                    >
-                      {HOURS.map((hour) => (
-                        <MenuItem key={hour.value} value={hour.value}>
-                          {hour.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
+          {/* Posting Frequency */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              Post Every: {settings.postIntervalMinutes} minutes
+            </label>
+            <input
+              type="range"
+              min={5}
+              max={120}
+              step={5}
+              value={settings.postIntervalMinutes}
+              onChange={(e) => updateSetting('postIntervalMinutes', Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>5m</span>
+              <span>30m</span>
+              <span>1h</span>
+              <span>2h</span>
+            </div>
+          </div>
 
-              {/* Posting Frequency */}
-              <Typography variant="subtitle2" gutterBottom>
-                Post Every: {settings.postIntervalMinutes} minutes
-                <Tooltip title="Time between each vehicle posting">
-                  <IconButton size="small">
-                    <InfoIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Typography>
-              <Slider
-                value={settings.postIntervalMinutes}
-                onChange={(_, value) => updateSetting('postIntervalMinutes', value as number)}
-                min={5}
-                max={120}
-                step={5}
-                marks={[
-                  { value: 5, label: '5m' },
-                  { value: 30, label: '30m' },
-                  { value: 60, label: '1h' },
-                  { value: 120, label: '2h' },
-                ]}
-                valueLabelDisplay="auto"
-                sx={{ mb: 3 }}
-              />
-
-              {/* Daily Limit */}
-              <Typography variant="subtitle2" gutterBottom>
-                Daily Post Limit: {settings.dailyPostLimit || 'No limit'}
-                <Tooltip title="Maximum posts per day (0 = unlimited)">
-                  <IconButton size="small">
-                    <InfoIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Typography>
-              <Slider
-                value={settings.dailyPostLimit}
-                onChange={(_, value) => updateSetting('dailyPostLimit', value as number)}
-                min={0}
-                max={100}
-                step={5}
-                marks={[
-                  { value: 0, label: '∞' },
-                  { value: 25, label: '25' },
-                  { value: 50, label: '50' },
-                  { value: 100, label: '100' },
-                ]}
-                valueLabelDisplay="auto"
-              />
-            </CardContent>
-          </Card>
-        </Grid>
+          {/* Daily Limit */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+              <Target className="w-4 h-4" />
+              Daily Post Limit: {settings.dailyPostLimit || 'Unlimited'}
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={settings.dailyPostLimit}
+              onChange={(e) => updateSetting('dailyPostLimit', Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>∞</span>
+              <span>25</span>
+              <span>50</span>
+              <span>100</span>
+            </div>
+          </div>
+        </div>
 
         {/* Posting Options */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Posting Options
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Settings className="w-5 h-5 text-indigo-600" />
+            Posting Options
+          </h2>
 
-              {/* Priority */}
-              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                <InputLabel>Posting Priority</InputLabel>
-                <Select
-                  value={settings.postingPriority}
-                  label="Posting Priority"
-                  onChange={(e) => updateSetting('postingPriority', e.target.value)}
-                >
-                  <MenuItem value="descending">Newest First (Descending)</MenuItem>
-                  <MenuItem value="ascending">Oldest First (Ascending)</MenuItem>
-                  <MenuItem value="price_high">Highest Price First</MenuItem>
-                  <MenuItem value="price_low">Lowest Price First</MenuItem>
-                </Select>
-              </FormControl>
+          {/* Priority */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Posting Priority</label>
+            <select
+              value={settings.postingPriority}
+              onChange={(e) => updateSetting('postingPriority', e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="descending">Newest First (Descending)</option>
+              <option value="ascending">Oldest First (Ascending)</option>
+              <option value="price_high">Highest Price First</option>
+              <option value="price_low">Lowest Price First</option>
+            </select>
+          </div>
 
-              {/* Videos */}
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={settings.includeVideos}
-                    onChange={(e) => updateSetting('includeVideos', e.target.checked)}
-                  />
-                }
-                label="Include Videos in Posts"
-                sx={{ mb: 1, display: 'block' }}
-              />
+          {/* Videos Toggle */}
+          <div className="mb-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={settings.includeVideos}
+                  onChange={(e) => updateSetting('includeVideos', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Video className="w-4 h-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">Include Videos in Posts</span>
+              </div>
+            </label>
+          </div>
 
-              {settings.includeVideos && (
-                <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                  <InputLabel>Video Source</InputLabel>
-                  <Select
-                    value={settings.videoSource}
-                    label="Video Source"
-                    onChange={(e) => updateSetting('videoSource', e.target.value)}
-                  >
-                    <MenuItem value="walkaround">Walk-around Video</MenuItem>
-                    <MenuItem value="videotour">Video Tour</MenuItem>
-                  </Select>
-                </FormControl>
-              )}
+          {settings.includeVideos && (
+            <div className="mb-4 ml-14">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Video Source</label>
+              <select
+                value={settings.videoSource}
+                onChange={(e) => updateSetting('videoSource', e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="walkaround">Walk-around Video</option>
+                <option value="videotour">Video Tour</option>
+              </select>
+            </div>
+          )}
 
-              {/* Location */}
-              <TextField
-                fullWidth
-                size="small"
-                label="Posting Location"
-                value={settings.postingLocation || ''}
-                onChange={(e) => updateSetting('postingLocation', e.target.value)}
-                placeholder="Enter city or ZIP code"
-                sx={{ mb: 2 }}
-              />
+          {/* Location */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+              <MapPin className="w-4 h-4" />
+              Posting Location
+            </label>
+            <input
+              type="text"
+              value={settings.postingLocation || ''}
+              onChange={(e) => updateSetting('postingLocation', e.target.value)}
+              placeholder="Enter city or ZIP code"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
 
-              <Typography variant="subtitle2" gutterBottom>
-                Posting Radius: {settings.postingRadius} miles
-              </Typography>
-              <Slider
-                value={settings.postingRadius}
-                onChange={(_, value) => updateSetting('postingRadius', value as number)}
-                min={5}
-                max={100}
-                step={5}
-                marks={[
-                  { value: 5, label: '5mi' },
-                  { value: 25, label: '25mi' },
-                  { value: 50, label: '50mi' },
-                  { value: 100, label: '100mi' },
-                ]}
-                valueLabelDisplay="auto"
-              />
-            </CardContent>
-          </Card>
-        </Grid>
+          {/* Radius */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Posting Radius: {settings.postingRadius} miles
+            </label>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              step={5}
+              value={settings.postingRadius}
+              onChange={(e) => updateSetting('postingRadius', Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>5mi</span>
+              <span>25mi</span>
+              <span>50mi</span>
+              <span>100mi</span>
+            </div>
+          </div>
+        </div>
 
         {/* Auto-Renewal Settings */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                <LoopIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Auto-Renewal & Repost
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <RotateCw className="w-5 h-5 text-indigo-600" />
+            Auto-Renewal & Repost
+          </h2>
 
-              {/* Auto-Renew */}
-              <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1, mb: 2 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={settings.autoRenewEnabled}
-                      onChange={(e) => updateSetting('autoRenewEnabled', e.target.checked)}
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="subtitle1">Auto-Renew Listings</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Automatically renew active listings to stay at the top
-                      </Typography>
-                    </Box>
-                  }
+          {/* Auto-Renew */}
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <div className="relative mt-1">
+                <input
+                  type="checkbox"
+                  checked={settings.autoRenewEnabled}
+                  onChange={(e) => updateSetting('autoRenewEnabled', e.target.checked)}
+                  className="sr-only peer"
                 />
-                {settings.autoRenewEnabled && (
-                  <Box mt={2}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Renew Every: {settings.renewFrequencyDays} days
-                    </Typography>
-                    <Slider
-                      value={settings.renewFrequencyDays}
-                      onChange={(_, value) => updateSetting('renewFrequencyDays', value as number)}
-                      min={1}
-                      max={14}
-                      step={1}
-                      marks={[
-                        { value: 1, label: '1d' },
-                        { value: 7, label: '7d' },
-                        { value: 14, label: '14d' },
-                      ]}
-                      valueLabelDisplay="auto"
-                    />
-                  </Box>
-                )}
-              </Box>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Auto-Renew Listings</span>
+                <p className="text-sm text-gray-500">
+                  Automatically renew active listings to stay at the top
+                </p>
+              </div>
+            </label>
+            {settings.autoRenewEnabled && (
+              <div className="mt-4 ml-14">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Renew Every: {settings.renewFrequencyDays} days
+                </label>
+                <input
+                  type="range"
+                  min={1}
+                  max={14}
+                  step={1}
+                  value={settings.renewFrequencyDays}
+                  onChange={(e) => updateSetting('renewFrequencyDays', Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>1d</span>
+                  <span>7d</span>
+                  <span>14d</span>
+                </div>
+              </div>
+            )}
+          </div>
 
-              {/* Auto-Repost */}
-              <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={settings.autoRepostEnabled}
-                      onChange={(e) => updateSetting('autoRepostEnabled', e.target.checked)}
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="subtitle1">Auto-Repost Expired Listings</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Re-create listings that have been archived or removed
-                      </Typography>
-                    </Box>
-                  }
+          {/* Auto-Repost */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <div className="relative mt-1">
+                <input
+                  type="checkbox"
+                  checked={settings.autoRepostEnabled}
+                  onChange={(e) => updateSetting('autoRepostEnabled', e.target.checked)}
+                  className="sr-only peer"
                 />
-                {settings.autoRepostEnabled && (
-                  <Box mt={2}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Repost After: {settings.repostFrequencyDays} days
-                    </Typography>
-                    <Slider
-                      value={settings.repostFrequencyDays}
-                      onChange={(_, value) => updateSetting('repostFrequencyDays', value as number)}
-                      min={7}
-                      max={90}
-                      step={1}
-                      marks={[
-                        { value: 7, label: '7d' },
-                        { value: 30, label: '30d' },
-                        { value: 60, label: '60d' },
-                        { value: 90, label: '90d' },
-                      ]}
-                      valueLabelDisplay="auto"
-                    />
-                  </Box>
-                )}
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Auto-Repost Expired Listings</span>
+                <p className="text-sm text-gray-500">
+                  Re-create listings that have been archived or removed
+                </p>
+              </div>
+            </label>
+            {settings.autoRepostEnabled && (
+              <div className="mt-4 ml-14">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Repost After: {settings.repostFrequencyDays} days
+                </label>
+                <input
+                  type="range"
+                  min={7}
+                  max={90}
+                  step={1}
+                  value={settings.repostFrequencyDays}
+                  onChange={(e) => updateSetting('repostFrequencyDays', Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>7d</span>
+                  <span>30d</span>
+                  <span>60d</span>
+                  <span>90d</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Price Updates */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                <TrendingUpIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Price Synchronization
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-indigo-600" />
+            Price Synchronization
+          </h2>
 
-              <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={settings.autoUpdatePrices}
-                      onChange={(e) => updateSetting('autoUpdatePrices', e.target.checked)}
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="subtitle1">Auto-Update Prices</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Automatically update Facebook listing prices when inventory changes
-                      </Typography>
-                    </Box>
-                  }
+          <div className="bg-gray-50 rounded-lg p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <div className="relative mt-1">
+                <input
+                  type="checkbox"
+                  checked={settings.autoUpdatePrices}
+                  onChange={(e) => updateSetting('autoUpdatePrices', e.target.checked)}
+                  className="sr-only peer"
                 />
-                {settings.autoUpdatePrices && (
-                  <Box mt={2}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Price Change Threshold: ${settings.priceChangeThreshold}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" mb={1}>
-                      Only update if price changed by more than this amount
-                    </Typography>
-                    <Slider
-                      value={settings.priceChangeThreshold}
-                      onChange={(_, value) => updateSetting('priceChangeThreshold', value as number)}
-                      min={0}
-                      max={1000}
-                      step={50}
-                      marks={[
-                        { value: 0, label: '$0' },
-                        { value: 250, label: '$250' },
-                        { value: 500, label: '$500' },
-                        { value: 1000, label: '$1k' },
-                      ]}
-                      valueLabelDisplay="auto"
-                    />
-                  </Box>
-                )}
-              </Box>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Auto-Update Prices</span>
+                <p className="text-sm text-gray-500">
+                  Automatically update Facebook listing prices when inventory changes
+                </p>
+              </div>
+            </label>
+            {settings.autoUpdatePrices && (
+              <div className="mt-4 ml-14">
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                  <DollarSign className="w-4 h-4" />
+                  Price Change Threshold: ${settings.priceChangeThreshold}
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Only update if price changed by more than this amount
+                </p>
+                <input
+                  type="range"
+                  min={0}
+                  max={1000}
+                  step={50}
+                  value={settings.priceChangeThreshold}
+                  onChange={(e) => updateSetting('priceChangeThreshold', Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>$0</span>
+                  <span>$250</span>
+                  <span>$500</span>
+                  <span>$1k</span>
+                </div>
+              </div>
+            )}
+          </div>
 
-              <Alert severity="info" sx={{ mt: 2 }}>
-                <Typography variant="body2">
-                  <strong>How it works:</strong> When your inventory feed updates with a new price,
-                  the system will automatically update the Facebook Marketplace listing to match.
-                </Typography>
-              </Alert>
-            </CardContent>
-          </Card>
-        </Grid>
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
+            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-blue-800">
+                <strong>How it works:</strong> When your inventory feed updates with a new price,
+                the system will automatically update the Facebook Marketplace listing to match.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        {/* Recent Activity */}
-        {status && status.recentPosts.length > 0 && (
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6">
-                    <RefreshIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Recent Posting Activity
-                  </Typography>
-                  <Button startIcon={<RefreshIcon />} onClick={fetchStatus} size="small">
-                    Refresh
-                  </Button>
-                </Box>
-                <Divider sx={{ mb: 2 }} />
-                <Grid container spacing={2}>
-                  {status.recentPosts.map((post) => (
-                    <Grid item xs={12} md={6} lg={4} key={post.id}>
-                      <Paper variant="outlined" sx={{ p: 2 }}>
-                        <Typography variant="subtitle2" noWrap>
-                          {post.vehicle}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Stock: {post.stockNumber || 'N/A'}
-                        </Typography>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
-                          <Chip
-                            label={post.status}
-                            size="small"
-                            color={
-                              post.status === 'ACTIVE'
-                                ? 'success'
-                                : post.status === 'PENDING'
-                                ? 'warning'
-                                : 'default'
-                            }
-                          />
-                          <Typography variant="caption" color="text.secondary">
-                            {post.postedAt ? new Date(post.postedAt).toLocaleDateString() : 'Pending'}
-                          </Typography>
-                        </Stack>
-                      </Paper>
-                    </Grid>
-                  ))}
-                </Grid>
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-      </Grid>
+      {/* Recent Activity */}
+      {statusData && statusData.recentPosts.length > 0 && (
+        <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-indigo-600" />
+              Recent Posting Activity
+            </h2>
+            <button
+              onClick={() => refetchStatus()}
+              className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {statusData.recentPosts.map((post) => (
+              <div key={post.id} className="border border-gray-200 rounded-lg p-4">
+                <p className="font-medium text-gray-900 truncate">{post.vehicle}</p>
+                <p className="text-sm text-gray-500">Stock: {post.stockNumber || 'N/A'}</p>
+                <div className="flex justify-between items-center mt-2">
+                  <span
+                    className={cn(
+                      'px-2 py-1 text-xs rounded-full font-medium',
+                      post.status === 'ACTIVE'
+                        ? 'bg-green-100 text-green-700'
+                        : post.status === 'PENDING'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-100 text-gray-700'
+                    )}
+                  >
+                    {post.status}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {post.postedAt ? new Date(post.postedAt).toLocaleDateString() : 'Pending'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Save Reminder */}
       {hasChanges && (
-        <Paper
-          sx={{
-            position: 'fixed',
-            bottom: 20,
-            right: 20,
-            p: 2,
-            bgcolor: 'warning.main',
-            color: 'warning.contrastText',
-          }}
-        >
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Typography>You have unsaved changes</Typography>
-            <Button
-              variant="contained"
-              color="inherit"
-              onClick={saveSettings}
-              disabled={saving}
-              sx={{ color: 'warning.main' }}
-            >
-              Save Now
-            </Button>
-          </Stack>
-        </Paper>
+        <div className="fixed bottom-4 right-4 bg-amber-500 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-4 z-50">
+          <span className="font-medium">You have unsaved changes</span>
+          <button
+            onClick={handleSave}
+            disabled={saveMutation.isPending}
+            className="px-4 py-2 bg-white text-amber-600 rounded-lg font-medium hover:bg-amber-50"
+          >
+            Save Now
+          </button>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

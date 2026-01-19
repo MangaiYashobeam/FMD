@@ -244,8 +244,8 @@ export class AutoPostService {
         status: { in: ['IN_STOCK', 'AVAILABLE', 'ACTIVE'] },
         // Has valid price
         price: { gt: 0 },
-        // Has photos
-        photoUrls: { isEmpty: false },
+        // Has photos (array not empty)
+        NOT: { imageUrls: { isEmpty: true } },
         // Not already posted or needs repost
         OR: [
           // Never posted
@@ -332,7 +332,7 @@ export class AutoPostService {
               fuelType: vehicle.fuelType,
               bodyStyle: vehicle.bodyStyle,
               description: vehicle.dealerComments || this.generateDescription(vehicle),
-              photos: vehicle.photoUrls || [],
+              photos: vehicle.imageUrls || [],
               videoUrl: settings.includeVideos ? vehicle.videoUrl : null,
             },
             settings: {
