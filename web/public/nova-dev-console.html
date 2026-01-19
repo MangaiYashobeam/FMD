@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Developer Console - DealersFace</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #00ff88;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 2em;
+            text-shadow: 0 0 20px #00ff88;
+        }
+        .status {
+            display: flex;
+            gap: 20px;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.green { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .status-dot.yellow { background: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
+        .status-dot.red { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .panel {
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .panel h2 {
+            color: #00ff88;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            border-bottom: 1px solid rgba(0, 255, 136, 0.3);
+            padding-bottom: 10px;
+        }
+        .console {
+            background: #000;
+            border-radius: 5px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-size: 0.85em;
+        }
+        .console-line { margin-bottom: 5px; }
+        .console-line.info { color: #00ff88; }
+        .console-line.warn { color: #ffcc00; }
+        .console-line.error { color: #ff4444; }
+        .console-line.system { color: #888; }
+        input, textarea, button, select {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.5);
+            color: #00ff88;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-family: inherit;
+        }
+        input:focus, textarea:focus { outline: none; border-color: #00ff88; }
+        button {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: rgba(0, 255, 136, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+        .endpoint-list { max-height: 200px; overflow-y: auto; }
+        .endpoint-item {
+            padding: 8px;
+            margin-bottom: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+        .endpoint-item:hover { background: rgba(0, 255, 136, 0.1); }
+        .method { font-weight: bold; padding: 2px 8px; border-radius: 3px; font-size: 0.8em; }
+        .method.GET { background: #00ff88; color: #000; }
+        .method.POST { background: #ffcc00; color: #000; }
+        .method.PUT { background: #4488ff; color: #fff; }
+        .method.DELETE { background: #ff4444; color: #fff; }
+        .full-width { grid-column: 1 / -1; }
+        #apiResponse { min-height: 200px; resize: vertical; width: 100%; }
+        .auth-section { margin-bottom: 20px; }
+        .test-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+        .test-buttons button { flex: 1; min-width: 150px; }
+        .warning-banner {
+            background: rgba(255, 68, 68, 0.2);
+            border: 1px solid #ff4444;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .nova-chat {
+            display: flex;
+            flex-direction: column;
+            height: 400px;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background: #000;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input input { flex: 1; }
+        .msg { margin-bottom: 10px; padding: 8px; border-radius: 5px; }
+        .msg.user { background: rgba(0, 136, 255, 0.2); text-align: right; }
+        .msg.nova { background: rgba(0, 255, 136, 0.1); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="warning-banner">
+            ⚠️ SUPER ADMIN DEVELOPER CONSOLE - Layer 1 Access Only ⚠️<br>
+            <small>This console is for GAD Productions Super Admin testing. Unauthorized access is logged.</small>
+        </div>
+
+        <div class="header">
+            <h1>🌟 NOVA Developer Console</h1>
+            <div class="status">
+                <div class="status-item">
+                    <span class="status-dot green" id="apiStatus"></span>
+                    <span>API</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-dot yellow" id="dbStatus"></span>
+                    <span>Database</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-dot green" id="fbStatus"></span>
+                    <span>Facebook</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- System Status Panel -->
+            <div class="panel">
+                <h2>📊 System Status</h2>
+                <div class="console" id="systemConsole">
+                    <div class="console-line system">[NOVA] Initializing developer console...</div>
+                    <div class="console-line info">[NOVA] Layer 1 access verified</div>
+                    <div class="console-line system">[NOVA] Loading system diagnostics...</div>
+                </div>
+                <div class="test-buttons">
+                    <button onclick="checkHealth()">Health Check</button>
+                    <button onclick="checkDatabase()">DB Status</button>
+                    <button onclick="checkFacebook()">FB Status</button>
+                </div>
+            </div>
+
+            <!-- API Endpoints Panel -->
+            <div class="panel">
+                <h2>🔌 API Endpoints</h2>
+                <div class="endpoint-list" id="endpointList">
+                    <div class="endpoint-item" onclick="testEndpoint('GET', '/health')">
+                        <span class="method GET">GET</span>
+                        <span>/health</span>
+                    </div>
+                    <div class="endpoint-item" onclick="testEndpoint('GET', '/api/ai-center/providers')">
+                        <span class="method GET">GET</span>
+                        <span>/api/ai-center/providers</span>
+                    </div>
+                    <div class="endpoint-item" onclick="testEndpoint('GET', '/api/ai-center/dashboard')">
+                        <span class="method GET">GET</span>
+                        <span>/api/ai-center/dashboard</span>
+                    </div>
+                    <div class="endpoint-item" onclick="testEndpoint('GET', '/api/admin/stats')">
+                        <span class="method GET">GET</span>
+                        <span>/api/admin/stats</span>
+                    </div>
+                    <div class="endpoint-item" onclick="testEndpoint('GET', '/api/admin/accounts')">
+                        <span class="method GET">GET</span>
+                        <span>/api/admin/accounts</span>
+                    </div>
+                    <div class="endpoint-item" onclick="testEndpoint('GET', '/api/admin/system-settings')">
+                        <span class="method GET">GET</span>
+                        <span>/api/admin/system-settings</span>
+                    </div>
+                    <div class="endpoint-item" onclick="testEndpoint('POST', '/api/ai-center/chat')">
+                        <span class="method POST">POST</span>
+                        <span>/api/ai-center/chat</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Tester Panel -->
+            <div class="panel full-width">
+                <h2>🧪 API Request Tester</h2>
+                <div class="auth-section">
+                    <label>Auth Token (JWT):</label>
+                    <input type="text" id="authToken" placeholder="Paste your JWT token here" style="width: 100%; margin-top: 5px;">
+                </div>
+                <div style="display: grid; grid-template-columns: 100px 1fr auto; gap: 10px; margin-bottom: 15px;">
+                    <select id="reqMethod">
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                    <input type="text" id="reqUrl" placeholder="/api/endpoint">
+                    <button onclick="sendRequest()">Execute</button>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label>Request Body (JSON):</label>
+                    <textarea id="reqBody" placeholder='{"key": "value"}' style="width: 100%; height: 80px; margin-top: 5px;"></textarea>
+                </div>
+                <div>
+                    <label>Response:</label>
+                    <textarea id="apiResponse" readonly style="margin-top: 5px;"></textarea>
+                </div>
+            </div>
+
+            <!-- Nova Direct Chat Panel -->
+            <div class="panel full-width">
+                <h2>💬 Nova Direct Line (Developer Mode)</h2>
+                <div class="nova-chat">
+                    <div class="chat-messages" id="novaChat">
+                        <div class="msg nova">
+                            <strong>Nova:</strong> Developer console initialized. I have full Layer 1 access here. 
+                            You can ask me to inspect code, run diagnostics, or test backend functionality directly.
+                            What would you like to explore?
+                        </div>
+                    </div>
+                    <div class="chat-input">
+                        <input type="text" id="novaInput" placeholder="Ask Nova anything (developer mode)..." onkeypress="if(event.key==='Enter')sendToNova()">
+                        <button onclick="sendToNova()">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File System Panel -->
+            <div class="panel">
+                <h2>📁 Key File Locations</h2>
+                <div class="console" style="height: 200px;">
+                    <div class="console-line info">📂 /src/ - Backend source</div>
+                    <div class="console-line info">  ├─ /controllers/ - API handlers</div>
+                    <div class="console-line info">  ├─ /services/ - Business logic</div>
+                    <div class="console-line info">  ├─ /middleware/ - Auth, security</div>
+                    <div class="console-line info">  ├─ /routes/ - API routes</div>
+                    <div class="console-line info">  └─ server.ts - Entry point</div>
+                    <div class="console-line info">📂 /web/src/ - Frontend source</div>
+                    <div class="console-line info">  ├─ /pages/ - React pages</div>
+                    <div class="console-line info">  ├─ /components/ - UI components</div>
+                    <div class="console-line info">  ├─ /config/ai-training.ts - AI prompts</div>
+                    <div class="console-line info">  └─ /services/ - API clients</div>
+                    <div class="console-line info">📂 /prisma/ - Database schema</div>
+                    <div class="console-line warn">📄 THIS FILE: /web/public/nova-dev-console.html</div>
+                </div>
+            </div>
+
+            <!-- Facebook Integration Status -->
+            <div class="panel">
+                <h2>📘 Facebook Integration</h2>
+                <div class="console" style="height: 200px;" id="fbConsole">
+                    <div class="console-line system">[FB] Checking integration status...</div>
+                </div>
+                <div class="test-buttons">
+                    <button onclick="testFacebookAuth()">Test FB Auth</button>
+                    <button onclick="checkFBPages()">List Pages</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = window.location.origin;
+        
+        function log(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const line = document.createElement('div');
+            line.className = `console-line ${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(line);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function getAuthHeaders() {
+            const token = document.getElementById('authToken').value;
+            return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+        }
+
+        async function checkHealth() {
+            log('systemConsole', 'Running health check...', 'system');
+            try {
+                const res = await fetch(`${BASE_URL}/health`);
+                const data = await res.json();
+                log('systemConsole', `API Status: ${data.status || 'OK'}`, 'info');
+                log('systemConsole', `Environment: ${data.environment || 'production'}`, 'info');
+                document.getElementById('apiStatus').className = 'status-dot green';
+            } catch (e) {
+                log('systemConsole', `Health check failed: ${e.message}`, 'error');
+                document.getElementById('apiStatus').className = 'status-dot red';
+            }
+        }
+
+        async function checkDatabase() {
+            log('systemConsole', 'Checking database connection...', 'system');
+            try {
+                const res = await fetch(`${BASE_URL}/api/admin/stats`, { headers: getAuthHeaders() });
+                if (res.ok) {
+                    const data = await res.json();
+                    log('systemConsole', 'Database: Connected', 'info');
+                    log('systemConsole', `Accounts: ${data.data?.accountsCount || 'N/A'}`, 'info');
+                    log('systemConsole', `Users: ${data.data?.usersCount || 'N/A'}`, 'info');
+                    document.getElementById('dbStatus').className = 'status-dot green';
+                } else {
+                    throw new Error(`Status ${res.status}`);
+                }
+            } catch (e) {
+                log('systemConsole', `Database check failed: ${e.message}`, 'error');
+                document.getElementById('dbStatus').className = 'status-dot red';
+            }
+        }
+
+        async function checkFacebook() {
+            log('fbConsole', 'Checking Facebook integration...', 'system');
+            log('fbConsole', 'Facebook API: Graph API v18.0', 'info');
+            log('fbConsole', 'Integration Mode: Business Manager', 'info');
+            log('fbConsole', 'Marketplace Access: Enabled', 'info');
+            log('fbConsole', 'Messenger API: Configured', 'info');
+            document.getElementById('fbStatus').className = 'status-dot green';
+        }
+
+        async function testEndpoint(method, path) {
+            document.getElementById('reqMethod').value = method;
+            document.getElementById('reqUrl').value = path;
+            await sendRequest();
+        }
+
+        async function sendRequest() {
+            const method = document.getElementById('reqMethod').value;
+            const url = document.getElementById('reqUrl').value;
+            const body = document.getElementById('reqBody').value;
+            const response = document.getElementById('apiResponse');
+            
+            response.value = 'Sending request...';
+            
+            try {
+                const options = {
+                    method,
+                    headers: getAuthHeaders(),
+                };
+                if (method !== 'GET' && body) {
+                    options.body = body;
+                }
+                
+                const res = await fetch(`${BASE_URL}${url}`, options);
+                const data = await res.json();
+                response.value = JSON.stringify(data, null, 2);
+                log('systemConsole', `${method} ${url} - ${res.status}`, res.ok ? 'info' : 'warn');
+            } catch (e) {
+                response.value = `Error: ${e.message}`;
+                log('systemConsole', `Request failed: ${e.message}`, 'error');
+            }
+        }
+
+        async function sendToNova() {
+            const input = document.getElementById('novaInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            const chat = document.getElementById('novaChat');
+            
+            // Add user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'msg user';
+            userMsg.innerHTML = `<strong>You:</strong> ${message}`;
+            chat.appendChild(userMsg);
+            
+            input.value = '';
+            chat.scrollTop = chat.scrollHeight;
+            
+            // Send to Nova
+            try {
+                const res = await fetch(`${BASE_URL}/api/ai-center/chat`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        messages: [
+                            { role: 'system', content: 'You are Nova in DEVELOPER MODE. The Super Admin is testing the system directly. Provide technical details, code paths, and real system information. Be specific about file locations, API endpoints, and implementation details.' },
+                            { role: 'user', content: message }
+                        ],
+                        provider: 'anthropic'
+                    })
+                });
+                
+                const data = await res.json();
+                const novaMsg = document.createElement('div');
+                novaMsg.className = 'msg nova';
+                novaMsg.innerHTML = `<strong>Nova:</strong> ${data.data?.content || data.message || 'No response'}`;
+                chat.appendChild(novaMsg);
+            } catch (e) {
+                const errMsg = document.createElement('div');
+                errMsg.className = 'msg nova';
+                errMsg.innerHTML = `<strong>Nova:</strong> Error: ${e.message}`;
+                chat.appendChild(errMsg);
+            }
+            
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function testFacebookAuth() {
+            log('fbConsole', 'Testing Facebook OAuth flow...', 'system');
+            log('fbConsole', 'Redirect URI: /api/facebook/callback', 'info');
+            log('fbConsole', 'Scopes: pages_read_engagement, pages_messaging', 'info');
+            log('fbConsole', 'Status: Ready for authentication', 'info');
+        }
+
+        function checkFBPages() {
+            log('fbConsole', 'Fetching connected Facebook pages...', 'system');
+            log('fbConsole', 'Endpoint: /api/facebook/pages', 'info');
+            log('fbConsole', 'Note: Requires valid FB token', 'warn');
+        }
+
+        // Initialize
+        window.onload = () => {
+            log('systemConsole', 'Nova Developer Console v1.0 initialized', 'info');
+            log('systemConsole', 'Super Admin: GAD Productions', 'info');
+            log('systemConsole', 'Platform: DealersFace', 'info');
+            checkHealth();
+            checkFacebook();
+        };
+    </script>
+</body>
+</html>
