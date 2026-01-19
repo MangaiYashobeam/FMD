@@ -328,8 +328,12 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
         content: m.content,
       }));
       
-      // Use exact versioned model name - claude-3-5-sonnet-20241022 is the current stable version
-      const anthropicModel = model || 'claude-3-5-sonnet-20241022';
+      // Use Claude Sonnet 4 (January 2026 current model)
+      const anthropicModel = model || 'claude-sonnet-4-20250514';
+      
+      console.log('[Anthropic] Sending request with model:', anthropicModel);
+      console.log('[Anthropic] System message length:', systemMessage.length);
+      console.log('[Anthropic] Chat messages count:', chatMessages.length);
       
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -348,6 +352,7 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({})) as any;
+        console.error('[Anthropic] API Error:', JSON.stringify(errorData, null, 2));
         throw new Error(errorData.error?.message || `Anthropic API returned ${response.status}`);
       }
       
