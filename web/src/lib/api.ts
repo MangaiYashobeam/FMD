@@ -241,6 +241,29 @@ export const syncApi = {
     api.get('/api/sync/history', { params }),
   
   getJobDetails: (jobId: string) => api.get(`/api/sync/jobs/${jobId}`),
+  
+  uploadFile: (
+    file: File,
+    accountId: string,
+    options?: {
+      skipHeader?: boolean;
+      updateExisting?: boolean;
+      markMissingSold?: boolean;
+      delimiter?: 'comma' | 'semicolon' | 'tab';
+    }
+  ) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('accountId', accountId);
+    if (options?.skipHeader !== undefined) formData.append('skipHeader', String(options.skipHeader));
+    if (options?.updateExisting !== undefined) formData.append('updateExisting', String(options.updateExisting));
+    if (options?.markMissingSold !== undefined) formData.append('markMissingSold', String(options.markMissingSold));
+    if (options?.delimiter) formData.append('delimiter', options.delimiter);
+    
+    return api.post('/api/sync/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // Admin API

@@ -78,10 +78,14 @@ async function fetchFacebookConfig() {
  */
 async function initiateOAuth() {
   // Ensure we have the latest Facebook config
-  await fetchFacebookConfig();
+  const config = await fetchFacebookConfig();
+  
+  console.log('OAuth initiate - config:', config);
   
   if (!CONFIG.FACEBOOK_APP_ID) {
-    throw new Error('Facebook App ID not configured. Please contact administrator.');
+    const errorMsg = 'Facebook App ID not configured. Please contact administrator to configure Facebook integration in the Admin Dashboard.';
+    console.error('OAuth Error:', errorMsg);
+    throw new Error(errorMsg);
   }
   
   const state = generateRandomState();
@@ -93,6 +97,9 @@ async function initiateOAuth() {
   authUrl.searchParams.set('scope', 'email,public_profile');
   authUrl.searchParams.set('state', state);
   
+  console.log('OAuth URL:', authUrl.toString());
+  console.log('Redirect URI:', CONFIG.OAUTH_REDIRECT_URI);
+  
   return new Promise((resolve, reject) => {
     chrome.identity.launchWebAuthFlow(
       {
@@ -101,27 +108,51 @@ async function initiateOAuth() {
       },
       async (redirectUrl) => {
         if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
+          const errMsg = chrome.runtime.lastError.message;
+          console.error('OAuth launchWebAuthFlow error:', errMsg);
+          
+          // Provide helpful error messages
+          if (errMsg.includes('canceled') || errMsg.includes('closed')) {
+            reject(new Error('Login was cancelled. Please try again.'));
+          } else if (errMsg.includes('invalid_client') || errMsg.includes('App ID')) {
+            reject(new Error('Invalid Facebook App configuration. Please contact administrator.'));
+          } else {
+            reject(new Error(`Facebook login failed: ${errMsg}`));
+          }
           return;
         }
+        
+        if (!redirectUrl) {
+          reject(new Error('No redirect URL received from Facebook. Please try again.'));
+          return;
+        }
+        
+        console.log('OAuth redirect received:', redirectUrl);
         
         try {
           const url = new URL(redirectUrl);
           const code = url.searchParams.get('code');
           const returnedState = url.searchParams.get('state');
+          const error = url.searchParams.get('error');
+          const errorDescription = url.searchParams.get('error_description');
+          
+          if (error) {
+            throw new Error(errorDescription || `Facebook error: ${error}`);
+          }
           
           if (returnedState !== state) {
-            throw new Error('State mismatch - possible CSRF attack');
+            throw new Error('State mismatch - possible security issue. Please try again.');
           }
           
           if (!code) {
-            throw new Error('No authorization code received');
+            throw new Error('No authorization code received from Facebook.');
           }
           
           // Exchange code for token via our server
           const tokenResult = await exchangeCodeForToken(code);
           resolve(tokenResult);
         } catch (error) {
+          console.error('OAuth callback error:', error);
           reject(error);
         }
       }

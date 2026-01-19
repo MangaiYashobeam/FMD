@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { syncApi } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import {
   RefreshCw,
   Clock,
@@ -13,6 +14,8 @@ import {
   FileText,
   Database,
   ArrowDownToLine,
+  Upload,
+  File,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -123,7 +126,25 @@ function SyncJobCard({ job }: { job: SyncJob }) {
 
 export default function SyncPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const accountId = user?.accounts?.[0]?.id;
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadOptions, setUploadOptions] = useState({
+    skipHeader: true,
+    updateExisting: true,
+    markMissingSold: false,
+    delimiter: 'comma' as 'comma' | 'semicolon' | 'tab',
+  });
+  const [uploadResult, setUploadResult] = useState<{
+    success: boolean;
+    imported: number;
+    updated: number;
+    failed: number;
+    message: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch sync history
   const { data, isLoading, error } = useQuery({
@@ -149,6 +170,55 @@ export default function SyncPage() {
     },
   });
 
+  // File upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!accountId) throw new Error('No account selected');
+      return syncApi.uploadFile(file, accountId, uploadOptions);
+    },
+    onSuccess: (response) => {
+      const data = response.data.data;
+      setUploadResult({
+        success: true,
+        imported: data.imported || 0,
+        updated: data.updated || 0,
+        failed: data.failed || 0,
+        message: response.data.message || 'Upload successful',
+      });
+      queryClient.invalidateQueries({ queryKey: ['sync-history'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+    },
+    onError: (error: any) => {
+      setUploadResult({
+        success: false,
+        imported: 0,
+        updated: 0,
+        failed: 0,
+        message: error.response?.data?.error || error.message || 'Upload failed',
+      });
+    },
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadFile(file);
+      setUploadResult(null);
+    }
+  };
+
+  const handleUpload = () => {
+    if (uploadFile) {
+      uploadMutation.mutate(uploadFile);
+    }
+  };
+
+  const handleCloseUploadModal = () => {
+    setShowUploadModal(false);
+    setUploadFile(null);
+    setUploadResult(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -158,6 +228,13 @@ export default function SyncPage() {
           <p className="text-gray-500">Sync your inventory from FTP/DMS feed</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Upload CSV
+          </button>
           <button
             onClick={() => setShowSettingsModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
@@ -417,6 +494,211 @@ export default function SyncPage() {
               >
                 Save Settings
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload CSV Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Inventory File</h3>
+
+            {/* File Drop Zone */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                'border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors',
+                uploadFile
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+              )}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,.xml"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              {uploadFile ? (
+                <div className="flex items-center justify-center gap-3">
+                  <File className="w-8 h-8 text-green-600" />
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">{uploadFile.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {(uploadFile.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-2">
+                    Click to select or drag and drop your file
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Supports CSV, Excel (.xlsx, .xls), and XML files
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Upload Options */}
+            <div className="mt-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">Skip Header Row</p>
+                  <p className="text-sm text-gray-500">First row contains column names</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={uploadOptions.skipHeader}
+                    onChange={(e) =>
+                      setUploadOptions({ ...uploadOptions, skipHeader: e.target.checked })
+                    }
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                  <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">Update Existing</p>
+                  <p className="text-sm text-gray-500">Update vehicles with matching VIN</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={uploadOptions.updateExisting}
+                    onChange={(e) =>
+                      setUploadOptions({ ...uploadOptions, updateExisting: e.target.checked })
+                    }
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                  <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">Mark Missing as Sold</p>
+                  <p className="text-sm text-gray-500">Vehicles not in file will be marked sold</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={uploadOptions.markMissingSold}
+                    onChange={(e) =>
+                      setUploadOptions({ ...uploadOptions, markMissingSold: e.target.checked })
+                    }
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                  <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  CSV Delimiter
+                </label>
+                <select
+                  value={uploadOptions.delimiter}
+                  onChange={(e) =>
+                    setUploadOptions({
+                      ...uploadOptions,
+                      delimiter: e.target.value as 'comma' | 'semicolon' | 'tab',
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="comma">Comma (,)</option>
+                  <option value="semicolon">Semicolon (;)</option>
+                  <option value="tab">Tab</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Upload Result */}
+            {uploadResult && (
+              <div
+                className={cn(
+                  'mt-4 p-4 rounded-lg',
+                  uploadResult.success
+                    ? 'bg-green-50 border border-green-200'
+                    : 'bg-red-50 border border-red-200'
+                )}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  {uploadResult.success ? (
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-600" />
+                  )}
+                  <p
+                    className={cn(
+                      'font-medium',
+                      uploadResult.success ? 'text-green-700' : 'text-red-700'
+                    )}
+                  >
+                    {uploadResult.message}
+                  </p>
+                </div>
+                {uploadResult.success && (
+                  <div className="grid grid-cols-3 gap-4 text-center mt-3">
+                    <div>
+                      <p className="text-lg font-semibold text-green-600">
+                        +{uploadResult.imported}
+                      </p>
+                      <p className="text-xs text-gray-500">Imported</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-blue-600">
+                        {uploadResult.updated}
+                      </p>
+                      <p className="text-xs text-gray-500">Updated</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-red-600">
+                        {uploadResult.failed}
+                      </p>
+                      <p className="text-xs text-gray-500">Failed</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleCloseUploadModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                {uploadResult?.success ? 'Close' : 'Cancel'}
+              </button>
+              {!uploadResult?.success && (
+                <button
+                  onClick={handleUpload}
+                  disabled={!uploadFile || uploadMutation.isPending}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploadMutation.isPending ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Uploading...
+                    </span>
+                  ) : (
+                    'Upload & Process'
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
