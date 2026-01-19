@@ -2009,3 +2009,160 @@ model AIExternalService {
   @@index([accountId])
   @@map("ai_external_services")
 }
+
+// ============================================
+// AI Chat & Memory System (Nova)
+// ============================================
+
+// AI Chat Sessions - User conversations with Nova
+model AIChatSession {
+  id         String @id @default(uuid())
+  userId     String @map("user_id")
+  accountId  String? @map("account_id")
+  
+  // Session Info
+  title       String @default("New Conversation")
+  sessionType String @default("general") @map("session_type") // general, support, training, analytics, task
+  
+  // Context
+  userRole    String @map("user_role") // super_admin, admin, manager, sales
+  contextData Json? @map("context_data") // Any additional context
+  
+  // Memory Snapshot
+  memorySnapshot Json? @map("memory_snapshot") // Relevant memories at start
+  
+  // Status
+  status     String @default("active") // active, archived, deleted
+  isPinned   Boolean @default(false) @map("is_pinned")
+  
+  // Metrics
+  messageCount Int @default(0) @map("message_count")
+  
+  // Timestamps
+  lastMessageAt DateTime? @map("last_message_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  messages  AIChatMessage[]
+  
+  @@index([userId])
+  @@index([accountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("ai_chat_sessions")
+}
+
+// AI Chat Messages - Individual messages within sessions
+model AIChatMessage {
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+  
+  // Message Content
+  role      String // user, assistant, system
+  content   String @db.Text
+  
+  // Attachments
+  hasAttachments Boolean @default(false) @map("has_attachments")
+  
+  // AI Processing
+  tokensUsed    Int? @map("tokens_used")
+  modelUsed     String? @map("model_used")
+  processingMs  Int? @map("processing_ms")
+  
+  // Memory Operations
+  memoriesAccessed String[] @default([]) @map("memories_accessed") // Memory IDs accessed
+  memoriesCreated  String[] @default([]) @map("memories_created") // Memory IDs created
+  
+  // Context at time of message
+  contextUsed Json? @map("context_used")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  session     AIChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attachments AIChatAttachment[]
+  
+  @@index([sessionId])
+  @@index([role])
+  @@index([createdAt])
+  @@map("ai_chat_messages")
+}
+
+// AI Chat Attachments - Files attached to messages
+model AIChatAttachment {
+  id        String @id @default(uuid())
+  messageId String @map("message_id")
+  
+  // File Info
+  filename    String
+  originalName String @map("original_name")
+  mimeType    String @map("mime_type")
+  fileSize    Int @map("file_size") // bytes
+  
+  // Storage
+  storageUrl  String @map("storage_url")
+  thumbnailUrl String? @map("thumbnail_url")
+  
+  // File Type Category
+  category    String // image, document, data (csv, xml)
+  
+  // Processing Status
+  isProcessed Boolean @default(false) @map("is_processed")
+  processedData Json? @map("processed_data") // Extracted text, data, etc
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  message AIChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  @@index([messageId])
+  @@index([category])
+  @@map("ai_chat_attachments")
+}
+
+// AI User Memory - User-specific persistent memory
+model AIUserMemory {
+  id         String @id @default(uuid())
+  userId     String @map("user_id")
+  accountId  String? @map("account_id")
+  
+  // Memory Hierarchy
+  scope      String // global, company, role, user
+  userRole   String? @map("user_role") // Role if scope is 'role'
+  
+  // Memory Content
+  category   String // preference, context, learned, fact, instruction
+  key        String
+  value      Json
+  summary    String? @db.Text // Human-readable summary
+  
+  // Importance
+  importance Float @default(0.5) // 0-1 priority
+  
+  // Usage Tracking
+  accessCount Int @default(0) @map("access_count")
+  lastAccessed DateTime? @map("last_accessed")
+  
+  // Lifecycle
+  isActive   Boolean @default(true) @map("is_active")
+  expiresAt  DateTime? @map("expires_at")
+  
+  // Source
+  source     String @default("conversation") // conversation, manual, system, learning
+  sourceMessageId String? @map("source_message_id")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@unique([userId, scope, category, key])
+  @@index([userId])
+  @@index([accountId])
+  @@index([scope])
+  @@index([category])
+  @@index([userRole])
+  @@map("ai_user_memories")
+}

@@ -510,6 +510,9 @@ app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes')
 // AI Center Routes (requires super admin)
 app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes').default); // AI Center (requires admin)
 
+// AI Chat Routes - Nova's Backend (requires auth, handles own file uploads)
+app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default); // AI Chat with memory system
+
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes
 // ============================================

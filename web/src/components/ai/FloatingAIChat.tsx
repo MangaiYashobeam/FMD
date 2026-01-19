@@ -6,7 +6,9 @@
  * - Can be minimized to a glowing sphere
  * - Has semi-transparent glass design
  * - Can be dragged around the screen
- * - Maintains conversation state
+ * - Maintains conversation state with backend persistence
+ * - Supports file attachments (upload, drag & drop, paste)
+ * - Has hierarchical memory (Global → Role → Company → User)
  * 
  * AI Roles:
  * - Super Admin AI: Full system knowledge, assists with admin tasks
@@ -15,7 +17,8 @@
  * - Internal AI (IAI): Facebook automation, lead interaction
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { DragEvent, ClipboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -27,19 +30,45 @@ import {
   ChevronDown,
   ChevronRight,
   Brain,
+  Paperclip,
+  Image as ImageIcon,
+  FileText,
+  Loader2,
+  History,
+  Plus,
 } from 'lucide-react';
-import { aiCenterService, type ChatMessage } from '../../services/ai-center.service';
 import { AI_TRAINING_CONFIG, type AIRole, type AIRoleConfig } from '../../config/ai-training';
 import { parseAIResponse, type ParsedAIResponse } from '../../utils/ai-response-parser';
+import { api } from '../../lib/api';
 
 // Use comprehensive AI training from config
 const AI_ROLES: Record<AIRole, AIRoleConfig> = AI_TRAINING_CONFIG;
 
+interface Attachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  category: string;
+  preview?: string;
+}
+
 interface MessageWithThoughts {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   parsed?: ParsedAIResponse;
   showThoughts?: boolean;
+  attachments?: Attachment[];
+  createdAt?: string;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  lastMessageAt: string;
+  messageCount: number;
+  isPinned: boolean;
 }
 
 interface FloatingAIChatProps {
@@ -49,34 +78,252 @@ interface FloatingAIChatProps {
   isImpersonating?: boolean;
 }
 
+// Allowed file types (gets refined by backend based on role)
+const ACCEPTED_FILE_TYPES = 'image/jpeg,image/png,image/webp,image/gif,text/csv,application/xml,text/xml,application/pdf';
+
 export default function FloatingAIChat({ 
   userRole = 'super_admin', 
   isAICenterTab = false,
   onMaximize,
   isImpersonating = false
 }: FloatingAIChatProps) {
+  // UI State
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  
+  // Chat State
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageWithThoughts[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  
+  // Position State
   const [position, setPosition] = useState({ x: window.innerWidth - 420, y: window.innerHeight - 600 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  
+  // Refs
   const inputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const roleConfig = AI_ROLES[userRole];
   
   // Nova follows Super Admin even in impersonation mode
   const isNovaFollowing = userRole === 'super_admin' && isImpersonating;
 
-  // Toggle thoughts visibility for a message
+  // ============================================
+  // API Functions
+  // ============================================
+  
+  const loadSessions = async () => {
+    try {
+      const response = await api.get('/api/ai/sessions?limit=20');
+      setSessions(response.data?.data?.sessions || []);
+    } catch (error) {
+      console.error('Failed to load sessions:', error);
+    }
+  };
+
+  const createNewSession = async () => {
+    try {
+      const response = await api.post('/api/ai/sessions', { title: 'New Conversation' });
+      setCurrentSessionId(response.data.data.id);
+      setMessages([]);
+      setShowSessions(false);
+      await loadSessions();
+      return response.data.data.id;
+    } catch (error) {
+      console.error('Failed to create session:', error);
+    }
+    return null;
+  };
+
+  const loadSession = async (sessionId: string) => {
+    try {
+      const response = await api.get(`/api/ai/sessions/${sessionId}`);
+      setCurrentSessionId(sessionId);
+      setMessages(response.data.data.messages?.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        attachments: m.attachments,
+        createdAt: m.createdAt,
+        parsed: m.role === 'assistant' ? parseAIResponse(m.content) : undefined,
+        showThoughts: false,
+      })) || []);
+      setShowSessions(false);
+    } catch (error) {
+      console.error('Failed to load session:', error);
+    }
+  };
+
+  const uploadFile = async (file: File): Promise<Attachment | null> => {
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await api.post('/api/ai/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      
+      const attachment: Attachment = {
+        ...response.data.data,
+        preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      };
+      return attachment;
+    } catch (error: any) {
+      console.error('Upload failed:', error);
+      alert(error.response?.data?.error || 'Failed to upload file');
+    } finally {
+      setUploadingFile(false);
+    }
+    return null;
+  };
+
+  // ============================================
+  // File Handling
+  // ============================================
+
+  const handleFileSelect = useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    for (const file of fileArray) {
+      const attachment = await uploadFile(file);
+      if (attachment) {
+        setPendingAttachments(prev => [...prev, attachment]);
+      }
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      await handleFileSelect(files);
+    }
+  }, [handleFileSelect]);
+
+  const handlePaste = useCallback(async (e: ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          await handleFileSelect([file]);
+        }
+        break;
+      }
+    }
+  }, [handleFileSelect]);
+
+  const removeAttachment = useCallback((id: string) => {
+    setPendingAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  // ============================================
+  // Message Handling
+  // ============================================
+
   const toggleThoughts = (index: number) => {
     setMessages(prev => prev.map((msg, i) => 
       i === index ? { ...msg, showThoughts: !msg.showThoughts } : msg
     ));
   };
+
+  const handleSend = async () => {
+    if ((!input.trim() && pendingAttachments.length === 0) || loading) return;
+
+    const userMessage = input.trim();
+    setInput('');
+    setLoading(true);
+
+    // Ensure we have a session
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+      sessionId = await createNewSession();
+      if (!sessionId) {
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Add user message optimistically
+    const userMsg: MessageWithThoughts = {
+      role: 'user',
+      content: userMessage || '[Attachment]',
+      attachments: [...pendingAttachments],
+    };
+    setMessages(prev => [...prev, userMsg]);
+    
+    const attachmentIds = pendingAttachments.map(a => a.id);
+    setPendingAttachments([]);
+
+    try {
+      const response = await api.post(`/api/ai/sessions/${sessionId}/messages`, { 
+        content: userMessage, 
+        attachmentIds,
+      });
+
+      const data = response.data;
+      const parsed = parseAIResponse(data.data.assistantMessage.content);
+      
+      setMessages(prev => [
+        ...prev.slice(0, -1), // Remove optimistic user message
+        {
+          ...userMsg,
+          id: data.data.userMessage.id,
+          createdAt: data.data.userMessage.createdAt,
+        },
+        {
+          id: data.data.assistantMessage.id,
+          role: 'assistant',
+          content: data.data.assistantMessage.content,
+          parsed,
+          showThoughts: false,
+          createdAt: data.data.assistantMessage.createdAt,
+        },
+      ]);
+      
+      // Refresh sessions list to update last message
+      loadSessions();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message;
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `I apologize, but I encountered an error: ${errorMsg}. Please try again.` 
+      }]);
+    }
+    setLoading(false);
+  };
+
+  // ============================================
+  // Effects
+  // ============================================
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -90,7 +337,17 @@ export default function FloatingAIChat({
     }
   }, [isOpen, isMinimized, loading]);
 
-  // Handle drag
+  // Load sessions when opened
+  useEffect(() => {
+    if (isOpen) {
+      loadSessions();
+    }
+  }, [isOpen]);
+
+  // ============================================
+  // Drag Handling
+  // ============================================
+
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -104,15 +361,13 @@ export default function FloatingAIChat({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDragging) {
-        // Different bounds for minimized sphere vs expanded chat
-        const sphereSize = 56; // w-14 = 56px
+        const sphereSize = 56;
         const chatWidth = 400;
         const chatHeight = 500;
         const sphereOffsetX = 175;
         const sphereOffsetY = 225;
         
         if (isMinimized) {
-          // For sphere: calculate bounds based on sphere position with offset
           const newX = e.clientX - dragOffset.x - sphereOffsetX;
           const newY = e.clientY - dragOffset.y - sphereOffsetY;
           setPosition({
@@ -120,7 +375,6 @@ export default function FloatingAIChat({
             y: Math.max(-sphereOffsetY, Math.min(window.innerHeight - sphereSize - sphereOffsetY, newY)),
           });
         } else {
-          // For chat window: use chat dimensions
           setPosition({
             x: Math.max(0, Math.min(window.innerWidth - chatWidth, e.clientX - dragOffset.x)),
             y: Math.max(0, Math.min(window.innerHeight - chatHeight, e.clientY - dragOffset.y)),
@@ -148,45 +402,9 @@ export default function FloatingAIChat({
     };
   }, [isDragging, dragOffset, isMinimized]);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-
-    const userMessage = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setLoading(true);
-
-    try {
-      const chatMessages: ChatMessage[] = [
-        { role: 'system', content: roleConfig.systemPrompt },
-        ...messages.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user' as const, content: userMessage },
-      ];
-
-      const result = await aiCenterService.chat.send(chatMessages, { provider: 'anthropic' });
-      
-      // Parse the response to separate thoughts from answer
-      const parsed = parseAIResponse(result.content);
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: result.content,
-        parsed,
-        showThoughts: false // Collapsed by default
-      }]);
-    } catch (error: any) {
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: `I apologize, but I encountered an error: ${error.message}. Please try again.` 
-      }]);
-    }
-    setLoading(false);
-  };
-
-  // Don't render if we're in AI Center tab (that has its own chat)
+  // Don't render if we're in AI Center tab
   if (isAICenterTab) return null;
 
-  // Handle sphere drag
   const handleSphereDrag = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -199,6 +417,16 @@ export default function FloatingAIChat({
 
   return (
     <>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_FILE_TYPES}
+        className="hidden"
+        onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+        multiple
+      />
+
       {/* Minimized Sphere - Now Draggable */}
       <AnimatePresence>
         {isMinimized && (
@@ -267,8 +495,25 @@ export default function FloatingAIChat({
             className="fixed z-50"
             style={{ left: position.x, top: position.y }}
           >
-            {/* Glass container */}
-            <div className="w-[400px] h-[500px] rounded-2xl overflow-hidden backdrop-blur-xl bg-gray-900/80 border border-white/10 shadow-2xl flex flex-col">
+            {/* Glass container with drag & drop overlay */}
+            <div 
+              ref={chatContainerRef}
+              className={`w-[400px] h-[500px] rounded-2xl overflow-hidden backdrop-blur-xl bg-gray-900/80 border border-white/10 shadow-2xl flex flex-col relative ${isDragOver ? 'ring-2 ring-purple-500' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              {/* Drag overlay */}
+              {isDragOver && (
+                <div className="absolute inset-0 z-50 bg-purple-900/50 backdrop-blur-sm flex items-center justify-center">
+                  <div className="text-center">
+                    <ImageIcon className="w-12 h-12 text-purple-400 mx-auto mb-2" />
+                    <p className="text-white font-medium">Drop files here</p>
+                    <p className="text-purple-300 text-sm">Images, CSV, XML, PDF</p>
+                  </div>
+                </div>
+              )}
+
               {/* Header - Draggable */}
               <div
                 onMouseDown={handleMouseDown}
@@ -292,6 +537,22 @@ export default function FloatingAIChat({
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  {/* History button */}
+                  <button
+                    onClick={() => setShowSessions(!showSessions)}
+                    className={`p-1.5 hover:bg-white/20 rounded-lg transition ${showSessions ? 'bg-white/20' : ''}`}
+                    title="Conversation history"
+                  >
+                    <History className="w-4 h-4 text-white" />
+                  </button>
+                  {/* New chat button */}
+                  <button
+                    onClick={createNewSession}
+                    className="p-1.5 hover:bg-white/20 rounded-lg transition"
+                    title="New conversation"
+                  >
+                    <Plus className="w-4 h-4 text-white" />
+                  </button>
                   {onMaximize && (
                     <button
                       onClick={onMaximize}
@@ -318,6 +579,39 @@ export default function FloatingAIChat({
                 </div>
               </div>
 
+              {/* Sessions Sidebar */}
+              <AnimatePresence>
+                {showSessions && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden bg-gray-800/50 border-b border-white/5"
+                  >
+                    <div className="p-2 max-h-48 overflow-y-auto">
+                      {sessions.length === 0 ? (
+                        <p className="text-gray-500 text-xs text-center py-2">No previous conversations</p>
+                      ) : (
+                        sessions.map((session) => (
+                          <button
+                            key={session.id}
+                            onClick={() => loadSession(session.id)}
+                            className={`w-full text-left p-2 rounded-lg hover:bg-gray-700/50 transition text-xs ${
+                              currentSessionId === session.id ? 'bg-purple-600/20 border border-purple-500/30' : ''
+                            }`}
+                          >
+                            <div className="font-medium text-white truncate">{session.title}</div>
+                            <div className="text-gray-500 text-[10px]">
+                              {session.messageCount} messages • {new Date(session.lastMessageAt).toLocaleDateString()}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {messages.length === 0 && (
@@ -327,6 +621,7 @@ export default function FloatingAIChat({
                     </div>
                     <p className="text-gray-400 text-sm">Hi! I'm {roleConfig.name.split(' ')[0]}</p>
                     <p className="text-gray-500 text-xs mt-1">How can I help you today?</p>
+                    <p className="text-gray-600 text-[10px] mt-2">Drop files or paste images to share</p>
                   </div>
                 )}
 
@@ -344,6 +639,22 @@ export default function FloatingAIChat({
                           : 'bg-gray-800/80 text-gray-100 border border-white/5'
                       }`}
                     >
+                      {/* Attachments preview */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className={`${msg.role === 'user' ? 'px-4 pt-2' : 'px-4 pt-3'} flex flex-wrap gap-2`}>
+                          {msg.attachments.map((att) => (
+                            <div key={att.id} className="flex items-center gap-1 bg-black/20 rounded px-2 py-1 text-xs">
+                              {att.category === 'image' ? (
+                                <ImageIcon className="w-3 h-3" />
+                              ) : (
+                                <FileText className="w-3 h-3" />
+                              )}
+                              <span className="truncate max-w-[100px]">{att.filename}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {/* AI Response with Thoughts */}
                       {msg.role === 'assistant' && msg.parsed?.hasTools && (
                         <div className="border-b border-white/10">
@@ -405,22 +716,62 @@ export default function FloatingAIChat({
                 <div ref={chatEndRef} />
               </div>
 
+              {/* Pending Attachments Preview */}
+              {pendingAttachments.length > 0 && (
+                <div className="px-3 py-2 border-t border-white/5 bg-gray-800/30">
+                  <div className="flex flex-wrap gap-2">
+                    {pendingAttachments.map((att) => (
+                      <div key={att.id} className="relative group">
+                        {att.preview ? (
+                          <img src={att.preview} alt={att.filename} className="w-12 h-12 object-cover rounded-lg" />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-gray-400" />
+                          </div>
+                        )}
+                        <button
+                          onClick={() => removeAttachment(att.id)}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                        >
+                          <X className="w-3 h-3 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Input */}
               <div className="p-3 border-t border-white/5">
                 <div className="flex gap-2">
+                  {/* Attachment button */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingFile}
+                    className="p-2.5 bg-gray-800/50 border border-white/10 rounded-xl hover:bg-gray-700/50 transition disabled:opacity-50"
+                    title="Attach file"
+                  >
+                    {uploadingFile ? (
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                    ) : (
+                      <Paperclip className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                  
                   <input
                     ref={inputRef}
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                    placeholder="Ask me anything..."
+                    onPaste={handlePaste}
+                    placeholder="Ask me anything... (paste images!)"
                     className="flex-1 px-4 py-2.5 bg-gray-800/50 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 transition"
                     disabled={loading}
                   />
                   <button
                     onClick={handleSend}
-                    disabled={loading || !input.trim()}
+                    disabled={loading || (!input.trim() && pendingAttachments.length === 0)}
                     className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 rounded-xl transition flex items-center justify-center"
                   >
                     <Send className="w-4 h-4 text-white" />
