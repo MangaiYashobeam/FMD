@@ -595,9 +595,6 @@ export class AIConversationControlService {
       where: {
         status: { in: ['thinking', 'streaming'] },
       },
-      include: {
-        // We'd need relations here - for now just get the basics
-      },
       orderBy: { lastActivityAt: 'desc' },
     });
   }
