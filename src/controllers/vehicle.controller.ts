@@ -14,11 +14,14 @@ export class VehicleController {
     const limit = parseInt(req.query.limit as string) || 50;
     const skip = (page - 1) * limit;
 
-    // Verify user has access to account
+    // Verify user has access to account (SUPER_ADMIN or account member)
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId,
+        OR: [
+          { role: 'SUPER_ADMIN' },
+          { accountId },
+        ],
       },
     });
 

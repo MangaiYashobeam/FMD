@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { vehiclesApi } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Search,
   Plus,
@@ -53,15 +54,19 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function InventoryPage() {
+  const { user } = useAuth();
+  const accountId = user?.accounts?.[0]?.id;
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['vehicles', page, search, statusFilter],
+    queryKey: ['vehicles', accountId, page, search, statusFilter],
     queryFn: async () => {
+      if (!accountId) return { data: { vehicles: [], pagination: { page: 1, totalPages: 1, total: 0 } } };
       const response = await vehiclesApi.getAll({
+        accountId,
         page,
         limit: 10,
         search: search || undefined,
@@ -69,6 +74,7 @@ export default function InventoryPage() {
       });
       return response.data;
     },
+    enabled: !!accountId,
   });
 
   const vehicles: Vehicle[] = data?.data?.vehicles || [];

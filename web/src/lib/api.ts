@@ -161,7 +161,7 @@ export const authApi = {
 
 // Vehicles API
 export const vehiclesApi = {
-  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; accountId?: string }) =>
     api.get('/api/vehicles', { params }),
   
   getById: (id: string) => api.get(`/api/vehicles/${id}`),
