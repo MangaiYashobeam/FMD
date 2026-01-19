@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 // Use same origin (empty baseURL) in production, fallback to Railway URL for development
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
@@ -15,7 +15,7 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
-    if (token) {
+    if (token && token !== 'undefined' && token !== 'null') {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -23,7 +23,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - handle token refresh
+// Response interceptor - handle token refresh and improved error handling
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: (value: any) => void; reject: (reason?: any) => void }> = [];
 
@@ -38,10 +38,36 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+// Improved error handler with better messages
+const handleApiError = (error: AxiosError<any>) => {
+  const status = error.response?.status;
+  const url = error.config?.url || 'unknown';
+  
+  // Log for debugging
+  console.error(`[API Error] ${status} on ${url}:`, error.response?.data || error.message);
+  
+  // Enhanced error messages based on status
+  if (status === 404) {
+    const isApiRoute = url.includes('/api/');
+    if (isApiRoute) {
+      console.warn(`[API] Route not found: ${url}. Server may need to be updated or restarted.`);
+    }
+  } else if (status === 500) {
+    console.error(`[API] Server error on ${url}. Check server logs for details.`);
+  } else if (!error.response) {
+    console.error(`[API] Network error - server may be unavailable`);
+  }
+  
+  return error;
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    
+    // Enhanced error handling
+    handleApiError(error);
 
     // If 401 and not already retried, try to refresh token
     if (error.response?.status === 401 && !originalRequest._retry) {

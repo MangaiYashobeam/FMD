@@ -170,31 +170,71 @@ export default function SyncPage() {
     },
   });
 
-  // File upload mutation
+  // File upload mutation with improved error handling
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      if (!accountId) throw new Error('No account selected');
+      // Validate account selection
+      if (!accountId) {
+        throw new Error('No account selected. Please ensure you are logged in and have an active account.');
+      }
+      
+      // Validate file type
+      const allowedTypes = ['.csv', '.xlsx', '.xls', '.xml'];
+      const fileExt = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+      if (!allowedTypes.includes(fileExt)) {
+        throw new Error(`Invalid file type: ${fileExt}. Allowed: CSV, Excel (.xlsx, .xls), XML`);
+      }
+      
+      // Validate file size (50MB max)
+      const maxSize = 50 * 1024 * 1024;
+      if (file.size > maxSize) {
+        throw new Error(`File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB. Maximum: 50MB`);
+      }
+      
+      console.log('📤 Uploading file:', file.name, 'Size:', file.size, 'Account:', accountId);
       return syncApi.uploadFile(file, accountId, uploadOptions);
     },
     onSuccess: (response) => {
-      const data = response.data.data;
+      const data = response.data.data || response.data;
+      console.log('✅ Upload successful:', data);
       setUploadResult({
         success: true,
         imported: data.imported || 0,
         updated: data.updated || 0,
         failed: data.failed || 0,
-        message: response.data.message || 'Upload successful',
+        message: response.data.message || `Successfully processed ${data.imported || 0} new vehicles, ${data.updated || 0} updated`,
       });
       queryClient.invalidateQueries({ queryKey: ['sync-history'] });
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
     },
     onError: (error: any) => {
+      console.error('❌ Upload failed:', error);
+      
+      // Extract meaningful error message
+      let errorMessage = 'Upload failed. Please try again.';
+      
+      if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please log in again.';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Access denied. You don\'t have permission to upload to this account.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'API endpoint not found. Please ensure the server is updated.';
+      } else if (error.response?.status === 413) {
+        errorMessage = 'File too large for server. Try a smaller file.';
+      } else if (error.response?.status === 500) {
+        errorMessage = error.response?.data?.error || 'Server error while processing file. Please check the file format.';
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       setUploadResult({
         success: false,
         imported: 0,
         updated: 0,
         failed: 0,
-        message: error.response?.data?.error || error.message || 'Upload failed',
+        message: errorMessage,
       });
     },
   });
