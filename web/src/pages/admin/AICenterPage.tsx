@@ -136,23 +136,23 @@ export default function AICenterPage() {
           },
         },
         providers: [
-          { id: 'deepseek', name: 'DeepSeek', isActive: true, healthStatus: 'healthy', defaultModel: 'deepseek-chat' },
+          { id: 'anthropic', name: 'Anthropic Claude', isActive: true, healthStatus: 'healthy', defaultModel: 'claude-3-sonnet' },
           { id: 'openai', name: 'OpenAI GPT-4', isActive: true, healthStatus: 'healthy', defaultModel: 'gpt-4-turbo' },
-          { id: 'anthropic', name: 'Anthropic Claude', isActive: true, healthStatus: 'healthy', defaultModel: 'claude-3-opus' },
+          { id: 'deepseek', name: 'DeepSeek', isActive: false, healthStatus: 'unknown', defaultModel: 'deepseek-chat' },
         ],
       });
 
       setProviders([
         {
-          id: 'deepseek',
-          name: 'DeepSeek',
-          displayName: 'DeepSeek AI',
-          type: 'deepseek',
+          id: 'anthropic',
+          name: 'Anthropic Claude',
+          displayName: 'Anthropic',
+          type: 'anthropic',
           isActive: true,
-          defaultModel: 'deepseek-chat',
-          availableModels: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+          defaultModel: 'claude-3-sonnet-20240229',
+          availableModels: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
           healthStatus: 'healthy',
-          capabilities: ['text', 'code', 'reasoning'],
+          capabilities: ['text', 'analysis', 'reasoning'],
         },
         {
           id: 'openai',
@@ -166,15 +166,15 @@ export default function AICenterPage() {
           capabilities: ['text', 'embeddings', 'vision'],
         },
         {
-          id: 'anthropic',
-          name: 'Anthropic Claude',
-          displayName: 'Anthropic',
-          type: 'anthropic',
-          isActive: true,
-          defaultModel: 'claude-3-opus-20240229',
-          availableModels: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-          healthStatus: 'healthy',
-          capabilities: ['text', 'analysis', 'reasoning'],
+          id: 'deepseek',
+          name: 'DeepSeek',
+          displayName: 'DeepSeek AI',
+          type: 'deepseek',
+          isActive: false,
+          defaultModel: 'deepseek-chat',
+          availableModels: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+          healthStatus: 'unknown',
+          capabilities: ['text', 'code', 'reasoning'],
         },
       ]);
 
@@ -681,7 +681,7 @@ function ChatTab({ selectedProvider, providers }: { selectedProvider: string | n
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [provider, setProvider] = useState(selectedProvider || 'deepseek');
+  const [provider, setProvider] = useState(selectedProvider || 'anthropic');
   const [mode, setMode] = useState<'chat' | 'code' | 'reason'>('chat');
 
   const handleSend = async () => {

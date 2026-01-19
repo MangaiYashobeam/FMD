@@ -236,53 +236,192 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
     return;
   }
   
-  // Try to use DeepSeek if configured and requested
-  if ((provider === 'deepseek' || !provider) && deepseekService.isConfigured()) {
-    try {
-      const { content, trace } = await deepseekService.chat(messages, {
-        model: model || 'deepseek-chat',
+  const selectedProvider = provider || 'anthropic'; // Default to Anthropic
+  const start = Date.now();
+  
+  // OpenAI
+  if (selectedProvider === 'openai') {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      res.json({
+        success: true,
+        data: {
+          content: `[Simulated Response] OpenAI API key not configured. Configure OPENAI_API_KEY to enable real AI responses.`,
+          provider: 'openai',
+          model: model || 'gpt-4',
+          inputTokens: 0,
+          outputTokens: 0,
+          latency: Date.now() - start,
+          traceId: `trace_sim_${Date.now()}`,
+          simulated: true,
+        },
       });
+      return;
+    }
+    
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model || 'gpt-4',
+          messages,
+          max_tokens: 1000,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})) as any;
+        throw new Error(errorData.error?.message || `OpenAI API returned ${response.status}`);
+      }
+      
+      const data = await response.json() as any;
+      const content = data.choices?.[0]?.message?.content || 'No response';
       
       res.json({
         success: true,
         data: {
           content,
-          provider: 'deepseek',
-          model: trace.model,
-          inputTokens: trace.inputTokens,
-          outputTokens: trace.outputTokens,
-          latency: trace.latency,
-          traceId: trace.id,
+          provider: 'openai',
+          model: data.model || model || 'gpt-4',
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+          latency: Date.now() - start,
+          traceId: `trace_openai_${Date.now()}`,
         },
       });
       return;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'DeepSeek request failed';
-      res.status(500).json({ success: false, message: errorMessage });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: `OpenAI error: ${error.message}` });
       return;
     }
   }
   
-  // Fallback to simulated response
-  const start = Date.now();
-  const inputText = messages.map((m: { content: string }) => m.content).join(' ');
-  const responseText = `[Simulated Response] DeepSeek API key not configured. In production with a valid API key, this would return a real AI response to: "${inputText.slice(0, 100)}..."`;
+  // Anthropic
+  if (selectedProvider === 'anthropic') {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      res.json({
+        success: true,
+        data: {
+          content: `[Simulated Response] Anthropic API key not configured. Configure ANTHROPIC_API_KEY to enable real AI responses.`,
+          provider: 'anthropic',
+          model: model || 'claude-3-sonnet-20240229',
+          inputTokens: 0,
+          outputTokens: 0,
+          latency: Date.now() - start,
+          traceId: `trace_sim_${Date.now()}`,
+          simulated: true,
+        },
+      });
+      return;
+    }
+    
+    try {
+      // Extract system message if present
+      const systemMessage = messages.find((m: any) => m.role === 'system')?.content || '';
+      const chatMessages = messages.filter((m: any) => m.role !== 'system').map((m: any) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+      }));
+      
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: model || 'claude-3-sonnet-20240229',
+          max_tokens: 1000,
+          system: systemMessage || 'You are a helpful AI assistant.',
+          messages: chatMessages,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})) as any;
+        throw new Error(errorData.error?.message || `Anthropic API returned ${response.status}`);
+      }
+      
+      const data = await response.json() as any;
+      const content = data.content?.[0]?.text || 'No response';
+      
+      res.json({
+        success: true,
+        data: {
+          content,
+          provider: 'anthropic',
+          model: data.model || model || 'claude-3-sonnet-20240229',
+          inputTokens: data.usage?.input_tokens || 0,
+          outputTokens: data.usage?.output_tokens || 0,
+          latency: Date.now() - start,
+          traceId: `trace_anthropic_${Date.now()}`,
+        },
+      });
+      return;
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: `Anthropic error: ${error.message}` });
+      return;
+    }
+  }
   
-  await new Promise(resolve => setTimeout(resolve, 300));
+  // DeepSeek
+  if (selectedProvider === 'deepseek') {
+    if (deepseekService.isConfigured()) {
+      try {
+        const { content, trace } = await deepseekService.chat(messages, {
+          model: model || 'deepseek-chat',
+        });
+        
+        res.json({
+          success: true,
+          data: {
+            content,
+            provider: 'deepseek',
+            model: trace.model,
+            inputTokens: trace.inputTokens,
+            outputTokens: trace.outputTokens,
+            latency: trace.latency,
+            traceId: trace.id,
+          },
+        });
+        return;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'DeepSeek request failed';
+        res.status(500).json({ success: false, message: errorMessage });
+        return;
+      }
+    }
+    
+    // Fallback to simulated response for DeepSeek
+    const inputText = messages.map((m: { content: string }) => m.content).join(' ');
+    const responseText = `[Simulated Response] DeepSeek API key not configured. In production with a valid API key, this would return a real AI response to: "${inputText.slice(0, 100)}..."`;
+    
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    res.json({
+      success: true,
+      data: {
+        content: responseText,
+        provider: 'deepseek',
+        model: model || 'deepseek-chat',
+        inputTokens: Math.floor(inputText.length / 4),
+        outputTokens: Math.floor(responseText.length / 4),
+        latency: Date.now() - start,
+        traceId: `trace_sim_${Date.now()}`,
+        simulated: true,
+      },
+    });
+    return;
+  }
   
-  res.json({
-    success: true,
-    data: {
-      content: responseText,
-      provider: provider || 'deepseek',
-      model: model || 'deepseek-chat',
-      inputTokens: Math.floor(inputText.length / 4),
-      outputTokens: Math.floor(responseText.length / 4),
-      latency: Date.now() - start,
-      traceId: `trace_sim_${Date.now()}`,
-      simulated: true,
-    },
-  });
+  // Unknown provider fallback
+  res.status(400).json({ success: false, message: `Unknown provider: ${selectedProvider}` });
 }));
 
 // DeepSeek code completion
