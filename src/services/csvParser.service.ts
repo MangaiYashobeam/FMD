@@ -142,59 +142,91 @@ export const parseCSVFile = async (filePath: string): Promise<ParsedVehicle[]> =
 
 /**
  * Parse a single CSV row into a vehicle object
+ * Supports case-insensitive column matching
  */
 const parseVehicleRow = (row: VehicleCSVRow): ParsedVehicle | null => {
+  // Normalize row keys to handle case-insensitive matching
+  const normalizedRow: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(row)) {
+    normalizedRow[key.toLowerCase().replace(/[_\s-]/g, '')] = value as string;
+  }
+  
+  // Helper to get value with multiple possible keys
+  const getValue = (...keys: string[]): string | undefined => {
+    for (const key of keys) {
+      const normalizedKey = key.toLowerCase().replace(/[_\s-]/g, '');
+      if (normalizedRow[normalizedKey]) {
+        return normalizedRow[normalizedKey];
+      }
+    }
+    return undefined;
+  };
+
+  // Get required fields with flexible matching
+  const vin = getValue('VIN', 'vin', 'Vehicle Identification Number', 'vehicleid');
+  const year = getValue('Year', 'year', 'ModelYear', 'model_year');
+  const make = getValue('Make', 'make', 'Manufacturer');
+  const model = getValue('Model', 'model');
+  
   // VIN is required
-  if (!row.VIN || !row.Year || !row.Make || !row.Model) {
-    logger.warn('Skipping row: missing required fields (VIN, Year, Make, or Model)');
+  if (!vin || !year || !make || !model) {
+    logger.warn('Skipping row: missing required fields (VIN, Year, Make, or Model)', {
+      hasVin: !!vin,
+      hasYear: !!year,
+      hasMake: !!make,
+      hasModel: !!model,
+    });
     return null;
   }
 
-  // Parse photo URLs
-  const photoUrls = row.PhotoURL
-    ? row.PhotoURL.split(',').map((url) => url.trim()).filter((url) => url.length > 0)
+  // Parse photo URLs using flexible matching
+  const photoUrlStr = getValue('PhotoURL', 'Photos', 'Images', 'Photo', 'ImageURL');
+  const photoUrls = photoUrlStr
+    ? photoUrlStr.split(',').map((url) => url.trim()).filter((url) => url.length > 0)
     : [];
 
-  // Parse dates
-  const instockDate = row.InstockDate ? parseDate(row.InstockDate) : undefined;
-  const lastModifiedDate = row.LastModifiedDate ? parseDate(row.LastModifiedDate) : undefined;
+  // Parse dates using flexible matching
+  const instockDateStr = getValue('InstockDate', 'InStockDate', 'DateAdded', 'AddedDate');
+  const lastModifiedStr = getValue('LastModifiedDate', 'ModifiedDate', 'UpdatedDate');
+  const instockDate = instockDateStr ? parseDate(instockDateStr) : undefined;
+  const lastModifiedDate = lastModifiedStr ? parseDate(lastModifiedStr) : undefined;
 
   const vehicle: ParsedVehicle = {
-    vin: sanitizeString(row.VIN) || '',
-    dealerId: sanitizeString(row.DealerID),
-    stockNumber: sanitizeString(row.Stock),
-    year: parseInt(row.Year, 10),
-    make: sanitizeString(row.Make) || '',
-    model: sanitizeString(row.Model) || '',
-    trim: sanitizeString(row.Trim),
-    bodyStyle: sanitizeString(row.BodyStyle),
-    bodyType: sanitizeString(row.BodyType),
-    isNew: row.IsNew?.toLowerCase() === 'new' || row.IsNew === '1',
-    factoryCertified: row.FactoryCertified === '1' || row.FactoryCertified?.toLowerCase() === 'true',
-    dealerCertified: row.DealerCertified === '1' || row.DealerCertified?.toLowerCase() === 'true',
-    listPrice: parsePrice(row.ListPrice),
-    specialPrice: parsePrice(row.SpecialPrice),
-    costPrice: parsePrice(row.CostPrice),
-    wholesalePrice: parsePrice(row.WholesalePrice),
-    mileage: parseNumber(row.Mileage),
-    exteriorColor: sanitizeString(row.Exteriorcolor),
-    exteriorColorCode: sanitizeString(row.Exteriorcolorcode),
-    interiorColor: sanitizeString(row.Interiorcolor),
-    interiorColorCode: sanitizeString(row.Interiorcolorcode),
-    interiorMaterial: sanitizeString(row.Interiormaterial),
-    engineDescription: sanitizeString(row['Engine Description']),
-    engineDisplacement: sanitizeString(row.EngineDisplacement),
-    cylinders: sanitizeString(row.Cylinders),
-    drivetrain: sanitizeString(row.Drivetrain),
-    transmission: sanitizeString(row.Transmission),
-    transmissionType: sanitizeString(row.TransmissionType),
-    fuelType: sanitizeString(row.FuelType),
-    cityMpg: parseNumber(row.CityMPG),
-    hwyMpg: parseNumber(row.HwyMPG),
-    optionDescription: sanitizeString(row.OptionDescription),
-    optionCodes: sanitizeString(row.OptionCodes),
-    dealerComments: sanitizeString(row.DealerComments),
-    videoUrl: sanitizeString(row.VideoURL),
+    vin: sanitizeString(vin) || '',
+    dealerId: sanitizeString(getValue('DealerID', 'DealerId', 'Dealer')),
+    stockNumber: sanitizeString(getValue('Stock', 'StockNumber', 'Stock#', 'StockNo')),
+    year: parseInt(year, 10),
+    make: sanitizeString(make) || '',
+    model: sanitizeString(model) || '',
+    trim: sanitizeString(getValue('Trim', 'TrimLevel')),
+    bodyStyle: sanitizeString(getValue('BodyStyle', 'Body Style', 'Body')),
+    bodyType: sanitizeString(getValue('BodyType', 'Body Type')),
+    isNew: getValue('IsNew', 'New', 'Condition')?.toLowerCase() === 'new' || getValue('IsNew') === '1',
+    factoryCertified: getValue('FactoryCertified', 'Factory Certified') === '1' || getValue('FactoryCertified')?.toLowerCase() === 'true',
+    dealerCertified: getValue('DealerCertified', 'Dealer Certified') === '1' || getValue('DealerCertified')?.toLowerCase() === 'true',
+    listPrice: parsePrice(getValue('ListPrice', 'Price', 'MSRP', 'AskingPrice')),
+    specialPrice: parsePrice(getValue('SpecialPrice', 'SalePrice', 'InternetPrice')),
+    costPrice: parsePrice(getValue('CostPrice', 'Cost', 'Invoice')),
+    wholesalePrice: parsePrice(getValue('WholesalePrice', 'Wholesale')),
+    mileage: parseNumber(getValue('Mileage', 'Miles', 'Odometer')),
+    exteriorColor: sanitizeString(getValue('Exteriorcolor', 'ExteriorColor', 'Exterior Color', 'Color')),
+    exteriorColorCode: sanitizeString(getValue('Exteriorcolorcode', 'ExteriorColorCode')),
+    interiorColor: sanitizeString(getValue('Interiorcolor', 'InteriorColor', 'Interior Color')),
+    interiorColorCode: sanitizeString(getValue('Interiorcolorcode', 'InteriorColorCode')),
+    interiorMaterial: sanitizeString(getValue('Interiormaterial', 'InteriorMaterial', 'Interior Material')),
+    engineDescription: sanitizeString(getValue('Engine Description', 'EngineDescription', 'Engine')),
+    engineDisplacement: sanitizeString(getValue('EngineDisplacement', 'Engine Displacement', 'Displacement')),
+    cylinders: sanitizeString(getValue('Cylinders', 'Cylinder')),
+    drivetrain: sanitizeString(getValue('Drivetrain', 'Drive', 'DriveType')),
+    transmission: sanitizeString(getValue('Transmission', 'Trans')),
+    transmissionType: sanitizeString(getValue('TransmissionType', 'Transmission Type')),
+    fuelType: sanitizeString(getValue('FuelType', 'Fuel', 'Fuel Type')),
+    cityMpg: parseNumber(getValue('CityMPG', 'City MPG', 'MPGCity')),
+    hwyMpg: parseNumber(getValue('HwyMPG', 'Highway MPG', 'MPGHighway', 'HighwayMPG')),
+    optionDescription: sanitizeString(getValue('OptionDescription', 'Options', 'Features')),
+    optionCodes: sanitizeString(getValue('OptionCodes', 'Option Codes')),
+    dealerComments: sanitizeString(getValue('DealerComments', 'Comments', 'Description', 'Notes')),
+    videoUrl: sanitizeString(getValue('VideoURL', 'Video')),
     photoUrls,
     instockDate,
     lastModifiedDate,
