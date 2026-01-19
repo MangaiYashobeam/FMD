@@ -406,8 +406,8 @@ export class VehicleController {
     // METHOD 2: PIXEL (Conversion Tracking Only)
     // =====================================================
     if (method === 'pixel') {
-      // Get account settings for Pixel ID
-      const settings = await prisma.accountSettings.findUnique({
+      // Get account settings for Pixel ID (for future use with custom Pixel ID)
+      const _settings = await prisma.accountSettings.findUnique({
         where: { accountId: vehicle.accountId },
       });
 
@@ -549,7 +549,7 @@ export class VehicleController {
    * Get posting task status
    */
   async getPostingTaskStatus(req: AuthRequest, res: Response): Promise<void> {
-    const { taskId } = req.params;
+    const taskId = req.params.taskId as string;
 
     const task = await prisma.extensionTask.findUnique({
       where: { id: taskId },
