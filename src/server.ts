@@ -507,6 +507,9 @@ app.get('/api/config/facebook', async (_req, res) => {
   });
 });
 
+// Cloud AI Sales Assistant - PUBLIC (no auth required for potential customers)
+app.use('/api/cloud', require('./routes/cloud.routes').default);
+
 app.use('/api/facebook', ring5AuthBarrier, facebookRoutes);                    // Other facebook routes require auth
 
 app.use('/api/vehicles', ring5AuthBarrier, vehicleRoutes);                     // Requires auth

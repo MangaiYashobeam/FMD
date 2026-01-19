@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "DealersFace Pro",
-  "version": "3.0.0",
-  "description": "DealersFace - Professional Facebook Marketplace automation for auto dealers",
+  "version": "3.1.0",
+  "description": "DealersFace - Professional Facebook Marketplace automation for auto dealers with IAI Soldier",
   "author": "Dealers Face",
   "permissions": [
     "storage",
@@ -56,8 +56,8 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["injected.js"],
-      "matches": ["https://www.facebook.com/*", "https://web.facebook.com/*"]
+      "resources": ["injected.js", "iai-soldier.js"],
+      "matches": ["https://www.facebook.com/*", "https://web.facebook.com/*", "https://m.facebook.com/*"]
     }
   ]
 }

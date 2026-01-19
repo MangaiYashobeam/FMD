@@ -1,6 +1,11 @@
 // Dealers Face Chrome Extension - Background Service Worker
+// Enhanced with IAI Soldier Task Polling and Marketplace Automation
 
 const API_BASE_URL = 'https://fmd-production.up.railway.app';
+const TASK_POLL_INTERVAL = 5000; // 5 seconds
+
+let taskPollingInterval = null;
+let isPolling = false;
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener((details) => {
@@ -8,6 +13,9 @@ chrome.runtime.onInstalled.addListener((details) => {
   
   // Open side panel on extension icon click
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  
+  // Initialize badge
+  chrome.action.setBadgeBackgroundColor({ color: '#3B82F6' });
 });
 
 // Listen for messages from content scripts or popup
@@ -31,13 +39,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SET_AUTH_TOKEN') {
     chrome.storage.local.set({ authToken: message.token }, () => {
       sendResponse({ success: true });
+      // Start polling when user logs in
+      startTaskPolling();
     });
     return true;
   }
   
   if (message.type === 'CLEAR_AUTH') {
-    chrome.storage.local.remove(['authToken', 'user'], () => {
+    chrome.storage.local.remove(['authToken', 'user', 'accountId'], () => {
       sendResponse({ success: true });
+      // Stop polling when user logs out
+      stopTaskPolling();
     });
     return true;
   }
@@ -46,6 +58,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.tabs.create({ url: message.url }, (tab) => {
       sendResponse({ tabId: tab.id });
     });
+    return true;
+  }
+  
+  if (message.type === 'START_TASK_POLLING') {
+    startTaskPolling();
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  if (message.type === 'STOP_TASK_POLLING') {
+    stopTaskPolling();
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  if (message.type === 'EXECUTE_IAI_TASK') {
+    executeIAITask(message.task)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'TASK_COMPLETED') {
+    updateTaskStatus(message.taskId, 'completed', message.result)
+      .then(() => sendResponse({ success: true }))
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'TASK_FAILED') {
+    updateTaskStatus(message.taskId, 'failed', { error: message.error })
+      .then(() => sendResponse({ success: true }))
+      .catch((error) => sendResponse({ error: error.message }));
     return true;
   }
 });
@@ -87,6 +132,152 @@ async function handleApiRequest(endpoint, method = 'GET', data = null) {
   }
 }
 
+// ============================================
+// TASK POLLING SYSTEM
+// ============================================
+
+async function startTaskPolling() {
+  if (taskPollingInterval) return; // Already polling
+  
+  const credentials = await chrome.storage.local.get(['authToken', 'accountId']);
+  if (!credentials.authToken || !credentials.accountId) {
+    console.log('Cannot start polling: Missing credentials');
+    return;
+  }
+  
+  console.log('🎖️ Starting IAI Task Polling...');
+  isPolling = true;
+  
+  // Initial poll
+  await pollForTasks();
+  
+  // Set up interval
+  taskPollingInterval = setInterval(pollForTasks, TASK_POLL_INTERVAL);
+}
+
+function stopTaskPolling() {
+  if (taskPollingInterval) {
+    clearInterval(taskPollingInterval);
+    taskPollingInterval = null;
+  }
+  isPolling = false;
+  console.log('🛑 Task Polling stopped');
+}
+
+async function pollForTasks() {
+  if (!isPolling) return;
+  
+  try {
+    const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+    if (!authToken || !accountId) return;
+    
+    const response = await fetch(
+      `${API_BASE_URL}/api/extension/tasks/${accountId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    if (!response.ok) return;
+    
+    const tasks = await response.json();
+    
+    if (tasks && tasks.length > 0) {
+      console.log(`📋 Found ${tasks.length} pending tasks`);
+      
+      // Update badge
+      chrome.action.setBadgeText({ text: String(tasks.length) });
+      
+      // Notify any open Facebook tabs about pending tasks
+      notifyFacebookTabs(tasks);
+    } else {
+      chrome.action.setBadgeText({ text: '' });
+    }
+  } catch (error) {
+    console.debug('Task polling error:', error);
+  }
+}
+
+async function notifyFacebookTabs(tasks) {
+  const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  
+  for (const tab of tabs) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'IAI_TASKS_AVAILABLE',
+        tasks: tasks,
+      });
+    } catch (e) {
+      // Tab might not have content script ready
+    }
+  }
+}
+
+async function executeIAITask(task) {
+  console.log('🎯 Executing IAI Task:', task.type);
+  
+  // Update task status to processing
+  await updateTaskStatus(task.id, 'processing');
+  
+  // Find a Facebook tab to execute the task
+  const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  
+  if (tabs.length === 0) {
+    // Open Facebook Marketplace if no tab exists
+    const newTab = await chrome.tabs.create({
+      url: 'https://www.facebook.com/marketplace/create/vehicle/',
+    });
+    
+    // Wait for page to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    tabs.push(newTab);
+  }
+  
+  // Send task to content script
+  const targetTab = tabs[0];
+  
+  try {
+    const result = await chrome.tabs.sendMessage(targetTab.id, {
+      type: 'EXECUTE_IAI_TASK',
+      task: task,
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to execute task:', error);
+    await updateTaskStatus(task.id, 'failed', { error: error.message });
+    throw error;
+  }
+}
+
+async function updateTaskStatus(taskId, status, result = null) {
+  const { authToken } = await chrome.storage.local.get(['authToken']);
+  if (!authToken) return;
+  
+  try {
+    await fetch(`${API_BASE_URL}/api/extension/tasks/${taskId}/status`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status, result }),
+    });
+    
+    console.log(`Task ${taskId} status updated to: ${status}`);
+  } catch (error) {
+    console.error('Failed to update task status:', error);
+  }
+}
+
+// ============================================
+// TAB MONITORING
+// ============================================
+
 // Listen for tab updates to detect Facebook pages
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
@@ -101,8 +292,25 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       }).catch(() => {
         // Side panel might not be open, that's ok
       });
+      
+      // Trigger task check when on Facebook
+      if (isPolling) {
+        pollForTasks();
+      }
     }
   }
 });
 
-console.log('Dealers Face background script loaded');
+// ============================================
+// STARTUP
+// ============================================
+
+// Check if we should start polling on extension load
+chrome.storage.local.get(['authToken', 'accountId'], (result) => {
+  if (result.authToken && result.accountId) {
+    console.log('🎖️ Credentials found, starting task polling...');
+    startTaskPolling();
+  }
+});
+
+console.log('🎖️ Dealers Face background script loaded - IAI Ready');

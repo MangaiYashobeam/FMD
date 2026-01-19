@@ -100,4 +100,27 @@ router.post(
   asyncHandler(controller.postToFacebook.bind(controller))
 );
 
+/**
+ * @route   GET /api/vehicles/tasks/:taskId
+ * @desc    Get posting task status
+ * @access  Private
+ */
+router.get(
+  '/tasks/:taskId',
+  validate([
+    param('taskId').isUUID().withMessage('Invalid task ID'),
+  ]),
+  asyncHandler(controller.getPostingTaskStatus.bind(controller))
+);
+
+/**
+ * @route   GET /api/vehicles/tasks
+ * @desc    Get pending tasks for extension
+ * @access  Private
+ */
+router.get(
+  '/tasks',
+  asyncHandler(controller.getPendingTasks.bind(controller))
+);
+
 export default router;

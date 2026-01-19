@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import SuperAdminRoute from './components/SuperAdminRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import AdminLayout from './layouts/AdminLayout';
+import { CloudChat } from './components/ai/CloudChat';
 // Public Pages
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
@@ -148,11 +149,31 @@ function App() {
             {/* Catch all - redirect to landing */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          
+          {/* Cloud Chat - AI Sales Assistant visible on public pages */}
+          <CloudChatWrapper />
         </BrowserRouter>
       </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>
   );
+}
+
+// Wrapper component to conditionally show Cloud Chat only on public pages
+function CloudChatWrapper() {
+  const location = useLocation();
+  
+  // Show Cloud Chat only on public pages (not logged in area or admin)
+  const publicPaths = ['/', '/login', '/register', '/features', '/markets', '/privacy', '/terms', '/cookies', '/dmca', '/forgot-password'];
+  const isPublicPage = publicPaths.some(path => 
+    location.pathname === path || 
+    location.pathname.startsWith('/features/') || 
+    location.pathname.startsWith('/markets/')
+  );
+  
+  if (!isPublicPage) return null;
+  
+  return <CloudChat position="bottom-right" />;
 }
 
 export default App;

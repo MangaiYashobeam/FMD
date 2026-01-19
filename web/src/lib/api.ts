@@ -868,4 +868,23 @@ export const reportsApi = {
     api.post(`/api/reports/invoices/${invoiceId}/paid`, data),
 };
 
+// Cloud AI Sales Assistant API (Public - no auth required)
+export const cloudApi = {
+  // Chat with Cloud
+  chat: (data: { 
+    message: string; 
+    conversationHistory?: Array<{ role: string; content: string }>; 
+    sessionId?: string;
+  }) => api.post('/api/cloud/chat', data),
+  
+  // Get product information
+  getProductInfo: () => api.get('/api/cloud/product-info'),
+  
+  // Get FAQ
+  getFaq: () => api.get('/api/cloud/faq'),
+  
+  // Check Cloud status
+  getStatus: () => api.get('/api/cloud/status'),
+};
+
 export default api;

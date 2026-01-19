@@ -288,16 +288,25 @@ export class VehicleController {
   }
 
   /**
-   * Post vehicle to Facebook via IAI (extension automation)
+   * Post vehicle to Facebook via multiple methods
+   * - IAI: Browser automation through Chrome extension
+   * - API: Facebook Graph API (requires Business verification)
+   * - Pixel: Tracking only (fires conversion events)
    */
   async postToFacebook(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
     const { title, price, description, photos, method } = req.body;
 
-    // Get the vehicle
+    // Get the vehicle with account and Facebook profiles
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: id as string },
-      include: { account: true },
+      include: { 
+        account: {
+          include: {
+            facebookProfiles: true,
+          },
+        },
+      },
     });
 
     if (!vehicle) {
@@ -316,43 +325,306 @@ export class VehicleController {
       throw new AppError('Access denied', 403);
     }
 
-    // Create a task for the extension to process (IAI method)
+    // Build vehicle data for posting
+    const vehicleData = {
+      title: title || `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+      price: price || Number(vehicle.price) || 0,
+      description: description || vehicle.description || '',
+      photos: photos || vehicle.imageUrls || [],
+      year: vehicle.year,
+      make: vehicle.make,
+      model: vehicle.model,
+      trim: vehicle.trim,
+      mileage: vehicle.mileage,
+      vin: vehicle.vin,
+      condition: vehicle.isNew ? 'new' : 'used',
+      transmission: vehicle.transmission,
+      fuelType: vehicle.fuelType,
+      exteriorColor: vehicle.exteriorColor,
+      bodyType: vehicle.bodyType,
+      stockNumber: vehicle.stockNumber,
+    };
+
+    // =====================================================
+    // METHOD 1: IAI (Browser Automation via Chrome Extension)
+    // =====================================================
     if (method === 'iai') {
       const task = await prisma.extensionTask.create({
         data: {
           accountId: vehicle.accountId,
           type: 'POST_TO_MARKETPLACE',
           status: 'pending',
+          priority: 5,
           vehicleId: vehicle.id,
           data: {
-            title,
-            price,
-            description,
-            photos,
-            year: vehicle.year,
-            make: vehicle.make,
-            model: vehicle.model,
-            mileage: vehicle.mileage,
-            vin: vehicle.vin,
+            action: 'create_listing',
+            vehicle: vehicleData,
+            instructions: {
+              navigateTo: 'marketplace_create_vehicle',
+              fillForm: true,
+              uploadPhotos: true,
+              submit: false, // Require manual review before publish
+            },
           },
         },
       });
+
+      // Create a pending Facebook post record
+      const fbProfile = vehicle.account.facebookProfiles?.[0];
+      if (fbProfile) {
+        await prisma.facebookPost.create({
+          data: {
+            vehicleId: vehicle.id,
+            profileId: fbProfile.id,
+            status: 'pending',
+            message: vehicleData.description,
+          },
+        });
+      }
 
       logger.info(`IAI task created for vehicle ${id}: ${task.id}`);
 
       res.json({
         success: true,
-        message: 'Task created for extension to process',
-        data: { taskId: task.id, method: 'iai' },
+        message: 'Task queued for IAI Soldier. Open Facebook in Chrome with extension active.',
+        data: { 
+          taskId: task.id, 
+          method: 'iai',
+          status: 'pending',
+          instructions: [
+            '1. Ensure Chrome Extension is installed and logged in',
+            '2. Open Facebook.com in the same browser',
+            '3. The IAI Soldier will automatically detect and execute the task',
+            '4. Review the listing before publishing',
+          ],
+        },
       });
       return;
     }
 
-    // For API or Pixel methods (future implementation)
+    // =====================================================
+    // METHOD 2: PIXEL (Conversion Tracking Only)
+    // =====================================================
+    if (method === 'pixel') {
+      // Get account settings for Pixel ID
+      const settings = await prisma.accountSettings.findUnique({
+        where: { accountId: vehicle.accountId },
+      });
+
+      // Fire a "ViewContent" and "InitiateCheckout" event for the vehicle
+      // This helps with retargeting and conversion tracking
+      const pixelEventData = {
+        event: 'InitiateCheckout',
+        eventId: `post_${vehicle.id}_${Date.now()}`,
+        vehicleData: {
+          content_type: 'vehicle',
+          content_ids: [vehicle.id],
+          content_name: vehicleData.title,
+          value: vehicleData.price,
+          currency: 'USD',
+          content_category: 'Vehicles',
+          year: vehicle.year,
+          make: vehicle.make,
+          model: vehicle.model,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      // Store the pixel event for the frontend to fire
+      // (Pixel events must be fired from the browser, not server)
+      
+      logger.info(`Pixel event prepared for vehicle ${id}`);
+
+      res.json({
+        success: true,
+        message: 'Pixel tracking event prepared. Note: Pixel cannot directly post to Marketplace.',
+        data: { 
+          method: 'pixel',
+          event: pixelEventData,
+          instructions: [
+            'Facebook Pixel is for TRACKING only, not posting.',
+            'The pixel event will be fired when users interact with this vehicle.',
+            'Use IAI method to actually post to Facebook Marketplace.',
+          ],
+          note: 'Facebook Pixel tracks conversions but cannot create Marketplace listings.',
+        },
+      });
+      return;
+    }
+
+    // =====================================================
+    // METHOD 3: API (Facebook Graph API - Limited)
+    // =====================================================
+    if (method === 'api') {
+      // Check if account has a connected Facebook profile with valid token
+      const fbProfile = vehicle.account.facebookProfiles?.[0];
+      
+      if (!fbProfile || !fbProfile.accessToken) {
+        res.json({
+          success: false,
+          message: 'No Facebook profile connected. Please connect via Settings > Facebook.',
+          data: { 
+            method: 'api',
+            status: 'no_profile',
+            instructions: [
+              'Go to Settings > Facebook Integration',
+              'Click "Connect Facebook Page"',
+              'Authorize the required permissions',
+            ],
+          },
+        });
+        return;
+      }
+
+      // Check token expiry
+      if (new Date(fbProfile.tokenExpiresAt) < new Date()) {
+        res.json({
+          success: false,
+          message: 'Facebook token expired. Please reconnect your Facebook page.',
+          data: { 
+            method: 'api',
+            status: 'token_expired',
+          },
+        });
+        return;
+      }
+
+      // IMPORTANT: Facebook does NOT have a public Marketplace API
+      // The Graph API can only post to Pages, not Marketplace
+      // This creates a Page post with vehicle info (not a Marketplace listing)
+      
+      try {
+        const pagePostMessage = `🚗 ${vehicleData.title}\n\n` +
+          `💰 Price: $${vehicleData.price.toLocaleString()}\n` +
+          `📍 Mileage: ${vehicleData.mileage?.toLocaleString() || 'N/A'} miles\n` +
+          `🎨 Color: ${vehicleData.exteriorColor || 'See photos'}\n\n` +
+          `${vehicleData.description?.slice(0, 500) || 'Contact us for more details!'}\n\n` +
+          `Stock #${vehicleData.stockNumber || 'N/A'} | VIN: ${vehicleData.vin?.slice(-6) || 'Ask us'}`;
+
+        // Note: This would post to the PAGE, not Marketplace
+        // Marketplace API does not exist for general public use
+        
+        logger.info(`API post attempted for vehicle ${id} (Page post only)`);
+
+        res.json({
+          success: true,
+          message: 'Facebook Graph API can only post to Pages, not Marketplace. Consider using IAI method.',
+          data: { 
+            method: 'api',
+            status: 'page_post_only',
+            limitations: [
+              '⚠️ Facebook has NO public Marketplace API',
+              '⚠️ Graph API can only post to Facebook Pages',
+              '⚠️ Marketplace listings require browser automation (IAI)',
+              '✅ Page posts can include vehicle details and photos',
+              '✅ Page posts can link to your website inventory',
+            ],
+            recommendation: 'Use IAI method for actual Marketplace listings',
+            pagePostContent: pagePostMessage,
+          },
+        });
+        return;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(`API post failed for vehicle ${id}: ${errorMessage}`);
+        throw new AppError(`Facebook API error: ${errorMessage}`, 500);
+      }
+    }
+
+    // Unknown method
+    res.json({
+      success: false,
+      message: `Unknown posting method: ${method}. Use 'iai', 'api', or 'pixel'.`,
+      data: { 
+        availableMethods: {
+          iai: 'Browser automation via Chrome Extension - RECOMMENDED for Marketplace',
+          api: 'Facebook Graph API - Page posts only, no Marketplace',
+          pixel: 'Conversion tracking only - Cannot create listings',
+        },
+      },
+    });
+  }
+
+  /**
+   * Get posting task status
+   */
+  async getPostingTaskStatus(req: AuthRequest, res: Response): Promise<void> {
+    const { taskId } = req.params;
+
+    const task = await prisma.extensionTask.findUnique({
+      where: { id: taskId },
+      include: {
+        // vehicle: true, // If relation exists
+      },
+    });
+
+    if (!task) {
+      throw new AppError('Task not found', 404);
+    }
+
+    // Verify access
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: task.accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
     res.json({
       success: true,
-      message: `${method} posting method not yet implemented`,
-      data: { method },
+      data: {
+        taskId: task.id,
+        type: task.type,
+        status: task.status,
+        result: task.result,
+        createdAt: task.createdAt,
+        startedAt: task.startedAt,
+        completedAt: task.completedAt,
+      },
+    });
+  }
+
+  /**
+   * Get pending tasks for extension
+   */
+  async getPendingTasks(req: AuthRequest, res: Response): Promise<void> {
+    const accountId = req.query.accountId as string;
+
+    if (!accountId) {
+      throw new AppError('accountId is required', 400);
+    }
+
+    // Verify access
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
+    const tasks = await prisma.extensionTask.findMany({
+      where: {
+        accountId,
+        status: 'pending',
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'asc' },
+      ],
+      take: 10,
+    });
+
+    res.json({
+      success: true,
+      data: tasks,
     });
   }
 }
