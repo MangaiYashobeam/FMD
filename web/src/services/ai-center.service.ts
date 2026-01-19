@@ -252,14 +252,14 @@ export const providersApi = {
   /**
    * Wake up / initialize a provider
    */
-  async wakeUp(id: string): Promise<{ success: boolean; message: string; latency: number }> {
+  async wakeUp(id: string): Promise<{ success: boolean; status: string; message: string; latency: number; configured: boolean; error?: string }> {
     return handleRequest(api.post(`${API_BASE}/providers/${id}/wake-up`));
   },
 
   /**
    * Wake up all providers
    */
-  async wakeUpAll(): Promise<{ providerId: string; success: boolean; message: string; latency: number }[]> {
+  async wakeUpAll(): Promise<{ providerId: string; success: boolean; status: string; message: string; latency: number; configured: boolean; error?: string }[]> {
     return handleRequest(api.post(`${API_BASE}/providers/wake-up-all`));
   },
 

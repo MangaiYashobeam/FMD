@@ -506,8 +506,10 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
     setWakingUp(providerId);
     try {
       const result = await aiCenterService.providers.wakeUp(providerId);
-      if (result.success) {
+      if (result.success && result.configured) {
         toast.success(`${providerId} is now awake! (${result.latency}ms)`);
+      } else if (!result.configured) {
+        toast.warning(`${providerId}: ${result.message}`);
       } else {
         toast.error(result.message || 'Failed to wake up provider');
       }
@@ -522,8 +524,19 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
     setWakingUpAll(true);
     try {
       const results = await aiCenterService.providers.wakeUpAll();
-      const successful = results.filter((r: any) => r.success).length;
-      toast.success(`${successful}/${results.length} providers awakened`);
+      const successful = results.filter((r) => r.success && r.configured).length;
+      const unconfigured = results.filter((r) => !r.configured).length;
+      const failed = results.filter((r) => !r.success && r.configured).length;
+      
+      if (successful > 0) {
+        toast.success(`${successful} provider(s) awake`);
+      }
+      if (unconfigured > 0) {
+        toast.warning(`${unconfigured} provider(s) not configured`);
+      }
+      if (failed > 0) {
+        toast.error(`${failed} provider(s) failed`);
+      }
       onRefresh();
     } catch (error: any) {
       toast.error(error.message || 'Failed to wake up providers');

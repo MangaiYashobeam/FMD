@@ -52,35 +52,143 @@ router.delete('/providers/:providerId', aiCenterController.deleteProvider);
 
 // Wake up provider (initialize/test connection)
 router.post('/providers/:providerId/wake-up', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { providerId } = req.params;
+  const providerId = req.params.providerId as string;
+  const providerKey = providerId.toLowerCase();
   const start = Date.now();
   
-  // Simulate wake-up by testing provider connection
-  await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
+  // Check if provider has API key configured
+  const providerConfigs: Record<string, { envKey: string; testEndpoint?: string }> = {
+    openai: { envKey: 'OPENAI_API_KEY', testEndpoint: 'https://api.openai.com/v1/models' },
+    anthropic: { envKey: 'ANTHROPIC_API_KEY', testEndpoint: 'https://api.anthropic.com/v1/messages' },
+    deepseek: { envKey: 'DEEPSEEK_API_KEY', testEndpoint: 'https://api.deepseek.com/v1/models' },
+  };
   
-  const latency = Date.now() - start;
+  const config = providerConfigs[providerKey];
+  const apiKey = config ? process.env[config.envKey] : null;
   
-  res.json({
-    success: true,
-    message: `Provider ${providerId} is now awake and ready`,
-    latency,
-  });
+  if (!apiKey) {
+    const latency = Date.now() - start;
+    res.json({
+      success: true,
+      data: {
+        success: false,
+        status: 'unconfigured',
+        message: `${providerId} API key not configured - provider is in simulation mode`,
+        latency,
+        configured: false,
+      },
+    });
+    return;
+  }
+  
+  // Try to validate the API key with a lightweight request
+  try {
+    if (providerKey === 'openai' && config.testEndpoint) {
+      const response = await fetch(config.testEndpoint, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+    } else if (providerKey === 'anthropic') {
+      // Anthropic doesn't have a simple test endpoint, so we verify key format
+      if (!apiKey.startsWith('sk-ant-')) throw new Error('Invalid Anthropic key format');
+    } else if (providerKey === 'deepseek' && config.testEndpoint) {
+      const response = await fetch(config.testEndpoint, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+    }
+    
+    const latency = Date.now() - start;
+    res.json({
+      success: true,
+      data: {
+        success: true,
+        status: 'awake',
+        message: `${providerId} is now awake and ready`,
+        latency,
+        configured: true,
+      },
+    });
+  } catch (error: any) {
+    const latency = Date.now() - start;
+    res.json({
+      success: true,
+      data: {
+        success: false,
+        status: 'error',
+        message: `${providerId} wake-up failed: ${error.message}`,
+        latency,
+        configured: true,
+        error: error.message,
+      },
+    });
+  }
 }));
 
 // Wake up all providers
 router.post('/providers/wake-up-all', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  const providers = ['deepseek', 'openai', 'anthropic'];
+  const providerConfigs: Record<string, { envKey: string; testEndpoint?: string }> = {
+    openai: { envKey: 'OPENAI_API_KEY', testEndpoint: 'https://api.openai.com/v1/models' },
+    anthropic: { envKey: 'ANTHROPIC_API_KEY' },
+    deepseek: { envKey: 'DEEPSEEK_API_KEY', testEndpoint: 'https://api.deepseek.com/v1/models' },
+  };
+  
   const results = [];
   
-  for (const providerId of providers) {
+  for (const [providerId, config] of Object.entries(providerConfigs)) {
     const start = Date.now();
-    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
-    results.push({
-      providerId,
-      success: true,
-      message: `${providerId} awakened`,
-      latency: Date.now() - start,
-    });
+    const apiKey = process.env[config.envKey];
+    
+    if (!apiKey) {
+      results.push({
+        providerId,
+        success: false,
+        status: 'unconfigured',
+        message: `${providerId} API key not configured`,
+        latency: Date.now() - start,
+        configured: false,
+      });
+      continue;
+    }
+    
+    try {
+      if (providerId === 'openai' && config.testEndpoint) {
+        const response = await fetch(config.testEndpoint, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+        });
+        if (!response.ok) throw new Error(`API returned ${response.status}`);
+      } else if (providerId === 'anthropic') {
+        if (!apiKey.startsWith('sk-ant-')) throw new Error('Invalid key format');
+      } else if (providerId === 'deepseek' && config.testEndpoint) {
+        const response = await fetch(config.testEndpoint, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+        });
+        if (!response.ok) throw new Error(`API returned ${response.status}`);
+      }
+      
+      results.push({
+        providerId,
+        success: true,
+        status: 'awake',
+        message: `${providerId} is awake and ready`,
+        latency: Date.now() - start,
+        configured: true,
+      });
+    } catch (error: any) {
+      results.push({
+        providerId,
+        success: false,
+        status: 'error',
+        message: `${providerId}: ${error.message}`,
+        latency: Date.now() - start,
+        configured: true,
+        error: error.message,
+      });
+    }
   }
   
   res.json({
