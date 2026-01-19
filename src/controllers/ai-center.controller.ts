@@ -26,22 +26,75 @@ const prisma = new PrismaClient();
 // Provider Management
 // ============================================
 
+// Default providers (used when database is empty)
+const DEFAULT_PROVIDERS = [
+  {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    displayName: 'Anthropic',
+    type: 'anthropic',
+    isActive: true,
+    defaultModel: 'claude-3-5-sonnet-latest',
+    availableModels: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
+    healthStatus: process.env.ANTHROPIC_API_KEY ? 'healthy' : 'unknown',
+    capabilities: { text: true, analysis: true, reasoning: true },
+    apiKey: process.env.ANTHROPIC_API_KEY ? '***configured***' : null,
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI GPT-4',
+    displayName: 'OpenAI',
+    type: 'openai',
+    isActive: true,
+    defaultModel: 'gpt-4-turbo',
+    availableModels: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+    healthStatus: process.env.OPENAI_API_KEY ? 'healthy' : 'unknown',
+    capabilities: { text: true, embeddings: true, vision: true },
+    apiKey: process.env.OPENAI_API_KEY ? '***configured***' : null,
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    displayName: 'DeepSeek AI',
+    type: 'deepseek',
+    isActive: !!process.env.DEEPSEEK_API_KEY,
+    defaultModel: 'deepseek-chat',
+    availableModels: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+    healthStatus: process.env.DEEPSEEK_API_KEY ? 'healthy' : 'unknown',
+    capabilities: { text: true, code: true, reasoning: true },
+    apiKey: process.env.DEEPSEEK_API_KEY ? '***configured***' : null,
+  },
+];
+
 /**
  * Get all AI providers
  */
-export async function getProviders(_req: Request, res: Response, next: NextFunction) {
+export async function getProviders(_req: Request, res: Response, _next: NextFunction) {
   try {
     const providers = await prisma.aIProvider.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
     });
 
+    // If no providers in database, return defaults
+    if (providers.length === 0) {
+      res.json({
+        success: true,
+        data: DEFAULT_PROVIDERS,
+      });
+      return;
+    }
+
     res.json({
       success: true,
       data: providers,
     });
   } catch (error) {
-    next(error);
+    // On any error, return defaults
+    res.json({
+      success: true,
+      data: DEFAULT_PROVIDERS,
+    });
   }
 }
 

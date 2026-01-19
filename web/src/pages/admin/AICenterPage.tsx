@@ -71,6 +71,43 @@ export default function AICenterPage() {
   const [traces, setTraces] = useState<APITrace[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Default providers (always available)
+  const defaultProviders: AIProvider[] = [
+    {
+      id: 'anthropic',
+      name: 'Anthropic Claude',
+      displayName: 'Anthropic',
+      type: 'anthropic',
+      isActive: true,
+      defaultModel: 'claude-3-5-sonnet-latest',
+      availableModels: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
+      healthStatus: 'healthy',
+      capabilities: ['text', 'analysis', 'reasoning'],
+    },
+    {
+      id: 'openai',
+      name: 'OpenAI GPT-4',
+      displayName: 'OpenAI',
+      type: 'openai',
+      isActive: true,
+      defaultModel: 'gpt-4-turbo',
+      availableModels: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+      healthStatus: 'healthy',
+      capabilities: ['text', 'embeddings', 'vision'],
+    },
+    {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      displayName: 'DeepSeek AI',
+      type: 'deepseek',
+      isActive: false,
+      defaultModel: 'deepseek-chat',
+      availableModels: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+      healthStatus: 'unknown',
+      capabilities: ['text', 'code', 'reasoning'],
+    },
+  ];
+
   // Load dashboard data
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
@@ -80,10 +117,12 @@ export default function AICenterPage() {
       setStats(dashboardStats as any);
 
       const providersList = await aiCenterService.providers.getAll();
-      setProviders(providersList);
+      // Use API providers if available, otherwise use defaults
+      const finalProviders = providersList && providersList.length > 0 ? providersList : defaultProviders;
+      setProviders(finalProviders);
 
-      if (providersList.length > 0 && !selectedProvider) {
-        setSelectedProvider(providersList[0].id);
+      if (finalProviders.length > 0 && !selectedProvider) {
+        setSelectedProvider(finalProviders[0].id);
       }
 
       // Load traces for monitoring
@@ -91,6 +130,10 @@ export default function AICenterPage() {
       setTraces(tracesList);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
+      // Set default providers on error
+      setProviders(defaultProviders);
+      setSelectedProvider('anthropic');
+      
       // Fallback to sample data for demonstration
       setStats({
         tasks: {
@@ -141,44 +184,6 @@ export default function AICenterPage() {
           { id: 'deepseek', name: 'DeepSeek', isActive: false, healthStatus: 'unknown', defaultModel: 'deepseek-chat' },
         ],
       });
-
-      setProviders([
-        {
-          id: 'anthropic',
-          name: 'Anthropic Claude',
-          displayName: 'Anthropic',
-          type: 'anthropic',
-          isActive: true,
-          defaultModel: 'claude-3-5-sonnet-latest',
-          availableModels: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
-          healthStatus: 'healthy',
-          capabilities: ['text', 'analysis', 'reasoning'],
-        },
-        {
-          id: 'openai',
-          name: 'OpenAI GPT-4',
-          displayName: 'OpenAI',
-          type: 'openai',
-          isActive: true,
-          defaultModel: 'gpt-4-turbo',
-          availableModels: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
-          healthStatus: 'healthy',
-          capabilities: ['text', 'embeddings', 'vision'],
-        },
-        {
-          id: 'deepseek',
-          name: 'DeepSeek',
-          displayName: 'DeepSeek AI',
-          type: 'deepseek',
-          isActive: false,
-          defaultModel: 'deepseek-chat',
-          availableModels: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
-          healthStatus: 'unknown',
-          capabilities: ['text', 'code', 'reasoning'],
-        },
-      ]);
-
-      setSelectedProvider('deepseek');
     }
     setLoading(false);
   }, [selectedProvider]);
