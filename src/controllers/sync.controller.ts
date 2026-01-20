@@ -318,14 +318,26 @@ export class SyncController {
     const file = req.file;
     const { accountId, skipHeader, updateExisting, markMissingSold, delimiter } = req.body;
 
-    logger.info(`📤 Upload request: accountId=${accountId}, file=${file?.originalname}, size=${file?.size}`);
+    logger.info(`📤 Upload request received`);
+    logger.info(`   Account ID: ${accountId}`);
+    logger.info(`   File: ${file?.originalname || 'NO FILE'}`);
+    logger.info(`   Size: ${file?.size || 0} bytes`);
+    logger.info(`   Mimetype: ${file?.mimetype || 'unknown'}`);
+    logger.info(`   Options: skipHeader=${skipHeader}, updateExisting=${updateExisting}, markMissingSold=${markMissingSold}, delimiter=${delimiter}`);
 
     if (!file) {
-      throw new AppError('No file uploaded', 400);
+      logger.error('❌ No file in request. Check multipart/form-data encoding.');
+      throw new AppError('No file uploaded. Please select a file and try again.', 400);
+    }
+
+    if (!file.buffer || file.buffer.length === 0) {
+      logger.error('❌ File buffer is empty');
+      throw new AppError('File appears to be empty. Please check the file and try again.', 400);
     }
 
     if (!accountId) {
-      throw new AppError('Account ID is required', 400);
+      logger.error('❌ No accountId provided');
+      throw new AppError('Account ID is required. Please refresh the page and try again.', 400);
     }
 
     // Verify user has access (check for SUPER_ADMIN first, then account-level roles)
@@ -385,7 +397,12 @@ export class SyncController {
         throw new AppError('Unsupported file format', 400);
       }
 
-      logger.info(`Parsed ${vehicles.length} vehicles from uploaded file`);
+      logger.info(`✅ Parsed ${vehicles.length} vehicles from uploaded file`);
+
+      if (vehicles.length === 0) {
+        logger.warn('⚠️ No vehicles parsed from file - check file format');
+        throw new AppError('No vehicles found in file. Please check the file format matches expected CSV/Excel columns (VIN, Year, Make, Model required).', 400);
+      }
 
       // Track existing VINs if markMissingSold is enabled
       let existingVINs: string[] = [];

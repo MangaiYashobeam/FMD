@@ -42,9 +42,10 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     message,
+    error: message, // Add error field for frontend compatibility
     ...(process.env.NODE_ENV === 'development' && {
       stack: err.stack,
-      error: err,
+      details: err,
     }),
   });
 };

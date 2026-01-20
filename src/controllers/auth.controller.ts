@@ -8,6 +8,7 @@ import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
 import { AuthRequest } from '@/middleware/auth';
 import { emailService } from '@/services/email.service';
+import { getJwtSecret, getJwtRefreshSecret } from '@/config/security';
 
 export class AuthController {
   /**
@@ -86,8 +87,8 @@ export class AuthController {
     });
 
     // Generate tokens
-    const jwtSecret = process.env.JWT_SECRET || 'secret';
-    const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'refresh-secret';
+    const jwtSecret = getJwtSecret();
+    const jwtRefreshSecret = getJwtRefreshSecret();
     const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
     const refreshTokenOptions: SignOptions = { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any };
 
@@ -313,7 +314,8 @@ export class AuthController {
     });
 
     // Generate new access token
-    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const jwtSecret = getJwtSecret();
+    const jwtRefreshSecret = getJwtRefreshSecret();
     const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
     const refreshTokenOptions: SignOptions = { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any };
 
@@ -326,7 +328,7 @@ export class AuthController {
     // Generate new refresh token (rotation for security)
     const newRefreshToken = jwt.sign(
       { id: tokenRecord.user.id },
-      process.env.JWT_REFRESH_SECRET || 'refresh-secret',
+      jwtRefreshSecret,
       refreshTokenOptions
     );
 
@@ -600,7 +602,7 @@ export class AuthController {
     }
 
     // Generate impersonation tokens (shorter expiry for security)
-    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const jwtSecret = getJwtSecret();
     const accessTokenOptions: SignOptions = { expiresIn: '2h' }; // Shorter for impersonation
 
     const accessToken = jwt.sign(
@@ -680,7 +682,7 @@ export class AuthController {
     }
 
     // Generate fresh token for admin
-    const jwtSecret = process.env.JWT_SECRET || 'secret';
+    const jwtSecret = getJwtSecret();
     const accessTokenOptions: SignOptions = { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any };
 
     const accessToken = jwt.sign(
@@ -942,7 +944,7 @@ export class AuthController {
     const currentToken = req.headers.authorization?.replace('Bearer ', '');
 
     // Get the current session to preserve it
-    const decoded = jwt.verify(currentToken || '', process.env.JWT_SECRET || 'secret') as { sessionId?: string };
+    const decoded = jwt.verify(currentToken || '', getJwtSecret()) as { sessionId?: string };
 
     // Delete all other refresh tokens except the current one
     const result = await prisma.refreshToken.deleteMany({

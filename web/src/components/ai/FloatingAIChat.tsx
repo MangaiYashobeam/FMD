@@ -76,6 +76,7 @@ interface FloatingAIChatProps {
   isAICenterTab?: boolean;
   onMaximize?: () => void;
   isImpersonating?: boolean;
+  showThoughtsDefault?: boolean; // Super admin sees thoughts by default
 }
 
 // Allowed file types (gets refined by backend based on role)
@@ -85,8 +86,11 @@ export default function FloatingAIChat({
   userRole = 'super_admin', 
   isAICenterTab = false,
   onMaximize,
-  isImpersonating = false
+  isImpersonating = false,
+  showThoughtsDefault = false
 }: FloatingAIChatProps) {
+  // Super admins always see AI thoughts by default
+  const shouldShowThoughts = userRole === 'super_admin' || showThoughtsDefault;
   // UI State
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -304,7 +308,7 @@ export default function FloatingAIChat({
           role: 'assistant',
           content: data.data.assistantMessage.content,
           parsed,
-          showThoughts: false,
+          showThoughts: shouldShowThoughts, // Auto-show for super admin
           createdAt: data.data.assistantMessage.createdAt,
         },
       ]);
@@ -633,10 +637,10 @@ export default function FloatingAIChat({
                     className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-2xl ${
+                      className={`max-w-[85%] rounded-2xl shadow-lg ${
                         msg.role === 'user'
-                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2'
-                          : 'bg-gray-800/80 text-gray-100 border border-white/5'
+                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-3'
+                          : 'bg-gray-800 text-white border border-gray-600'
                       }`}
                     >
                       {/* Attachments preview */}
@@ -693,8 +697,8 @@ export default function FloatingAIChat({
                       )}
                       
                       {/* Main Answer */}
-                      <div className={`px-4 py-2 ${msg.role === 'assistant' && msg.parsed?.hasTools ? 'text-emerald-100' : ''}`}>
-                        <p className="text-sm whitespace-pre-wrap">
+                      <div className={`px-4 py-3 ${msg.role === 'assistant' ? 'text-gray-100' : ''}`}>
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
                           {msg.role === 'assistant' && msg.parsed ? msg.parsed.answer : msg.content}
                         </p>
                       </div>

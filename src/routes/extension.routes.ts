@@ -14,6 +14,7 @@ import { Router, Request, Response } from 'express';
 import { AINavigationAgent } from '../services/ai-agent.service';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import prisma from '../config/database';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const aiAgent = new AINavigationAgent();
@@ -55,6 +56,7 @@ function cleanOldTasks() {
 /**
  * GET /api/extension/tasks/:accountId
  * Get pending tasks for an account
+ * Reads from both database (AutoPost tasks) and in-memory queue
  */
 router.get('/tasks/:accountId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -73,15 +75,48 @@ router.get('/tasks/:accountId', authenticate, async (req: AuthRequest, res: Resp
       return;
     }
     
-    // Get pending tasks for this account
-    const tasks: ExtensionTask[] = [];
+    // Get pending tasks from DATABASE (AutoPost service creates these)
+    const dbTasks = await prisma.extensionTask.findMany({
+      where: {
+        accountId,
+        status: { in: ['pending', 'processing'] },
+        OR: [
+          { scheduledFor: null },
+          { scheduledFor: { lte: new Date() } },
+        ],
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'asc' },
+      ],
+      take: 10,
+    });
+    
+    // Also check in-memory queue for legacy tasks
+    const memoryTasks: ExtensionTask[] = [];
     taskQueue.forEach((task) => {
       if (task.accountId === accountId && task.status === 'pending') {
-        tasks.push(task);
+        memoryTasks.push(task);
       }
     });
     
-    res.json(tasks);
+    // Transform database tasks to extension format
+    const tasks = dbTasks.map(task => ({
+      id: task.id,
+      accountId: task.accountId,
+      type: task.type === 'post_vehicle' ? 'POST_TO_MARKETPLACE' : task.type.toUpperCase(),
+      status: task.status,
+      data: task.data as Record<string, unknown>,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    }));
+    
+    // Merge with memory tasks (de-duped)
+    const allTasks = [...tasks, ...memoryTasks.filter(mt => !tasks.some(t => t.id === mt.id))];
+    
+    logger.info(`📋 Extension polling: Found ${allTasks.length} tasks for account ${accountId} (${dbTasks.length} from DB, ${memoryTasks.length} from memory)`);
+    
+    res.json(allTasks);
   } catch (error) {
     console.error('Get tasks error:', error);
     res.status(500).json({ error: 'Failed to get tasks' });
@@ -148,24 +183,67 @@ router.post('/tasks', authenticate, async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/extension/tasks/:taskId/status
- * Update task status
+ * Update task status - works with both DB and in-memory tasks
  */
 router.post('/tasks/:taskId/status', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const taskId = req.params.taskId as string;
     const { status, result } = req.body;
     
-    const task = taskQueue.get(taskId);
-    if (!task) {
-      res.status(404).json({ error: 'Task not found' });
+    // Try database first (AutoPost tasks)
+    const dbTask = await prisma.extensionTask.findUnique({
+      where: { id: taskId },
+    });
+    
+    if (dbTask) {
+      // Update database task
+      await prisma.extensionTask.update({
+        where: { id: taskId },
+        data: {
+          status,
+          result: result || {},
+          completedAt: (status === 'completed' || status === 'failed') ? new Date() : undefined,
+        },
+      });
+      
+      // If posting completed, track in FacebookPostHistory (doesn't require profileId)
+      if (status === 'completed' && dbTask.type === 'post_vehicle' && dbTask.vehicleId) {
+        try {
+          // Store result in the task itself for tracking
+          await prisma.extensionTask.update({
+            where: { id: taskId },
+            data: {
+              result: {
+                ...result,
+                completedAt: new Date().toISOString(),
+                vehicleId: dbTask.vehicleId,
+                accountId: dbTask.accountId,
+              },
+            },
+          });
+          logger.info(`✅ Recorded posting completion for vehicle ${dbTask.vehicleId}`);
+        } catch (fbError) {
+          logger.warn('Could not record posting completion:', fbError);
+        }
+      }
+      
+      logger.info(`📝 DB Task ${taskId} updated to: ${status}`);
+      res.json({ success: true, source: 'database' });
       return;
     }
     
-    task.status = status;
-    task.result = result;
-    task.updatedAt = new Date();
+    // Fall back to in-memory queue
+    const memTask = taskQueue.get(taskId);
+    if (!memTask) {
+      res.status(404).json({ error: 'Task not found in database or memory' });
+      return;
+    }
     
-    console.log(`Task ${taskId} updated to: ${status}`);
+    memTask.status = status;
+    memTask.result = result;
+    memTask.updatedAt = new Date();
+    
+    logger.info(`📝 Memory Task ${taskId} updated to: ${status}`);
     
     // If completed or failed, schedule cleanup after 5 minutes
     if (status === 'completed' || status === 'failed') {
@@ -174,7 +252,7 @@ router.post('/tasks/:taskId/status', authenticate, async (req: AuthRequest, res:
       }, 5 * 60 * 1000);
     }
     
-    res.json({ success: true });
+    res.json({ success: true, source: 'memory' });
   } catch (error) {
     console.error('Update task status error:', error);
     res.status(500).json({ error: 'Failed to update task status' });

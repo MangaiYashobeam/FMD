@@ -35,6 +35,7 @@ import {
 } from '@/middleware/apiGateway';
 import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
+import { validateSecurityConfig } from '@/config/security';
 import authRoutes from '@/routes/auth.routes';
 import vehicleRoutes from '@/routes/vehicle.routes';
 import accountRoutes from '@/routes/account.routes';
@@ -53,6 +54,9 @@ import { iipcCheck } from '@/middleware/iipc';
 import iipcRoutes from '@/routes/iipc.routes';
 import postingRoutes from '@/routes/posting.routes';
 import { autoPostService } from '@/services/autopost.service';
+
+// Validate security configuration on startup
+validateSecurityConfig();
 
 console.log('🔵 All modules loaded successfully');
 
@@ -635,12 +639,13 @@ const startServer = async () => {
       logger.info('Continuing without auto-posting...');
     }
 
-    // Auto-promote default super admin users
-    const DEFAULT_SUPER_ADMINS = ['admin@gadproductions.com'];
+    // Auto-promote default super admin users from environment
+    const DEFAULT_SUPER_ADMINS = process.env.DEFAULT_SUPER_ADMINS?.split(',').map(e => e.trim().toLowerCase()) || [];
     for (const email of DEFAULT_SUPER_ADMINS) {
+      if (!email) continue;
       try {
         const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase() },
+          where: { email },
           include: { accountUsers: true },
         });
         
@@ -655,7 +660,7 @@ const startServer = async () => {
           }
         }
       } catch (error) {
-        logger.warn(`⚠️  Failed to auto-promote ${email}:`, error);
+        logger.warn(`⚠️  Failed to auto-promote user:`, error);
       }
     }
 

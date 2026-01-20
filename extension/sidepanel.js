@@ -2,6 +2,17 @@
 
 const API_BASE_URL = 'https://fmd-production.up.railway.app';
 
+// Sanitize HTML to prevent XSS attacks
+function escapeHtml(unsafe) {
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // State
 let state = {
   user: null,
@@ -229,17 +240,18 @@ function renderVehicles() {
     return;
   }
   
+  // Use escapeHtml to prevent XSS from vehicle data
   elements.vehiclesList.innerHTML = filtered.map(vehicle => `
-    <div class="list-item" data-vehicle-id="${vehicle.id}">
+    <div class="list-item" data-vehicle-id="${escapeHtml(vehicle.id)}">
       ${vehicle.photos?.[0] 
-        ? `<img src="${vehicle.photos[0]}" alt="${vehicle.year} ${vehicle.make}" class="vehicle-image">` 
+        ? `<img src="${escapeHtml(vehicle.photos[0])}" alt="${escapeHtml(vehicle.year)} ${escapeHtml(vehicle.make)}" class="vehicle-image">` 
         : '<div class="vehicle-image-placeholder">🚗</div>'
       }
       <div class="vehicle-info">
-        <div class="vehicle-title">${vehicle.year} ${vehicle.make} ${vehicle.model}</div>
+        <div class="vehicle-title">${escapeHtml(vehicle.year)} ${escapeHtml(vehicle.make)} ${escapeHtml(vehicle.model)}</div>
         <div class="vehicle-details">
           <span class="vehicle-price">$${vehicle.price?.toLocaleString() || 'N/A'}</span>
-          <span>${vehicle.stockNumber || ''}</span>
+          <span>${escapeHtml(vehicle.stockNumber) || ''}</span>
         </div>
       </div>
       <div class="vehicle-status">
@@ -271,17 +283,18 @@ function renderGroups() {
     return;
   }
   
+  // Use escapeHtml to prevent XSS from group data
   elements.groupsList.innerHTML = state.groups.map(group => `
-    <div class="group-item" data-group-id="${group.id}">
+    <div class="group-item" data-group-id="${escapeHtml(group.id)}">
       <div class="group-info">
         <div class="group-icon">👥</div>
         <div>
-          <div class="group-name">${group.name}</div>
+          <div class="group-name">${escapeHtml(group.name)}</div>
           <div class="group-members">${group.memberCount?.toLocaleString() || '?'} members</div>
         </div>
       </div>
       <label class="toggle">
-        <input type="checkbox" ${group.autoPost ? 'checked' : ''} data-group-id="${group.id}">
+        <input type="checkbox" ${group.autoPost ? 'checked' : ''} data-group-id="${escapeHtml(group.id)}">
         <span class="toggle-slider"></span>
       </label>
     </div>
@@ -300,11 +313,12 @@ function renderQueue() {
     return;
   }
   
+  // Use escapeHtml to prevent XSS from queue data
   elements.queueList.innerHTML = state.queue.map(item => `
     <div class="list-item">
       <div class="vehicle-image-placeholder">🚗</div>
       <div class="vehicle-info">
-        <div class="vehicle-title">${item.vehicle.year} ${item.vehicle.make} ${item.vehicle.model}</div>
+        <div class="vehicle-title">${escapeHtml(item.vehicle.year)} ${escapeHtml(item.vehicle.make)} ${escapeHtml(item.vehicle.model)}</div>
         <div class="vehicle-details">
           <span>${item.groups.length} group(s)</span>
         </div>
