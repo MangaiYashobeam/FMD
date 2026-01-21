@@ -307,7 +307,7 @@ export class AutoPostService {
       const title = `${vehicle.year} ${vehicle.make} ${vehicle.model}${vehicle.trim ? ` ${vehicle.trim}` : ''}`;
       const price = vehicle.price || vehicle.listPrice || vehicle.specialPrice || 0;
       
-      // Create the task
+      // Create the task for Chrome extension (IAI Soldier)
       const task = await prisma.extensionTask.create({
         data: {
           accountId: account.id,
@@ -343,6 +343,38 @@ export class AutoPostService {
           scheduledFor: new Date(),
         },
       });
+
+      // Also queue to Python workers if available (dual-mode)
+      // Python workers provide headless automation when extension is not online
+      try {
+        const { workerQueueService } = await import('@/services/worker-queue.service');
+        if (workerQueueService.isAvailable()) {
+          const location = account.name || 'Miami, FL'; // Use account name as location fallback
+          await workerQueueService.queueVehiclePosting(
+            account.id,
+            {
+              year: vehicle.year,
+              make: vehicle.make,
+              model: vehicle.model,
+              price: Number(price),
+              mileage: vehicle.mileage,
+              vin: vehicle.vin,
+              body_style: vehicle.bodyStyle,
+              fuel_type: vehicle.fuelType,
+              transmission: vehicle.transmission,
+              exterior_color: vehicle.exteriorColor,
+              description: vehicle.dealerComments || this.generateDescription(vehicle),
+              location,
+            },
+            vehicle.imageUrls || [],
+            [] // groups - can be configured per account
+          );
+          logger.debug(`📤 Also queued to Python workers for ${title}`);
+        }
+      } catch (workerError) {
+        // Python workers are optional, don't fail if not available
+        logger.debug('Python worker queue not available:', workerError);
+      }
 
       // Update posting settings
       await prisma.postingSettings.update({

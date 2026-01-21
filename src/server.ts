@@ -534,6 +534,13 @@ app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              /
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications
 app.use('/api/posting', ring5AuthBarrier, postingRoutes);                      // Auto-posting settings & triggers
+app.use('/api/workers', ring5AuthBarrier, require('./routes/worker.routes').default); // Python worker management
+
+// Super Admin Dashboard Routes (requires super admin access)
+app.use('/api/dashboard', ring5AuthBarrier, require('./routes/dashboard.routes').default); // Dashboard analytics (RBAC protected)
+
+// User Settings Routes (requires auth)
+app.use('/api/settings', ring5AuthBarrier, require('./routes/user-settings.routes').default); // User settings & preferences
 
 // Chrome Extension AI Hybrid System
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (public callback)
@@ -637,6 +644,39 @@ const startServer = async () => {
     } catch (error) {
       logger.warn('⚠️  AutoPost service initialization failed:', error);
       logger.info('Continuing without auto-posting...');
+    }
+
+    // Initialize Worker Queue Service (Python headless browser workers)
+    try {
+      const { workerQueueService } = await import('@/services/worker-queue.service');
+      await workerQueueService.initialize();
+      if (workerQueueService.isAvailable()) {
+        logger.info('✅ Worker Queue service initialized (Python headless browsers)');
+      } else {
+        logger.info('ℹ️  Worker Queue service not configured (REDIS_URL not set)');
+      }
+    } catch (error) {
+      logger.warn('⚠️  Worker Queue service initialization failed:', error);
+      logger.info('Continuing without Python workers...');
+    }
+
+    // Initialize Dashboard Services (Super Admin Dashboard)
+    try {
+      const { dashboardMetricsService } = await import('@/services/dashboard-metrics.service');
+      const { facebookHealthIntelligenceService } = await import('@/services/facebook-health-intelligence.service');
+      const { riskAssessmentService } = await import('@/services/risk-assessment.service');
+      const { connectionMethodService } = await import('@/services/connection-method.service');
+      
+      await Promise.all([
+        dashboardMetricsService.initialize(),
+        facebookHealthIntelligenceService.initialize(),
+        riskAssessmentService.initialize(),
+        connectionMethodService.initialize(),
+      ]);
+      logger.info('✅ Dashboard services initialized (Metrics, FB Health, Risk Assessment, Connection Methods)');
+    } catch (error) {
+      logger.warn('⚠️  Dashboard services initialization failed:', error);
+      logger.info('Continuing without dashboard features...');
     }
 
     // Auto-promote default super admin users from environment

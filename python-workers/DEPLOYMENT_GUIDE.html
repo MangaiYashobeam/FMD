@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaceMyDealer Python Workers - Complete Deployment Guide</title>
+    <style>
+        :root {
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --bg-code: #1c2128;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #d29922;
+            --accent-red: #f85149;
+            --accent-purple: #a371f7;
+            --border: #30363d;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            padding: 40px 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 40px;
+        }
+        
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+        
+        .section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .section h2 {
+            color: var(--accent-blue);
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .section h3 {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            margin: 20px 0 12px 0;
+        }
+        
+        .step-number {
+            background: var(--accent-blue);
+            color: var(--bg-dark);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .code-block {
+            position: relative;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin: 12px 0;
+            overflow: hidden;
+        }
+        
+        .code-header {
+            background: var(--bg-card);
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        .copy-btn {
+            background: var(--accent-green);
+            color: var(--bg-dark);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: #2ea043;
+            transform: scale(1.05);
+        }
+        
+        .copy-btn.copied {
+            background: var(--accent-purple);
+        }
+        
+        pre {
+            padding: 16px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        
+        code {
+            font-family: 'Fira Code', 'Consolas', monospace;
+        }
+        
+        .inline-code {
+            background: var(--bg-code);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: var(--accent-orange);
+        }
+        
+        .note {
+            background: rgba(88, 166, 255, 0.1);
+            border-left: 4px solid var(--accent-blue);
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+        }
+        
+        .warning {
+            background: rgba(210, 153, 34, 0.1);
+            border-left: 4px solid var(--accent-orange);
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+        }
+        
+        .success {
+            background: rgba(63, 185, 80, 0.1);
+            border-left: 4px solid var(--accent-green);
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+        }
+        
+        .danger {
+            background: rgba(248, 81, 73, 0.1);
+            border-left: 4px solid var(--accent-red);
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+        }
+        
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid var(--border);
+        }
+        
+        th {
+            background: var(--bg-code);
+            color: var(--accent-blue);
+        }
+        
+        tr:nth-child(even) {
+            background: rgba(255,255,255,0.02);
+        }
+        
+        .architecture {
+            background: var(--bg-code);
+            padding: 20px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre;
+            line-height: 1.4;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .badge-blue { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
+        .badge-green { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .badge-orange { background: rgba(210, 153, 34, 0.2); color: var(--accent-orange); }
+        .badge-purple { background: rgba(163, 113, 247, 0.2); color: var(--accent-purple); }
+        
+        .toc {
+            background: var(--bg-code);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .toc h3 {
+            margin-bottom: 12px;
+            color: var(--accent-blue);
+        }
+        
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc li {
+            padding: 6px 0;
+        }
+        
+        .toc a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .toc a:hover {
+            color: var(--accent-blue);
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        
+        .card h4 {
+            color: var(--accent-green);
+            margin-bottom: 10px;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+            color: var(--text-secondary);
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .section {
+                padding: 16px;
+            }
+            
+            pre {
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚗 FaceMyDealer Python Workers</h1>
+            <p>Complete Server Deployment Guide - From Zero to Production</p>
+            <p style="margin-top: 10px;">
+                <span class="badge badge-blue">Ubuntu 22.04</span>
+                <span class="badge badge-green">Python 3.11+</span>
+                <span class="badge badge-orange">Playwright</span>
+                <span class="badge badge-purple">Redis</span>
+            </p>
+        </header>
+
+        <!-- Table of Contents -->
+        <div class="toc">
+            <h3>📑 Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">1. System Overview & Capacity</a></li>
+                <li><a href="#requirements">2. Server Requirements</a></li>
+                <li><a href="#vps-providers">3. VPS Provider Setup</a></li>
+                <li><a href="#os-setup">4. Operating System Setup</a></li>
+                <li><a href="#install-deps">5. Install Dependencies</a></li>
+                <li><a href="#redis-setup">6. Redis Setup</a></li>
+                <li><a href="#project-setup">7. Project Setup</a></li>
+                <li><a href="#configure">8. Configuration</a></li>
+                <li><a href="#sessions">9. Facebook Session Setup</a></li>
+                <li><a href="#systemd">10. Production Deployment (systemd)</a></li>
+                <li><a href="#usage">11. How to Use</a></li>
+                <li><a href="#monitoring">12. Monitoring & Logs</a></li>
+                <li><a href="#troubleshooting">13. Troubleshooting</a></li>
+            </ul>
+        </div>
+
+        <!-- Section 1: Overview -->
+        <div class="section" id="overview">
+            <h2><span class="step-number">1</span> System Overview & Capacity</h2>
+            
+            <h3>How It Works</h3>
+            <div class="architecture">
+┌────────────────────────────────────────────────────────────────────────────┐
+│                     YOUR MAIN APP (Railway/Vercel)                          │
+│                                                                              │
+│   Node.js Backend                                                            │
+│   ├── AutoPost Service (schedules posts)                                    │
+│   ├── Worker Queue Service (pushes tasks to Redis)                          │
+│   └── API Routes                                                             │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  │  Tasks via Redis Queue
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           REDIS (Cloud or Local)                            │
+│                                                                              │
+│   Queue: fmd:tasks:posting    ──→  Vehicle posting tasks                    │
+│   Queue: fmd:tasks:session    ──→  Session validation tasks                 │
+│   Hash:  fmd:results:*        ──→  Task results                             │
+└─────────────────────────────────┬────────────────────────────────────────────┘
+                                  │
+                                  │  Workers poll for tasks
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                    PYTHON WORKER SERVER (This Guide)                        │
+│                                                                              │
+│   ┌─────────────────────────────────────────────────────────────────────┐  │
+│   │                        Worker Manager                                │  │
+│   │                                                                       │  │
+│   │   Worker 1          Worker 2          Worker 3          Worker N     │  │
+│   │   ┌─────────┐      ┌─────────┐      ┌─────────┐      ┌─────────┐    │  │
+│   │   │Chromium │      │Chromium │      │Chromium │      │Chromium │    │  │
+│   │   │ Browser │      │ Browser │      │ Browser │      │ Browser │    │  │
+│   │   │         │      │         │      │         │      │         │    │  │
+│   │   │Account A│      │Account B│      │Account C│      │Account N│    │  │
+│   │   └─────────┘      └─────────┘      └─────────┘      └─────────┘    │  │
+│   └─────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│   Each worker:                                                               │
+│   • Polls Redis for new tasks                                               │
+│   • Opens headless Chromium browser                                         │
+│   • Loads saved Facebook session (cookies)                                  │
+│   • Posts vehicle to Facebook Marketplace                                   │
+│   • Reports result back to Redis                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+            </div>
+
+            <h3>Capacity Per Server</h3>
+            <table>
+                <tr>
+                    <th>Server Specs</th>
+                    <th>Concurrent Workers</th>
+                    <th>FB Accounts</th>
+                    <th>Posts/Hour</th>
+                    <th>Est. Cost/Month</th>
+                </tr>
+                <tr>
+                    <td><strong>1 vCPU / 1GB RAM</strong> (Basic)</td>
+                    <td>2 workers</td>
+                    <td>2-5 accounts</td>
+                    <td>~20-40 posts</td>
+                    <td>$5-6</td>
+                </tr>
+                <tr>
+                    <td><strong>2 vCPU / 2GB RAM</strong> (Recommended)</td>
+                    <td>4 workers</td>
+                    <td>5-15 accounts</td>
+                    <td>~60-100 posts</td>
+                    <td>$10-12</td>
+                </tr>
+                <tr>
+                    <td><strong>4 vCPU / 4GB RAM</strong> (Production)</td>
+                    <td>8 workers</td>
+                    <td>15-30 accounts</td>
+                    <td>~150-200 posts</td>
+                    <td>$20-24</td>
+                </tr>
+                <tr>
+                    <td><strong>8 vCPU / 8GB RAM</strong> (High Volume)</td>
+                    <td>16 workers</td>
+                    <td>30-50 accounts</td>
+                    <td>~300-400 posts</td>
+                    <td>$40-48</td>
+                </tr>
+            </table>
+
+            <div class="note">
+                <strong>💡 Note:</strong> Each Chromium browser uses ~200-400MB RAM. The number of concurrent workers depends on available RAM.
+                Facebook accounts are managed via saved sessions - you can have more accounts than workers (workers share accounts based on task queue).
+            </div>
+        </div>
+
+        <!-- Section 2: Requirements -->
+        <div class="section" id="requirements">
+            <h2><span class="step-number">2</span> Server Requirements</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h4>Minimum Requirements</h4>
+                    <ul>
+                        <li>Ubuntu 22.04 LTS (recommended)</li>
+                        <li>1 vCPU</li>
+                        <li>1 GB RAM</li>
+                        <li>20 GB SSD</li>
+                        <li>Public IP address</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>Recommended for Production</h4>
+                    <ul>
+                        <li>Ubuntu 22.04 LTS</li>
+                        <li>2-4 vCPU</li>
+                        <li>4 GB RAM</li>
+                        <li>40 GB SSD</li>
+                        <li>Static IP address</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: VPS Providers -->
+        <div class="section" id="vps-providers">
+            <h2><span class="step-number">3</span> VPS Provider Setup</h2>
+            
+            <h3>Recommended Providers (Best Value)</h3>
+            <table>
+                <tr>
+                    <th>Provider</th>
+                    <th>2 vCPU / 2GB Plan</th>
+                    <th>Signup Link</th>
+                </tr>
+                <tr>
+                    <td><strong>Hetzner</strong> (Best value)</td>
+                    <td>~$5/month</td>
+                    <td>hetzner.com/cloud</td>
+                </tr>
+                <tr>
+                    <td><strong>DigitalOcean</strong></td>
+                    <td>$12/month</td>
+                    <td>digitalocean.com</td>
+                </tr>
+                <tr>
+                    <td><strong>Linode</strong></td>
+                    <td>$12/month</td>
+                    <td>linode.com</td>
+                </tr>
+                <tr>
+                    <td><strong>Vultr</strong></td>
+                    <td>$12/month</td>
+                    <td>vultr.com</td>
+                </tr>
+            </table>
+
+            <h3>Create Your Server</h3>
+            <ol>
+                <li>Sign up at your chosen provider</li>
+                <li>Create a new server/droplet/instance</li>
+                <li>Select <strong>Ubuntu 22.04 LTS</strong></li>
+                <li>Choose your plan (2GB RAM recommended)</li>
+                <li>Select a region close to your users</li>
+                <li>Add your SSH key (or use password)</li>
+                <li>Create the server and note the IP address</li>
+            </ol>
+
+            <h3>Connect to Your Server</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Terminal (your local machine)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Replace YOUR_SERVER_IP with your actual IP
+ssh root@YOUR_SERVER_IP</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 4: OS Setup -->
+        <div class="section" id="os-setup">
+            <h2><span class="step-number">4</span> Operating System Setup</h2>
+            
+            <h3>4.1 Update System</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Update & upgrade packages</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>apt update && apt upgrade -y</code></pre>
+            </div>
+
+            <h3>4.2 Create Non-Root User</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Create user 'facedealer' with sudo access</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Create user
+adduser facedealer
+
+# Add to sudo group
+usermod -aG sudo facedealer
+
+# Switch to new user
+su - facedealer</code></pre>
+            </div>
+
+            <h3>4.3 Install Essential Packages</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Install required system packages</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>sudo apt install -y \
+    git \
+    curl \
+    wget \
+    build-essential \
+    software-properties-common \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    htop \
+    nano \
+    ufw</code></pre>
+            </div>
+
+            <h3>4.4 Configure Firewall</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Set up UFW firewall</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Allow SSH
+sudo ufw allow OpenSSH
+
+# Allow Worker API port (optional, only if exposing API)
+sudo ufw allow 8001/tcp
+
+# Enable firewall
+sudo ufw enable
+
+# Check status
+sudo ufw status</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 5: Install Dependencies -->
+        <div class="section" id="install-deps">
+            <h2><span class="step-number">5</span> Install Dependencies</h2>
+            
+            <h3>5.1 Install Python 3.11</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Install Python 3.11 from deadsnakes PPA</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Add Python PPA
+sudo add-apt-repository ppa:deadsnakes/ppa -y
+sudo apt update
+
+# Install Python 3.11
+sudo apt install -y python3.11 python3.11-venv python3.11-dev python3-pip
+
+# Verify installation
+python3.11 --version</code></pre>
+            </div>
+
+            <h3>5.2 Install Playwright Dependencies</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Install Chromium browser dependencies</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Install dependencies for headless Chromium
+sudo apt install -y \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libfontconfig1 \
+    libfreetype6</code></pre>
+            </div>
+
+            <div class="note">
+                <strong>💡 All-in-One Command:</strong> You can combine the above into one command:
+            </div>
+
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Complete dependency installation (single command)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>sudo apt update && sudo apt install -y git curl wget build-essential software-properties-common ca-certificates gnupg lsb-release htop nano ufw libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libfontconfig1 libfreetype6 && sudo add-apt-repository ppa:deadsnakes/ppa -y && sudo apt update && sudo apt install -y python3.11 python3.11-venv python3.11-dev python3-pip</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 6: Redis Setup -->
+        <div class="section" id="redis-setup">
+            <h2><span class="step-number">6</span> Redis Setup</h2>
+            
+            <p>You have two options for Redis:</p>
+
+            <h3>Option A: Install Redis Locally (on this server)</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Install and configure Redis</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Install Redis
+sudo apt install -y redis-server
+
+# Configure Redis to start on boot
+sudo systemctl enable redis-server
+
+# Start Redis
+sudo systemctl start redis-server
+
+# Verify Redis is running
+redis-cli ping
+# Should return: PONG
+
+# Check Redis status
+sudo systemctl status redis-server</code></pre>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Security:</strong> If using local Redis, make sure it only listens on localhost (default).
+                Never expose Redis to the internet without authentication.
+            </div>
+
+            <h3>Option B: Use Redis Cloud (Recommended for Production)</h3>
+            <ol>
+                <li>Go to <a href="https://redis.com/try-free/" target="_blank" style="color: var(--accent-blue);">redis.com/try-free</a></li>
+                <li>Create a free account (30MB free tier)</li>
+                <li>Create a new database</li>
+                <li>Copy the connection URL (looks like: <code class="inline-code">redis://default:password@redis-12345.c1.us-east-1.ec2.cloud.redislabs.com:12345</code>)</li>
+            </ol>
+
+            <div class="success">
+                <strong>✅ Recommended:</strong> Use Redis Cloud for production. It's more reliable, requires no maintenance, and the free tier is sufficient for most dealerships.
+            </div>
+        </div>
+
+        <!-- Section 7: Project Setup -->
+        <div class="section" id="project-setup">
+            <h2><span class="step-number">7</span> Project Setup</h2>
+            
+            <h3>7.1 Clone the Repository</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Clone FaceMyDealer repository</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Navigate to home directory
+cd ~
+
+# Clone repository (replace with your actual repo URL)
+git clone https://github.com/YOUR_USERNAME/FaceMyDealer.git
+
+# Navigate to python workers directory
+cd FaceMyDealer/python-workers</code></pre>
+            </div>
+
+            <h3>7.2 Create Virtual Environment</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Create and activate Python virtual environment</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Create virtual environment
+python3.11 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Verify Python version
+python --version
+# Should show: Python 3.11.x</code></pre>
+            </div>
+
+            <h3>7.3 Install Python Dependencies</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Install all required packages</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Upgrade pip
+pip install --upgrade pip
+
+# Install requirements
+pip install -r requirements.txt</code></pre>
+            </div>
+
+            <h3>7.4 Install Playwright Browsers</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Install Chromium for headless browsing</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Install Chromium browser
+python -m playwright install chromium
+
+# Install system dependencies for Playwright
+sudo python -m playwright install-deps chromium</code></pre>
+            </div>
+
+            <h3>7.5 Create Data Directories</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Create directories for sessions and logs</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Create required directories
+mkdir -p data/sessions
+mkdir -p data/screenshots
+mkdir -p logs
+
+# Set permissions
+chmod 700 data/sessions</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 8: Configuration -->
+        <div class="section" id="configure">
+            <h2><span class="step-number">8</span> Configuration</h2>
+            
+            <h3>8.1 Create Environment File</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Copy and edit .env file</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Copy example file
+cp .env.example .env
+
+# Edit with nano
+nano .env</code></pre>
+            </div>
+
+            <h3>8.2 Configure Environment Variables</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>.env file contents</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># ===========================================
+# FaceMyDealer Python Workers Configuration
+# ===========================================
+
+# Redis Connection
+# For local Redis: redis://localhost:6379
+# For Redis Cloud: redis://default:password@host:port
+REDIS_URL=redis://localhost:6379
+
+# Your Node.js Backend URL (Railway, Vercel, etc.)
+API_BASE_URL=https://your-backend.railway.app
+
+# Shared secret for authentication (MUST MATCH your Node.js backend)
+WORKER_SECRET=your-super-secret-key-change-this-in-production
+
+# Session encryption key (32 characters minimum)
+SESSION_SECRET=your-session-encryption-key-32chars
+
+# Browser Settings
+HEADLESS=true
+MAX_CONCURRENT_BROWSERS=4
+
+# Facebook Settings
+FACEBOOK_LOCALE=en_US
+
+# Logging
+LOG_LEVEL=INFO</code></pre>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Important:</strong> 
+                <ul>
+                    <li>Generate strong random secrets for <code class="inline-code">WORKER_SECRET</code> and <code class="inline-code">SESSION_SECRET</code></li>
+                    <li>The <code class="inline-code">WORKER_SECRET</code> MUST match the one in your Node.js backend</li>
+                    <li>Set <code class="inline-code">MAX_CONCURRENT_BROWSERS</code> based on your server's RAM (each browser uses ~300MB)</li>
+                </ul>
+            </div>
+
+            <h3>8.3 Generate Secure Secrets</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Generate random secrets</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Generate WORKER_SECRET
+openssl rand -base64 32
+
+# Generate SESSION_SECRET  
+openssl rand -base64 32</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 9: Facebook Sessions -->
+        <div class="section" id="sessions">
+            <h2><span class="step-number">9</span> Facebook Session Setup</h2>
+            
+            <div class="danger">
+                <strong>🔐 Critical Step:</strong> Before workers can post, you must log into each Facebook account and save the session.
+                This is a ONE-TIME setup per Facebook account.
+            </div>
+
+            <h3>9.1 Run Session Setup (Interactive Mode)</h3>
+            <p>You need to run this on a machine with a display (your local PC, or use VNC/X11 forwarding on the server).</p>
+
+            <h4>Option A: Run on Your Local PC (Easiest)</h4>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Windows PowerShell - Run locally</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Navigate to python-workers directory
+cd C:\path\to\FaceMyDealer\python-workers
+
+# Run session setup
+.\run_setup_session.ps1
+
+# Or directly:
+.\venv\Scripts\python.exe -m scripts.setup_session</code></pre>
+            </div>
+
+            <h4>Option B: Run on Server with X11 Forwarding</h4>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>SSH with X11 forwarding (requires X server on local machine)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Connect with X11 forwarding
+ssh -X facedealer@YOUR_SERVER_IP
+
+# Navigate to project
+cd ~/FaceMyDealer/python-workers
+
+# Activate environment
+source venv/bin/activate
+
+# Run setup (browser will appear on your local machine)
+python -m scripts.setup_session</code></pre>
+            </div>
+
+            <h3>9.2 Session Setup Process</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Interactive session setup flow</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>============================================================
+   FaceMyDealer Session Setup Tool
+============================================================
+
+📌 Options:
+   1. Set up new session
+   2. List all sessions
+   3. Validate a session
+   4. Delete a session
+   5. Exit
+
+Select option (1-5): 1
+
+--- New Session Setup ---
+Account ID (unique identifier): dealer_main_account
+Facebook email/phone: dealer@email.com
+Facebook password: ********
+Do you have a TOTP secret? (y/n): n
+Run headless? (y/n, default n): n
+
+🚀 Setting up session for account: dealer_main_account
+📱 Logging into Facebook...
+
+[Browser opens - complete 2FA if prompted]
+
+✅ Login successful!
+💾 Session saved for account: dealer_main_account</code></pre>
+            </div>
+
+            <h3>9.3 Transfer Sessions to Server</h3>
+            <p>If you set up sessions on your local PC, transfer them to the server:</p>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Transfer sessions via SCP</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># From your local machine (PowerShell/Terminal)
+scp -r ./data/sessions/* facedealer@YOUR_SERVER_IP:~/FaceMyDealer/python-workers/data/sessions/</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 10: Production Deployment -->
+        <div class="section" id="systemd">
+            <h2><span class="step-number">10</span> Production Deployment (systemd)</h2>
+            
+            <h3>10.1 Create Worker Service</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Create systemd service file</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>sudo nano /etc/systemd/system/facedealer-worker.service</code></pre>
+            </div>
+
+            <div class="code-block">
+                <div class="code-header">
+                    <span>facedealer-worker.service contents</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>[Unit]
+Description=FaceMyDealer Python Worker
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=facedealer
+Group=facedealer
+WorkingDirectory=/home/facedealer/FaceMyDealer/python-workers
+Environment="PATH=/home/facedealer/FaceMyDealer/python-workers/venv/bin"
+EnvironmentFile=/home/facedealer/FaceMyDealer/python-workers/.env
+ExecStart=/home/facedealer/FaceMyDealer/python-workers/venv/bin/python -m workers.posting_worker
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/facedealer/FaceMyDealer/python-workers/logs/worker.log
+StandardError=append:/home/facedealer/FaceMyDealer/python-workers/logs/worker-error.log
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+            </div>
+
+            <h3>10.2 Create API Service (Optional)</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Create API systemd service</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>sudo nano /etc/systemd/system/facedealer-api.service</code></pre>
+            </div>
+
+            <div class="code-block">
+                <div class="code-header">
+                    <span>facedealer-api.service contents</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>[Unit]
+Description=FaceMyDealer Worker API
+After=network.target
+
+[Service]
+Type=simple
+User=facedealer
+Group=facedealer
+WorkingDirectory=/home/facedealer/FaceMyDealer/python-workers
+Environment="PATH=/home/facedealer/FaceMyDealer/python-workers/venv/bin"
+EnvironmentFile=/home/facedealer/FaceMyDealer/python-workers/.env
+ExecStart=/home/facedealer/FaceMyDealer/python-workers/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8001
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/facedealer/FaceMyDealer/python-workers/logs/api.log
+StandardError=append:/home/facedealer/FaceMyDealer/python-workers/logs/api-error.log
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+            </div>
+
+            <h3>10.3 Enable and Start Services</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Enable and start the services</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Reload systemd
+sudo systemctl daemon-reload
+
+# Enable services to start on boot
+sudo systemctl enable facedealer-worker
+sudo systemctl enable facedealer-api
+
+# Start services
+sudo systemctl start facedealer-worker
+sudo systemctl start facedealer-api
+
+# Check status
+sudo systemctl status facedealer-worker
+sudo systemctl status facedealer-api</code></pre>
+            </div>
+
+            <h3>10.4 Run Multiple Workers</h3>
+            <p>To run multiple worker instances, create a template service:</p>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Create template service for multiple workers</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>sudo nano /etc/systemd/system/facedealer-worker@.service</code></pre>
+            </div>
+
+            <div class="code-block">
+                <div class="code-header">
+                    <span>facedealer-worker@.service template</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code>[Unit]
+Description=FaceMyDealer Python Worker %i
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=facedealer
+Group=facedealer
+WorkingDirectory=/home/facedealer/FaceMyDealer/python-workers
+Environment="PATH=/home/facedealer/FaceMyDealer/python-workers/venv/bin"
+Environment="WORKER_ID=%i"
+EnvironmentFile=/home/facedealer/FaceMyDealer/python-workers/.env
+ExecStart=/home/facedealer/FaceMyDealer/python-workers/venv/bin/python -m workers.posting_worker
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/facedealer/FaceMyDealer/python-workers/logs/worker-%i.log
+StandardError=append:/home/facedealer/FaceMyDealer/python-workers/logs/worker-%i-error.log
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+            </div>
+
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Start multiple worker instances</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Reload systemd
+sudo systemctl daemon-reload
+
+# Start 4 worker instances
+sudo systemctl enable facedealer-worker@1
+sudo systemctl enable facedealer-worker@2
+sudo systemctl enable facedealer-worker@3
+sudo systemctl enable facedealer-worker@4
+
+sudo systemctl start facedealer-worker@1
+sudo systemctl start facedealer-worker@2
+sudo systemctl start facedealer-worker@3
+sudo systemctl start facedealer-worker@4
+
+# Check all workers
+sudo systemctl status 'facedealer-worker@*'</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 11: Usage -->
+        <div class="section" id="usage">
+            <h2><span class="step-number">11</span> How to Use</h2>
+            
+            <h3>Automatic Operation</h3>
+            <p>Once deployed, the system works automatically:</p>
+            
+            <div class="architecture">
+1. Dealer schedules a post in FaceMyDealer web app
+                    ↓
+2. Node.js AutoPost service triggers at scheduled time
+                    ↓
+3. Task is pushed to Redis queue
+                    ↓
+4. Python worker picks up the task
+                    ↓
+5. Worker opens headless Chromium with saved FB session
+                    ↓
+6. Worker posts vehicle to Facebook Marketplace
+                    ↓
+7. Result is saved back to Redis
+                    ↓
+8. Node.js backend checks result and updates database
+            </div>
+
+            <h3>Manual Commands</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Useful management commands</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># SSH into server
+ssh facedealer@YOUR_SERVER_IP
+
+# Navigate to project
+cd ~/FaceMyDealer/python-workers
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Check worker status
+sudo systemctl status facedealer-worker@1
+
+# View worker logs (live)
+tail -f logs/worker-1.log
+
+# View error logs
+tail -f logs/worker-1-error.log
+
+# Restart a worker
+sudo systemctl restart facedealer-worker@1
+
+# Restart all workers
+sudo systemctl restart 'facedealer-worker@*'
+
+# Stop all workers
+sudo systemctl stop 'facedealer-worker@*'
+
+# Check Redis queue
+redis-cli LLEN fmd:tasks:posting
+
+# List all sessions
+python -m scripts.setup_session
+# Then select option 2</code></pre>
+            </div>
+
+            <h3>Configure Your Node.js Backend</h3>
+            <p>Make sure your main backend's <code class="inline-code">.env</code> has:</p>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Node.js backend .env additions</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Add these to your Railway/Vercel environment variables
+
+# Same Redis URL as Python workers
+REDIS_URL=redis://your-redis-url:6379
+
+# Same secret as Python workers
+WORKER_SECRET=your-super-secret-key-change-this-in-production</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 12: Monitoring -->
+        <div class="section" id="monitoring">
+            <h2><span class="step-number">12</span> Monitoring & Logs</h2>
+            
+            <h3>12.1 View Logs</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Log viewing commands</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># View systemd logs for worker
+sudo journalctl -u facedealer-worker@1 -f
+
+# View application logs
+tail -f ~/FaceMyDealer/python-workers/logs/worker-1.log
+
+# View last 100 lines of errors
+tail -100 ~/FaceMyDealer/python-workers/logs/worker-1-error.log
+
+# Search logs for errors
+grep -i "error" ~/FaceMyDealer/python-workers/logs/worker-1.log</code></pre>
+            </div>
+
+            <h3>12.2 Monitor Resources</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Resource monitoring</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Interactive resource monitor
+htop
+
+# Memory usage
+free -h
+
+# Disk usage
+df -h
+
+# Check chromium processes
+ps aux | grep chromium</code></pre>
+            </div>
+
+            <h3>12.3 Health Check API</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Check API health</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># If API service is running
+curl http://localhost:8001/health
+
+# Expected response:
+# {"status": "healthy", "workers": 4, "redis": "connected"}</code></pre>
+            </div>
+        </div>
+
+        <!-- Section 13: Troubleshooting -->
+        <div class="section" id="troubleshooting">
+            <h2><span class="step-number">13</span> Troubleshooting</h2>
+            
+            <table>
+                <tr>
+                    <th>Problem</th>
+                    <th>Solution</th>
+                </tr>
+                <tr>
+                    <td>Worker won't start</td>
+                    <td>Check logs: <code class="inline-code">sudo journalctl -u facedealer-worker@1 -n 50</code></td>
+                </tr>
+                <tr>
+                    <td>Redis connection failed</td>
+                    <td>Verify REDIS_URL in .env. Test with <code class="inline-code">redis-cli ping</code></td>
+                </tr>
+                <tr>
+                    <td>Session expired</td>
+                    <td>Re-run <code class="inline-code">python -m scripts.setup_session</code> to refresh</td>
+                </tr>
+                <tr>
+                    <td>Browser crashes (OOM)</td>
+                    <td>Reduce <code class="inline-code">MAX_CONCURRENT_BROWSERS</code> or add more RAM</td>
+                </tr>
+                <tr>
+                    <td>Facebook blocked</td>
+                    <td>Check if account is restricted. May need to verify identity on Facebook</td>
+                </tr>
+                <tr>
+                    <td>Permissions error</td>
+                    <td>Run <code class="inline-code">chmod 700 data/sessions</code> and check file ownership</td>
+                </tr>
+                <tr>
+                    <td>Module not found</td>
+                    <td>Ensure venv is activated: <code class="inline-code">source venv/bin/activate</code></td>
+                </tr>
+            </table>
+
+            <h3>Complete Reset</h3>
+            <div class="code-block">
+                <div class="code-header">
+                    <span>If all else fails - complete reset</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                </div>
+                <pre><code># Stop services
+sudo systemctl stop 'facedealer-worker@*'
+sudo systemctl stop facedealer-api
+
+# Navigate to project
+cd ~/FaceMyDealer/python-workers
+
+# Remove and recreate virtual environment
+rm -rf venv
+python3.11 -m venv venv
+source venv/bin/activate
+
+# Reinstall everything
+pip install --upgrade pip
+pip install -r requirements.txt
+python -m playwright install chromium
+
+# Restart services
+sudo systemctl start facedealer-worker@1
+sudo systemctl start facedealer-api</code></pre>
+            </div>
+        </div>
+
+        <!-- Quick Reference -->
+        <div class="section">
+            <h2>📋 Quick Reference Commands</h2>
+            
+            <div class="code-block">
+                <div class="code-header">
+                    <span>Copy this entire block for quick setup</span>
+                    <button class="copy-btn" onclick="copyCode(this)">📋 Copy All</button>
+                </div>
+                <pre><code># ============================================
+# FULL SETUP SCRIPT - Run line by line
+# ============================================
+
+# 1. Update system
+sudo apt update && sudo apt upgrade -y
+
+# 2. Install all dependencies
+sudo apt install -y git curl wget build-essential software-properties-common ca-certificates gnupg lsb-release htop nano ufw redis-server libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 libfontconfig1 libfreetype6
+
+# 3. Install Python 3.11
+sudo add-apt-repository ppa:deadsnakes/ppa -y
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3.11-dev
+
+# 4. Enable Redis
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+
+# 5. Clone repo (CHANGE THIS URL)
+cd ~
+git clone https://github.com/YOUR_USERNAME/FaceMyDealer.git
+cd FaceMyDealer/python-workers
+
+# 6. Setup Python environment
+python3.11 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+python -m playwright install chromium
+sudo python -m playwright install-deps chromium
+
+# 7. Create directories
+mkdir -p data/sessions data/screenshots logs
+chmod 700 data/sessions
+
+# 8. Create .env file (EDIT THIS!)
+cp .env.example .env
+nano .env
+
+# 9. Test it works
+python -c "from core.config import get_settings; print('✅ Config OK')"
+
+# 10. Start manually to test
+python -m workers.posting_worker
+
+# ============================================
+# After testing, set up systemd services
+# (copy service files from guide above)
+# ============================================</code></pre>
+            </div>
+        </div>
+
+        <footer>
+            <p>FaceMyDealer Python Workers Deployment Guide</p>
+            <p style="margin-top: 8px; font-size: 0.9rem;">
+                Built with ❤️ for automotive dealers
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        function copyCode(button) {
+            const codeBlock = button.closest('.code-block');
+            const code = codeBlock.querySelector('pre code').textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = button.textContent;
+                button.textContent = '✅ Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                button.textContent = '❌ Failed';
+                setTimeout(() => {
+                    button.textContent = '📋 Copy';
+                }, 2000);
+            });
+        }
+
+        // Add smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

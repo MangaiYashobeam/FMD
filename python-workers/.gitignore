@@ -1,0 +1,44 @@
+# Ignore environment files with secrets
+.env
+
+# Sessions contain encrypted credentials
+data/sessions/*.enc
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.eggs/
+*.egg-info/
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+logs/
+
+# Build
+dist/
+build/
+
+# Temp files
+*.tmp
+*.temp
