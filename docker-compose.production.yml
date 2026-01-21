@@ -206,7 +206,7 @@ services:
   # Traefik Reverse Proxy (SSL/TLS)
   # ===========================================
   traefik:
-    image: traefik:v2.10
+    image: traefik:v3.2
     restart: unless-stopped
     command:
       - "--api.dashboard=true"
@@ -214,7 +214,6 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
