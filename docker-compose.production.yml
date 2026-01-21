@@ -104,9 +104,16 @@ services:
       - fmd-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.api.tls=true"
-      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      # Domain-based routing (with SSL)
+      - "traefik.http.routers.api-secure.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.api-secure.tls=true"
+      - "traefik.http.routers.api-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-secure.entrypoints=websecure"
+      # IP-based routing (HTTP only, for direct IP access)
+      - "traefik.http.routers.api-ip.rule=HostRegexp(`{host:.+}`)"
+      - "traefik.http.routers.api-ip.entrypoints=web"
+      - "traefik.http.routers.api-ip.priority=1"
+      # Service
       - "traefik.http.services.api.loadbalancer.server.port=3000"
 
   # ===========================================
