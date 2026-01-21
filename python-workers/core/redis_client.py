@@ -234,6 +234,58 @@ class RedisQueue:
                 workers.append(data)
         return workers
     
+    async def update_worker_health(self, worker_id: str, health_data: Dict[str, Any]):
+        """Update worker health/status information"""
+        key = f"fmd:worker:{worker_id}:health"
+        health_data['updated_at'] = datetime.utcnow().isoformat()
+        await self.client.hset(key, mapping={k: json.dumps(v) if isinstance(v, (dict, list)) else str(v) for k, v in health_data.items()})
+        await self.client.expire(key, 300)  # 5 minute TTL
+        # Also update heartbeat on main worker key
+        await self.worker_heartbeat(worker_id)
+        logger.debug("Worker health updated", worker_id=worker_id)
+    
+    async def get_worker_health(self, worker_id: str) -> Optional[Dict[str, Any]]:
+        """Get worker health information"""
+        key = f"fmd:worker:{worker_id}:health"
+        data = await self.client.hgetall(key)
+        if data:
+            # Parse JSON values back
+            for k, v in data.items():
+                try:
+                    data[k] = json.loads(v)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            data['worker_id'] = worker_id
+        return data if data else None
+    
+    async def requeue_task(self, queue_name: str, task: Dict[str, Any], delay_seconds: int = 0):
+        """
+        Requeue a task for retry, optionally with a delay
+        
+        Args:
+            queue_name: Name of the queue (or None for default)
+            task: Task data to requeue
+            delay_seconds: Delay before task becomes available (for backoff)
+        """
+        task_queue = f"fmd:tasks:{queue_name}:pending" if queue_name else self.TASK_QUEUE
+        task['requeued_at'] = datetime.utcnow().isoformat()
+        priority = task.get('priority', 5)
+        
+        # Use timestamp to calculate score - add delay to push task into future
+        if delay_seconds > 0:
+            # Use a delayed queue pattern
+            delayed_key = f"fmd:tasks:delayed"
+            execute_at = datetime.utcnow().timestamp() + delay_seconds
+            await self.client.zadd(delayed_key, {json.dumps(task): execute_at})
+            logger.info("Task delayed for retry", 
+                       task_id=task.get('id'), 
+                       delay_seconds=delay_seconds)
+        else:
+            # Immediate requeue with lower priority
+            score = (10 - priority) * 1000000000 + datetime.utcnow().timestamp()
+            await self.client.zadd(task_queue, {json.dumps(task): score})
+            logger.info("Task requeued immediately", task_id=task.get('id'))
+    
     # ==========================================
     # Browser Pool Management
     # ==========================================
