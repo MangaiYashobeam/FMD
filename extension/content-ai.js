@@ -13,8 +13,7 @@
 // ============================================
 
 const CONFIG = {
-  API_URL: 'http://46.4.224.182:3000/api', // VPS Direct (Cloudflare not configured)
-  // API_URL: 'https://dealersface.com/api', // Production (when Cloudflare is configured)
+  API_URL: 'https://dealersface.com/api', // Production via Cloudflare
   // API_URL: 'http://localhost:5000/api', // Development
   POLL_INTERVAL: 5000, // Check for tasks every 5 seconds
   HUMAN_TYPING_MIN_DELAY: 50,

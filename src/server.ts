@@ -159,11 +159,13 @@ app.use(helmet({
 app.use(securityHeaders);
 
 // ============================================
-// CORS Configuration
+// CORS Configuration (Cloudflare Production)
 // ============================================
 const allowedOrigins = [
+  // Development
   'http://localhost:3000',
   'http://localhost:5173', // Vite dev server
+  // Production (via Cloudflare)
   'https://dealersface.com',
   'https://www.dealersface.com',
   'https://fmd-production.up.railway.app',
@@ -171,19 +173,15 @@ const allowedOrigins = [
   'https://www.facebook.com',
   'https://facebook.com',
   'https://m.facebook.com',
-  // VPS direct access
-  'http://46.4.224.182',
-  'http://46.4.224.182:3000',
-  'https://46.4.224.182',
-  // Chrome Extension origins
-  'chrome-extension://*',
+  // Chrome Extension origins (handled separately below)
   ...(process.env.ALLOWED_ORIGINS?.split(',') || []),
   process.env.API_URL,
+  process.env.FRONTEND_URL,
 ].filter(Boolean) as string[];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman, etc.) or empty origin
+    // Allow requests with no origin (mobile apps, curl, Postman, server-to-server, Cloudflare workers)
     if (!origin || origin === '') {
       return callback(null, true);
     }
@@ -198,6 +196,11 @@ app.use(cors({
       return callback(null, true);
     }
     
+    // Allow Cloudflare Workers
+    if (origin.includes('cloudflare') || origin.includes('workers.dev')) {
+      return callback(null, true);
+    }
+    
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -207,8 +210,20 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Request-Signature', 'X-Request-Timestamp'],
-  exposedHeaders: ['X-CSRF-Token'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'X-CSRF-Token', 
+    'X-Request-Signature', 
+    'X-Request-Timestamp',
+    // Cloudflare headers
+    'CF-Connecting-IP',
+    'CF-Ray',
+    'CF-IPCountry',
+    'CF-Visitor',
+  ],
+  exposedHeaders: ['X-CSRF-Token', 'CF-Ray'],
   maxAge: 86400, // 24 hours
 }));
 

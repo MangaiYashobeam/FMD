@@ -268,7 +268,7 @@ elements.postVehicleBtn.addEventListener('click', async () => {
   try {
     // Open Dealers Face vehicle posting page
     await chrome.tabs.create({
-      url: 'http://46.4.224.182/dashboard/post',
+      url: 'https://dealersface.com/dashboard/post',
       active: true,
     });
     addActivity('info', 'Opening vehicle posting interface...');
@@ -280,7 +280,7 @@ elements.postVehicleBtn.addEventListener('click', async () => {
 // Open Dashboard
 elements.openDashboardBtn.addEventListener('click', async () => {
   await chrome.tabs.create({
-    url: 'http://46.4.224.182/dashboard',
+    url: 'https://dealersface.com/dashboard',
     active: true,
   });
 });
@@ -288,7 +288,7 @@ elements.openDashboardBtn.addEventListener('click', async () => {
 // Settings
 elements.settingsBtn.addEventListener('click', async () => {
   await chrome.tabs.create({
-    url: 'http://46.4.224.182/dashboard/settings',
+    url: 'https://dealersface.com/dashboard/settings',
     active: true,
   });
 });
