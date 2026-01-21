@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vehiclesApi } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,7 +15,6 @@ import {
   Car,
   Loader2,
   X,
-  Image as ImageIcon,
   DollarSign,
   Calendar,
   Gauge,
@@ -28,8 +27,62 @@ import {
   AlertCircle,
   Clock,
   Share2,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+
+// Vehicle Image Component with error handling for broken images
+function VehicleImage({ 
+  src, 
+  alt, 
+  className,
+  fallbackClassName,
+  iconSize = 'w-6 h-6'
+}: { 
+  src?: string; 
+  alt: string; 
+  className?: string;
+  fallbackClassName?: string;
+  iconSize?: string;
+}) {
+  const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const handleError = useCallback(() => {
+    setHasError(true);
+    setIsLoading(false);
+  }, []);
+
+  const handleLoad = useCallback(() => {
+    setIsLoading(false);
+  }, []);
+
+  if (!src || hasError) {
+    return (
+      <div className={cn('w-full h-full flex items-center justify-center bg-gray-100', fallbackClassName)}>
+        <Car className={cn(iconSize, 'text-gray-400')} />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {isLoading && (
+        <div className={cn('w-full h-full flex items-center justify-center bg-gray-100 absolute inset-0', fallbackClassName)}>
+          <Loader2 className={cn(iconSize, 'text-gray-400 animate-spin')} />
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={cn(className, isLoading && 'opacity-0')}
+        onError={handleError}
+        onLoad={handleLoad}
+        loading="lazy"
+      />
+    </>
+  );
+}
 
 interface Vehicle {
   id: string;
@@ -117,18 +170,13 @@ function VehicleDetailModal({ vehicle, onClose, onEdit }: { vehicle: Vehicle; on
             {/* Photo Gallery */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               <div>
-                <div className="aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden">
-                  {photos[selectedPhoto] ? (
-                    <img
-                      src={photos[selectedPhoto]}
-                      alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Car className="w-16 h-16 text-gray-300" />
-                    </div>
-                  )}
+                <div className="aspect-[4/3] bg-gray-100 rounded-xl overflow-hidden relative">
+                  <VehicleImage
+                    src={photos[selectedPhoto]}
+                    alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                    className="w-full h-full object-cover"
+                    iconSize="w-16 h-16"
+                  />
                 </div>
                 {photos.length > 1 && (
                   <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
@@ -137,11 +185,11 @@ function VehicleDetailModal({ vehicle, onClose, onEdit }: { vehicle: Vehicle; on
                         key={i}
                         onClick={() => setSelectedPhoto(i)}
                         className={cn(
-                          'w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 border-2',
+                          'w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 border-2 relative',
                           selectedPhoto === i ? 'border-blue-500' : 'border-transparent'
                         )}
                       >
-                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                        <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-4 h-4" />
                       </button>
                     ))}
                     {photos.length > 8 && (
@@ -232,7 +280,8 @@ function InfoCard({ icon: Icon, label, value }: { icon: React.ElementType; label
 function FacebookAdPreviewModal({ 
   vehicle, 
   onClose, 
-  onPost 
+  onPost,
+  onRefresh,
 }: { 
   vehicle: Vehicle; 
   onClose: () => void;
@@ -244,6 +293,7 @@ function FacebookAdPreviewModal({
     photos: string[];
     method: string;
   }) => void;
+  onRefresh?: () => void;
 }) {
   const photos = vehicle.photos?.length ? vehicle.photos : vehicle.imageUrls || [];
   const [title, setTitle] = useState(`${vehicle.year} ${vehicle.make} ${vehicle.model} ${vehicle.trim || ''}`.trim());
@@ -252,9 +302,20 @@ function FacebookAdPreviewModal({
     vehicle.description || generateDefaultDescription(vehicle)
   );
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>(photos.slice(0, 10));
-  const [postMethod, setPostMethod] = useState<'api' | 'pixel' | 'iai'>('iai');
+  const [postMethod, setPostMethod] = useState<'api' | 'pixel' | 'iai' | 'soldier'>('iai');
   const [posting, setPosting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+
+  const handleRefresh = async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   function generateDefaultDescription(v: Vehicle): string {
     const parts = [
@@ -341,9 +402,22 @@ function FacebookAdPreviewModal({
                   <p className="text-xs text-gray-500 mt-1">{title.length}/100 characters</p>
                 </div>
 
-                {/* Price */}
+                {/* Price with Refresh Button */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">Price</label>
+                    {onRefresh && (
+                      <button
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                        title="Refresh price and data from CSV source"
+                      >
+                        <RefreshCw className={cn('w-3 h-3', refreshing && 'animate-spin')} />
+                        {refreshing ? 'Refreshing...' : 'Refresh from CSV'}
+                      </button>
+                    )}
+                  </div>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
@@ -385,7 +459,7 @@ function FacebookAdPreviewModal({
                             : 'border-gray-200 hover:border-gray-300'
                         )}
                       >
-                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                        <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-4 h-4" />
                         {selectedPhotos.includes(photo) && (
                           <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
                             <CheckCircle className="w-3 h-3 text-white" />
@@ -417,6 +491,24 @@ function FacebookAdPreviewModal({
                         <p className="text-xs text-gray-500">Automated browser posting via extension</p>
                       </div>
                       <span className="ml-auto text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Recommended</span>
+                    </label>
+                    <label className={cn(
+                      'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
+                      postMethod === 'soldier' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                    )}>
+                      <input
+                        type="radio"
+                        name="postMethod"
+                        checked={postMethod === 'soldier'}
+                        onChange={() => setPostMethod('soldier')}
+                        className="text-blue-600"
+                      />
+                      <Send className="w-5 h-5 text-orange-600" />
+                      <div>
+                        <p className="font-medium text-gray-900">Soldier Workers</p>
+                        <p className="text-xs text-gray-500">Server-side headless browser automation</p>
+                      </div>
+                      <span className="ml-auto text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">No Extension</span>
                     </label>
                     <label className={cn(
                       'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
@@ -474,17 +566,12 @@ function FacebookAdPreviewModal({
 
                   {/* Image Carousel */}
                   <div className="relative aspect-[4/3] bg-gray-100">
-                    {selectedPhotos[currentPhotoIndex] ? (
-                      <img
-                        src={selectedPhotos[currentPhotoIndex]}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <ImageIcon className="w-12 h-12 text-gray-300" />
-                      </div>
-                    )}
+                    <VehicleImage
+                      src={selectedPhotos[currentPhotoIndex]}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      iconSize="w-12 h-12"
+                    />
                     {selectedPhotos.length > 1 && (
                       <>
                         <button
@@ -700,6 +787,20 @@ export default function InventoryPage() {
     },
   });
 
+  // Refresh vehicle from source mutation
+  const refreshFromSourceMutation = useMutation({
+    mutationFn: async (vehicleId: string) => {
+      return vehiclesApi.refreshFromSource(vehicleId);
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      // Update the editing vehicle with fresh data
+      if (editingVehicle && response?.data?.data) {
+        setEditingVehicle(response.data.data);
+      }
+    },
+  });
+
   // Post to Facebook mutation
   const postToFacebookMutation = useMutation({
     mutationFn: async (data: {
@@ -892,18 +993,13 @@ export default function InventoryPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-16 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                              {photos[0] ? (
-                                <img
-                                  src={photos[0]}
-                                  alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <Car className="w-6 h-6 text-gray-400" />
-                                </div>
-                              )}
+                            <div className="w-16 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 relative">
+                              <VehicleImage
+                                src={photos[0]}
+                                alt={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                                className="w-full h-full object-cover"
+                                iconSize="w-6 h-6"
+                              />
                             </div>
                             <div>
                               <p className="font-medium text-gray-900">
@@ -1021,6 +1117,7 @@ export default function InventoryPage() {
           vehicle={postingVehicle}
           onClose={() => setPostingVehicle(null)}
           onPost={(data) => postToFacebookMutation.mutate(data)}
+          onRefresh={() => refreshFromSourceMutation.mutate(postingVehicle.id)}
         />
       )}
 
@@ -1038,6 +1135,7 @@ export default function InventoryPage() {
           vehicle={editingVehicle}
           onClose={() => setEditingVehicle(null)}
           onPost={(data) => postToFacebookMutation.mutate(data)}
+          onRefresh={() => refreshFromSourceMutation.mutate(editingVehicle.id)}
         />
       )}
     </div>

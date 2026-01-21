@@ -3,6 +3,9 @@ import { AuthRequest } from '@/middleware/auth';
 import prisma from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
+import { FTPService } from '@/services/ftp.service';
+import { CSVParserService } from '@/services/csvParser.service';
+import { getRedisConnection } from '@/config/redis';
 
 export class VehicleController {
   /**
@@ -526,13 +529,106 @@ export class VehicleController {
       }
     }
 
+    // =====================================================
+    // METHOD 4: SOLDIER WORKERS (Headless Browser Automation)
+    // =====================================================
+    if (method === 'soldier') {
+      // Queue task for Python Soldier Workers (headless Playwright browsers)
+      try {
+        // Create task in database for tracking
+        const task = await prisma.extensionTask.create({
+          data: {
+            accountId: vehicle.accountId,
+            type: 'SOLDIER_POST_TO_MARKETPLACE',
+            status: 'pending',
+            priority: 5,
+            vehicleId: vehicle.id,
+            data: {
+              action: 'soldier_create_listing',
+              vehicle: vehicleData,
+              targetPlatform: 'facebook_marketplace',
+              useHeadlessBrowser: true,
+              workerType: 'soldier',
+              instructions: {
+                navigateTo: 'marketplace_create_vehicle',
+                fillForm: true,
+                uploadPhotos: true,
+                handleCaptcha: true,
+                submit: false, // Require manual approval setting
+              },
+            },
+          },
+        });
+
+        // Push to Redis queue for Soldier Workers to pick up
+        const redisQueue = getRedisConnection();
+        if (redisQueue) {
+          await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify({
+            taskId: task.id,
+            type: 'POST_TO_MARKETPLACE',
+            accountId: vehicle.accountId,
+            vehicleId: vehicle.id,
+            vehicle: vehicleData,
+            createdAt: new Date().toISOString(),
+            priority: 5,
+          }));
+        } else {
+          logger.warn('Redis not available - Soldier Worker task created but not queued');
+        }
+
+        // Create a pending Facebook post record
+        const fbProfile = vehicle.account.facebookProfiles?.[0];
+        if (fbProfile) {
+          await prisma.facebookPost.create({
+            data: {
+              vehicleId: vehicle.id,
+              profileId: fbProfile.id,
+              status: 'queued_soldier',
+              message: vehicleData.description,
+            },
+          });
+        }
+
+        logger.info(`Soldier Worker task created for vehicle ${id}: ${task.id}`);
+
+        res.json({
+          success: true,
+          message: 'Task queued for Soldier Worker. Your listing will be processed automatically.',
+          data: { 
+            taskId: task.id, 
+            method: 'soldier',
+            status: 'queued',
+            estimatedProcessingTime: '1-5 minutes',
+            features: [
+              '🤖 Fully automated headless browser posting',
+              '🔒 Secure server-side processing',
+              '📸 Automatic photo upload',
+              '🛡️ Anti-detection measures',
+              '⚡ No browser extension required',
+            ],
+            instructions: [
+              'Your listing is being processed by our Soldier Workers',
+              'You will receive a notification when complete',
+              'Check the posting status in Settings > Posting History',
+            ],
+          },
+        });
+        return;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(`Soldier Worker post failed for vehicle ${id}: ${errorMessage}`);
+        throw new AppError(`Soldier Worker error: ${errorMessage}`, 500);
+      }
+    }
+
     // Unknown method
     res.json({
       success: false,
-      message: `Unknown posting method: ${method}. Use 'iai', 'api', or 'pixel'.`,
+      message: `Unknown posting method: ${method}. Use 'iai', 'api', 'pixel', or 'soldier'.`,
       data: { 
         availableMethods: {
           iai: 'Browser automation via Chrome Extension - RECOMMENDED for Marketplace',
+          soldier: 'Headless browser automation via Soldier Workers - Server-side processing',
           api: 'Facebook Graph API - Page posts only, no Marketplace',
           pixel: 'Conversion tracking only - Cannot create listings',
         },
@@ -618,5 +714,119 @@ export class VehicleController {
       success: true,
       data: tasks,
     });
+  }
+
+  /**
+   * Refresh vehicle data from FTP/CSV source
+   * Fetches the latest CSV file and updates this specific vehicle with current data
+   */
+  async refreshFromSource(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    // Get the vehicle with account info
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: id as string },
+      include: { account: true },
+    });
+
+    if (!vehicle) {
+      throw new AppError('Vehicle not found', 404);
+    }
+
+    // Verify access
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: vehicle.accountId,
+        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied', 403);
+    }
+
+    const account = vehicle.account;
+
+    // Check if account has FTP configured
+    if (!account.ftpHost || !account.ftpUsername || !account.csvPath) {
+      throw new AppError('FTP/CSV source not configured for this account', 400);
+    }
+
+    try {
+      // Connect to FTP and download CSV
+      const ftpService = new FTPService();
+      await ftpService.connect({
+        host: account.ftpHost,
+        port: account.ftpPort || 21,
+        username: account.ftpUsername,
+        password: account.ftpPassword || '',
+        path: account.csvPath,
+        protocol: 'ftp',
+      });
+
+      const tempPath = `/tmp/refresh_${vehicle.id}_${Date.now()}.csv`;
+      await ftpService.downloadFile(account.csvPath, tempPath);
+      
+      // Read the file content
+      const fs = await import('fs');
+      const csvContent = fs.readFileSync(tempPath, 'utf-8');
+
+      // Parse CSV
+      const csvParser = new CSVParserService();
+      const vehicles = await csvParser.parseCSVContent(csvContent);
+
+      // Find this specific vehicle by VIN
+      const matchingVehicle = vehicles.find(v => v.vin === vehicle.vin);
+
+      if (!matchingVehicle) {
+        throw new AppError('Vehicle not found in CSV source. It may have been removed from inventory.', 404);
+      }
+
+      // Update the vehicle with fresh data from CSV
+      const updated = await prisma.vehicle.update({
+        where: { id: vehicle.id },
+        data: {
+          // Price fields
+          price: matchingVehicle.listPrice || matchingVehicle.specialPrice || vehicle.price,
+          listPrice: matchingVehicle.listPrice,
+          specialPrice: matchingVehicle.specialPrice,
+          costPrice: matchingVehicle.costPrice,
+          wholesalePrice: matchingVehicle.wholesalePrice,
+          // Other updatable fields
+          mileage: matchingVehicle.mileage || vehicle.mileage,
+          description: matchingVehicle.dealerComments || vehicle.description,
+          imageUrls: matchingVehicle.photoUrls?.length ? matchingVehicle.photoUrls : vehicle.imageUrls,
+          exteriorColor: matchingVehicle.exteriorColor || vehicle.exteriorColor,
+          interiorColor: matchingVehicle.interiorColor || vehicle.interiorColor,
+          transmission: matchingVehicle.transmission || vehicle.transmission,
+          fuelType: matchingVehicle.fuelType || vehicle.fuelType,
+          drivetrain: matchingVehicle.drivetrain || vehicle.drivetrain,
+          engineDescription: matchingVehicle.engineDescription || vehicle.engineDescription,
+          // Metadata
+          lastModifiedDate: matchingVehicle.lastModifiedDate || new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Cleanup temp file
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {}
+
+      // Close FTP connection
+      ftpService.disconnect();
+
+      logger.info(`Vehicle ${vehicle.id} refreshed from CSV source by user ${req.user!.id}`);
+
+      res.json({
+        success: true,
+        data: updated,
+        message: 'Vehicle data refreshed from CSV source',
+      });
+    } catch (error: any) {
+      logger.error(`Failed to refresh vehicle ${id} from source:`, error);
+      throw new AppError(error.message || 'Failed to refresh from source', 500);
+    }
   }
 }

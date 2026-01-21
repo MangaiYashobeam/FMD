@@ -240,6 +240,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: accounts?.[0]?.role || 'USER',
       accounts: accounts || [],
     });
+    
+    // Navigate to dashboard after impersonation
+    window.location.href = '/dashboard';
   };
 
   const endImpersonation = async () => {

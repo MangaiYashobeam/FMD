@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaceMyDealer - VPS Auto-Deployment Guide</title>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --bg-card: #1e293b;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: var(--text-muted); margin-bottom: 2rem; font-size: 1.1rem; }
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+        .card h2 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+        }
+        .card h3 { margin: 1rem 0 0.5rem; color: var(--text); }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-success { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+        .badge-warning { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .badge-primary { background: rgba(59, 130, 246, 0.2); color: var(--primary); }
+        pre {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+        pre code { color: #e6edf3; }
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .copy-btn:hover { background: var(--primary-dark); }
+        .copy-btn.copied { background: var(--success); }
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+        }
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 4px solid var(--primary);
+            padding: 1rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1rem 0;
+        }
+        .warning-box {
+            background: rgba(245, 158, 11, 0.1);
+            border-left: 4px solid var(--warning);
+            padding: 1rem;
+            border-radius: 0 8px 8px 0;
+            margin: 1rem 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th { color: var(--text-muted); font-weight: 600; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+        .quick-cmd {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 8px;
+            margin: 0.5rem 0;
+        }
+        .quick-cmd code {
+            flex: 1;
+            background: #0d1117;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+        .btn-success { background: var(--success); }
+        .btn-success:hover { background: #16a34a; }
+        hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .status-healthy { background: var(--success); }
+        .status-unhealthy { background: var(--warning); }
+        footer { text-align: center; color: var(--text-muted); margin-top: 3rem; padding: 2rem 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 FaceMyDealer VPS Deployment</h1>
+        <p class="subtitle">Automated deployment commands for Hetzner VPS (46.4.224.182)</p>
+
+        <!-- Quick Deploy Section -->
+        <div class="card">
+            <h2>⚡ One-Click Deploy Commands</h2>
+            <p>Copy and run these commands from your local terminal (PowerShell/Git Bash):</p>
+            
+            <h3><span class="step-number">1</span> Quick Deploy (After Git Push)</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git pull origin main && docker compose -f docker-compose.production.yml up -d --build"</code></pre>
+
+            <h3><span class="step-number">2</span> Deploy Without Rebuild (Fast)</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git pull origin main && docker compose -f docker-compose.production.yml up -d"</code></pre>
+
+            <h3><span class="step-number">3</span> Force Sync & Deploy (Reset to Main)</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git fetch origin && git reset --hard origin/main && docker compose -f docker-compose.production.yml up -d --build"</code></pre>
+        </div>
+
+        <!-- Combined Git Push + Deploy -->
+        <div class="card">
+            <h2>🔄 Git Push + Auto Deploy (One Command)</h2>
+            <p>Run from your local FaceMyDealer folder to commit, push, and deploy in one go:</p>
+            
+            <h3>PowerShell</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>git add -A; git commit -m "Your commit message"; git push origin main; ssh root@46.4.224.182 "cd /opt/facemydealer && git pull origin main && docker compose -f docker-compose.production.yml up -d --build"</code></pre>
+
+            <h3>Git Bash / Linux</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>git add -A && git commit -m "Your commit message" && git push origin main && ssh root@46.4.224.182 "cd /opt/facemydealer && git pull origin main && docker compose -f docker-compose.production.yml up -d --build"</code></pre>
+        </div>
+
+        <!-- Service-Specific Deploys -->
+        <div class="card">
+            <h2>🎯 Deploy Specific Services Only</h2>
+            <div class="grid">
+                <div>
+                    <h3>API Only</h3>
+                    <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git pull && docker compose -f docker-compose.production.yml up -d --build api"</code></pre>
+                </div>
+                <div>
+                    <h3>Browser Workers Only</h3>
+                    <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git pull && docker compose -f docker-compose.production.yml up -d --build browser-worker"</code></pre>
+                </div>
+                <div>
+                    <h3>Worker API Only</h3>
+                    <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git pull && docker compose -f docker-compose.production.yml up -d --build worker-api"</code></pre>
+                </div>
+                <div>
+                    <h3>Session Monitor Only</h3>
+                    <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git pull && docker compose -f docker-compose.production.yml up -d --build session-monitor"</code></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Commands -->
+        <div class="card">
+            <h2>📊 Monitoring & Debugging</h2>
+            
+            <h3>Check All Container Status</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "docker compose -f /opt/facemydealer/docker-compose.production.yml ps"</code></pre>
+
+            <h3>View API Logs (Last 50 Lines)</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "docker logs facemydealer-api-1 --tail 50"</code></pre>
+
+            <h3>View Browser Worker Logs</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "docker logs facemydealer-browser-worker-1 --tail 50"</code></pre>
+
+            <h3>Follow Logs in Real-Time</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "docker logs -f facemydealer-api-1"</code></pre>
+
+            <h3>Check Disk Usage</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "df -h && docker system df"</code></pre>
+        </div>
+
+        <!-- Maintenance Commands -->
+        <div class="card">
+            <h2>🔧 Maintenance Commands</h2>
+            
+            <h3>Restart All Services</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && docker compose -f docker-compose.production.yml restart"</code></pre>
+
+            <h3>Stop All Services</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && docker compose -f docker-compose.production.yml down"</code></pre>
+
+            <h3>Clean Up Docker (Free Space)</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "docker system prune -af && docker volume prune -f"</code></pre>
+
+            <div class="warning-box">
+                ⚠️ <strong>Warning:</strong> The prune command removes all unused images and volumes. Use with caution!
+            </div>
+
+            <h3>Database Backup</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "docker exec facemydealer-postgres-1 pg_dump -U facemydealer facemydealer > /opt/facemydealer/backups/backup_$(date +%Y%m%d_%H%M%S).sql"</code></pre>
+
+            <h3>Run Database Migrations</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>ssh root@46.4.224.182 "cd /opt/facemydealer && docker compose -f docker-compose.production.yml exec api npx prisma db push"</code></pre>
+        </div>
+
+        <!-- Environment Info -->
+        <div class="card">
+            <h2>📋 Environment Information</h2>
+            <table>
+                <tr><th>Property</th><th>Value</th></tr>
+                <tr><td>VPS IP</td><td><code>46.4.224.182</code></td></tr>
+                <tr><td>Domain</td><td><code>dealersface.com</code></td></tr>
+                <tr><td>SSH User</td><td><code>root</code></td></tr>
+                <tr><td>Project Path</td><td><code>/opt/facemydealer</code></td></tr>
+                <tr><td>GitHub Repo</td><td><code>https://github.com/MangaiYashobeam/FMD</code></td></tr>
+                <tr><td>Compose File</td><td><code>docker-compose.production.yml</code></td></tr>
+            </table>
+
+            <h3>Services & Ports</h3>
+            <table>
+                <tr><th>Service</th><th>Internal Port</th><th>External Access</th></tr>
+                <tr><td>Traefik (Reverse Proxy)</td><td>80, 443</td><td>Public HTTP/HTTPS</td></tr>
+                <tr><td>Node.js API</td><td>3000</td><td>Via Traefik</td></tr>
+                <tr><td>Worker API (FastAPI)</td><td>8000</td><td>Internal Only</td></tr>
+                <tr><td>PostgreSQL</td><td>5432</td><td>Internal Only</td></tr>
+                <tr><td>Redis</td><td>6379</td><td>Internal Only</td></tr>
+            </table>
+        </div>
+
+        <!-- GitHub Webhook Auto-Deploy -->
+        <div class="card">
+            <h2>🤖 Automatic Deployment (GitHub Webhook)</h2>
+            <p>Set up automatic deployment so every push to <code>main</code> automatically deploys to your VPS - no manual commands needed!</p>
+            
+            <div class="info-box">
+                <strong>🎯 End Result:</strong> Push code → GitHub Actions runs → VPS updates automatically in ~2 minutes
+            </div>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Step 1: Generate SSH Key -->
+            <h3><span class="step-number">1</span> Generate SSH Key Pair (On Your Local Machine)</h3>
+            <p>First, create a dedicated SSH key for GitHub Actions:</p>
+            
+            <h4 style="margin-top: 1rem; color: var(--text-muted);">PowerShell (Windows):</h4>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># Generate a new SSH key pair (no passphrase for automation)
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f "$env:USERPROFILE\.ssh\github_actions_deploy" -N '""'
+
+# Display the PUBLIC key (copy this for Step 2)
+Get-Content "$env:USERPROFILE\.ssh\github_actions_deploy.pub"
+
+# Display the PRIVATE key (copy this for Step 3)
+Get-Content "$env:USERPROFILE\.ssh\github_actions_deploy"</code></pre>
+
+            <h4 style="margin-top: 1rem; color: var(--text-muted);">Git Bash / Linux / Mac:</h4>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># Generate a new SSH key pair (no passphrase for automation)
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_actions_deploy -N ""
+
+# Display the PUBLIC key (copy this for Step 2)
+cat ~/.ssh/github_actions_deploy.pub
+
+# Display the PRIVATE key (copy this for Step 3)
+cat ~/.ssh/github_actions_deploy</code></pre>
+
+            <div class="warning-box">
+                ⚠️ <strong>Important:</strong> Keep your PRIVATE key secret! Never share it or commit it to Git.
+            </div>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Step 2: Add Public Key to VPS -->
+            <h3><span class="step-number">2</span> Add Public Key to VPS</h3>
+            <p>Add the PUBLIC key to your VPS so GitHub Actions can connect:</p>
+            
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># SSH into your VPS
+ssh root@46.4.224.182
+
+# Add the public key to authorized_keys (paste your public key)
+echo "ssh-ed25519 AAAA... github-actions-deploy" >> ~/.ssh/authorized_keys
+
+# Set correct permissions
+chmod 600 ~/.ssh/authorized_keys
+
+# Exit VPS
+exit</code></pre>
+
+            <p style="margin-top: 1rem;"><strong>Alternative one-liner</strong> (run from local machine):</p>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># Replace YOUR_PUBLIC_KEY with the actual key from Step 1
+ssh root@46.4.224.182 "echo 'YOUR_PUBLIC_KEY' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"</code></pre>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Step 3: Add Secret to GitHub -->
+            <h3><span class="step-number">3</span> Add Private Key to GitHub Secrets</h3>
+            <p>Store the PRIVATE key securely in GitHub:</p>
+            
+            <ol style="margin-left: 1.5rem; line-height: 2;">
+                <li>Go to your GitHub repository: <a href="https://github.com/MangaiYashobeam/FMD" target="_blank" style="color: var(--primary);">https://github.com/MangaiYashobeam/FMD</a></li>
+                <li>Click <strong>Settings</strong> (top right, gear icon)</li>
+                <li>In the left sidebar, click <strong>Secrets and variables</strong> → <strong>Actions</strong></li>
+                <li>Click the green <strong>New repository secret</strong> button</li>
+                <li>Set <strong>Name</strong> to: <code>VPS_SSH_KEY</code></li>
+                <li>Paste your entire PRIVATE key in the <strong>Secret</strong> field (including the BEGIN and END lines)</li>
+                <li>Click <strong>Add secret</strong></li>
+            </ol>
+
+            <div class="info-box">
+                <strong>📋 Your private key should look like this:</strong>
+                <pre style="margin-top: 0.5rem; background: transparent; border: none; padding: 0;"><code>-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmU...
+...many lines of random characters...
+-----END OPENSSH PRIVATE KEY-----</code></pre>
+            </div>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Step 4: Create Workflow File -->
+            <h3><span class="step-number">4</span> Create GitHub Actions Workflow File</h3>
+            <p>Create the file <code>.github/workflows/deploy.yml</code> in your repository:</p>
+
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>name: 🚀 Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 46.4.224.182
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          script: |
+            echo "🔄 Starting deployment..."
+            cd /opt/facemydealer
+            
+            echo "📥 Pulling latest code..."
+            git fetch origin
+            git reset --hard origin/main
+            
+            echo "🐳 Rebuilding containers..."
+            docker compose -f docker-compose.production.yml up -d --build
+            
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+            
+            echo "✅ Deployment complete!"
+            docker compose -f docker-compose.production.yml ps
+
+      - name: 📊 Health Check
+        run: |
+          echo "Waiting for services to start..."
+          sleep 30
+          curl -f http://46.4.224.182/health || echo "Health check failed (may need more time)"</code></pre>
+
+            <p style="margin-top: 1rem;"><strong>Create this file using PowerShell:</strong></p>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># Create the directory
+New-Item -ItemType Directory -Force -Path ".github/workflows"
+
+# The workflow content will be created - copy the YAML above into this file
+notepad ".github/workflows/deploy.yml"</code></pre>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Step 5: Test the Workflow -->
+            <h3><span class="step-number">5</span> Test the Automatic Deployment</h3>
+            <p>Commit and push the workflow file to trigger your first automatic deployment:</p>
+
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># Stage and commit the workflow file
+git add .github/workflows/deploy.yml
+git commit -m "ci: add automatic deployment workflow"
+git push origin main</code></pre>
+
+            <p style="margin-top: 1rem;"><strong>Monitor the deployment:</strong></p>
+            <ol style="margin-left: 1.5rem; line-height: 2;">
+                <li>Go to your repo: <a href="https://github.com/MangaiYashobeam/FMD/actions" target="_blank" style="color: var(--primary);">https://github.com/MangaiYashobeam/FMD/actions</a></li>
+                <li>You'll see the workflow running with a yellow dot ⏳</li>
+                <li>Click on it to see live logs</li>
+                <li>When it turns green ✅, your deployment is complete!</li>
+            </ol>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Step 6: Manual Trigger -->
+            <h3><span class="step-number">6</span> Manual Deployment Trigger (Optional)</h3>
+            <p>You can also trigger deployments manually from GitHub:</p>
+
+            <ol style="margin-left: 1.5rem; line-height: 2;">
+                <li>Go to <a href="https://github.com/MangaiYashobeam/FMD/actions" target="_blank" style="color: var(--primary);">Actions tab</a></li>
+                <li>Select "🚀 Deploy to VPS" workflow</li>
+                <li>Click "Run workflow" button (top right)</li>
+                <li>Select branch and click "Run workflow"</li>
+            </ol>
+
+            <div class="info-box">
+                <strong>💡 Pro Tip:</strong> The <code>workflow_dispatch</code> in the workflow file enables this manual trigger feature.
+            </div>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Troubleshooting -->
+            <h3>🔧 Troubleshooting</h3>
+            
+            <table>
+                <tr><th>Issue</th><th>Solution</th></tr>
+                <tr>
+                    <td>Permission denied (publickey)</td>
+                    <td>Make sure the public key is in <code>~/.ssh/authorized_keys</code> on VPS</td>
+                </tr>
+                <tr>
+                    <td>Host key verification failed</td>
+                    <td>Add VPS to known_hosts: <code>ssh-keyscan 46.4.224.182 >> ~/.ssh/known_hosts</code></td>
+                </tr>
+                <tr>
+                    <td>Workflow not triggering</td>
+                    <td>Check that the file is in <code>.github/workflows/</code> and branch is <code>main</code></td>
+                </tr>
+                <tr>
+                    <td>Docker build fails</td>
+                    <td>Check VPS disk space: <code>ssh root@46.4.224.182 "df -h"</code></td>
+                </tr>
+            </table>
+
+            <h4 style="margin-top: 1.5rem;">Test SSH Connection Manually:</h4>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># Test with the deploy key
+ssh -i ~/.ssh/github_actions_deploy root@46.4.224.182 "echo 'SSH connection successful!'"</code></pre>
+
+            <hr style="margin: 1.5rem 0; border-color: var(--border);">
+
+            <!-- Summary Checklist -->
+            <h3>✅ Setup Checklist</h3>
+            <div style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                <label style="display: block; margin: 0.5rem 0; cursor: pointer;">
+                    <input type="checkbox" style="margin-right: 0.5rem;"> Generated SSH key pair
+                </label>
+                <label style="display: block; margin: 0.5rem 0; cursor: pointer;">
+                    <input type="checkbox" style="margin-right: 0.5rem;"> Added PUBLIC key to VPS (~/.ssh/authorized_keys)
+                </label>
+                <label style="display: block; margin: 0.5rem 0; cursor: pointer;">
+                    <input type="checkbox" style="margin-right: 0.5rem;"> Added PRIVATE key to GitHub Secrets (VPS_SSH_KEY)
+                </label>
+                <label style="display: block; margin: 0.5rem 0; cursor: pointer;">
+                    <input type="checkbox" style="margin-right: 0.5rem;"> Created .github/workflows/deploy.yml
+                </label>
+                <label style="display: block; margin: 0.5rem 0; cursor: pointer;">
+                    <input type="checkbox" style="margin-right: 0.5rem;"> Pushed workflow and verified it runs ✅
+                </label>
+            </div>
+        </div>
+
+        <!-- Local Deploy Script -->
+        <div class="card">
+            <h2>📜 Local Deploy Script (Windows)</h2>
+            <p>Save this as <code>deploy.ps1</code> in your project root:</p>
+            
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># deploy.ps1 - FaceMyDealer Quick Deploy Script
+param(
+    [string]$message = "Update deployment",
+    [switch]$skipBuild,
+    [switch]$force
+)
+
+$VPS = "root@46.4.224.182"
+$PROJECT = "/opt/facemydealer"
+$COMPOSE = "docker-compose.production.yml"
+
+Write-Host "🚀 FaceMyDealer Deploy Script" -ForegroundColor Cyan
+Write-Host "================================" -ForegroundColor Cyan
+
+# Step 1: Git operations
+Write-Host "`n📦 Committing changes..." -ForegroundColor Yellow
+git add -A
+git commit -m $message
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
+    Write-Host "Git commit failed!" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "`n📤 Pushing to GitHub..." -ForegroundColor Yellow
+git push origin main
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Git push failed!" -ForegroundColor Red
+    exit 1
+}
+
+# Step 2: Deploy to VPS
+Write-Host "`n🔄 Deploying to VPS..." -ForegroundColor Yellow
+
+if ($force) {
+    $cmd = "cd $PROJECT && git fetch origin && git reset --hard origin/main"
+} else {
+    $cmd = "cd $PROJECT && git pull origin main"
+}
+
+if ($skipBuild) {
+    $cmd += " && docker compose -f $COMPOSE up -d"
+} else {
+    $cmd += " && docker compose -f $COMPOSE up -d --build"
+}
+
+ssh $VPS $cmd
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "`n✅ Deployment successful!" -ForegroundColor Green
+    Write-Host "🌐 Site: https://dealersface.com" -ForegroundColor Cyan
+} else {
+    Write-Host "`n❌ Deployment failed!" -ForegroundColor Red
+    exit 1
+}
+
+# Step 3: Show status
+Write-Host "`n📊 Container Status:" -ForegroundColor Yellow
+ssh $VPS "docker compose -f $PROJECT/$COMPOSE ps"</code></pre>
+
+            <h3>Usage Examples</h3>
+            <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code># Basic deploy
+.\deploy.ps1 -message "Fix login bug"
+
+# Deploy without rebuilding (faster)
+.\deploy.ps1 -message "Update config" -skipBuild
+
+# Force sync with GitHub (reset local VPS changes)
+.\deploy.ps1 -message "Major update" -force</code></pre>
+        </div>
+
+        <!-- Quick Reference -->
+        <div class="card">
+            <h2>🎯 Quick Reference Cheat Sheet</h2>
+            <table>
+                <tr><th>Action</th><th>Command</th></tr>
+                <tr><td>Full Deploy</td><td><code>ssh root@46.4.224.182 "cd /opt/facemydealer && git pull && docker compose -f docker-compose.production.yml up -d --build"</code></td></tr>
+                <tr><td>Quick Restart</td><td><code>ssh root@46.4.224.182 "docker compose -f /opt/facemydealer/docker-compose.production.yml restart"</code></td></tr>
+                <tr><td>View Status</td><td><code>ssh root@46.4.224.182 "docker compose -f /opt/facemydealer/docker-compose.production.yml ps"</code></td></tr>
+                <tr><td>API Logs</td><td><code>ssh root@46.4.224.182 "docker logs facemydealer-api-1 --tail 100"</code></td></tr>
+                <tr><td>SSH Into VPS</td><td><code>ssh root@46.4.224.182</code></td></tr>
+                <tr><td>Test Health</td><td><code>curl http://46.4.224.182/health</code></td></tr>
+            </table>
+        </div>
+
+        <hr>
+
+        <footer>
+            <p>FaceMyDealer VPS Deployment Guide • Generated: January 21, 2026</p>
+            <p style="margin-top: 0.5rem;">VPS: 46.4.224.182 • Domain: dealersface.com</p>
+        </footer>
+    </div>
+
+    <script>
+        function copyCode(btn) {
+            const code = btn.parentElement.querySelector('code').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
+</code></pre>

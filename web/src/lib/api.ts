@@ -173,6 +173,8 @@ export const vehiclesApi = {
   
   generateDescription: (id: string) => api.post(`/api/vehicles/${id}/generate-description`),
   
+  refreshFromSource: (id: string) => api.post(`/api/vehicles/${id}/refresh-from-source`),
+  
   postToFacebook: (id: string, data: {
     title: string;
     price: number;
