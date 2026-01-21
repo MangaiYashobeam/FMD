@@ -178,6 +178,54 @@ class RedisQueue:
         await self.client.expire(key, ttl)
     
     # ==========================================
+    # Worker Management
+    # ==========================================
+    
+    async def register_worker(self, worker_id: str, metadata: Dict[str, Any]):
+        """Register a worker instance"""
+        key = f"fmd:worker:{worker_id}"
+        data = {
+            **metadata,
+            'worker_id': worker_id,
+            'registered_at': datetime.utcnow().isoformat(),
+            'last_heartbeat': datetime.utcnow().isoformat(),
+            'status': 'active'
+        }
+        await self.client.hset(key, mapping={k: json.dumps(v) if isinstance(v, (dict, list)) else str(v) for k, v in data.items()})
+        await self.client.expire(key, 3600)  # 1 hour TTL
+        await self.client.sadd("fmd:workers:active", worker_id)
+        logger.info("Worker registered", worker_id=worker_id)
+    
+    async def unregister_worker(self, worker_id: str):
+        """Unregister a worker instance"""
+        key = f"fmd:worker:{worker_id}"
+        await self.client.delete(key)
+        await self.client.srem("fmd:workers:active", worker_id)
+        # Clean up worker's browsers
+        browser_ids = await self.client.smembers(f"fmd:worker:{worker_id}:browsers")
+        for browser_id in browser_ids:
+            await self.client.delete(f"{self.BROWSER_PREFIX}{browser_id}")
+        await self.client.delete(f"fmd:worker:{worker_id}:browsers")
+        logger.info("Worker unregistered", worker_id=worker_id)
+    
+    async def worker_heartbeat(self, worker_id: str):
+        """Update worker heartbeat"""
+        key = f"fmd:worker:{worker_id}"
+        await self.client.hset(key, 'last_heartbeat', datetime.utcnow().isoformat())
+        await self.client.expire(key, 3600)
+    
+    async def get_active_workers(self) -> List[Dict[str, Any]]:
+        """Get all active workers"""
+        worker_ids = await self.client.smembers("fmd:workers:active")
+        workers = []
+        for worker_id in worker_ids:
+            data = await self.client.hgetall(f"fmd:worker:{worker_id}")
+            if data:
+                data['worker_id'] = worker_id
+                workers.append(data)
+        return workers
+    
+    # ==========================================
     # Browser Pool Management
     # ==========================================
     
