@@ -167,6 +167,14 @@ const allowedOrigins = [
   'https://dealersface.com',
   'https://www.dealersface.com',
   'https://fmd-production.up.railway.app',
+  // Facebook origins (for extension content scripts running on Facebook pages)
+  'https://www.facebook.com',
+  'https://facebook.com',
+  'https://m.facebook.com',
+  // VPS direct access
+  'http://46.4.224.182',
+  'http://46.4.224.182:3000',
+  'https://46.4.224.182',
   // Chrome Extension origins
   'chrome-extension://*',
   ...(process.env.ALLOWED_ORIGINS?.split(',') || []),

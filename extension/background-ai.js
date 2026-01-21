@@ -13,7 +13,8 @@
 // ============================================
 
 const CONFIG = {
-  API_URL: 'https://dealersface.com/api',
+  API_URL: 'http://46.4.224.182:3000/api', // VPS Direct (Cloudflare not configured)
+  // API_URL: 'https://dealersface.com/api', // Production (when Cloudflare is configured)
   // API_URL: 'http://localhost:5000/api', // Development
   FACEBOOK_APP_ID: null, // Fetched from server - not hardcoded
   POLL_INTERVAL_MS: 10000,
@@ -587,7 +588,7 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     // Open onboarding page
     chrome.tabs.create({
-      url: 'https://dealersface.com/extension/welcome',
+      url: 'http://46.4.224.182/extension/welcome',
     });
   }
 });

@@ -19,7 +19,8 @@
 const IAI_CONFIG = {
   // API Endpoints
   API: {
-    PRODUCTION: 'https://dealersface.com/api',
+    PRODUCTION: 'http://46.4.224.182:3000/api', // VPS Direct (Cloudflare not configured)
+    // PRODUCTION: 'https://dealersface.com/api', // (when Cloudflare is configured)
     LOCAL: 'http://localhost:5000/api',
     AI_SERVICE: 'https://sag.gemquery.com/api/v1',
   },
