@@ -1531,10 +1531,8 @@ export const getExtensionErrors = async (req: Request, res: Response, next: Next
 export const resolveError = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { errorId } = req.params;
-    const resolutionRaw = req.body.resolution;
-    const preventionPlanRaw = req.body.preventionPlan;
-    const resolution = typeof resolutionRaw === 'string' ? resolutionRaw : undefined;
-    const preventionPlan = typeof preventionPlanRaw === 'string' ? preventionPlanRaw : undefined;
+    const resolution: string | undefined = typeof req.body.resolution === 'string' ? req.body.resolution : undefined;
+    const preventionPlan: string | undefined = typeof req.body.preventionPlan === 'string' ? req.body.preventionPlan : undefined;
 
     const error = await prisma.auditLog.findUnique({
       where: { id: errorId },
@@ -1553,8 +1551,8 @@ export const resolveError = async (req: Request, res: Response, next: NextFuncti
           ...currentMetadata,
           resolved: true,
           resolvedAt: new Date().toISOString(),
-          resolution,
-          preventionPlan,
+          resolution: resolution as string | undefined,
+          preventionPlan: preventionPlan as string | undefined,
         },
       },
     });
