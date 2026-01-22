@@ -3,6 +3,9 @@ import axios, { AxiosError } from 'axios';
 // Use same origin (empty baseURL) in production, fallback to Railway URL for development
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
+// Store CSRF token for state-changing requests
+let csrfToken: string | null = null;
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -11,13 +14,19 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-// Request interceptor - add auth token
+// Request interceptor - add auth token and CSRF token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
     if (token && token !== 'undefined' && token !== 'null') {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add CSRF token for state-changing requests (POST, PUT, PATCH, DELETE)
+    if (csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(config.method?.toUpperCase() || '')) {
+      config.headers['X-CSRF-Token'] = csrfToken;
+    }
+    
     return config;
   },
   (error) => Promise.reject(error)
@@ -62,8 +71,21 @@ const handleApiError = (error: AxiosError<any>) => {
 };
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Capture CSRF token from response header
+    const newCsrfToken = response.headers['x-csrf-token'];
+    if (newCsrfToken) {
+      csrfToken = newCsrfToken;
+    }
+    return response;
+  },
   async (error) => {
+    // Capture CSRF token from error responses
+    const newCsrfToken = error.response?.headers?.['x-csrf-token'];
+    if (newCsrfToken) {
+      csrfToken = newCsrfToken;
+    }
+    
     const originalRequest = error.config;
     
     // Enhanced error handling
