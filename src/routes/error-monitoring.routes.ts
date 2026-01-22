@@ -462,10 +462,52 @@ router.post('/summaries/:id/root-summary', requireAdmin, async (req: AuthRequest
 
 // ============================================
 // Real-time Monitoring (SSE)
+// SSE doesn't support custom headers, so we accept token from query param
 // ============================================
 
-router.get('/stream', requireAdmin, async (req: AuthRequest, res: Response) => {
+router.get('/stream', async (req: AuthRequest, res: Response) => {
   try {
+    // For SSE, token can come from query param (EventSource doesn't support headers)
+    const tokenParam = getQueryString(req.query.token);
+    const authHeader = req.headers.authorization;
+    const token = tokenParam || (authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+
+    if (!token) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
+    // Verify token
+    const jwt = await import('jsonwebtoken');
+    let decoded: { id: string; email: string };
+    try {
+      decoded = jwt.default.verify(token, process.env.JWT_SECRET!) as { id: string; email: string };
+    } catch {
+      res.status(401).json({ success: false, error: 'Invalid token' });
+      return;
+    }
+
+    // Get user and check admin status
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      include: { accountUsers: true },
+    });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({ success: false, error: 'User not found or inactive' });
+      return;
+    }
+
+    const accountUser = user.accountUsers.find(au => 
+      ['SUPER_ADMIN', 'ADMIN', 'ACCOUNT_OWNER'].includes(au.role)
+    );
+
+    if (!accountUser) {
+      res.status(403).json({ success: false, error: 'Admin access required' });
+      return;
+    }
+
+    // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');

@@ -252,15 +252,24 @@ const ErrorMonitoringPage: React.FC = () => {
 
   useEffect(() => {
     let eventSource: EventSource | null = null;
+    let retryCount = 0;
+    const maxRetries = 5;
 
     const connectSSE = () => {
       try {
-        eventSource = new EventSource('/api/error-monitoring/stream', {
-          withCredentials: true,
-        });
+        // EventSource doesn't support custom headers, so we pass token as query param
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+          console.warn('[SSE] No access token available');
+          return;
+        }
+
+        const url = `/api/error-monitoring/stream?token=${encodeURIComponent(token)}`;
+        eventSource = new EventSource(url);
 
         eventSource.onopen = () => {
           setIsRealTimeConnected(true);
+          retryCount = 0; // Reset retry count on successful connection
         };
 
         eventSource.onmessage = (event) => {
@@ -285,7 +294,13 @@ const ErrorMonitoringPage: React.FC = () => {
         eventSource.onerror = () => {
           setIsRealTimeConnected(false);
           eventSource?.close();
-          setTimeout(connectSSE, 5000);
+          
+          // Exponential backoff with max retries
+          if (retryCount < maxRetries) {
+            retryCount++;
+            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+            setTimeout(connectSSE, delay);
+          }
         };
       } catch {
         setIsRealTimeConnected(false);
