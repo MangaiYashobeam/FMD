@@ -1239,7 +1239,11 @@ export const getAllFacebookProfiles = async (req: Request, res: Response, next: 
  */
 export const getSystemErrors = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { severity, source, limit = 100, offset = 0 } = req.query;
+    const { severity, source } = req.query;
+    const limitParam = req.query.limit;
+    const offsetParam = req.query.offset;
+    const limit = typeof limitParam === 'string' ? parseInt(limitParam, 10) : 100;
+    const offset = typeof offsetParam === 'string' ? parseInt(offsetParam, 10) : 0;
 
     // Build where clause
     const where: any = {
@@ -1269,8 +1273,8 @@ export const getSystemErrors = async (req: Request, res: Response, next: NextFun
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: Math.min(Number(limit), 500),
-        skip: Number(offset),
+        take: Math.min(limit, 500),
+        skip: offset,
       }),
       prisma.auditLog.count({ where }),
     ]);
@@ -1304,9 +1308,9 @@ export const getSystemErrors = async (req: Request, res: Response, next: NextFun
         errors: diagnosticErrors,
         pagination: {
           total,
-          limit: Number(limit),
-          offset: Number(offset),
-          hasMore: Number(offset) + errors.length < total,
+          limit,
+          offset,
+          hasMore: offset + errors.length < total,
         },
       },
     });
