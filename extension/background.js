@@ -1,7 +1,7 @@
 // Dealers Face Chrome Extension - Background Service Worker
 // Enhanced with IAI Soldier Task Polling and Marketplace Automation
 
-const API_BASE_URL = 'https://fmd-production.up.railway.app';
+const API_BASE_URL = 'https://dealersface.com';
 const TASK_POLL_INTERVAL = 5000; // 5 seconds
 
 let taskPollingInterval = null;

@@ -136,12 +136,10 @@ app.use(helmet({
       connectSrc: [
         "'self'",
         "https://graph.facebook.com",
-        "https://fmd-production.up.railway.app",
         "https://dealersface.com",
         "https://www.dealersface.com",
         "wss://dealersface.com",
         "wss://www.dealersface.com",
-        "wss://fmd-production.up.railway.app"
       ],
       fontSrc: ["'self'", "data:"],
       frameSrc: ["'self'", "https://www.facebook.com"],
@@ -168,7 +166,6 @@ const allowedOrigins = [
   // Production (via Cloudflare)
   'https://dealersface.com',
   'https://www.dealersface.com',
-  'https://fmd-production.up.railway.app',
   // Facebook origins (for extension content scripts running on Facebook pages)
   'https://www.facebook.com',
   'https://facebook.com',

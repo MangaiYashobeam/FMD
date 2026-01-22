@@ -181,7 +181,6 @@ const DEFAULT_TRUSTED_DOMAINS = [
   // Our own domains
   'dealersface.com',
   'www.dealersface.com',
-  'fmd-production.up.railway.app',
 ];
 
 const TRUSTED_IP_RANGES = [

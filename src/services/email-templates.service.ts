@@ -21,7 +21,7 @@ export const BRANDING = {
   footerColor: '#64748b',
   supportEmail: 'support@dealersface.com',
   websiteUrl: 'https://dealersface.com',
-  appUrl: process.env.FRONTEND_URL || 'https://fmd-production.up.railway.app',
+  appUrl: process.env.FRONTEND_URL || 'https://dealersface.com',
 };
 
 // ============================================

@@ -1,6 +1,6 @@
 // Dealers Face Chrome Extension - Side Panel JavaScript
 
-const API_BASE_URL = 'https://fmd-production.up.railway.app';
+const API_BASE_URL = 'https://dealersface.com';
 
 // Sanitize HTML to prevent XSS attacks
 function escapeHtml(unsafe) {

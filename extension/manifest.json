@@ -19,7 +19,6 @@
     "https://m.facebook.com/*",
     "https://web.facebook.com/*",
     "https://dealersface.com/*",
-    "https://fmd-production.up.railway.app/*",
     "http://localhost:5000/*"
   ],
   "action": {

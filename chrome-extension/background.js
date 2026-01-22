@@ -1,6 +1,6 @@
 // Background service worker for Dealers Face Chrome Extension
 
-let apiUrl = 'https://fmd-production.up.railway.app/api';
+let apiUrl = 'https://dealersface.com/api';
 let authToken = null;
 let apiKey = null; // API key for extension auth
 
