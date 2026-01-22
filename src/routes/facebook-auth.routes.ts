@@ -206,7 +206,7 @@ router.post('/callback', async (req: Request, res: Response) => {
       },
     });
   } catch (error: unknown) {
-    const err = error as { response?: { data?: unknown; status?: number }; message?: string };
+    const err = error as { response?: { data?: { error?: { message?: string } }; status?: number }; message?: string };
     const errorDetails = {
       message: err.message,
       responseData: err.response?.data,
