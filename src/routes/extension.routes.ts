@@ -804,7 +804,8 @@ router.post('/report-error', authenticate, async (req: AuthRequest, res: Respons
 });
 
 // Helper function for AI responses
-async function generateAIResponse(message: string, systemPrompt: string, context: any): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function generateAIResponse(message: string, _systemPrompt: string, context: any): Promise<string> {
   const lowerMessage = message.toLowerCase();
   
   // Context-aware responses
@@ -886,7 +887,8 @@ function classifyErrorSeverity(error: string): string {
 }
 
 // Generate diagnostic for error
-async function generateErrorDiagnostic(error: string, context: any): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function generateErrorDiagnostic(error: string, _context: any): Promise<string> {
   const lowerError = error.toLowerCase();
   
   if (lowerError.includes('element not found') || lowerError.includes('selector')) {

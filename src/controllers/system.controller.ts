@@ -1239,7 +1239,7 @@ export const getAllFacebookProfiles = async (req: Request, res: Response, next: 
  */
 export const getSystemErrors = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { severity, source, resolved, limit = 100, offset = 0 } = req.query;
+    const { severity, source, limit = 100, offset = 0 } = req.query;
 
     // Build where clause
     const where: any = {
@@ -1247,7 +1247,7 @@ export const getSystemErrors = async (req: Request, res: Response, next: NextFun
     };
 
     // Filter by severity if provided
-    if (severity) {
+    if (severity && typeof severity === 'string') {
       where.metadata = {
         path: ['severity'],
         equals: severity,
@@ -1255,7 +1255,7 @@ export const getSystemErrors = async (req: Request, res: Response, next: NextFun
     }
 
     // Filter by source (extension, api, system)
-    if (source) {
+    if (source && typeof source === 'string') {
       where.entityType = source;
     }
 
@@ -1284,7 +1284,7 @@ export const getSystemErrors = async (req: Request, res: Response, next: NextFun
         source: err.entityType,
         accountId: err.entityId,
         severity: metadata.severity || 'medium',
-        error: metadata.error || err.details || 'Unknown error',
+        error: metadata.error || 'Unknown error',
         context: {
           url: metadata.url,
           stackTrace: metadata.stackTrace,
