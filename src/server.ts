@@ -573,6 +573,9 @@ app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes')
 // AI Chat Routes - Nova's Backend (requires auth, handles own file uploads)
 app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default); // AI Chat with memory system
 
+// Error Monitoring & AI Intervention System
+app.use('/api/error-monitoring', ring5AuthBarrier, require('./routes/error-monitoring.routes').default); // Error monitoring & AI intervention
+
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes
 // ============================================
@@ -700,6 +703,20 @@ const startServer = async () => {
       logger.info('Continuing without dashboard features...');
     }
 
+    // Initialize Error Monitoring & AI Intervention System
+    try {
+      const { errorMonitoringService } = await import('@/services/error-monitoring.service');
+      // AI Intervention service is initialized on-demand via event handlers
+      await import('@/services/ai-intervention.service');
+      
+      await errorMonitoringService.initialize();
+      logger.info('✅ Error Monitoring service initialized (3-minute scanning cycle)');
+      logger.info('✅ AI Intervention service ready');
+    } catch (error) {
+      logger.warn('⚠️  Error Monitoring service initialization failed:', error);
+      logger.info('Continuing without error monitoring...');
+    }
+
     // Auto-promote default super admin users from environment
     const DEFAULT_SUPER_ADMINS = process.env.DEFAULT_SUPER_ADMINS?.split(',').map(e => e.trim().toLowerCase()) || [];
     for (const email of DEFAULT_SUPER_ADMINS) {
@@ -765,6 +782,11 @@ process.on('SIGTERM', async () => {
   iipcService.shutdown();
   const { stopAllJobs } = require('./services/scheduled-jobs.service');
   stopAllJobs();
+  // Shutdown error monitoring service
+  try {
+    const { errorMonitoringService } = await import('@/services/error-monitoring.service');
+    errorMonitoringService.shutdown();
+  } catch {}
   await shutdownEmailQueue();
   process.exit(0);
 });
@@ -777,6 +799,11 @@ process.on('SIGINT', async () => {
   iipcService.shutdown();
   const { stopAllJobs } = require('./services/scheduled-jobs.service');
   stopAllJobs();
+  // Shutdown error monitoring service
+  try {
+    const { errorMonitoringService } = await import('@/services/error-monitoring.service');
+    errorMonitoringService.shutdown();
+  } catch {}
   await shutdownEmailQueue();
   process.exit(0);
 });

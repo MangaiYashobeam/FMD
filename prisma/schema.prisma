@@ -2455,3 +2455,322 @@ model AIConversationControl {
   @@index([status])
   @@map("ai_conversation_controls")
 }
+
+// ============================================
+// Error Monitoring & AI Intervention System
+// ============================================
+
+// Error Sensitivity Levels
+enum ErrorSeverity {
+  INFO       // Informational logs
+  WARNING    // Potential issues
+  ERROR      // Errors requiring attention
+  CRITICAL   // Critical errors requiring immediate action
+  FATAL      // System-breaking errors
+}
+
+// Error Status
+enum ErrorTicketStatus {
+  DETECTED      // Just detected
+  ANALYZING     // AI is analyzing
+  INTERVENING   // AI is intervening with user
+  RESOLVED      // Resolved by AI or user
+  ESCALATED     // Escalated to admin
+  CLOSED        // Manually closed
+}
+
+// User Session Error Log - Tracks errors per user session
+model UserSessionErrorLog {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  accountId       String?  @map("account_id")
+  sessionToken    String   @map("session_token") // Browser session identifier
+  
+  // Error Details
+  errorType       String   @map("error_type") // api_error, ui_error, validation_error, auth_error, sync_error, network_error
+  errorCode       String?  @map("error_code")
+  errorMessage    String   @db.Text @map("error_message")
+  stackTrace      String?  @db.Text @map("stack_trace")
+  
+  // Context
+  endpoint        String?  // API endpoint that failed
+  httpMethod      String?  @map("http_method")
+  httpStatus      Int?     @map("http_status")
+  requestPayload  Json?    @map("request_payload")
+  responsePayload Json?    @map("response_payload")
+  
+  // User Action Context
+  userAction      String?  @map("user_action") // What user was trying to do
+  pageUrl         String?  @map("page_url")
+  component       String?  // UI component that triggered error
+  
+  // Severity & Classification
+  severity        ErrorSeverity @default(ERROR)
+  isRecurring     Boolean  @default(false) @map("is_recurring")
+  occurenceCount  Int      @default(1) @map("occurence_count")
+  
+  // Processing Status
+  processed       Boolean  @default(false)
+  processedAt     DateTime? @map("processed_at")
+  ticketId        String?  @map("ticket_id")
+  
+  // Timestamps
+  firstOccurrence DateTime @default(now()) @map("first_occurrence")
+  lastOccurrence  DateTime @default(now()) @map("last_occurrence")
+  createdAt       DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  ticket          ErrorTicket? @relation(fields: [ticketId], references: [id])
+  
+  @@index([userId])
+  @@index([accountId])
+  @@index([sessionToken])
+  @@index([errorType])
+  @@index([severity])
+  @@index([processed])
+  @@index([createdAt])
+  @@map("user_session_error_logs")
+}
+
+// Error Ticket - AI Intervention tracking
+model ErrorTicket {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  accountId       String?  @map("account_id")
+  
+  // Ticket Info
+  ticketNumber    String   @unique @map("ticket_number") // ERR-XXXX format
+  title           String
+  description     String   @db.Text
+  
+  // Classification
+  severity        ErrorSeverity @default(ERROR)
+  status          ErrorTicketStatus @default(DETECTED)
+  priority        Int      @default(3) // 1=highest, 5=lowest
+  
+  // Error Pattern
+  errorPattern    String   @map("error_pattern") // Grouped error pattern identifier
+  errorCount      Int      @default(1) @map("error_count")
+  affectedFeature String?  @map("affected_feature")
+  
+  // AI Analysis
+  aiAnalysis      String?  @db.Text @map("ai_analysis")
+  aiDiagnosis     String?  @db.Text @map("ai_diagnosis")
+  aiSolution      String?  @db.Text @map("ai_solution")
+  aiConfidence    Float?   @map("ai_confidence") // 0-1 confidence score
+  
+  // Timing
+  detectedAt      DateTime @default(now()) @map("detected_at")
+  analyzedAt      DateTime? @map("analyzed_at")
+  interveneAt     DateTime? @map("intervene_at")
+  resolvedAt      DateTime? @map("resolved_at")
+  
+  // Detection to Intervention timing
+  detectionToAnalysisMs Int? @map("detection_to_analysis_ms")
+  analysisToInterventionMs Int? @map("analysis_to_intervention_ms")
+  totalResolutionMs Int? @map("total_resolution_ms")
+  
+  // Resolution
+  resolutionMethod String? @map("resolution_method") // ai_auto, user_action, admin_manual, escalation
+  resolutionNotes String?  @db.Text @map("resolution_notes")
+  
+  // Escalation
+  escalatedTo     String?  @map("escalated_to") // admin user id
+  escalatedAt     DateTime? @map("escalated_at")
+  escalationReason String? @map("escalation_reason")
+  
+  // Color Alert
+  alertColor      String   @default("yellow") @map("alert_color") // green, yellow, orange, red, purple
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  errorLogs       UserSessionErrorLog[]
+  interventions   AIIntervention[]
+  
+  @@index([userId])
+  @@index([accountId])
+  @@index([status])
+  @@index([severity])
+  @@index([alertColor])
+  @@index([createdAt])
+  @@map("error_tickets")
+}
+
+// AI Intervention - Records of AI helping users
+model AIIntervention {
+  id              String   @id @default(uuid())
+  ticketId        String   @map("ticket_id")
+  userId          String   @map("user_id")
+  
+  // Intervention Type
+  interventionType String  @map("intervention_type") // proactive_message, guided_help, auto_fix, escalation_notice
+  
+  // Message Sent to User
+  messageToUser   String   @db.Text @map("message_to_user")
+  messageDelivered Boolean @default(false) @map("message_delivered")
+  messageReadAt   DateTime? @map("message_read_at")
+  
+  // User Response
+  userResponse    String?  @db.Text @map("user_response")
+  userRespondedAt DateTime? @map("user_responded_at")
+  
+  // AI Agent Info
+  aiAgentRole     String   @map("ai_agent_role") // support_ai, admin_ai, root_ai
+  aiSessionId     String?  @map("ai_session_id")
+  
+  // Steps Provided
+  stepsProvided   Json?    @map("steps_provided") // Array of step-by-step guidance
+  stepsCompleted  Int      @default(0) @map("steps_completed")
+  
+  // Outcome
+  wasHelpful      Boolean? @map("was_helpful")
+  userFeedback    String?  @map("user_feedback")
+  resolved        Boolean  @default(false)
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  ticket          ErrorTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  
+  @@index([ticketId])
+  @@index([userId])
+  @@index([interventionType])
+  @@index([resolved])
+  @@map("ai_interventions")
+}
+
+// Error Monitoring Config - Per-account settings
+model ErrorMonitoringConfig {
+  id              String   @id @default(uuid())
+  accountId       String?  @unique @map("account_id") // null = global defaults
+  
+  // Scanning Settings
+  scanIntervalSeconds Int  @default(180) @map("scan_interval_seconds") // 3 minutes default
+  isEnabled       Boolean  @default(true) @map("is_enabled")
+  
+  // Sensitivity Thresholds
+  minSeverityForAlert ErrorSeverity @default(ERROR) @map("min_severity_for_alert")
+  errorCountThreshold Int @default(3) @map("error_count_threshold") // Errors before AI intervenes
+  
+  // Time Windows
+  errorWindowMinutes Int @default(5) @map("error_window_minutes") // Time window for counting errors
+  maxInterventionDelaySeconds Int @default(300) @map("max_intervention_delay_seconds") // Max 5 min before AI must intervene
+  
+  // Alert Colors Configuration
+  greenThreshold  Int @default(0)  @map("green_threshold")  // 0 errors
+  yellowThreshold Int @default(2)  @map("yellow_threshold") // 1-2 errors
+  orangeThreshold Int @default(5)  @map("orange_threshold") // 3-5 errors
+  redThreshold    Int @default(10) @map("red_threshold")    // 6-10 errors
+  // Purple = > redThreshold (critical)
+  
+  // AI Intervention Settings
+  autoIntervene   Boolean  @default(true) @map("auto_intervene")
+  autoEscalate    Boolean  @default(true) @map("auto_escalate")
+  escalationDelay Int      @default(900) @map("escalation_delay") // 15 min before escalation
+  
+  // Notification Channels
+  notifyEmail     Boolean  @default(true) @map("notify_email")
+  notifyInApp     Boolean  @default(true) @map("notify_in_app")
+  notifySlack     Boolean  @default(false) @map("notify_slack")
+  slackWebhook    String?  @map("slack_webhook")
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  @@map("error_monitoring_configs")
+}
+
+// Error Pattern - Learned error patterns for better detection
+model ErrorPattern {
+  id              String   @id @default(uuid())
+  
+  // Pattern Identification
+  patternHash     String   @unique @map("pattern_hash") // Hash of error signature
+  patternName     String   @map("pattern_name")
+  
+  // Pattern Details
+  errorType       String   @map("error_type")
+  errorCodePattern String? @map("error_code_pattern") // Regex or exact match
+  messagePattern  String   @db.Text @map("message_pattern") // Regex for matching
+  endpointPattern String?  @map("endpoint_pattern")
+  
+  // Classification
+  severity        ErrorSeverity @default(ERROR)
+  category        String   // authentication, data_sync, api_limit, validation, network, unknown
+  
+  // AI Knowledge
+  rootCause       String?  @db.Text @map("root_cause")
+  solution        String?  @db.Text @map("solution")
+  preventionTips  String?  @db.Text @map("prevention_tips")
+  
+  // Statistics
+  totalOccurrences Int     @default(0) @map("total_occurrences")
+  resolvedCount   Int      @default(0) @map("resolved_count")
+  avgResolutionMs Int?     @map("avg_resolution_ms")
+  
+  // Learning
+  isVerified      Boolean  @default(false) @map("is_verified") // Manually verified by admin
+  lastUpdated     DateTime @default(now()) @map("last_updated")
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  
+  @@index([patternHash])
+  @@index([errorType])
+  @@index([category])
+  @@map("error_patterns")
+}
+
+// AI Intervention Summary - Root AI summarized reports
+model AIInterventionSummary {
+  id              String   @id @default(uuid())
+  
+  // Summary Scope
+  summaryType     String   @map("summary_type") // daily, weekly, monthly, incident
+  periodStart     DateTime @map("period_start")
+  periodEnd       DateTime @map("period_end")
+  accountId       String?  @map("account_id") // null = system-wide
+  
+  // Counts
+  totalErrors     Int      @map("total_errors")
+  totalTickets    Int      @map("total_tickets")
+  totalInterventions Int   @map("total_interventions")
+  resolvedCount   Int      @map("resolved_count")
+  escalatedCount  Int      @map("escalated_count")
+  
+  // Severity Breakdown
+  criticalCount   Int      @default(0) @map("critical_count")
+  errorCount      Int      @default(0) @map("error_count")
+  warningCount    Int      @default(0) @map("warning_count")
+  infoCount       Int      @default(0) @map("info_count")
+  
+  // AI Agent Summary (by agent role)
+  agentSummary    String   @db.Text @map("agent_summary") // AI agent's summary
+  
+  // Root AI Re-Summary
+  rootAISummary   String?  @db.Text @map("root_ai_summary") // Root AI consolidated summary
+  
+  // Diagnostics
+  topErrorPatterns Json?   @map("top_error_patterns") // Most common patterns
+  recommendations Json?    // AI recommendations for improvement
+  
+  // Performance Metrics
+  avgDetectionTime Int?    @map("avg_detection_time") // ms
+  avgResolutionTime Int?   @map("avg_resolution_time") // ms
+  successRate     Float?   @map("success_rate") // % of successful AI interventions
+  
+  // Timestamps
+  generatedAt     DateTime @default(now()) @map("generated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  
+  @@index([summaryType])
+  @@index([periodStart, periodEnd])
+  @@index([accountId])
+  @@map("ai_intervention_summaries")
+}
