@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import SuperAdminRoute from './components/SuperAdminRoute';
 import DashboardLayout from './layouts/DashboardLayout';
@@ -77,7 +78,8 @@ function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
-            <Routes>
+            <NotificationProvider>
+              <Routes>
               {/* Public routes */}
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
@@ -158,6 +160,7 @@ function App() {
           
           {/* Cloud Chat - AI Sales Assistant visible on public pages */}
           <CloudChatWrapper />
+            </NotificationProvider>
         </BrowserRouter>
       </AuthProvider>
       </ToastProvider>

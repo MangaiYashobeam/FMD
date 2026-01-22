@@ -370,20 +370,28 @@ function FacebookAdPreviewModal({
   };
 
   // Drag and drop handlers for reordering selected photos
-  const handleDragStart = (index: number) => {
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
     setDraggedPhotoIndex(index);
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
-    setDragOverIndex(index);
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedPhotoIndex !== null && draggedPhotoIndex !== targetIndex) {
+      setDragOverIndex(targetIndex);
+    }
   };
 
-  const handleDragLeave = () => {
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
     setDragOverIndex(null);
   };
 
-  const handleDrop = (targetIndex: number) => {
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    
     if (draggedPhotoIndex === null || draggedPhotoIndex === targetIndex) {
       setDraggedPhotoIndex(null);
       setDragOverIndex(null);
@@ -392,20 +400,24 @@ function FacebookAdPreviewModal({
 
     const newPhotos = [...selectedPhotos];
     const [draggedPhoto] = newPhotos.splice(draggedPhotoIndex, 1);
-    newPhotos.splice(targetIndex, 0, draggedPhoto);
+    
+    // Calculate new target index after removal
+    const adjustedTargetIndex = draggedPhotoIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    newPhotos.splice(adjustedTargetIndex, 0, draggedPhoto);
     
     setSelectedPhotos(newPhotos);
-    setDraggedPhotoIndex(null);
-    setDragOverIndex(null);
     
     // Update current photo index if needed
     if (currentPhotoIndex === draggedPhotoIndex) {
-      setCurrentPhotoIndex(targetIndex);
-    } else if (draggedPhotoIndex < currentPhotoIndex && targetIndex >= currentPhotoIndex) {
+      setCurrentPhotoIndex(adjustedTargetIndex);
+    } else if (draggedPhotoIndex < currentPhotoIndex && adjustedTargetIndex >= currentPhotoIndex) {
       setCurrentPhotoIndex(currentPhotoIndex - 1);
-    } else if (draggedPhotoIndex > currentPhotoIndex && targetIndex <= currentPhotoIndex) {
+    } else if (draggedPhotoIndex > currentPhotoIndex && adjustedTargetIndex <= currentPhotoIndex) {
       setCurrentPhotoIndex(currentPhotoIndex + 1);
     }
+    
+    setDraggedPhotoIndex(null);
+    setDragOverIndex(null);
   };
 
   const handleDragEnd = () => {
@@ -517,6 +529,20 @@ function FacebookAdPreviewModal({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Photos ({selectedPhotos.length}/10) - Drag to reorder, click to remove
                   </label>
+                  
+                  {/* Facebook Marketplace 10-photo limit disclaimer */}
+                  <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-xs">
+                        <p className="text-amber-800 font-medium">Facebook Marketplace Limit: 10 Photos Maximum</p>
+                        <p className="text-amber-700 mt-0.5">
+                          Only the first 10 selected photos will be uploaded. Photos beyond the limit are shown faded and marked "Won't Upload".
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <p className="text-xs text-gray-500 mb-2">First photo will be the main listing image. Drag photos to change order.</p>
                   
                   {/* All photos in one draggable grid */}
@@ -527,24 +553,28 @@ function FacebookAdPreviewModal({
                       photos.map((photo) => {
                         const selectedIndex = selectedPhotos.indexOf(photo);
                         const isSelected = selectedIndex !== -1;
+                        // Show "won't upload" for photos beyond position 10 when all 10 slots are filled
+                        const wouldExceedLimit = !isSelected && selectedPhotos.length >= 10;
                         
                         return (
                           <div
                             key={photo}
                             draggable={isSelected}
-                            onDragStart={() => isSelected && handleDragStart(selectedIndex)}
+                            onDragStart={(e) => isSelected && handleDragStart(e, selectedIndex)}
                             onDragOver={(e) => isSelected && handleDragOver(e, selectedIndex)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={() => isSelected && handleDrop(selectedIndex)}
+                            onDragLeave={(e) => handleDragLeave(e)}
+                            onDrop={(e) => isSelected && handleDrop(e, selectedIndex)}
                             onDragEnd={handleDragEnd}
-                            onClick={() => togglePhotoSelection(photo)}
+                            onClick={() => !wouldExceedLimit && togglePhotoSelection(photo)}
                             className={cn(
-                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer group',
+                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
                               isSelected 
                                 ? selectedIndex === 0 
                                   ? 'ring-2 ring-green-400 border-green-500 cursor-move' 
                                   : 'border-blue-500 bg-blue-50 cursor-move'
-                                : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100',
+                                : wouldExceedLimit
+                                  ? 'border-red-200 bg-red-50 opacity-40 cursor-not-allowed'
+                                  : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100 cursor-pointer',
                               isSelected && draggedPhotoIndex === selectedIndex && 'opacity-50 scale-95',
                               isSelected && dragOverIndex === selectedIndex && 'ring-2 ring-purple-500 scale-105'
                             )}
@@ -558,6 +588,13 @@ function FacebookAdPreviewModal({
                                 selectedIndex === 0 ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
                               )}>
                                 {selectedIndex + 1}
+                              </div>
+                            ) : wouldExceedLimit ? (
+                              <div className="absolute inset-0 flex items-center justify-center bg-red-900/50">
+                                <div className="text-center">
+                                  <X className="w-6 h-6 text-white mx-auto" />
+                                  <span className="text-[10px] text-white font-medium block mt-0.5">Won't Upload</span>
+                                </div>
                               </div>
                             ) : (
                               <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-gray-400/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

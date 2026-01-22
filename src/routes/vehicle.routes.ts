@@ -97,7 +97,7 @@ router.post(
 
 /**
  * @route   POST /api/vehicles/:id/post-to-facebook
- * @desc    Post vehicle to Facebook via IAI/API/Pixel
+ * @desc    Post vehicle to Facebook via IAI/API/Soldier
  * @access  Private
  */
 router.post(
@@ -108,7 +108,8 @@ router.post(
     body('price').isNumeric().withMessage('Price must be a number'),
     body('description').isString().notEmpty().withMessage('Description is required'),
     body('photos').isArray().withMessage('Photos must be an array'),
-    body('method').isIn(['iai', 'api', 'pixel', 'soldier']).withMessage('Invalid posting method'),
+    body('method').isIn(['iai', 'api', 'soldier']).withMessage('Invalid posting method. Use: iai, api, or soldier'),
+    body('includePixelTracking').optional().isBoolean().withMessage('includePixelTracking must be a boolean'),
   ]),
   asyncHandler(controller.postToFacebook.bind(controller))
 );

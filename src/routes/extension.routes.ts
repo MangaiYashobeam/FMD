@@ -124,6 +124,107 @@ router.get('/tasks/:accountId', authenticate, async (req: AuthRequest, res: Resp
 });
 
 /**
+ * GET /api/extension/tasks/:accountId/pending
+ * Alias for /tasks/:accountId - for backward compatibility
+ */
+router.get('/tasks/:accountId/pending', authenticate, async (req: AuthRequest, res: Response) => {
+  // Just return pending tasks for this account - same as main route
+  try {
+    const accountId = req.params.accountId as string;
+    
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId,
+      },
+    });
+    
+    if (!accountUser) {
+      res.status(403).json({ error: 'Access denied to this account' });
+      return;
+    }
+    
+    const tasks = await prisma.extensionTask.findMany({
+      where: {
+        accountId,
+        status: 'pending',
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'asc' },
+      ],
+      take: 10,
+    });
+    
+    const formattedTasks = tasks.map(task => ({
+      id: task.id,
+      accountId: task.accountId,
+      type: task.type === 'post_vehicle' ? 'POST_TO_MARKETPLACE' : task.type.toUpperCase(),
+      status: task.status,
+      data: task.data as Record<string, unknown>,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    }));
+    
+    logger.info(`📋 Pending tasks: Found ${formattedTasks.length} for account ${accountId}`);
+    res.json(formattedTasks);
+  } catch (error) {
+    logger.error('Get pending tasks error:', error);
+    res.status(500).json({ error: 'Failed to get tasks' });
+  }
+});
+
+/**
+ * POST /api/extension/tasks/:taskId/complete
+ * Mark task as completed
+ */
+router.post('/tasks/:taskId/complete', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const taskId = req.params.taskId as string;
+    
+    await prisma.extensionTask.update({
+      where: { id: taskId },
+      data: { 
+        status: 'completed',
+        updatedAt: new Date(),
+        result: req.body.result || null,
+      },
+    });
+    
+    logger.info(`✅ Task ${taskId} marked as completed`);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Complete task error:', error);
+    res.status(500).json({ error: 'Failed to complete task' });
+  }
+});
+
+/**
+ * POST /api/extension/tasks/:taskId/failed
+ * Mark task as failed
+ */
+router.post('/tasks/:taskId/failed', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const taskId = req.params.taskId as string;
+    
+    await prisma.extensionTask.update({
+      where: { id: taskId },
+      data: { 
+        status: 'failed',
+        updatedAt: new Date(),
+        result: { error: req.body.error || 'Unknown error', failedAt: new Date().toISOString() },
+      },
+    });
+    
+    logger.info(`❌ Task ${taskId} marked as failed: ${req.body.error}`);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Fail task error:', error);
+    res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
+/**
  * POST /api/extension/tasks
  * Create a new task for the extension
  */

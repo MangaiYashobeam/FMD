@@ -14,6 +14,7 @@
  * - GET /api/ai/memories - Get user's memories
  * - POST /api/ai/memories - Create memory
  * - DELETE /api/ai/memories/:memoryId - Delete memory
+ * - GET /api/ai/notifications/stream - SSE for real-time AI notifications to user
  * 
  * Super Admin Conversation Control:
  * - POST /api/ai/sessions/:sessionId/stop - Stop active conversation
@@ -28,10 +29,12 @@
  * - GET /api/ai/active-conversations - Get all active conversations
  */
 
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { authenticate } from '@/middleware/auth';
 import { aiChatController } from '@/controllers/ai-chat.controller';
+import { aiInterventionEvents } from '@/services/ai-intervention.service';
+import { logger } from '@/utils/logger';
 
 const router = Router();
 
@@ -45,6 +48,89 @@ const upload = multer({
 
 // All routes require authentication
 router.use(authenticate);
+
+// ============================================
+// User Notification Stream (SSE)
+// ============================================
+
+/**
+ * @route GET /api/ai/notifications/stream
+ * @desc SSE endpoint for real-time AI notifications to user
+ * @access Private (authenticated users)
+ */
+router.get('/notifications/stream', async (req: Request & { user?: any }, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    // Send initial connected event
+    res.write(`data: ${JSON.stringify({ type: 'connected', userId })}\n\n`);
+
+    // Handler for AI intervention messages
+    const onIntervention = (data: any) => {
+      // Only send to the specific user this intervention is for
+      if (data.userId === userId) {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'ai_intervention', 
+          data: {
+            sessionId: data.sessionId,
+            messageId: data.messageId,
+            interventionId: data.interventionId,
+            ticketId: data.ticketId,
+            message: 'Nova has a message for you about an issue we detected.',
+          }
+        })}\n\n`);
+        logger.info(`AI notification sent to user ${userId}`);
+      }
+    };
+
+    // Handler for ticket escalations
+    const onEscalation = (data: any) => {
+      if (data.userId === userId) {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'ticket_escalated', 
+          data: {
+            ticketId: data.ticketId,
+            priority: data.priority,
+            message: 'A support ticket has been escalated for your account.',
+          }
+        })}\n\n`);
+      }
+    };
+
+    // Subscribe to events
+    aiInterventionEvents.on('message:sent', onIntervention);
+    aiInterventionEvents.on('ticket:escalated', onEscalation);
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+    }, 30000);
+
+    // Cleanup on connection close
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      aiInterventionEvents.off('message:sent', onIntervention);
+      aiInterventionEvents.off('ticket:escalated', onEscalation);
+      logger.info(`User ${userId} disconnected from notification stream`);
+    });
+
+    logger.info(`User ${userId} connected to notification stream`);
+
+  } catch (error) {
+    logger.error('Notification stream error:', error);
+    res.status(500).json({ success: false, error: 'Stream failed' });
+  }
+});
 
 // ============================================
 // Session Management
