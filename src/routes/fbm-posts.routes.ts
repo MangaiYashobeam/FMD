@@ -7,7 +7,7 @@
 
 import { Router, Response } from 'express';
 import { authenticate, AuthRequest } from '@/middleware/auth';
-import { requireRole } from '@/middleware/rbac';
+import { requireRole, UserRole } from '@/middleware/rbac';
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
 
@@ -86,6 +86,12 @@ export class FBMPostLogService {
     facebookPostId?: string;
     fbPostId?: string;
     success?: boolean;
+    extensionTaskId?: string;
+    queuedAt?: Date;
+    processingAt?: Date;
+    completedAt?: Date;
+    riskLevel?: string;
+    riskFactors?: any[];
   }) {
     const currentLog = await prisma.fBMPostLog.findUnique({
       where: { id: logId },
@@ -304,7 +310,7 @@ export class FBMPostLogService {
  * GET /api/fbm-posts/admin/stats
  * Get global FBM posting statistics (Super Admin only)
  */
-router.get('/admin/stats', requireRole('SUPER_ADMIN'), async (req: AuthRequest, res: Response) => {
+router.get('/admin/stats', requireRole(UserRole.SUPER_ADMIN), async (req: AuthRequest, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '24h';
     const stats = await FBMPostLogService.getStats(undefined, timeRange);
@@ -320,7 +326,7 @@ router.get('/admin/stats', requireRole('SUPER_ADMIN'), async (req: AuthRequest, 
  * GET /api/fbm-posts/admin/logs
  * Get all FBM post logs (Super Admin only)
  */
-router.get('/admin/logs', requireRole('SUPER_ADMIN'), async (req: AuthRequest, res: Response) => {
+router.get('/admin/logs', requireRole(UserRole.SUPER_ADMIN), async (req: AuthRequest, res: Response) => {
   try {
     const {
       page = '1',
@@ -344,12 +350,12 @@ router.get('/admin/logs', requireRole('SUPER_ADMIN'), async (req: AuthRequest, r
       createdAt: { gte: FBMPostLogService['getTimeFilter'](timeRange as string) },
     };
 
-    if (status) whereClause.status = status;
-    if (method) whereClause.method = method;
-    if (triggerType) whereClause.triggerType = triggerType;
-    if (riskLevel) whereClause.riskLevel = riskLevel;
-    if (accountId) whereClause.accountId = accountId;
-    if (userId) whereClause.userId = userId;
+    if (status) whereClause.status = status as string;
+    if (method) whereClause.method = method as string;
+    if (triggerType) whereClause.triggerType = triggerType as string;
+    if (riskLevel) whereClause.riskLevel = riskLevel as string;
+    if (accountId) whereClause.accountId = accountId as string;
+    if (userId) whereClause.userId = userId as string;
     if (success !== undefined) whereClause.success = success === 'true';
     if (search) {
       whereClause.OR = [
@@ -398,9 +404,9 @@ router.get('/admin/logs', requireRole('SUPER_ADMIN'), async (req: AuthRequest, r
  * GET /api/fbm-posts/admin/logs/:logId
  * Get detailed FBM post log with events (Super Admin only)
  */
-router.get('/admin/logs/:logId', requireRole('SUPER_ADMIN'), async (req: AuthRequest, res: Response) => {
+router.get('/admin/logs/:logId', requireRole(UserRole.SUPER_ADMIN), async (req: AuthRequest, res: Response) => {
   try {
-    const { logId } = req.params;
+    const logId = req.params.logId as string;
 
     const log = await prisma.fBMPostLog.findUnique({
       where: { id: logId },
@@ -431,9 +437,9 @@ router.get('/admin/logs/:logId', requireRole('SUPER_ADMIN'), async (req: AuthReq
  * POST /api/fbm-posts/admin/logs/:logId/retry
  * Manually retry a failed post (Super Admin only)
  */
-router.post('/admin/logs/:logId/retry', requireRole('SUPER_ADMIN'), async (req: AuthRequest, res: Response) => {
+router.post('/admin/logs/:logId/retry', requireRole(UserRole.SUPER_ADMIN), async (req: AuthRequest, res: Response) => {
   try {
-    const { logId } = req.params;
+    const logId = req.params.logId as string;
     const { method } = req.body; // Optional: override method
 
     const originalLog = await prisma.fBMPostLog.findUnique({
@@ -484,7 +490,7 @@ router.post('/admin/logs/:logId/retry', requireRole('SUPER_ADMIN'), async (req: 
  * GET /api/fbm-posts/admin/accounts
  * Get accounts with FBM posting activity (Super Admin only)
  */
-router.get('/admin/accounts', requireRole('SUPER_ADMIN'), async (req: AuthRequest, res: Response) => {
+router.get('/admin/accounts', requireRole(UserRole.SUPER_ADMIN), async (req: AuthRequest, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '24h';
     const timeFilter = FBMPostLogService['getTimeFilter'](timeRange);
@@ -580,8 +586,8 @@ router.get('/logs', async (req: AuthRequest, res: Response) => {
     const skip = (pageNum - 1) * limitNum;
 
     const whereClause: any = { accountId };
-    if (status) whereClause.status = status;
-    if (method) whereClause.method = method;
+    if (status) whereClause.status = status as string;
+    if (method) whereClause.method = method as string;
     if (success !== undefined) whereClause.success = success === 'true';
 
     const [logs, total] = await Promise.all([
@@ -624,10 +630,10 @@ router.get('/logs', async (req: AuthRequest, res: Response) => {
 router.get('/logs/:logId', async (req: AuthRequest, res: Response) => {
   try {
     const { logId } = req.params;
-    const accountId = req.user!.accountIds[0];
+    const accountId = req.user!.accountIds[0] as string;
 
     const log = await prisma.fBMPostLog.findFirst({
-      where: { id: logId, accountId },
+      where: { id: logId as string, accountId },
       include: {
         vehicle: true,
         user: { select: { id: true, email: true, firstName: true, lastName: true } },
@@ -656,10 +662,10 @@ router.get('/logs/:logId', async (req: AuthRequest, res: Response) => {
 router.post('/logs/:logId/retry', async (req: AuthRequest, res: Response) => {
   try {
     const { logId } = req.params;
-    const accountId = req.user!.accountIds[0];
+    const accountId = req.user!.accountIds[0] as string;
 
     const originalLog = await prisma.fBMPostLog.findFirst({
-      where: { id: logId, accountId },
+      where: { id: logId as string, accountId },
     });
 
     if (!originalLog) {
@@ -749,3 +755,4 @@ router.post('/internal/event', async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
+
