@@ -8,9 +8,10 @@ import { FTPService } from '@/services/ftp.service';
 export class AccountController {
   /**
    * Get current user's primary account
+   * Auto-creates an account if the user doesn't have one (recovery for orphaned users)
    */
   async getCurrentAccount(req: AuthRequest, res: Response) {
-    const accountUser = await prisma.accountUser.findFirst({
+    let accountUser = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
       },
@@ -31,8 +32,69 @@ export class AccountController {
       },
     });
 
+    // Auto-create account if user doesn't have one (recovery for orphaned users)
     if (!accountUser) {
-      throw new AppError('No account found for user', 404);
+      logger.warn(`User ${req.user!.id} has no account - auto-creating one`);
+      
+      // Get user details for account name
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.id },
+        select: { firstName: true, lastName: true, email: true },
+      });
+      
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Create a new account and link to user
+      const accountName = user.firstName && user.lastName 
+        ? `${user.firstName} ${user.lastName}'s Dealership`
+        : `${user.email.split('@')[0]}'s Dealership`;
+      
+      const newAccount = await prisma.account.create({
+        data: {
+          name: accountName,
+          dealershipName: accountName,
+          accountUsers: {
+            create: {
+              userId: req.user!.id,
+              role: 'ACCOUNT_OWNER',
+            },
+          },
+        },
+        include: {
+          _count: {
+            select: {
+              vehicles: true,
+              facebookProfiles: true,
+            },
+          },
+        },
+      });
+
+      logger.info(`Auto-created account ${newAccount.id} for user ${req.user!.id}`);
+
+      // Return the newly created account
+      res.json({
+        success: true,
+        data: {
+          id: newAccount.id,
+          name: newAccount.name,
+          dealershipName: newAccount.dealershipName,
+          ftpHost: newAccount.ftpHost,
+          ftpPort: newAccount.ftpPort,
+          ftpUsername: newAccount.ftpUsername,
+          csvPath: newAccount.csvPath,
+          autoSync: newAccount.autoSync,
+          syncInterval: newAccount.syncInterval,
+          role: 'ACCOUNT_OWNER',
+          vehicleCount: newAccount._count.vehicles,
+          facebookProfileCount: newAccount._count.facebookProfiles,
+          createdAt: newAccount.createdAt,
+          _autoCreated: true, // Flag to indicate this was auto-created
+        },
+      });
+      return;
     }
 
     res.json({

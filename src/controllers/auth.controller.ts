@@ -248,7 +248,45 @@ export class AuthController {
         },
       });
 
-      logger.info(`Login step 9: Sending response for ${user.email}`);
+      logger.info(`Login step 9: Checking for accounts`);
+      
+      // Auto-create account if user doesn't have one (recovery for orphaned users)
+      let accounts = user.accountUsers.map((au) => ({
+        id: au.account.id,
+        name: au.account.name,
+        role: au.role,
+      }));
+      
+      if (accounts.length === 0) {
+        logger.warn(`User ${user.id} has no accounts - auto-creating one during login`);
+        
+        const accountName = user.firstName && user.lastName 
+          ? `${user.firstName} ${user.lastName}'s Dealership`
+          : `${user.email.split('@')[0]}'s Dealership`;
+        
+        const newAccount = await prisma.account.create({
+          data: {
+            name: accountName,
+            dealershipName: accountName,
+            accountUsers: {
+              create: {
+                userId: user.id,
+                role: 'ACCOUNT_OWNER',
+              },
+            },
+          },
+        });
+        
+        accounts = [{
+          id: newAccount.id,
+          name: newAccount.name,
+          role: 'ACCOUNT_OWNER',
+        }];
+        
+        logger.info(`Auto-created account ${newAccount.id} for user ${user.id} during login`);
+      }
+
+      logger.info(`Login step 10: Sending response for ${user.email}`);
 
       res.json({
         success: true,
@@ -259,11 +297,7 @@ export class AuthController {
             firstName: user.firstName,
             lastName: user.lastName,
           },
-          accounts: user.accountUsers.map((au) => ({
-            id: au.account.id,
-            name: au.account.name,
-            role: au.role,
-          })),
+          accounts,
           accessToken,
           refreshToken,
         },
@@ -384,6 +418,7 @@ export class AuthController {
 
   /**
    * Get current user
+   * Auto-creates an account if user doesn't have one (recovery for orphaned users)
    */
   async getCurrentUser(req: AuthRequest, res: Response) {
     const user = await prisma.user.findUnique({
@@ -401,6 +436,42 @@ export class AuthController {
       throw new AppError('User not found', 404);
     }
 
+    // Auto-create account if user doesn't have one
+    let accounts = user.accountUsers.map((au) => ({
+      id: au.account.id,
+      name: au.account.name,
+      role: au.role,
+    }));
+    
+    if (accounts.length === 0) {
+      logger.warn(`User ${user.id} has no accounts - auto-creating one`);
+      
+      const accountName = user.firstName && user.lastName 
+        ? `${user.firstName} ${user.lastName}'s Dealership`
+        : `${user.email.split('@')[0]}'s Dealership`;
+      
+      const newAccount = await prisma.account.create({
+        data: {
+          name: accountName,
+          dealershipName: accountName,
+          accountUsers: {
+            create: {
+              userId: user.id,
+              role: 'ACCOUNT_OWNER',
+            },
+          },
+        },
+      });
+      
+      accounts = [{
+        id: newAccount.id,
+        name: newAccount.name,
+        role: 'ACCOUNT_OWNER',
+      }];
+      
+      logger.info(`Auto-created account ${newAccount.id} for user ${user.id}`);
+    }
+
     res.json({
       success: true,
       data: {
@@ -410,11 +481,7 @@ export class AuthController {
         lastName: user.lastName,
         phone: user.phone,
         emailVerified: user.emailVerified,
-        accounts: user.accountUsers.map((au) => ({
-          id: au.account.id,
-          name: au.account.name,
-          role: au.role,
-        })),
+        accounts,
       },
     });
   }

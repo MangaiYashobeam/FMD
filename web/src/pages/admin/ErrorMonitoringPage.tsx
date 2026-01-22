@@ -5,9 +5,9 @@
  * for system-wide monitoring. Designed for Nova AI oversight.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api } from '../../lib/api';
 import { 
   AlertTriangle, 
   CheckCircle, 
@@ -18,11 +18,9 @@ import {
   User,
   Globe,
   Puzzle,
-  Server,
   RefreshCw,
   Eye,
-  Check,
-  MessageSquare
+  Check
 } from 'lucide-react';
 
 interface ErrorStats {
@@ -92,7 +90,7 @@ const ErrorMonitoringPage: React.FC = () => {
   }>({});
 
   // Fetch error statistics
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ['error-stats'],
     queryFn: async () => {
       const response = await api.get('/admin/errors/stats');
@@ -115,7 +113,7 @@ const ErrorMonitoringPage: React.FC = () => {
   });
 
   // Fetch extension errors with patterns
-  const { data: extensionData, isLoading: extensionLoading } = useQuery({
+  const { data: extensionData } = useQuery({
     queryKey: ['extension-errors'],
     queryFn: async () => {
       const response = await api.get('/admin/errors/extension');

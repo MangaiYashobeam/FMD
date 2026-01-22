@@ -203,6 +203,7 @@ export const vehiclesApi = {
     description: string;
     photos: string[];
     method: string;
+    includePixelTracking?: boolean;
   }) => api.post(`/api/vehicles/${id}/post-to-facebook`, data),
 };
 

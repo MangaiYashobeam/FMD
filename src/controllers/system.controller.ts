@@ -1530,9 +1530,13 @@ export const getExtensionErrors = async (req: Request, res: Response, next: Next
  */
 export const resolveError = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { errorId } = req.params;
+    const errorId = typeof req.params.errorId === 'string' ? req.params.errorId : Array.isArray(req.params.errorId) ? req.params.errorId[0] : undefined;
     const resolution: string | undefined = typeof req.body.resolution === 'string' ? req.body.resolution : undefined;
     const preventionPlan: string | undefined = typeof req.body.preventionPlan === 'string' ? req.body.preventionPlan : undefined;
+
+    if (!errorId) {
+      throw new AppError('Error ID is required', 400);
+    }
 
     const error = await prisma.auditLog.findUnique({
       where: { id: errorId },

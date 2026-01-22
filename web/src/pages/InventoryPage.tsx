@@ -296,6 +296,7 @@ function FacebookAdPreviewModal({
     description: string;
     photos: string[];
     method: string;
+    includePixelTracking?: boolean;
   }) => void;
   onRefresh?: () => void;
 }) {
@@ -523,7 +524,7 @@ function FacebookAdPreviewModal({
                     {photos.length === 0 ? (
                       <p className="text-gray-400 text-sm col-span-5 m-auto py-8">No photos available</p>
                     ) : (
-                      photos.map((photo, i) => {
+                      photos.map((photo) => {
                         const selectedIndex = selectedPhotos.indexOf(photo);
                         const isSelected = selectedIndex !== -1;
                         
