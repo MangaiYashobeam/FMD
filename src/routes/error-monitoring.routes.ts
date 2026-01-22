@@ -4,7 +4,8 @@
  * API endpoints for error monitoring and AI intervention system
  */
 
-import { Router, Response, NextFunction } from 'express';
+import { Router, Response, NextFunction, Request } from 'express';
+import jwt from 'jsonwebtoken';
 import { authenticate, AuthRequest } from '@/middleware/auth';
 import { errorMonitoringService, errorMonitoringEvents } from '@/services/error-monitoring.service';
 import { aiInterventionService, aiInterventionEvents } from '@/services/ai-intervention.service';
@@ -12,9 +13,6 @@ import { logger } from '@/utils/logger';
 import prisma from '@/config/database';
 
 const router = Router();
-
-// All routes require authentication
-router.use(authenticate);
 
 // Helper to safely get string from query params
 const getQueryString = (value: unknown): string | undefined => {
@@ -37,6 +35,111 @@ const getQueryInt = (value: unknown, defaultVal: number): number => {
   const parsed = parseInt(str, 10);
   return isNaN(parsed) ? defaultVal : parsed;
 };
+
+// ============================================
+// SSE Stream Route (BEFORE authenticate middleware)
+// EventSource can't send headers, so we verify token from query param
+// ============================================
+
+router.get('/stream', async (req: Request, res: Response) => {
+  try {
+    // For SSE, token comes from query param (EventSource doesn't support headers)
+    const tokenParam = getQueryString(req.query.token);
+    const authHeader = req.headers.authorization;
+    const token = tokenParam || (authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+
+    if (!token) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
+    }
+
+    // Verify token
+    let decoded: { id: string; email: string };
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string; email: string };
+    } catch {
+      res.status(401).json({ success: false, error: 'Invalid or expired token' });
+      return;
+    }
+
+    // Get user and check admin status
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      include: { accountUsers: true },
+    });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({ success: false, error: 'User not found or inactive' });
+      return;
+    }
+
+    const accountUser = user.accountUsers.find(au => 
+      ['SUPER_ADMIN', 'ADMIN', 'ACCOUNT_OWNER'].includes(au.role)
+    );
+
+    if (!accountUser) {
+      res.status(403).json({ success: false, error: 'Admin access required' });
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+    const onError = (data: any) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', data })}\n\n`);
+    };
+
+    const onTicket = (data: any) => {
+      res.write(`data: ${JSON.stringify({ type: 'ticket', data })}\n\n`);
+    };
+
+    const onIntervention = (data: any) => {
+      res.write(`data: ${JSON.stringify({ type: 'intervention', data })}\n\n`);
+    };
+
+    const onScan = (data: any) => {
+      res.write(`data: ${JSON.stringify({ type: 'scan', data })}\n\n`);
+    };
+
+    errorMonitoringEvents.on('error:new', onError);
+    errorMonitoringEvents.on('ticket:created', onTicket);
+    errorMonitoringEvents.on('ticket:updated', onTicket);
+    errorMonitoringEvents.on('ticket:critical', onTicket);
+    errorMonitoringEvents.on('scan:complete', onScan);
+    aiInterventionEvents.on('message:sent', onIntervention);
+    aiInterventionEvents.on('ticket:escalated', onIntervention);
+
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+    }, 30000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      errorMonitoringEvents.off('error:new', onError);
+      errorMonitoringEvents.off('ticket:created', onTicket);
+      errorMonitoringEvents.off('ticket:updated', onTicket);
+      errorMonitoringEvents.off('ticket:critical', onTicket);
+      errorMonitoringEvents.off('scan:complete', onScan);
+      aiInterventionEvents.off('message:sent', onIntervention);
+      aiInterventionEvents.off('ticket:escalated', onIntervention);
+      logger.info('Error monitoring SSE stream disconnected');
+    });
+
+    logger.info('Error monitoring SSE stream connected');
+
+  } catch (error) {
+    logger.error('SSE stream error:', error);
+    res.status(500).json({ success: false, error: 'Stream failed' });
+  }
+});
+
+// All other routes require authentication via header
+router.use(authenticate);
 
 /**
  * Check if user is admin/super admin
@@ -457,106 +560,6 @@ router.post('/summaries/:id/root-summary', requireAdmin, async (req: AuthRequest
   } catch (error) {
     logger.error('Failed to generate root summary:', error);
     res.status(500).json({ success: false, error: 'Failed to generate summary' });
-  }
-});
-
-// ============================================
-// Real-time Monitoring (SSE)
-// SSE doesn't support custom headers, so we accept token from query param
-// ============================================
-
-router.get('/stream', async (req: AuthRequest, res: Response) => {
-  try {
-    // For SSE, token can come from query param (EventSource doesn't support headers)
-    const tokenParam = getQueryString(req.query.token);
-    const authHeader = req.headers.authorization;
-    const token = tokenParam || (authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
-
-    if (!token) {
-      res.status(401).json({ success: false, error: 'Authentication required' });
-      return;
-    }
-
-    // Verify token
-    const jwt = await import('jsonwebtoken');
-    let decoded: { id: string; email: string };
-    try {
-      decoded = jwt.default.verify(token, process.env.JWT_SECRET!) as { id: string; email: string };
-    } catch {
-      res.status(401).json({ success: false, error: 'Invalid token' });
-      return;
-    }
-
-    // Get user and check admin status
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      include: { accountUsers: true },
-    });
-
-    if (!user || !user.isActive) {
-      res.status(401).json({ success: false, error: 'User not found or inactive' });
-      return;
-    }
-
-    const accountUser = user.accountUsers.find(au => 
-      ['SUPER_ADMIN', 'ADMIN', 'ACCOUNT_OWNER'].includes(au.role)
-    );
-
-    if (!accountUser) {
-      res.status(403).json({ success: false, error: 'Admin access required' });
-      return;
-    }
-
-    // Set SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
-
-    const onError = (data: any) => {
-      res.write(`data: ${JSON.stringify({ type: 'error', data })}\n\n`);
-    };
-
-    const onTicket = (data: any) => {
-      res.write(`data: ${JSON.stringify({ type: 'ticket', data })}\n\n`);
-    };
-
-    const onIntervention = (data: any) => {
-      res.write(`data: ${JSON.stringify({ type: 'intervention', data })}\n\n`);
-    };
-
-    const onScan = (data: any) => {
-      res.write(`data: ${JSON.stringify({ type: 'scan', data })}\n\n`);
-    };
-
-    errorMonitoringEvents.on('error:new', onError);
-    errorMonitoringEvents.on('ticket:created', onTicket);
-    errorMonitoringEvents.on('ticket:updated', onTicket);
-    errorMonitoringEvents.on('ticket:critical', onTicket);
-    errorMonitoringEvents.on('scan:complete', onScan);
-    aiInterventionEvents.on('message:sent', onIntervention);
-    aiInterventionEvents.on('ticket:escalated', onIntervention);
-
-    const heartbeat = setInterval(() => {
-      res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
-    }, 30000);
-
-    req.on('close', () => {
-      clearInterval(heartbeat);
-      errorMonitoringEvents.off('error:new', onError);
-      errorMonitoringEvents.off('ticket:created', onTicket);
-      errorMonitoringEvents.off('ticket:updated', onTicket);
-      errorMonitoringEvents.off('ticket:critical', onTicket);
-      errorMonitoringEvents.off('scan:complete', onScan);
-      aiInterventionEvents.off('message:sent', onIntervention);
-      aiInterventionEvents.off('ticket:escalated', onIntervention);
-    });
-
-  } catch (error) {
-    logger.error('SSE stream error:', error);
-    res.status(500).json({ success: false, error: 'Stream failed' });
   }
 });
 

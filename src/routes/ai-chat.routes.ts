@@ -31,10 +31,12 @@
 
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import jwt from 'jsonwebtoken';
 import { authenticate } from '@/middleware/auth';
 import { aiChatController } from '@/controllers/ai-chat.controller';
 import { aiInterventionEvents } from '@/services/ai-intervention.service';
 import { logger } from '@/utils/logger';
+import prisma from '@/config/database';
 
 const router = Router();
 
@@ -46,25 +48,46 @@ const upload = multer({
   },
 });
 
-// All routes require authentication
-router.use(authenticate);
-
 // ============================================
-// User Notification Stream (SSE)
+// SSE Route (BEFORE global authenticate middleware)
+// EventSource can't send headers, so we verify token from query param
 // ============================================
 
 /**
  * @route GET /api/ai/notifications/stream
  * @desc SSE endpoint for real-time AI notifications to user
- * @access Private (authenticated users)
+ * @access Private (token in query param for EventSource compatibility)
  */
-router.get('/notifications/stream', async (req: Request & { user?: any }, res: Response) => {
+router.get('/notifications/stream', async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
+    // For SSE, token comes from query param (EventSource doesn't support headers)
+    const token = typeof req.query.token === 'string' ? req.query.token : null;
+    
+    if (!token) {
+      res.status(401).json({ success: false, error: 'Token required' });
       return;
     }
+
+    // Verify token
+    let decoded: { id: string; email: string };
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string; email: string };
+    } catch (err) {
+      res.status(401).json({ success: false, error: 'Invalid or expired token' });
+      return;
+    }
+
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({ success: false, error: 'User not found or inactive' });
+      return;
+    }
+
+    const userId = user.id;
 
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -131,6 +154,9 @@ router.get('/notifications/stream', async (req: Request & { user?: any }, res: R
     res.status(500).json({ success: false, error: 'Stream failed' });
   }
 });
+
+// All other routes require authentication via header
+router.use(authenticate);
 
 // ============================================
 // Session Management

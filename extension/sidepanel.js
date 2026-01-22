@@ -114,8 +114,13 @@ async function login(email, password) {
       throw new Error(data.message || 'Login failed');
     }
     
-    // Get user's account ID
-    const accountId = data.data.user.accounts?.[0]?.id || data.data.user.accountId;
+    // Get user's account ID - accounts are at data.data.accounts (NOT data.data.user.accounts)
+    const accountId = data.data.accounts?.[0]?.id || data.data.user?.accountId;
+    
+    if (!accountId) {
+      console.error('❌ No accountId found in login response:', data);
+      throw new Error('Login failed: No account found. Please contact support.');
+    }
     
     // Store token, user, and accountId (needed for task polling)
     await chrome.storage.local.set({
@@ -128,7 +133,7 @@ async function login(email, password) {
     // Notify background to start task polling
     chrome.runtime.sendMessage({ type: 'START_TASK_POLLING' });
     
-    console.log('✅ Login successful, accountId:', accountId);
+    console.log('✅ Login successful, accountId:', accountId, 'User:', data.data.user.email);
     
     state.user = data.data.user;
     showDashboard();
@@ -136,7 +141,7 @@ async function login(email, password) {
   } catch (error) {
     showLoginError(error.message);
   } finally {
-    showLoginLoading(false));
+    showLoginLoading(false);
   }
 }
 

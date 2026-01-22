@@ -369,25 +369,7 @@ function FacebookAdPreviewModal({
     }
   };
 
-  // Drag and drop handlers for reordering selected photos
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString());
-    setDraggedPhotoIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedPhotoIndex !== null && draggedPhotoIndex !== targetIndex) {
-      setDragOverIndex(targetIndex);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOverIndex(null);
-  };
+  // Drag and drop for reordering selected photos - handleDrop and handleDragEnd used inline
 
   const handleDrop = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
@@ -555,23 +537,43 @@ function FacebookAdPreviewModal({
                         const isSelected = selectedIndex !== -1;
                         // Show "won't upload" for photos beyond position 10 when all 10 slots are filled
                         const wouldExceedLimit = !isSelected && selectedPhotos.length >= 10;
+                        const isDragging = draggedPhotoIndex !== null;
                         
                         return (
                           <div
                             key={photo}
                             draggable={isSelected}
-                            onDragStart={(e) => isSelected && handleDragStart(e, selectedIndex)}
-                            onDragOver={(e) => isSelected && handleDragOver(e, selectedIndex)}
-                            onDragLeave={(e) => handleDragLeave(e)}
-                            onDrop={(e) => isSelected && handleDrop(e, selectedIndex)}
+                            onDragStart={(e) => {
+                              if (isSelected) {
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', selectedIndex.toString());
+                                setDraggedPhotoIndex(selectedIndex);
+                              }
+                            }}
+                            onDragOver={(e) => {
+                              if (isSelected && draggedPhotoIndex !== null && draggedPhotoIndex !== selectedIndex) {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                setDragOverIndex(selectedIndex);
+                              }
+                            }}
+                            onDragLeave={(e) => {
+                              e.preventDefault();
+                              setDragOverIndex(null);
+                            }}
+                            onDrop={(e) => {
+                              if (isSelected) {
+                                handleDrop(e, selectedIndex);
+                              }
+                            }}
                             onDragEnd={handleDragEnd}
-                            onClick={() => !wouldExceedLimit && togglePhotoSelection(photo)}
+                            onClick={() => !wouldExceedLimit && !isDragging && togglePhotoSelection(photo)}
                             className={cn(
-                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
+                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group select-none',
                               isSelected 
                                 ? selectedIndex === 0 
-                                  ? 'ring-2 ring-green-400 border-green-500 cursor-move' 
-                                  : 'border-blue-500 bg-blue-50 cursor-move'
+                                  ? 'ring-2 ring-green-400 border-green-500 cursor-grab active:cursor-grabbing' 
+                                  : 'border-blue-500 bg-blue-50 cursor-grab active:cursor-grabbing'
                                 : wouldExceedLimit
                                   ? 'border-red-200 bg-red-50 opacity-40 cursor-not-allowed'
                                   : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100 cursor-pointer',
@@ -579,45 +581,48 @@ function FacebookAdPreviewModal({
                               isSelected && dragOverIndex === selectedIndex && 'ring-2 ring-purple-500 scale-105'
                             )}
                           >
-                            <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-4 h-4" />
+                            {/* Image with pointer-events-none during drag to prevent event capture */}
+                            <div className={cn('w-full h-full', isDragging && 'pointer-events-none')}>
+                              <VehicleImage src={photo} alt="" className="w-full h-full object-cover pointer-events-none" iconSize="w-4 h-4" />
+                            </div>
                             
                             {/* Selection indicator / Order number */}
                             {isSelected ? (
                               <div className={cn(
-                                'absolute top-1 left-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md',
+                                'absolute top-1 left-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md pointer-events-none',
                                 selectedIndex === 0 ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
                               )}>
                                 {selectedIndex + 1}
                               </div>
                             ) : wouldExceedLimit ? (
-                              <div className="absolute inset-0 flex items-center justify-center bg-red-900/50">
+                              <div className="absolute inset-0 flex items-center justify-center bg-red-900/50 pointer-events-none">
                                 <div className="text-center">
                                   <X className="w-6 h-6 text-white mx-auto" />
                                   <span className="text-[10px] text-white font-medium block mt-0.5">Won't Upload</span>
                                 </div>
                               </div>
                             ) : (
-                              <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-gray-400/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-gray-400/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                 <Plus className="w-3 h-3 text-white" />
                               </div>
                             )}
                             
                             {/* Drag handle for selected */}
                             {isSelected && (
-                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                 <GripVertical className="w-4 h-4 text-white drop-shadow-lg" />
                               </div>
                             )}
                             
                             {/* Main photo indicator */}
                             {isSelected && selectedIndex === 0 && (
-                              <div className="absolute bottom-1 left-1 right-1">
+                              <div className="absolute bottom-1 left-1 right-1 pointer-events-none">
                                 <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full font-medium">Main Photo</span>
                               </div>
                             )}
                             
-                            {/* Move arrows for selected photos */}
-                            {isSelected && (
+                            {/* Move arrows for selected photos - only show when not dragging */}
+                            {isSelected && !isDragging && (
                               <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {selectedIndex > 0 && (
                                   <button
