@@ -56,26 +56,40 @@ router.post('/callback', async (req: Request, res: Response) => {
     
     logger.info(`Using ${isExtensionCallback ? 'extension' : 'web'} Facebook credentials for callback`);
     logger.info(`App ID: ${appId?.substring(0, 8)}...`);
+    logger.info(`App Secret: ${appSecret?.substring(0, 8)}...`);
     logger.info(`Redirect URI: ${redirectUri}`);
+    logger.info(`Code: ${code?.substring(0, 20)}...`);
     
     // Exchange code for access token with Facebook
     let tokenResponse;
+    const fbUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&redirect_uri=${encodeURIComponent(redirectUri || '')}&code=${encodeURIComponent(code)}`;
+    logger.info(`Calling Facebook API...`);
+    
     try {
-      tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
-        params: {
-          client_id: appId,
-          client_secret: appSecret,
-          redirect_uri: redirectUri,
-          code,
-        },
-      });
+      tokenResponse = await axios.get(fbUrl);
+      logger.info(`Facebook token response status: ${tokenResponse.status}`);
     } catch (fbError: unknown) {
-      const err = fbError as { response?: { data?: unknown; status?: number }; message?: string };
-      logger.error('Facebook token exchange failed:', JSON.stringify({
-        status: err.response?.status,
-        data: err.response?.data,
-        message: err.message,
-      }));
+      // Detailed error logging for axios errors
+      if (axios.isAxiosError(fbError)) {
+        logger.error('Facebook API error:', JSON.stringify({
+          status: fbError.response?.status,
+          statusText: fbError.response?.statusText,
+          data: fbError.response?.data,
+          message: fbError.message,
+          code: fbError.code,
+        }));
+        // Return Facebook's actual error to the client
+        if (fbError.response?.data?.error) {
+          res.status(400).json({
+            success: false,
+            error: fbError.response.data.error.message || 'Facebook authentication failed',
+            facebookError: fbError.response.data.error,
+          });
+          return;
+        }
+      } else {
+        logger.error('Unknown error during Facebook token exchange:', String(fbError));
+      }
       throw fbError;
     }
     
