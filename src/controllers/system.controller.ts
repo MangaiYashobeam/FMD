@@ -1417,7 +1417,10 @@ export const getErrorStats = async (_req: Request, res: Response, next: NextFunc
  */
 export const getExtensionErrors = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { limit = 50, offset = 0 } = req.query;
+    const limitParam = req.query.limit;
+    const offsetParam = req.query.offset;
+    const limit = typeof limitParam === 'string' ? parseInt(limitParam, 10) : 50;
+    const offset = typeof offsetParam === 'string' ? parseInt(offsetParam, 10) : 0;
 
     const [errors, total] = await Promise.all([
       prisma.auditLog.findMany({
@@ -1430,8 +1433,8 @@ export const getExtensionErrors = async (req: Request, res: Response, next: Next
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: Math.min(Number(limit), 200),
-        skip: Number(offset),
+        take: Math.min(limit, 200),
+        skip: offset,
       }),
       prisma.auditLog.count({
         where: { action: 'EXTENSION_ERROR' },
@@ -1508,8 +1511,8 @@ export const getExtensionErrors = async (req: Request, res: Response, next: Next
         patterns,
         pagination: {
           total,
-          limit: Number(limit),
-          offset: Number(offset),
+          limit,
+          offset,
         },
       },
     });
