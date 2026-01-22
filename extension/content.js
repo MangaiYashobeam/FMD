@@ -616,14 +616,26 @@ async function smartFillMarketplaceForm(vehicle) {
     });
     if (colorResult) filledFields.push('exteriorColor');
   }
+
+  // === INTERIOR COLOR ===
+  if (vehicle.interiorColor) {
+    const intColorResult = await smartSelectDropdown({
+      buttonSelectors: [
+        '[aria-label*="Interior color" i]',
+      ],
+      value: vehicle.interiorColor,
+      fieldName: 'interiorColor',
+    });
+    if (intColorResult) filledFields.push('interiorColor');
+  }
   
   // === TRANSMISSION ===
-  if (vehicle.transmission) {
+  if (vehicle.transmission || vehicle.transmissionType) {
     const transResult = await smartSelectDropdown({
       buttonSelectors: [
         '[aria-label*="Transmission" i]',
       ],
-      value: vehicle.transmission,
+      value: vehicle.transmission || vehicle.transmissionType,
       fieldName: 'transmission',
     });
     if (transResult) filledFields.push('transmission');
@@ -640,6 +652,72 @@ async function smartFillMarketplaceForm(vehicle) {
       fieldName: 'fuelType',
     });
     if (fuelResult) filledFields.push('fuelType');
+  }
+
+  // === DRIVETRAIN ===
+  if (vehicle.drivetrain) {
+    const driveResult = await smartSelectDropdown({
+      buttonSelectors: [
+        '[aria-label*="Drivetrain" i]',
+        '[aria-label*="Drive type" i]',
+      ],
+      value: vehicle.drivetrain,
+      fieldName: 'drivetrain',
+    });
+    if (driveResult) filledFields.push('drivetrain');
+  }
+
+  // === TITLE STATUS (Clean, Salvage, Rebuilt) ===
+  if (vehicle.titleStatus) {
+    const titleStatusResult = await smartSelectDropdown({
+      buttonSelectors: [
+        '[aria-label*="Title status" i]',
+        '[aria-label*="Title" i][aria-label*="status" i]',
+        '[aria-label*="Clean title" i]',
+      ],
+      value: vehicle.titleStatus,
+      fieldName: 'titleStatus',
+    });
+    if (titleStatusResult) filledFields.push('titleStatus');
+  }
+
+  // === NUMBER OF DOORS ===
+  if (vehicle.numberOfDoors) {
+    const doorsResult = await smartSelectDropdown({
+      buttonSelectors: [
+        '[aria-label*="door" i]',
+        '[aria-label*="Doors" i]',
+      ],
+      value: String(vehicle.numberOfDoors),
+      fieldName: 'numberOfDoors',
+    });
+    if (doorsResult) filledFields.push('numberOfDoors');
+  }
+
+  // === ENGINE / CYLINDERS ===
+  if (vehicle.cylinders || vehicle.engineDescription) {
+    const engineResult = await smartSelectDropdown({
+      buttonSelectors: [
+        '[aria-label*="Engine" i]',
+        '[aria-label*="Cylinder" i]',
+      ],
+      value: vehicle.cylinders || vehicle.engineDescription,
+      fieldName: 'engine',
+    });
+    if (engineResult) filledFields.push('engine');
+  }
+
+  // === CONDITION (New/Used) ===
+  if (vehicle.condition) {
+    const conditionResult = await smartSelectDropdown({
+      buttonSelectors: [
+        '[aria-label*="Condition" i]',
+        '[aria-label*="Vehicle condition" i]',
+      ],
+      value: vehicle.condition,
+      fieldName: 'condition',
+    });
+    if (conditionResult) filledFields.push('condition');
   }
   
   // === DESCRIPTION (Last) ===

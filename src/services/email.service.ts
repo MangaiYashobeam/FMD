@@ -799,3 +799,88 @@ export class EmailService {
 
 export const emailService = new EmailService();
 export { SYSTEM_DOMAIN, SYSTEM_FROM_EMAIL, SYSTEM_FROM_NAME, SYSTEM_SUPPORT_EMAIL, SYSTEM_NOREPLY_EMAIL };
+
+/**
+ * Send team invitation email
+ * Exported function for easy import in routes
+ */
+export interface TeamInvitationEmailOptions {
+  to: string;
+  inviterName: string;
+  accountName: string;
+  role: string;
+  inviteLink: string;
+  temporaryPassword: string;
+}
+
+export async function sendTeamInvitationEmail(options: TeamInvitationEmailOptions): Promise<boolean> {
+  const { to, inviterName, accountName, role, inviteLink, temporaryPassword } = options;
+  
+  const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
+  
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h1 style="color: #2563eb;">You've Been Invited! 🎉</h1>
+      <p>Hi there,</p>
+      <p><strong>${inviterName}</strong> has invited you to join <strong>${accountName}</strong> on DealersFace as a <strong>${roleDisplay}</strong>.</p>
+      
+      <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb;">
+        <h3 style="margin-top: 0; color: #1e40af;">Your Login Credentials</h3>
+        <table style="width: 100%;">
+          <tr>
+            <td><strong>Email:</strong></td>
+            <td style="font-family: monospace;">${to}</td>
+          </tr>
+          <tr>
+            <td><strong>Temporary Password:</strong></td>
+            <td style="font-family: monospace; color: #dc2626;">${temporaryPassword}</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div style="margin: 30px 0; text-align: center;">
+        <a href="${inviteLink}" style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; font-size: 16px;">
+          Accept Invitation & Login
+        </a>
+      </div>
+      
+      <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+        <p style="margin: 0; color: #92400e;">
+          ⚠️ <strong>Important:</strong> Please change your password after your first login for security purposes.
+        </p>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px;">
+        If the button above doesn't work, copy and paste this link into your browser:<br>
+        <a href="${inviteLink}" style="color: #2563eb; word-break: break-all;">${inviteLink}</a>
+      </p>
+      
+      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+      
+      <p style="color: #6b7280; font-size: 13px;">
+        If you didn't expect this invitation, you can safely ignore this email.
+      </p>
+    </div>
+  `;
+  
+  return emailService.sendEmail({
+    to,
+    subject: `You're invited to join ${accountName} on DealersFace`,
+    html,
+    text: `
+You've Been Invited!
+
+${inviterName} has invited you to join ${accountName} on DealersFace as a ${roleDisplay}.
+
+Your Login Credentials:
+- Email: ${to}
+- Temporary Password: ${temporaryPassword}
+
+Login here: ${inviteLink}
+
+IMPORTANT: Please change your password after your first login for security purposes.
+
+If you didn't expect this invitation, you can safely ignore this email.
+    `.trim(),
+  });
+}

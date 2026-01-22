@@ -15,6 +15,7 @@ import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import { sendTeamInvitationEmail } from '@/services/email.service';
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.get('/members', asyncHandler(async (req: AuthRequest, res: Response) => {
           firstName: true,
           lastName: true,
           isActive: true,
+          emailVerified: true,
           lastLoginAt: true,
           createdAt: true,
         },
@@ -57,12 +59,12 @@ router.get('/members', asyncHandler(async (req: AuthRequest, res: Response) => {
   });
 
   // Transform to team member format
-  const teamMembers = members.map((m: typeof members[0]) => ({
+  const teamMembers = members.map((m) => ({
     id: m.user.id,
     name: `${m.user.firstName || ''} ${m.user.lastName || ''}`.trim() || m.user.email.split('@')[0],
     email: m.user.email,
     role: m.role.toLowerCase() as 'owner' | 'admin' | 'manager' | 'sales',
-    status: m.user.isActive ? 'active' : 'inactive' as 'active' | 'pending' | 'inactive',
+    status: !m.user.isActive ? 'inactive' : (!m.user.emailVerified ? 'pending' : 'active') as 'active' | 'pending' | 'inactive',
     lastActive: m.user.lastLoginAt?.toISOString(),
     createdAt: m.createdAt.toISOString(),
   }));
@@ -72,6 +74,67 @@ router.get('/members', asyncHandler(async (req: AuthRequest, res: Response) => {
     data: {
       members: teamMembers,
       total: teamMembers.length,
+    },
+  });
+}));
+
+/**
+ * Get pending invitations
+ */
+router.get('/invites', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.user!.id;
+
+  // Get user's primary account
+  const accountUser = await prisma.accountUser.findFirst({
+    where: { 
+      userId,
+      role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
+    },
+  });
+
+  if (!accountUser) {
+    throw new AppError('No account found or insufficient permissions', 403);
+  }
+
+  // Get pending invitations - check if table exists
+  let invitations: any[] = [];
+  try {
+    invitations = await prisma.teamInvitation.findMany({
+      where: { 
+        accountId: accountUser.accountId,
+        status: 'PENDING',
+      },
+      include: {
+        invitedBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  } catch (e) {
+    // Table might not exist yet if migration hasn't run
+    logger.warn('TeamInvitation table may not exist yet');
+    invitations = [];
+  }
+
+  res.json({
+    success: true,
+    data: {
+      invitations: invitations.map((inv: any) => ({
+        id: inv.id,
+        email: inv.email,
+        firstName: inv.firstName,
+        lastName: inv.lastName,
+        role: inv.role.toLowerCase(),
+        status: inv.status.toLowerCase(),
+        invitedBy: `${inv.invitedBy?.firstName || ''} ${inv.invitedBy?.lastName || ''}`.trim() || inv.invitedBy?.email || 'Unknown',
+        expiresAt: inv.expiresAt.toISOString(),
+        createdAt: inv.createdAt.toISOString(),
+      })),
     },
   });
 }));
@@ -93,13 +156,22 @@ router.post(
     const { email, firstName, lastName, name, role } = req.body;
     const userId = req.user!.id;
 
-    // Get user's primary account
+    // Get user's primary account with account details
     const accountUser = await prisma.accountUser.findFirst({
       where: { 
         userId,
         role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
       },
-      include: { account: true },
+      include: { 
+        account: true,
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
     });
 
     if (!accountUser) {
@@ -107,6 +179,7 @@ router.post(
     }
 
     const accountId = accountUser.accountId;
+    const normalizedEmail = email.toLowerCase();
 
     // Parse name if firstName/lastName not provided
     let finalFirstName = firstName;
@@ -118,8 +191,8 @@ router.post(
     }
 
     // Check if user already exists
-    let existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -135,12 +208,12 @@ router.post(
         throw new AppError('This user is already a member of your team', 409);
       }
 
-      // Add existing user to account
+      // Add existing user to account directly
       await prisma.accountUser.create({
         data: {
           userId: existingUser.id,
           accountId,
-          role: role.toUpperCase(),
+          role: role.toUpperCase() as any,
         },
       });
 
@@ -157,13 +230,13 @@ router.post(
       });
     }
 
-    // Create new user with temporary password
+    // Create new user with temporary password (fallback method if invitation table doesn't exist)
     const tempPassword = crypto.randomBytes(8).toString('hex');
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
     const newUser = await prisma.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         passwordHash: hashedPassword,
         firstName: finalFirstName || 'Team',
         lastName: finalLastName || 'Member',
@@ -177,12 +250,52 @@ router.post(
       data: {
         userId: newUser.id,
         accountId,
-        role: role.toUpperCase(),
+        role: role.toUpperCase() as any,
       },
     });
 
-    // TODO: Send invitation email with temp password
-    // await emailService.sendInviteEmail(email, tempPassword, accountUser.account.businessName);
+    // Try to create invitation record (may fail if table doesn't exist)
+    let invitationId: string | null = null;
+    try {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      
+      const invitation = await prisma.teamInvitation.create({
+        data: {
+          accountId,
+          email: normalizedEmail,
+          firstName: finalFirstName,
+          lastName: finalLastName,
+          role: role.toUpperCase() as any,
+          token,
+          invitedById: userId,
+          expiresAt,
+          status: 'ACCEPTED', // Already created the user
+          acceptedAt: new Date(),
+        },
+      });
+      invitationId = invitation.id;
+    } catch (e) {
+      logger.warn('Could not create invitation record (table may not exist)');
+    }
+
+    // Send invitation email
+    const inviterName = `${accountUser.user.firstName || ''} ${accountUser.user.lastName || ''}`.trim() || accountUser.user.email;
+    const accountName = accountUser.account.dealershipName || accountUser.account.name;
+    
+    try {
+      await sendTeamInvitationEmail({
+        to: normalizedEmail,
+        inviterName,
+        accountName,
+        role: role.toLowerCase(),
+        inviteLink: `${process.env.APP_URL || 'https://dealersface.com'}/login`,
+        temporaryPassword: tempPassword,
+      });
+      logger.info(`Invitation email sent to ${normalizedEmail}`);
+    } catch (emailError) {
+      logger.error('Failed to send invitation email:', emailError);
+    }
 
     logger.info(`New user ${newUser.id} created and invited to account ${accountId} by ${userId}`);
 
@@ -191,11 +304,69 @@ router.post(
       message: 'Invitation sent successfully',
       data: {
         userId: newUser.id,
-        email: newUser.email,
+        email: normalizedEmail,
         status: 'invited',
+        invitationId,
         // In development, include temp password for testing
         ...(process.env.NODE_ENV === 'development' && { tempPassword }),
       },
+    });
+  })
+);
+
+/**
+ * Cancel a pending invitation
+ */
+router.delete(
+  '/invites/:inviteId',
+  validate([
+    param('inviteId').isUUID().withMessage('Invalid invitation ID'),
+  ]),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const inviteId = req.params.inviteId as string;
+    const userId = req.user!.id;
+
+    // Get user's primary account
+    const accountUser = await prisma.accountUser.findFirst({
+      where: { 
+        userId,
+        role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
+      },
+    });
+
+    if (!accountUser) {
+      throw new AppError('You do not have permission to cancel invitations', 403);
+    }
+
+    try {
+      // Find the invitation
+      const invitation = await prisma.teamInvitation.findFirst({
+        where: {
+          id: inviteId,
+          accountId: accountUser.accountId,
+          status: 'PENDING',
+        },
+      });
+
+      if (!invitation) {
+        throw new AppError('Invitation not found', 404);
+      }
+
+      // Cancel the invitation
+      await prisma.teamInvitation.update({
+        where: { id: inviteId },
+        data: { status: 'CANCELED' },
+      });
+
+      logger.info(`Invitation ${inviteId} canceled by ${userId}`);
+    } catch (e: any) {
+      if (e.message === 'Invitation not found') throw e;
+      throw new AppError('Could not cancel invitation', 500);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Invitation canceled successfully',
     });
   })
 );
@@ -231,10 +402,11 @@ router.post(
     }
 
     const accountId = accountUser.accountId;
+    const normalizedEmail = email.toLowerCase();
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -255,7 +427,7 @@ router.post(
         data: {
           userId: existingUser.id,
           accountId,
-          role: role.toUpperCase(),
+          role: role.toUpperCase() as any,
         },
       });
       
@@ -280,7 +452,7 @@ router.post(
 
     const newUser = await prisma.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         passwordHash: hashedPassword,
         firstName,
         lastName,
@@ -294,7 +466,7 @@ router.post(
       data: {
         userId: newUser.id,
         accountId,
-        role: role.toUpperCase(),
+        role: role.toUpperCase() as any,
       },
     });
 
@@ -355,7 +527,7 @@ router.put(
     }
 
     // Can't modify owner
-    if (memberAccount.role === 'ACCOUNT_OWNER') {
+    if (memberAccount.role === 'ACCOUNT_OWNER' || memberAccount.role === 'SUPER_ADMIN') {
       throw new AppError('Cannot modify account owner', 403);
     }
 
@@ -363,7 +535,7 @@ router.put(
     if (role) {
       await prisma.accountUser.update({
         where: { id: memberAccount.id },
-        data: { role: role.toUpperCase() },
+        data: { role: role.toUpperCase() as any },
       });
     }
 
@@ -426,7 +598,7 @@ router.delete(
     }
 
     // Can't remove owner
-    if (memberAccount.role === 'ACCOUNT_OWNER') {
+    if (memberAccount.role === 'ACCOUNT_OWNER' || memberAccount.role === 'SUPER_ADMIN') {
       throw new AppError('Cannot remove account owner', 403);
     }
 
@@ -462,7 +634,16 @@ router.post(
         userId,
         role: { in: ['SUPER_ADMIN', 'ACCOUNT_OWNER', 'ADMIN'] },
       },
-      include: { account: true },
+      include: { 
+        account: true,
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
     });
 
     if (!accountUser) {
@@ -482,7 +663,7 @@ router.post(
       throw new AppError('Team member not found', 404);
     }
 
-    // Generate new temp password
+    // Generate new temp password and send email
     const tempPassword = crypto.randomBytes(8).toString('hex');
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
@@ -494,8 +675,23 @@ router.post(
       },
     });
 
-    // TODO: Send email with new temp password
-    // await emailService.sendInviteEmail(member.user.email, tempPassword, accountUser.account.businessName);
+    // Send email with new credentials
+    const inviterName = `${accountUser.user.firstName || ''} ${accountUser.user.lastName || ''}`.trim() || accountUser.user.email;
+    const accountName = accountUser.account.dealershipName || accountUser.account.name;
+
+    try {
+      await sendTeamInvitationEmail({
+        to: member.user.email,
+        inviterName,
+        accountName,
+        role: member.role.toLowerCase(),
+        inviteLink: `${process.env.APP_URL || 'https://dealersface.com'}/login`,
+        temporaryPassword: tempPassword,
+      });
+      logger.info(`Invite resent to ${member.user.email}`);
+    } catch (emailError) {
+      logger.error('Failed to resend invitation email:', emailError);
+    }
 
     logger.info(`Invite resent to ${memberId} by ${userId}`);
 

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vehiclesApi } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import {
   Search,
   Plus,
@@ -28,6 +29,9 @@ import {
   Clock,
   Share2,
   RefreshCw,
+  GripVertical,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -306,6 +310,8 @@ function FacebookAdPreviewModal({
   const [posting, setPosting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const handleRefresh = async () => {
     if (!onRefresh) return;
@@ -357,6 +363,67 @@ function FacebookAdPreviewModal({
       setSelectedPhotos(selectedPhotos.filter(p => p !== photo));
     } else if (selectedPhotos.length < 10) {
       setSelectedPhotos([...selectedPhotos, photo]);
+    }
+  };
+
+  // Drag and drop handlers for reordering selected photos
+  const handleDragStart = (index: number) => {
+    setDraggedPhotoIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (targetIndex: number) => {
+    if (draggedPhotoIndex === null || draggedPhotoIndex === targetIndex) {
+      setDraggedPhotoIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newPhotos = [...selectedPhotos];
+    const [draggedPhoto] = newPhotos.splice(draggedPhotoIndex, 1);
+    newPhotos.splice(targetIndex, 0, draggedPhoto);
+    
+    setSelectedPhotos(newPhotos);
+    setDraggedPhotoIndex(null);
+    setDragOverIndex(null);
+    
+    // Update current photo index if needed
+    if (currentPhotoIndex === draggedPhotoIndex) {
+      setCurrentPhotoIndex(targetIndex);
+    } else if (draggedPhotoIndex < currentPhotoIndex && targetIndex >= currentPhotoIndex) {
+      setCurrentPhotoIndex(currentPhotoIndex - 1);
+    } else if (draggedPhotoIndex > currentPhotoIndex && targetIndex <= currentPhotoIndex) {
+      setCurrentPhotoIndex(currentPhotoIndex + 1);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedPhotoIndex(null);
+    setDragOverIndex(null);
+  };
+
+  // Move photo left or right
+  const movePhoto = (index: number, direction: 'left' | 'right') => {
+    const newIndex = direction === 'left' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= selectedPhotos.length) return;
+    
+    const newPhotos = [...selectedPhotos];
+    [newPhotos[index], newPhotos[newIndex]] = [newPhotos[newIndex], newPhotos[index]];
+    setSelectedPhotos(newPhotos);
+    
+    // Update current photo index
+    if (currentPhotoIndex === index) {
+      setCurrentPhotoIndex(newIndex);
+    } else if (currentPhotoIndex === newIndex) {
+      setCurrentPhotoIndex(index);
     }
   };
 
@@ -442,12 +509,12 @@ function FacebookAdPreviewModal({
                   <p className="text-xs text-gray-500 mt-1">{description.length}/5000 characters</p>
                 </div>
 
-                {/* Photo Selection */}
+                {/* Photo Selection - Available Photos */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Photos ({selectedPhotos.length}/10 selected)
+                    Available Photos (click to select)
                   </label>
-                  <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto p-1">
+                  <div className="grid grid-cols-6 gap-2 max-h-32 overflow-y-auto p-1 bg-gray-50 rounded-lg">
                     {photos.map((photo, i) => (
                       <button
                         key={i}
@@ -455,18 +522,101 @@ function FacebookAdPreviewModal({
                         className={cn(
                           'relative aspect-square rounded-lg overflow-hidden border-2 transition-all',
                           selectedPhotos.includes(photo) 
-                            ? 'border-blue-500 ring-2 ring-blue-200' 
+                            ? 'border-blue-500 ring-2 ring-blue-200 opacity-50' 
                             : 'border-gray-200 hover:border-gray-300'
                         )}
                       >
-                        <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-4 h-4" />
+                        <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-3 h-3" />
                         {selectedPhotos.includes(photo) && (
-                          <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-3 h-3 text-white" />
+                          <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-2.5 h-2.5 text-white" />
                           </div>
                         )}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Selected Photos - Drag to Reorder */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selected Photos ({selectedPhotos.length}/10) - Drag to reorder
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">First photo will be the main listing image</p>
+                  <div className="flex flex-wrap gap-2 p-2 bg-blue-50 rounded-lg min-h-[80px] border-2 border-dashed border-blue-200">
+                    {selectedPhotos.length === 0 ? (
+                      <p className="text-gray-400 text-sm m-auto">Click photos above to select</p>
+                    ) : (
+                      selectedPhotos.map((photo, i) => (
+                        <div
+                          key={photo}
+                          draggable
+                          onDragStart={() => handleDragStart(i)}
+                          onDragOver={(e) => handleDragOver(e, i)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={() => handleDrop(i)}
+                          onDragEnd={handleDragEnd}
+                          className={cn(
+                            'relative w-16 h-16 rounded-lg overflow-hidden border-2 cursor-move transition-all group',
+                            i === 0 ? 'ring-2 ring-green-400 border-green-500' : 'border-blue-300',
+                            draggedPhotoIndex === i && 'opacity-50 scale-95',
+                            dragOverIndex === i && 'ring-2 ring-purple-500 scale-105'
+                          )}
+                        >
+                          <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-3 h-3" />
+                          
+                          {/* Order number badge */}
+                          <div className={cn(
+                            'absolute top-0.5 left-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold',
+                            i === 0 ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+                          )}>
+                            {i + 1}
+                          </div>
+                          
+                          {/* Drag handle */}
+                          <div className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <GripVertical className="w-3 h-3 text-white drop-shadow-lg" />
+                          </div>
+                          
+                          {/* Remove button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePhotoSelection(photo);
+                            }}
+                            className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-2.5 h-2.5 text-white" />
+                          </button>
+                          
+                          {/* Move arrows */}
+                          <div className="absolute bottom-0.5 left-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {i > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  movePhoto(i, 'left');
+                                }}
+                                className="w-4 h-4 bg-white/80 rounded flex items-center justify-center hover:bg-white"
+                              >
+                                <ArrowLeft className="w-2.5 h-2.5 text-gray-700" />
+                              </button>
+                            )}
+                            {i < selectedPhotos.length - 1 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  movePhoto(i, 'right');
+                                }}
+                                className="w-4 h-4 bg-white/80 rounded flex items-center justify-center hover:bg-white"
+                              >
+                                <ArrowRight className="w-2.5 h-2.5 text-gray-700" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -623,7 +773,7 @@ function FacebookAdPreviewModal({
                   </div>
                 </div>
 
-                {/* IAI Info Box */}
+                {/* Method Info Boxes */}
                 {postMethod === 'iai' && (
                   <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
                     <div className="flex items-start gap-3">
@@ -651,6 +801,108 @@ function FacebookAdPreviewModal({
                             Submit the listing for you
                           </li>
                         </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {postMethod === 'soldier' && (
+                  <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <Send className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-orange-900">Soldier Workers (Headless)</h4>
+                        <p className="text-sm text-orange-700 mt-1">
+                          Server-side automated posting:
+                        </p>
+                        <ul className="text-sm text-orange-700 mt-2 space-y-1">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            No browser extension required
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Runs on our servers 24/7
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Uses headless Playwright browsers
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <AlertCircle className="w-3 h-3" />
+                            Requires Facebook session setup
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {postMethod === 'api' && (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <Zap className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-blue-900">Facebook Graph API</h4>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Direct API posting limitations:
+                        </p>
+                        <ul className="text-sm text-blue-700 mt-2 space-y-1">
+                          <li className="flex items-center gap-2">
+                            <AlertCircle className="w-3 h-3" />
+                            Only posts to Facebook Pages (not Marketplace)
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <AlertCircle className="w-3 h-3" />
+                            Facebook has NO public Marketplace API
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Good for Page feed posts with vehicle info
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Can link to your website inventory
+                          </li>
+                        </ul>
+                        <p className="text-xs text-blue-600 mt-2 font-medium">
+                          💡 Use IAI or Soldier for actual Marketplace listings
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {postMethod === 'pixel' && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <Share2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-green-900">Facebook Pixel Tracking</h4>
+                        <p className="text-sm text-green-700 mt-1">
+                          Tracking only - does not create listings:
+                        </p>
+                        <ul className="text-sm text-green-700 mt-2 space-y-1">
+                          <li className="flex items-center gap-2">
+                            <AlertCircle className="w-3 h-3" />
+                            This does NOT post to Marketplace
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Fires conversion tracking events
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Helps with retargeting ads
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Tracks user engagement with vehicles
+                          </li>
+                        </ul>
+                        <p className="text-xs text-green-600 mt-2 font-medium">
+                          💡 Use IAI or Soldier to actually post to Marketplace
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -748,6 +1000,7 @@ function DeleteConfirmModal({ vehicle, onClose, onConfirm, deleting }: {
 export default function InventoryPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const toast = useToast();
   const accountId = user?.accounts?.[0]?.id;
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -784,6 +1037,10 @@ export default function InventoryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       setDeletingVehicle(null);
+      toast.success('Vehicle deleted successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || 'Failed to delete vehicle');
     },
   });
 
@@ -798,6 +1055,10 @@ export default function InventoryPage() {
       if (editingVehicle && response?.data?.data) {
         setEditingVehicle(response.data.data);
       }
+      toast.success('Vehicle refreshed from source');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || 'Failed to refresh vehicle');
     },
   });
 
@@ -820,9 +1081,31 @@ export default function InventoryPage() {
         method: data.method,
       });
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       setPostingVehicle(null);
+      setEditingVehicle(null);
+      
+      const data = response?.data?.data;
+      const method = data?.method || 'unknown';
+      const message = response?.data?.message || 'Task created successfully';
+      
+      // Display appropriate success message based on method
+      if (method === 'iai') {
+        toast.success(`IAI Task Queued! ${message}`);
+      } else if (method === 'soldier') {
+        toast.success(`Soldier Worker Task Queued! ${message}`);
+      } else if (method === 'api') {
+        toast.info(`Facebook API: ${message}`);
+      } else if (method === 'pixel') {
+        toast.info(`Pixel Event Prepared: ${message}`);
+      } else {
+        toast.success(message);
+      }
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || error?.response?.data?.message || 'Failed to post to Facebook';
+      toast.error(message);
     },
   });
 

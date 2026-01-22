@@ -49,6 +49,7 @@ model User {
   salesRepMappings    SalesRepMapping[]
   leadActivities      LeadActivity[]
   dealerAccount       DealerAccount?
+  sentInvitations     TeamInvitation[]     @relation("InvitedBy")
 
   @@map("users")
 }
@@ -103,6 +104,7 @@ model Account {
   apiKeys           ApiKey[]
   adfConfiguration  ADFConfiguration?
   leads             Lead[]
+  teamInvitations   TeamInvitation[]
 
   @@map("accounts")
 }
@@ -131,6 +133,39 @@ model AccountUser {
 
   @@unique([accountId, userId])
   @@map("account_users")
+}
+
+// Team invitation for pending invites
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELED
+}
+
+model TeamInvitation {
+  id          String           @id @default(uuid())
+  accountId   String           @map("account_id")
+  email       String
+  firstName   String?          @map("first_name")
+  lastName    String?          @map("last_name")
+  role        UserRole         @default(SALES_REP)
+  token       String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String           @map("invited_by_id")
+  expiresAt   DateTime         @map("expires_at")
+  acceptedAt  DateTime?        @map("accepted_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invitedBy User    @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([email])
+  @@index([token])
+  @@index([accountId])
+  @@map("team_invitations")
 }
 
 model AccountSettings {
@@ -350,6 +385,13 @@ model Vehicle {
   fuelType           String? @map("fuel_type")
   cityMpg            Int?    @map("city_mpg")
   hwyMpg             Int?    @map("hwy_mpg")
+
+  // Facebook Marketplace Required Fields
+  titleStatus     String? @map("title_status")     // clean, salvage, rebuilt, lemon, parts_only, missing
+  numberOfDoors   Int?    @map("number_of_doors")  // 2, 3, 4, 5
+  numberOfSeats   Int?    @map("number_of_seats")  // 2-8+
+  vehicleType     String? @map("vehicle_type")     // car_truck, motorcycle, powersport, rv_camper, boat, commercial
+  sellerType      String? @map("seller_type")      // dealer, private
 
   // Status
   isNew            Boolean @default(false) @map("is_new")

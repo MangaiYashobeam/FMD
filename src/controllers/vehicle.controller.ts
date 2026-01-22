@@ -328,12 +328,15 @@ export class VehicleController {
       throw new AppError('Access denied', 403);
     }
 
-    // Build vehicle data for posting
+    // Build comprehensive vehicle data for Facebook Marketplace posting
     const vehicleData = {
-      title: title || `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+      // Basic info
+      title: title || `${vehicle.year} ${vehicle.make} ${vehicle.model}${vehicle.trim ? ' ' + vehicle.trim : ''}`,
       price: price || Number(vehicle.price) || 0,
       description: description || vehicle.description || '',
       photos: photos || vehicle.imageUrls || [],
+      
+      // Required Marketplace fields
       year: vehicle.year,
       make: vehicle.make,
       model: vehicle.model,
@@ -341,11 +344,39 @@ export class VehicleController {
       mileage: vehicle.mileage,
       vin: vehicle.vin,
       condition: vehicle.isNew ? 'new' : 'used',
-      transmission: vehicle.transmission,
+      
+      // Transmission & Drivetrain
+      transmission: vehicle.transmission || vehicle.transmissionType,
+      transmissionType: vehicle.transmissionType,
+      drivetrain: vehicle.drivetrain,
+      
+      // Engine
       fuelType: vehicle.fuelType,
+      engineDescription: vehicle.engineDescription,
+      engineDisplacement: vehicle.engineDisplacement,
+      cylinders: vehicle.cylinders,
+      
+      // Colors
       exteriorColor: vehicle.exteriorColor,
+      interiorColor: vehicle.interiorColor,
+      
+      // Body
       bodyType: vehicle.bodyType,
+      bodyStyle: vehicle.bodyStyle,
+      
+      // Facebook Marketplace specific fields
+      titleStatus: (vehicle as any).titleStatus || 'clean',
+      numberOfDoors: (vehicle as any).numberOfDoors,
+      numberOfSeats: (vehicle as any).numberOfSeats,
+      vehicleType: (vehicle as any).vehicleType || 'car_truck',
+      sellerType: (vehicle as any).sellerType || 'dealer',
+      
+      // Additional info
       stockNumber: vehicle.stockNumber,
+      cityMpg: vehicle.cityMpg,
+      hwyMpg: vehicle.hwyMpg,
+      factoryCertified: vehicle.factoryCertified,
+      dealerCertified: vehicle.dealerCertified,
     };
 
     // =====================================================
