@@ -1531,7 +1531,10 @@ export const getExtensionErrors = async (req: Request, res: Response, next: Next
 export const resolveError = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { errorId } = req.params;
-    const { resolution, preventionPlan } = req.body;
+    const resolutionRaw = req.body.resolution;
+    const preventionPlanRaw = req.body.preventionPlan;
+    const resolution = typeof resolutionRaw === 'string' ? resolutionRaw : undefined;
+    const preventionPlan = typeof preventionPlanRaw === 'string' ? preventionPlanRaw : undefined;
 
     const error = await prisma.auditLog.findUnique({
       where: { id: errorId },
