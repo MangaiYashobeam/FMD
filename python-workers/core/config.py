@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     
     # Main API
-    api_base_url: str = "https://fmd-production.up.railway.app"
+    api_base_url: str = "https://dealersface.com"
     
     # Security - REQUIRED in production
     encryption_key: str = ""  # Must be set in production

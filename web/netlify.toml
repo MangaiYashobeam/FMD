@@ -8,4 +8,4 @@
   status = 200
 
 [build.environment]
-  VITE_API_URL = "https://fmd-production.up.railway.app"
+  VITE_API_URL = "https://dealersface.com"

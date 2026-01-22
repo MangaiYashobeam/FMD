@@ -1401,7 +1401,7 @@ export default function SettingsPage() {
                 <div className="mt-3 p-3 bg-gray-900 rounded-lg">
                   <code className="text-green-400 text-xs">
                     curl -H "X-API-Key: fmd_your_key_here" \<br />
-                    &nbsp;&nbsp;https://fmd-production.up.railway.app/api/vehicles
+                    &nbsp;&nbsp;https://dealersface.com/api/vehicles
                   </code>
                 </div>
               </div>

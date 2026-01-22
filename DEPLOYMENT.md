@@ -97,9 +97,9 @@ cd facemydealer/python-workers
 cp .env.example .env
 
 # Edit .env
-DATABASE_URL=postgresql://... (from Railway)
-REDIS_URL=redis://... (from Railway Redis)
-API_BASE_URL=https://fmd-production.up.railway.app
+DATABASE_URL=postgresql://... (from your database)
+REDIS_URL=redis://... (from your Redis instance)
+API_BASE_URL=https://dealersface.com
 
 # Start workers only
 docker-compose up -d
