@@ -391,7 +391,28 @@ export const ring4RequestValidator = (req: Request, res: Response, next: NextFun
 // This ring is handled by the existing auth middleware
 // Just marks the context when JWT is validated
 export const ring5AuthBarrier = (req: Request, _res: Response, next: NextFunction): void => {
-  const context = (req as any).securityContext as SecurityContext;
+  let context = (req as any).securityContext as SecurityContext | undefined;
+  
+  // Initialize security context if not already done (for routes that skip Ring 1)
+  if (!context) {
+    context = {
+      rings: {
+        gateway: true,
+        ipSentinel: true,
+        rateShield: true,
+        requestValidator: true,
+        authBarrier: false,
+        apiKeyFortress: false,
+        rbacGuardian: false,
+      },
+      passedRings: 4,
+      clientIP: getClientIP(req),
+      requestId: generateRequestId(),
+      timestamp: new Date(),
+    };
+    (req as any).securityContext = context;
+    (req as any).requestId = context.requestId;
+  }
   
   // Check if user was authenticated by the auth middleware
   if ((req as any).user) {
