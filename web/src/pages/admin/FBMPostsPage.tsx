@@ -5,7 +5,7 @@
  * across all accounts, users, and methods.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
@@ -15,20 +15,16 @@ import {
   XCircle,
   Clock,
   RefreshCw,
-  ChevronDown,
-  ChevronRight,
   Eye,
   RotateCcw,
   Building2,
   User,
-  Car,
   Zap,
   Bot,
   Laptop,
   Filter,
   Search,
   TrendingUp,
-  TrendingDown,
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
@@ -80,6 +76,9 @@ interface FBMLog {
   processingAt?: string;
   completedAt?: string;
   createdAt: string;
+  extensionTaskId?: string;
+  facebookPostId?: string;
+  fbPostId?: string;
   vehicle: {
     id: string;
     year: number;
