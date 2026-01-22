@@ -55,16 +55,29 @@ router.post('/callback', async (req: Request, res: Response) => {
       : process.env.FACEBOOK_APP_SECRET;
     
     logger.info(`Using ${isExtensionCallback ? 'extension' : 'web'} Facebook credentials for callback`);
+    logger.info(`App ID: ${appId?.substring(0, 8)}...`);
+    logger.info(`Redirect URI: ${redirectUri}`);
     
     // Exchange code for access token with Facebook
-    const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
-      params: {
-        client_id: appId,
-        client_secret: appSecret,
-        redirect_uri: redirectUri,
-        code,
-      },
-    });
+    let tokenResponse;
+    try {
+      tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
+        params: {
+          client_id: appId,
+          client_secret: appSecret,
+          redirect_uri: redirectUri,
+          code,
+        },
+      });
+    } catch (fbError: unknown) {
+      const err = fbError as { response?: { data?: unknown; status?: number }; message?: string };
+      logger.error('Facebook token exchange failed:', JSON.stringify({
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message,
+      }));
+      throw fbError;
+    }
     
     const { access_token: accessToken, expires_in: expiresIn } = tokenResponse.data;
     
