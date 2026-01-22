@@ -45,9 +45,8 @@ RUN mkdir -p /app/sessions
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/health')" || exit 1
+# NOTE: Health check is defined per-service in docker-compose.yml
+# worker-api uses HTTP check, browser-worker/session-monitor use process check
 
 EXPOSE 8000
 
