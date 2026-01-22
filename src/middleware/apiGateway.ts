@@ -394,7 +394,8 @@ export const ring5AuthBarrier = (req: Request, _res: Response, next: NextFunctio
   let context = (req as any).securityContext as SecurityContext | undefined;
   
   // Initialize security context if not already done (for routes that skip Ring 1)
-  if (!context) {
+  // Also reinitialize if context exists but is malformed (missing rings property)
+  if (!context || !context.rings) {
     context = {
       rings: {
         gateway: true,
