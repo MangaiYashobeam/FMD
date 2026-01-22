@@ -82,7 +82,9 @@ export class FacebookController {
       throw new AppError('Facebook App ID not configured', 500);
     }
     
-    const redirectUri = `${process.env.API_URL || 'http://localhost:5000'}/api/facebook/callback`;
+    // Use FACEBOOK_REDIRECT_URI if set, otherwise construct from API_URL or FRONTEND_URL
+    const redirectUri = process.env.FACEBOOK_REDIRECT_URI || 
+      `${process.env.API_URL || process.env.FRONTEND_URL || 'http://localhost:5000'}/api/facebook/callback`;
     
     // Sign the state to prevent tampering (HMAC signed)
     const state = signState({ 
@@ -125,6 +127,10 @@ export class FacebookController {
    */
   async handleOAuthCallback(req: AuthRequest, res: Response) {
     const { code, state, error, error_description } = req.query;
+    
+    // Debug logging
+    logger.info(`Facebook OAuth callback received - URL: ${req.originalUrl}`);
+    logger.info(`Facebook OAuth callback params - code: ${code ? 'present' : 'missing'}, state: ${state ? 'present' : 'missing'}, error: ${error || 'none'}`);
 
     // Handle user denial
     if (error) {
@@ -134,6 +140,7 @@ export class FacebookController {
     }
 
     if (!code || !state) {
+      logger.warn(`Facebook OAuth missing params - Full query: ${JSON.stringify(req.query)}`);
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       return res.redirect(`${frontendUrl}/app/facebook?error=Missing authorization code`);
     }
@@ -150,11 +157,14 @@ export class FacebookController {
       const { accountId, userId, returnUrl } = stateData;
 
       // Exchange code for access token
+      const redirectUri = process.env.FACEBOOK_REDIRECT_URI || 
+        `${process.env.API_URL || process.env.FRONTEND_URL || 'http://localhost:5000'}/api/facebook/callback`;
+      
       const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
         params: {
           client_id: process.env.FACEBOOK_APP_ID,
           client_secret: process.env.FACEBOOK_APP_SECRET,
-          redirect_uri: `${process.env.API_URL || 'http://localhost:5000'}/api/facebook/callback`,
+          redirect_uri: redirectUri,
           code,
         },
       });
@@ -273,11 +283,14 @@ export class FacebookController {
     const { accountId } = stateData;
 
     // Exchange code for access token
+    const redirectUri = process.env.FACEBOOK_REDIRECT_URI || 
+      `${process.env.API_URL || process.env.FRONTEND_URL || 'http://localhost:5000'}/api/facebook/callback`;
+    
     const tokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
       params: {
         client_id: process.env.FACEBOOK_APP_ID,
         client_secret: process.env.FACEBOOK_APP_SECRET,
-        redirect_uri: `${process.env.API_URL}/api/facebook/callback`,
+        redirect_uri: redirectUri,
         code,
       },
     });

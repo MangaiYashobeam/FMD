@@ -415,6 +415,15 @@ async function handleMessage(message, sender) {
     case 'GET_ACCOUNT_INFO':
       return await getAccountInfo();
       
+    case 'GET_VEHICLES':
+      return await getVehicles();
+      
+    case 'GENERATE_DESCRIPTION':
+      return await generateVehicleDescription(message.vehicle);
+      
+    case 'RECORD_POSTING':
+      return await recordPosting(message.vehicleId, message.platform, message.status);
+      
     case 'INJECT_CONTENT_SCRIPT':
       if (sender.tab?.id) {
         await chrome.scripting.executeScript({
@@ -499,6 +508,160 @@ async function getAccountInfo() {
   });
   
   return response.json();
+}
+
+/**
+ * Get vehicles from server inventory
+ */
+async function getVehicles() {
+  const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+  
+  if (!authToken) {
+    return { success: false, error: 'Not authenticated' };
+  }
+  
+  try {
+    const response = await fetch(`${CONFIG.API_URL}/vehicles?accountId=${accountId}&status=ACTIVE&limit=100`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return { 
+      success: true, 
+      data: data.data || data.vehicles || data || [] 
+    };
+  } catch (error) {
+    console.error('Failed to fetch vehicles:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Generate AI description for a vehicle
+ */
+async function generateVehicleDescription(vehicle) {
+  try {
+    const prompt = `Write a compelling Facebook Marketplace listing description for this vehicle:
+
+Year: ${vehicle.year}
+Make: ${vehicle.make}
+Model: ${vehicle.model}
+Mileage: ${vehicle.mileage || 'N/A'} miles
+Price: $${vehicle.price}
+Condition: ${vehicle.condition || 'Good'}
+Color: ${vehicle.exteriorColor || 'N/A'}
+Transmission: ${vehicle.transmission || 'Automatic'}
+Engine: ${vehicle.engine || 'N/A'}
+
+Requirements:
+- Professional but friendly tone
+- Highlight key features and selling points
+- Include a call-to-action
+- Keep under 200 words
+- Do not use excessive emojis
+
+Description:`;
+
+    // Try the AI service
+    const response = await fetch('https://sag.gemquery.com/api/v1/generate-text', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        maxTokens: 400,
+        temperature: 0.7,
+      }),
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      return { 
+        success: true, 
+        description: result.text || result.content || result.response || ''
+      };
+    }
+    
+    // Fallback: generate a simple template
+    return {
+      success: true,
+      description: generateFallbackDescription(vehicle)
+    };
+    
+  } catch (error) {
+    console.error('AI description generation failed:', error);
+    return {
+      success: true,
+      description: generateFallbackDescription(vehicle)
+    };
+  }
+}
+
+/**
+ * Fallback description generator
+ */
+function generateFallbackDescription(vehicle) {
+  const year = vehicle.year || '';
+  const make = vehicle.make || '';
+  const model = vehicle.model || '';
+  const mileage = vehicle.mileage ? `${vehicle.mileage.toLocaleString()} miles` : 'Low mileage';
+  const price = vehicle.price ? `$${vehicle.price.toLocaleString()}` : 'Call for price';
+  
+  return `${year} ${make} ${model} FOR SALE!
+
+✅ ${mileage}
+✅ Clean title
+✅ Well maintained
+✅ Ready to drive today!
+
+Price: ${price}
+
+This ${year} ${make} ${model} is in excellent condition and has been well cared for. Perfect for anyone looking for a reliable vehicle.
+
+Don't miss out on this great opportunity! Contact us today to schedule a test drive.
+
+📞 Message us for more info!
+🚗 Financing available`;
+}
+
+/**
+ * Record a vehicle posting
+ */
+async function recordPosting(vehicleId, platform, status) {
+  const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+  
+  if (!authToken) {
+    return { success: false, error: 'Not authenticated' };
+  }
+  
+  try {
+    const response = await fetch(`${CONFIG.API_URL}/extension/posting`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        vehicleId,
+        accountId,
+        platform,
+        status,
+        postedAt: new Date().toISOString(),
+      }),
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to record posting:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 // ============================================

@@ -208,6 +208,19 @@ const RATE_CONFIG = {
 export const ring3RateShield = (req: Request, res: Response, next: NextFunction): void => {
   const context = (req as any).securityContext as SecurityContext;
   
+  // Skip rate limiting for critical OAuth callbacks
+  const rateLimitSkipPaths = [
+    '/facebook/callback',
+    '/auth/facebook/callback',
+    '/config/facebook',
+  ];
+  if (rateLimitSkipPaths.some(p => req.path.includes(p))) {
+    context.rings.rateShield = true;
+    context.passedRings++;
+    next();
+    return;
+  }
+  
   // IIPC bypass - super admin IPs skip rate limiting
   if (iipcService.isSuperAdminIP(context.clientIP)) {
     context.rings.rateShield = true;

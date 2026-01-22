@@ -1515,6 +1515,373 @@ function findByText(textOptions) {
 }
 
 // ============================================
+// MESSAGE HANDLERS FOR SIDEPANEL INTEGRATION
+// ============================================
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  (async () => {
+    try {
+      switch (message.type) {
+        case 'IAI_FILL_LISTING':
+          const fillResult = await fillVehicleListing(message.vehicle);
+          sendResponse({ success: true, result: fillResult });
+          break;
+          
+        case 'IAI_UPLOAD_IMAGES':
+          const uploadResult = await uploadVehicleImages(message.images);
+          sendResponse({ success: true, result: uploadResult });
+          break;
+          
+        case 'IAI_PUBLISH_LISTING':
+          const publishResult = await publishListing();
+          sendResponse({ success: true, result: publishResult });
+          break;
+          
+        case 'IAI_GET_STATUS':
+          sendResponse({ 
+            success: true, 
+            active: window.iaiSoldier?.isActive || false,
+            page: detectCurrentPage()
+          });
+          break;
+          
+        default:
+          // Let other handlers process
+          sendResponse({ success: false, error: 'Unknown message type' });
+      }
+    } catch (error) {
+      console.error('IAI message handler error:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+  })();
+  
+  return true; // Keep message channel open for async response
+});
+
+/**
+ * Fill vehicle listing form on Facebook Marketplace
+ */
+async function fillVehicleListing(vehicle) {
+  console.log('🚗 IAI Filling vehicle listing:', vehicle);
+  
+  const stealth = new IAIStealth();
+  const steps = [];
+  
+  // Wait for page to be ready
+  await stealth.delay(1500, 2500);
+  
+  // Helper to find and fill input
+  async function fillField(selectors, value, fieldName) {
+    if (!value) return false;
+    
+    for (const selector of selectors) {
+      try {
+        let element = null;
+        
+        if (typeof selector === 'function') {
+          element = selector();
+        } else {
+          element = document.querySelector(selector);
+        }
+        
+        if (element && isVisible(element)) {
+          await stealth.click(element);
+          await stealth.delay(200, 400);
+          
+          // Clear existing value
+          element.value = '';
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          
+          // Type new value
+          await stealth.type(element, String(value));
+          
+          steps.push({ field: fieldName, success: true });
+          console.log(`✅ Filled ${fieldName}:`, value);
+          return true;
+        }
+      } catch (e) {
+        console.debug(`Selector failed for ${fieldName}:`, e);
+      }
+    }
+    
+    steps.push({ field: fieldName, success: false });
+    console.warn(`⚠️ Could not fill ${fieldName}`);
+    return false;
+  }
+  
+  // Helper to select dropdown option
+  async function selectOption(buttonSelectors, optionValue, fieldName) {
+    if (!optionValue) return false;
+    
+    for (const selector of buttonSelectors) {
+      try {
+        const button = document.querySelector(selector);
+        if (button && isVisible(button)) {
+          await stealth.click(button);
+          await stealth.delay(500, 800);
+          
+          // Find option in dropdown
+          const options = document.querySelectorAll('[role="option"], [role="listbox"] [role="option"], [role="menuitem"]');
+          for (const opt of options) {
+            if (opt.textContent?.toLowerCase().includes(optionValue.toLowerCase())) {
+              await stealth.click(opt);
+              steps.push({ field: fieldName, success: true });
+              console.log(`✅ Selected ${fieldName}:`, optionValue);
+              return true;
+            }
+          }
+          
+          // Try typing to search
+          const searchInput = document.querySelector('[role="combobox"], [role="listbox"] input');
+          if (searchInput) {
+            await stealth.type(searchInput, optionValue);
+            await stealth.delay(500, 800);
+            
+            const firstOption = document.querySelector('[role="option"]');
+            if (firstOption) {
+              await stealth.click(firstOption);
+              steps.push({ field: fieldName, success: true });
+              return true;
+            }
+          }
+        }
+      } catch (e) {
+        console.debug(`Selector failed for ${fieldName}:`, e);
+      }
+    }
+    
+    steps.push({ field: fieldName, success: false });
+    return false;
+  }
+  
+  // Fill the form fields
+  // Year
+  await selectOption(
+    ['[aria-label*="Year" i]', '[aria-label*="año" i]', 'label[id*="year"] + div'],
+    vehicle.year,
+    'year'
+  );
+  await stealth.delay(300, 600);
+  
+  // Make
+  await selectOption(
+    ['[aria-label*="Make" i]', '[aria-label*="marca" i]', 'label[id*="make"] + div'],
+    vehicle.make,
+    'make'
+  );
+  await stealth.delay(300, 600);
+  
+  // Model
+  await selectOption(
+    ['[aria-label*="Model" i]', '[aria-label*="modelo" i]', 'label[id*="model"] + div'],
+    vehicle.model,
+    'model'
+  );
+  await stealth.delay(300, 600);
+  
+  // Price
+  await fillField(
+    ['[aria-label*="Price" i]', '[aria-label*="precio" i]', 'input[name="price"]', 'input[placeholder*="price" i]'],
+    vehicle.price,
+    'price'
+  );
+  await stealth.delay(300, 600);
+  
+  // Mileage
+  await fillField(
+    ['[aria-label*="Mileage" i]', '[aria-label*="kilometraje" i]', 'input[name="mileage"]', 'input[placeholder*="mileage" i]'],
+    vehicle.mileage,
+    'mileage'
+  );
+  await stealth.delay(300, 600);
+  
+  // Description
+  await fillField(
+    ['[aria-label*="Description" i]', '[aria-label*="descripción" i]', 'textarea', '[contenteditable="true"]'],
+    vehicle.description,
+    'description'
+  );
+  await stealth.delay(300, 600);
+  
+  // Vehicle Type (if available)
+  if (vehicle.bodyType) {
+    await selectOption(
+      ['[aria-label*="Vehicle type" i]', '[aria-label*="Body" i]'],
+      vehicle.bodyType,
+      'vehicleType'
+    );
+    await stealth.delay(300, 600);
+  }
+  
+  // Transmission
+  if (vehicle.transmission) {
+    await selectOption(
+      ['[aria-label*="Transmission" i]', '[aria-label*="transmisión" i]'],
+      vehicle.transmission,
+      'transmission'
+    );
+    await stealth.delay(300, 600);
+  }
+  
+  // Fuel Type
+  if (vehicle.fuelType) {
+    await selectOption(
+      ['[aria-label*="Fuel" i]', '[aria-label*="combustible" i]'],
+      vehicle.fuelType,
+      'fuelType'
+    );
+    await stealth.delay(300, 600);
+  }
+  
+  // Exterior Color
+  if (vehicle.exteriorColor) {
+    await selectOption(
+      ['[aria-label*="Exterior color" i]', '[aria-label*="color exterior" i]'],
+      vehicle.exteriorColor,
+      'exteriorColor'
+    );
+    await stealth.delay(300, 600);
+  }
+  
+  console.log('✅ Form filling complete. Steps:', steps);
+  return { success: true, steps };
+}
+
+/**
+ * Upload images to the listing
+ */
+async function uploadVehicleImages(imageUrls) {
+  console.log('📷 IAI Uploading images:', imageUrls.length);
+  
+  const stealth = new IAIStealth();
+  
+  // Find file input
+  const fileInput = document.querySelector('input[type="file"][accept*="image"]');
+  
+  if (!fileInput) {
+    // Try clicking add photo button first
+    const addPhotoBtn = document.querySelector('[aria-label*="Add photo" i], [aria-label*="photo" i]');
+    if (addPhotoBtn) {
+      await stealth.click(addPhotoBtn);
+      await stealth.delay(500, 1000);
+    }
+    
+    // Check again for file input
+    const newFileInput = document.querySelector('input[type="file"][accept*="image"]');
+    if (!newFileInput) {
+      console.error('Could not find file input');
+      return { success: false, error: 'File input not found' };
+    }
+  }
+  
+  const input = document.querySelector('input[type="file"][accept*="image"]');
+  
+  // Fetch and convert images
+  const files = [];
+  for (let i = 0; i < Math.min(imageUrls.length, 10); i++) {
+    try {
+      const response = await fetch(imageUrls[i]);
+      const blob = await response.blob();
+      const file = new File([blob], `vehicle_${i}.jpg`, { type: 'image/jpeg' });
+      files.push(file);
+    } catch (e) {
+      console.warn(`Failed to fetch image ${i}:`, e);
+    }
+  }
+  
+  if (files.length === 0) {
+    return { success: false, error: 'No images could be loaded' };
+  }
+  
+  // Create DataTransfer and assign files
+  const dataTransfer = new DataTransfer();
+  files.forEach(f => dataTransfer.items.add(f));
+  input.files = dataTransfer.files;
+  
+  // Dispatch change event
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  
+  // Wait for upload
+  await stealth.delay(2000, 4000);
+  
+  console.log(`✅ Uploaded ${files.length} images`);
+  return { success: true, count: files.length };
+}
+
+/**
+ * Click the publish/post button
+ */
+async function publishListing() {
+  console.log('📤 IAI Publishing listing...');
+  
+  const stealth = new IAIStealth();
+  
+  // Look for publish/post button
+  const publishSelectors = [
+    'button[aria-label*="Publish" i]',
+    'button[aria-label*="Post" i]',
+    '[role="button"][aria-label*="Publish" i]',
+    '[role="button"][aria-label*="Post" i]',
+    () => findByText(['Publish', 'Post', 'Publicar', 'Submit']),
+  ];
+  
+  for (const selector of publishSelectors) {
+    try {
+      let button = null;
+      
+      if (typeof selector === 'function') {
+        button = selector();
+      } else {
+        button = document.querySelector(selector);
+      }
+      
+      if (button && isVisible(button) && !button.disabled) {
+        await stealth.click(button);
+        await stealth.delay(2000, 3000);
+        
+        console.log('✅ Publish button clicked');
+        return { success: true };
+      }
+    } catch (e) {
+      console.debug('Publish selector failed:', e);
+    }
+  }
+  
+  console.warn('⚠️ Publish button not found');
+  return { success: false, error: 'Publish button not found' };
+}
+
+/**
+ * Detect current page type
+ */
+function detectCurrentPage() {
+  const url = window.location.href;
+  
+  if (url.includes('/marketplace/create')) return 'create_listing';
+  if (url.includes('/marketplace/inbox')) return 'messages';
+  if (url.includes('/marketplace/you/selling')) return 'my_listings';
+  if (url.includes('/marketplace')) return 'marketplace';
+  if (url.includes('facebook.com')) return 'facebook';
+  
+  return 'unknown';
+}
+
+/**
+ * Check if element is visible
+ */
+function isVisible(element) {
+  if (!element) return false;
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  
+  return style.display !== 'none' &&
+         style.visibility !== 'hidden' &&
+         style.opacity !== '0' &&
+         rect.width > 0 &&
+         rect.height > 0;
+}
+
+// ============================================
 // EXPORTS & INITIALIZATION
 // ============================================
 

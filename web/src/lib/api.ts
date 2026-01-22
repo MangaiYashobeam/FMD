@@ -915,4 +915,73 @@ export const cloudApi = {
   getStatus: () => api.get('/api/cloud/status'),
 };
 
+// API Dashboard API (Super Admin Only)
+export const apiDashboardApi = {
+  // Get comprehensive dashboard data
+  getDashboard: async () => {
+    const response = await api.get('/api/admin/api-dashboard');
+    return response.data;
+  },
+  
+  // Get endpoint categories summary
+  getCategories: async () => {
+    const response = await api.get('/api/admin/api-dashboard/categories');
+    return response.data;
+  },
+  
+  // Get all endpoints
+  getEndpoints: async (category?: string) => {
+    const response = await api.get('/api/admin/api-dashboard/endpoints', { params: { category } });
+    return response.data;
+  },
+  
+  // Get single endpoint details
+  getEndpointDetails: async (endpointId: string) => {
+    const response = await api.get(`/api/admin/api-dashboard/endpoints/${endpointId}`);
+    return response.data;
+  },
+  
+  // Health check specific endpoint
+  checkEndpointHealth: async (endpointId: string) => {
+    const response = await api.post(`/api/admin/api-dashboard/endpoints/${endpointId}/health-check`);
+    return response.data;
+  },
+  
+  // Get all services
+  getServices: async () => {
+    const response = await api.get('/api/admin/api-dashboard/services');
+    return response.data;
+  },
+  
+  // Get single service details
+  getServiceDetails: async (serviceId: string) => {
+    const response = await api.get(`/api/admin/api-dashboard/services/${serviceId}`);
+    return response.data;
+  },
+  
+  // Control a service (start, stop, restart, pause)
+  controlService: async (serviceId: string, action: string) => {
+    const response = await api.post(`/api/admin/api-dashboard/services/${serviceId}/control`, { action });
+    return response.data;
+  },
+  
+  // Run full health check on all endpoints
+  runFullHealthCheck: async () => {
+    const response = await api.post('/api/admin/api-dashboard/health-check');
+    return response.data;
+  },
+  
+  // Activate PANIC mode
+  activatePanicMode: async (reason?: string) => {
+    const response = await api.post('/api/admin/api-dashboard/panic', { reason });
+    return response.data;
+  },
+  
+  // Deactivate PANIC mode
+  deactivatePanicMode: async () => {
+    const response = await api.delete('/api/admin/api-dashboard/panic');
+    return response.data;
+  },
+};
+
 export default api;

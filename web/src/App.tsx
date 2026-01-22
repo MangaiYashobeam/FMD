@@ -57,6 +57,7 @@ import AICenterPage from './pages/admin/AICenterPage';
 import EmailSettingsPage from './pages/admin/EmailSettingsPage';
 import FacebookConfigPage from './pages/admin/FacebookConfigPage';
 import ExtensionConfigPage from './pages/admin/ExtensionConfigPage';
+import APIDashboardPage from './pages/admin/APIDashboardPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -146,6 +147,7 @@ function App() {
               <Route path="ai-center" element={<AICenterPage />} />
               <Route path="facebook" element={<FacebookConfigPage />} />
               <Route path="extension" element={<ExtensionConfigPage />} />
+              <Route path="api-dashboard" element={<APIDashboardPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

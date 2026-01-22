@@ -612,4 +612,62 @@ router.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+/**
+ * POST /api/extension/posting
+ * Record a vehicle posting from extension
+ */
+router.post('/posting', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { vehicleId, accountId, platform, status, postedAt } = req.body;
+    
+    if (!vehicleId || !platform) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'vehicleId and platform are required' 
+      });
+      return;
+    }
+    
+    // Create audit log entry for the posting
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.id || null,
+        action: 'VEHICLE_POSTED',
+        entityType: 'vehicle',
+        entityId: vehicleId,
+        metadata: {
+          accountId: accountId || req.user?.id,
+          platform,
+          status,
+          postedAt: postedAt || new Date().toISOString(),
+          source: 'extension',
+        },
+      },
+    });
+    
+    // Log activity
+    logger.info(`Extension posted vehicle ${vehicleId} to ${platform}`, {
+      vehicleId,
+      accountId: accountId || req.user?.id,
+      platform,
+    });
+    
+    res.json({
+      success: true,
+      posting: {
+        vehicleId,
+        platform,
+        status: status || 'completed',
+        postedAt: postedAt || new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Record posting error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to record posting' 
+    });
+  }
+});
+
 export default router;

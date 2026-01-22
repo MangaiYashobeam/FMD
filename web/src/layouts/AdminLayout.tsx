@@ -16,6 +16,7 @@ import {
   Brain,
   Facebook,
   Puzzle,
+  Terminal,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
@@ -25,6 +26,7 @@ import { FacebookConnectionStatus } from '../components/FacebookConnectionStatus
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'AI Center', href: '/admin/ai-center', icon: Brain },
+  { name: 'API Dashboard', href: '/admin/api-dashboard', icon: Terminal },
   { name: 'Accounts', href: '/admin/accounts', icon: Building2 },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Payments', href: '/admin/payments', icon: CreditCard },

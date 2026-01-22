@@ -728,7 +728,7 @@ export const getFacebookConfig = async (_req: Request, res: Response, next: Next
           appSecret: integrations.facebookAppSecret ? '********' : '',
           hasSecret: !!(integrations.facebookAppSecret || process.env.FACEBOOK_APP_SECRET),
           configured: !!(integrations.facebookAppId || process.env.FACEBOOK_APP_ID),
-          oauthRedirectUri: `${process.env.API_URL || 'https://dealersface.com/api'}/facebook/callback`,
+          oauthRedirectUri: process.env.FACEBOOK_REDIRECT_URI || `${process.env.API_URL || process.env.FRONTEND_URL || 'https://dealersface.com'}/api/facebook/callback`,
           extensionRedirectPattern: 'https://*.chromiumapp.org/*',
         },
         stats: {

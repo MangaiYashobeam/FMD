@@ -546,6 +546,7 @@ app.use('/api/users/me', ring5AuthBarrier, userCredentialsRoutes);             /
 app.use('/api/users/me/api-keys', ring5AuthBarrier, require('./routes/apiKey.routes').default);
 app.use('/api/subscriptions', require('./routes/subscription.routes').default); // Mixed (webhook is public)
 app.use('/api/admin', ring5AuthBarrier, require('./routes/admin.routes').default); // Requires admin
+app.use('/api/admin/api-dashboard', ring5AuthBarrier, require('./routes/apiDashboard.routes').default); // API Dashboard (super admin)
 app.use('/api/email', ring5AuthBarrier, emailRoutes);                          // Requires auth
 app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
 app.use('/api/messages', ring5AuthBarrier, require('./routes/message.routes').default); // Messages/conversations (requires auth)

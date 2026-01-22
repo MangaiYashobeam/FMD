@@ -2,6 +2,7 @@
  * DF-Auto Sim Sidepanel Script
  * 
  * Handles UI interactions and communicates with background script
+ * Includes advanced vehicle posting with IAI Soldier integration
  */
 
 // ============================================
@@ -37,6 +38,43 @@ const elements = {
   // Activity
   activityList: document.getElementById('activityList'),
   clearActivityBtn: document.getElementById('clearActivityBtn'),
+  
+  // Modal Elements
+  vehicleModal: document.getElementById('vehicleModal'),
+  closeModal: document.getElementById('closeModal'),
+  vehicleSearch: document.getElementById('vehicleSearch'),
+  vehicleLoading: document.getElementById('vehicleLoading'),
+  vehicleSkeleton: document.getElementById('vehicleSkeleton'),
+  vehicleList: document.getElementById('vehicleList'),
+  emptyState: document.getElementById('emptyState'),
+  postingOptions: document.getElementById('postingOptions'),
+  cancelPost: document.getElementById('cancelPost'),
+  startPost: document.getElementById('startPost'),
+  aiDescription: document.getElementById('aiDescription'),
+  schedulePost: document.getElementById('schedulePost'),
+  
+  // Modal Views
+  modalSelectView: document.getElementById('modalSelectView'),
+  modalProgressView: document.getElementById('modalProgressView'),
+  modalSuccessView: document.getElementById('modalSuccessView'),
+  modalErrorView: document.getElementById('modalErrorView'),
+  
+  // Progress Elements
+  progressCount: document.getElementById('progressCount'),
+  currentVehicleTitle: document.getElementById('currentVehicleTitle'),
+  currentVehicleMeta: document.getElementById('currentVehicleMeta'),
+  progressStatus: document.getElementById('progressStatus'),
+  progressPercent: document.getElementById('progressPercent'),
+  progressFill: document.getElementById('progressFill'),
+  progressSteps: document.getElementById('progressSteps'),
+  cancelProgress: document.getElementById('cancelProgress'),
+  
+  // Result Elements
+  successMessage: document.getElementById('successMessage'),
+  errorMessage: document.getElementById('errorMessage'),
+  closeSuccess: document.getElementById('closeSuccess'),
+  retryPost: document.getElementById('retryPost'),
+  closeError: document.getElementById('closeError'),
 };
 
 // ============================================
@@ -45,6 +83,10 @@ const elements = {
 
 let authState = null;
 let activities = [];
+let vehicles = [];
+let selectedVehicles = new Set();
+let postingInProgress = false;
+let abortController = null;
 
 // ============================================
 // Initialization
@@ -263,17 +305,13 @@ elements.scanInboxBtn.addEventListener('click', async () => {
   }
 });
 
-// Post Vehicle
+// Post Vehicle - Open Modal
 elements.postVehicleBtn.addEventListener('click', async () => {
   try {
-    // Open Dealers Face vehicle posting page
-    await chrome.tabs.create({
-      url: 'https://dealersface.com/dashboard/post',
-      active: true,
-    });
-    addActivity('info', 'Opening vehicle posting interface...');
+    openVehicleModal();
   } catch (error) {
     console.error('Post vehicle error:', error);
+    addActivity('error', `Failed to open posting: ${error.message}`);
   }
 });
 
@@ -454,3 +492,530 @@ setInterval(async () => {
     }
   }
 }, 30000);
+
+// ============================================
+// Vehicle Posting System
+// ============================================
+
+/**
+ * Open the vehicle posting modal
+ */
+async function openVehicleModal() {
+  // Reset state
+  selectedVehicles.clear();
+  vehicles = [];
+  
+  // Show modal
+  elements.vehicleModal.classList.add('active');
+  showModalView('select');
+  
+  // Show skeleton loading
+  elements.vehicleSkeleton.style.display = 'block';
+  elements.vehicleList.innerHTML = '';
+  elements.emptyState.style.display = 'none';
+  elements.postingOptions.style.display = 'none';
+  
+  // Fetch vehicles
+  await fetchVehicles();
+}
+
+/**
+ * Close the modal
+ */
+function closeVehicleModal() {
+  elements.vehicleModal.classList.remove('active');
+  
+  // Cancel any ongoing operation
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
+  }
+  
+  postingInProgress = false;
+}
+
+/**
+ * Switch between modal views
+ */
+function showModalView(view) {
+  elements.modalSelectView.style.display = view === 'select' ? 'block' : 'none';
+  elements.modalProgressView.style.display = view === 'progress' ? 'block' : 'none';
+  elements.modalSuccessView.style.display = view === 'success' ? 'block' : 'none';
+  elements.modalErrorView.style.display = view === 'error' ? 'block' : 'none';
+}
+
+/**
+ * Fetch vehicles from API
+ */
+async function fetchVehicles() {
+  try {
+    const response = await sendMessage({ type: 'GET_VEHICLES' });
+    
+    elements.vehicleSkeleton.style.display = 'none';
+    
+    if (response.success && response.data?.length > 0) {
+      vehicles = response.data;
+      renderVehicleList(vehicles);
+      elements.postingOptions.style.display = 'block';
+    } else {
+      elements.emptyState.style.display = 'block';
+    }
+  } catch (error) {
+    console.error('Failed to fetch vehicles:', error);
+    elements.vehicleSkeleton.style.display = 'none';
+    elements.emptyState.style.display = 'block';
+    elements.emptyState.querySelector('p').textContent = 
+      'Failed to load vehicles. Please check your connection.';
+  }
+}
+
+/**
+ * Render the vehicle list
+ */
+function renderVehicleList(vehiclesToRender) {
+  elements.vehicleList.innerHTML = vehiclesToRender.map(vehicle => {
+    const isSelected = selectedVehicles.has(vehicle.id);
+    const thumbUrl = vehicle.images?.[0]?.url || vehicle.imageUrl || '';
+    const stockNum = vehicle.stockNumber || vehicle.stock || vehicle.stockNum || '';
+    const vinLast6 = vehicle.vin ? vehicle.vin.slice(-6) : '';
+    
+    return `
+      <div class="vehicle-item ${isSelected ? 'selected' : ''}" data-id="${vehicle.id}">
+        <div class="vehicle-thumb">
+          ${thumbUrl 
+            ? `<img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(vehicle.title || '')}" onerror="this.parentElement.innerHTML='<div class=vehicle-thumb-placeholder>🚗</div>'">`
+            : '<div class="vehicle-thumb-placeholder">🚗</div>'
+          }
+        </div>
+        <div class="vehicle-details">
+          <div class="vehicle-title">${escapeHtml(vehicle.year || '')} ${escapeHtml(vehicle.make || '')} ${escapeHtml(vehicle.model || '')}</div>
+          <div class="vehicle-meta">
+            <span class="vehicle-price">$${formatNumber(vehicle.price || 0)}</span>
+            <span>${formatNumber(vehicle.mileage || 0)} mi</span>
+            ${stockNum ? `<span class="vehicle-stock">#${escapeHtml(stockNum)}</span>` : ''}
+            ${vinLast6 ? `<span class="vehicle-vin" title="VIN: ${escapeHtml(vehicle.vin || '')}">...${escapeHtml(vinLast6)}</span>` : ''}
+          </div>
+        </div>
+        <div class="vehicle-checkbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  // Add click handlers
+  elements.vehicleList.querySelectorAll('.vehicle-item').forEach(item => {
+    item.addEventListener('click', () => toggleVehicleSelection(item.dataset.id));
+  });
+  
+  updateStartButton();
+}
+
+/**
+ * Toggle vehicle selection
+ */
+function toggleVehicleSelection(vehicleId) {
+  if (selectedVehicles.has(vehicleId)) {
+    selectedVehicles.delete(vehicleId);
+  } else {
+    selectedVehicles.add(vehicleId);
+  }
+  
+  // Update UI
+  const item = elements.vehicleList.querySelector(`[data-id="${vehicleId}"]`);
+  if (item) {
+    item.classList.toggle('selected', selectedVehicles.has(vehicleId));
+  }
+  
+  updateStartButton();
+}
+
+/**
+ * Update the Start Posting button state
+ */
+function updateStartButton() {
+  const count = selectedVehicles.size;
+  elements.startPost.disabled = count === 0;
+  elements.startPost.innerHTML = count > 0 
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg> Post ${count} Vehicle${count > 1 ? 's' : ''}`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg> Start Posting`;
+}
+
+/**
+ * Start the posting process
+ */
+async function startPosting() {
+  if (selectedVehicles.size === 0 || postingInProgress) return;
+  
+  postingInProgress = true;
+  abortController = new AbortController();
+  
+  const selectedList = Array.from(selectedVehicles);
+  const vehiclesToPost = vehicles.filter(v => selectedList.includes(v.id));
+  const useAI = elements.aiDescription.checked;
+  const scheduled = elements.schedulePost.checked;
+  
+  // Switch to progress view
+  showModalView('progress');
+  elements.progressCount.textContent = `0/${vehiclesToPost.length}`;
+  
+  let completed = 0;
+  let failed = 0;
+  const errors = [];
+  
+  for (let i = 0; i < vehiclesToPost.length; i++) {
+    if (abortController.signal.aborted) {
+      addActivity('warning', 'Posting cancelled by user');
+      break;
+    }
+    
+    const vehicle = vehiclesToPost[i];
+    
+    // Update current vehicle display
+    updateProgressVehicle(vehicle);
+    elements.progressCount.textContent = `${i}/${vehiclesToPost.length}`;
+    
+    try {
+      // Add random delay if scheduled
+      if (scheduled && i > 0) {
+        const delay = Math.floor(Math.random() * 30000) + 10000; // 10-40 seconds
+        updateProgressStatus('Waiting before next post...', (i / vehiclesToPost.length) * 100);
+        await sleep(delay);
+      }
+      
+      // Post the vehicle
+      await postVehicle(vehicle, useAI);
+      completed++;
+      addActivity('success', `Posted: ${vehicle.year} ${vehicle.make} ${vehicle.model}`);
+      
+    } catch (error) {
+      console.error(`Failed to post vehicle ${vehicle.id}:`, error);
+      failed++;
+      errors.push({ vehicle, error: error.message });
+      addActivity('error', `Failed: ${vehicle.year} ${vehicle.make} ${vehicle.model}`);
+    }
+    
+    // Update progress
+    const progress = ((i + 1) / vehiclesToPost.length) * 100;
+    updateProgressStatus(`Posted ${completed} of ${vehiclesToPost.length}`, progress);
+  }
+  
+  postingInProgress = false;
+  
+  // Show result
+  if (completed > 0 && failed === 0) {
+    elements.successMessage.textContent = 
+      `Successfully posted ${completed} vehicle${completed > 1 ? 's' : ''} to Facebook Marketplace!`;
+    showModalView('success');
+  } else if (completed > 0 && failed > 0) {
+    elements.successMessage.textContent = 
+      `Posted ${completed} vehicle${completed > 1 ? 's' : ''}, ${failed} failed. Check activity log for details.`;
+    showModalView('success');
+  } else {
+    elements.errorMessage.textContent = errors[0]?.error || 'Failed to post vehicles. Please try again.';
+    showModalView('error');
+  }
+}
+
+/**
+ * Post a single vehicle
+ */
+async function postVehicle(vehicle, useAI) {
+  // Update progress steps
+  setProgressStep('navigate', 'active');
+  updateProgressStatus('Opening Facebook Marketplace...', 10);
+  
+  // Find or open Facebook tab
+  let tab = await getOrCreateFacebookTab();
+  
+  // Navigate to create listing
+  await chrome.tabs.update(tab.id, { 
+    url: 'https://www.facebook.com/marketplace/create/vehicle/',
+    active: true 
+  });
+  
+  await waitForTabLoad(tab.id);
+  setProgressStep('navigate', 'completed');
+  
+  // Fill form
+  setProgressStep('form', 'active');
+  updateProgressStatus('Filling vehicle details...', 30);
+  
+  // Prepare vehicle data with optional AI description
+  let description = vehicle.description || '';
+  if (useAI && (!description || description.length < 50)) {
+    updateProgressStatus('Generating AI description...', 35);
+    try {
+      const aiResponse = await sendMessage({
+        type: 'GENERATE_DESCRIPTION',
+        vehicle: vehicle
+      });
+      if (aiResponse.success && aiResponse.description) {
+        description = aiResponse.description;
+      }
+    } catch (e) {
+      console.warn('AI description failed, using original:', e);
+    }
+  }
+  
+  const vehicleData = {
+    ...vehicle,
+    description: description
+  };
+  
+  // Send to content script to fill the form
+  await sendToTab(tab.id, {
+    type: 'IAI_FILL_LISTING',
+    vehicle: vehicleData
+  });
+  
+  await sleep(2000);
+  setProgressStep('form', 'completed');
+  
+  // Upload images
+  setProgressStep('images', 'active');
+  updateProgressStatus('Uploading photos...', 60);
+  
+  if (vehicle.images?.length > 0 || vehicle.imageUrl) {
+    const images = vehicle.images?.map(i => i.url) || [vehicle.imageUrl];
+    await sendToTab(tab.id, {
+      type: 'IAI_UPLOAD_IMAGES',
+      images: images.filter(Boolean)
+    });
+    await sleep(3000);
+  }
+  
+  setProgressStep('images', 'completed');
+  
+  // Publish
+  setProgressStep('publish', 'active');
+  updateProgressStatus('Publishing listing...', 85);
+  
+  await sendToTab(tab.id, { type: 'IAI_PUBLISH_LISTING' });
+  await sleep(3000);
+  
+  setProgressStep('publish', 'completed');
+  updateProgressStatus('Complete!', 100);
+  
+  // Record the posting
+  await sendMessage({
+    type: 'RECORD_POSTING',
+    vehicleId: vehicle.id,
+    platform: 'facebook_marketplace',
+    status: 'completed'
+  });
+  
+  await sleep(1000);
+}
+
+/**
+ * Update progress display
+ */
+function updateProgressVehicle(vehicle) {
+  const thumb = document.querySelector('#currentVehicle .vehicle-thumb');
+  if (vehicle.images?.[0]?.url || vehicle.imageUrl) {
+    thumb.innerHTML = `<img src="${vehicle.images?.[0]?.url || vehicle.imageUrl}" alt="">`;
+  } else {
+    thumb.innerHTML = '<div class="vehicle-thumb-placeholder">🚗</div>';
+  }
+  
+  elements.currentVehicleTitle.textContent = `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
+  elements.currentVehicleMeta.textContent = `$${formatNumber(vehicle.price)} • ${formatNumber(vehicle.mileage)} mi`;
+}
+
+function updateProgressStatus(status, percent) {
+  elements.progressStatus.textContent = status;
+  elements.progressPercent.textContent = `${Math.round(percent)}%`;
+  elements.progressFill.style.width = `${percent}%`;
+}
+
+function setProgressStep(stepName, status) {
+  const steps = elements.progressSteps.querySelectorAll('.progress-step');
+  steps.forEach(step => {
+    const isTarget = step.dataset.step === stepName;
+    step.classList.remove('active', 'completed');
+    
+    if (isTarget && status === 'active') {
+      step.classList.add('active');
+      step.querySelector('.step-icon').innerHTML = '<div class="step-spinner"></div>';
+    } else if (isTarget && status === 'completed') {
+      step.classList.add('completed');
+      step.querySelector('.step-icon').innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>`;
+    }
+  });
+}
+
+function resetProgressSteps() {
+  const icons = {
+    navigate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
+    form: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
+    images: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
+    publish: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>'
+  };
+  
+  elements.progressSteps.querySelectorAll('.progress-step').forEach(step => {
+    step.classList.remove('active', 'completed');
+    step.querySelector('.step-icon').innerHTML = icons[step.dataset.step] || '';
+  });
+}
+
+// ============================================
+// Helper Functions for Posting
+// ============================================
+
+async function getOrCreateFacebookTab() {
+  const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  
+  if (tabs.length > 0) {
+    return tabs[0];
+  }
+  
+  return await chrome.tabs.create({
+    url: 'https://www.facebook.com/marketplace/',
+    active: true
+  });
+}
+
+async function waitForTabLoad(tabId, timeout = 30000) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    const checkTab = async () => {
+      if (Date.now() - startTime > timeout) {
+        reject(new Error('Tab load timeout'));
+        return;
+      }
+      
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.status === 'complete') {
+          await sleep(1000); // Extra wait for Facebook's JS
+          resolve();
+        } else {
+          setTimeout(checkTab, 500);
+        }
+      } catch (e) {
+        reject(e);
+      }
+    };
+    
+    checkTab();
+  });
+}
+
+async function sendToTab(tabId, message) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ============================================
+// Modal Event Listeners
+// ============================================
+
+// Close modal events
+elements.closeModal?.addEventListener('click', closeVehicleModal);
+elements.cancelPost?.addEventListener('click', closeVehicleModal);
+elements.closeSuccess?.addEventListener('click', closeVehicleModal);
+elements.closeError?.addEventListener('click', closeVehicleModal);
+
+// Cancel progress
+elements.cancelProgress?.addEventListener('click', () => {
+  if (abortController) {
+    abortController.abort();
+  }
+  closeVehicleModal();
+});
+
+// Retry after error
+elements.retryPost?.addEventListener('click', () => {
+  showModalView('select');
+  resetProgressSteps();
+});
+
+// Start posting
+elements.startPost?.addEventListener('click', startPosting);
+
+// Search filter - supports stock#, VIN, year, make, model, and keywords
+elements.vehicleSearch?.addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase().trim();
+  
+  if (!query) {
+    renderVehicleList(vehicles);
+    return;
+  }
+  
+  // Split query into terms for multi-word search
+  const terms = query.split(/\s+/).filter(t => t.length > 0);
+  
+  const filtered = vehicles.filter(v => {
+    // Build searchable text from multiple fields
+    const searchFields = [
+      v.year?.toString() || '',
+      v.make || '',
+      v.model || '',
+      v.trim || '',
+      v.vin || '',
+      v.stockNumber || v.stock || v.stockNum || '',
+      v.exteriorColor || v.color || '',
+      v.transmission || '',
+      v.engine || '',
+      v.title || '',
+      v.description || '',
+    ].join(' ').toLowerCase();
+    
+    // All terms must match (AND search)
+    return terms.every(term => searchFields.includes(term));
+  });
+  
+  renderVehicleList(filtered);
+});
+
+// Posting options buttons
+document.querySelectorAll('.option-btn[data-groups]')?.forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.option-btn[data-groups]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Toggle switches
+document.querySelectorAll('.toggle')?.forEach(toggle => {
+  toggle.addEventListener('click', () => {
+    const input = toggle.previousElementSibling;
+    input.checked = !input.checked;
+  });
+});
+
+// Close modal on overlay click
+elements.vehicleModal?.addEventListener('click', (e) => {
+  if (e.target === elements.vehicleModal) {
+    closeVehicleModal();
+  }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && elements.vehicleModal.classList.contains('active')) {
+    closeVehicleModal();
+  }
+});
