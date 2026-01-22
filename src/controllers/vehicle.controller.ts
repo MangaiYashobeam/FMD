@@ -6,6 +6,7 @@ import { logger } from '@/utils/logger';
 import { FTPService } from '@/services/ftp.service';
 import { CSVParserService } from '@/services/csvParser.service';
 import { getRedisConnection } from '@/config/redis';
+import { FBMPostLogService } from '@/routes/fbm-posts.routes';
 
 export class VehicleController {
   /**
@@ -426,6 +427,24 @@ export class VehicleController {
     // METHOD 1: IAI (Browser Automation via Chrome Extension)
     // =====================================================
     if (method === 'iai') {
+      // Create FBM Post Log entry for tracking
+      let fbmLog: any = null;
+      try {
+        fbmLog = await FBMPostLogService.createLog({
+          accountId: vehicle.accountId,
+          vehicleId: vehicle.id,
+          userId: req.user!.id,
+          method: 'iai',
+          triggerType: 'manual',
+          vehicleData: vehicleData,
+          requestData: { title, price, description, photos, method, includePixelTracking },
+        });
+        logger.info(`FBM Post Log created: ${fbmLog.id} for vehicle ${id}`);
+      } catch (logError) {
+        // Log error but don't block the post
+        logger.error(`Failed to create FBM Post Log: ${logError}`);
+      }
+
       // Create pixel event if enabled
       const pixelEvent = await createPixelEvent();
 
@@ -440,6 +459,7 @@ export class VehicleController {
             action: 'create_listing',
             vehicle: vehicleData,
             pixelTracking: includePixelTracking ? pixelEvent : null,
+            fbmLogId: fbmLog?.id,  // Include log ID for status updates
             instructions: {
               navigateTo: 'marketplace_create_vehicle',
               fillForm: true,
@@ -449,6 +469,19 @@ export class VehicleController {
           },
         },
       });
+
+      // Update FBM log with task ID
+      if (fbmLog) {
+        try {
+          await FBMPostLogService.updateLog(fbmLog.id, {
+            status: 'queued',
+            stage: 'task_created',
+            extensionTaskId: task.id,
+          });
+        } catch (e) {
+          logger.error(`Failed to update FBM log with task ID: ${e}`);
+        }
+      }
 
       // Create a pending Facebook post record
       const fbProfile = vehicle.account.facebookProfiles?.[0];
@@ -470,6 +503,7 @@ export class VehicleController {
         message: 'Task queued for IAI Soldier. Open Facebook in Chrome with extension active.',
         data: { 
           taskId: task.id, 
+          fbmLogId: fbmLog?.id,
           method: 'iai',
           status: 'pending',
           pixelTracking: includePixelTracking,
@@ -488,6 +522,24 @@ export class VehicleController {
     // METHOD 2: SOLDIER WORKERS (Server-side Headless Browser)
     // =====================================================
     if (method === 'soldier') {
+      // Create FBM Post Log entry for tracking
+      let fbmLog: any = null;
+      try {
+        fbmLog = await FBMPostLogService.createLog({
+          accountId: vehicle.accountId,
+          vehicleId: vehicle.id,
+          userId: req.user!.id,
+          method: 'soldier',
+          triggerType: 'manual',
+          vehicleData: vehicleData,
+          requestData: { title, price, description, photos, method, includePixelTracking },
+        });
+        logger.info(`FBM Post Log created: ${fbmLog.id} for vehicle ${id} (soldier method)`);
+      } catch (logError) {
+        // Log error but don't block the post
+        logger.error(`Failed to create FBM Post Log: ${logError}`);
+      }
+
       // Create pixel event if enabled
       const pixelEvent = await createPixelEvent();
 
@@ -505,6 +557,7 @@ export class VehicleController {
               action: 'soldier_create_listing',
               vehicle: vehicleData,
               pixelTracking: includePixelTracking ? pixelEvent : null,
+              fbmLogId: fbmLog?.id,  // Include log ID for status updates
               targetPlatform: 'facebook_marketplace',
               useHeadlessBrowser: true,
               workerType: 'soldier',
@@ -519,11 +572,25 @@ export class VehicleController {
           },
         });
 
+        // Update FBM log with task ID
+        if (fbmLog) {
+          try {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              status: 'queued',
+              stage: 'task_created',
+              extensionTaskId: task.id,
+            });
+          } catch (e) {
+            logger.error(`Failed to update FBM log with task ID: ${e}`);
+          }
+        }
+
         // Push to Redis queue for Soldier Workers to pick up
         const redisQueue = getRedisConnection();
         if (redisQueue) {
           await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify({
             taskId: task.id,
+            fbmLogId: fbmLog?.id,  // Include log ID for status updates from worker
             type: 'POST_TO_MARKETPLACE',
             accountId: vehicle.accountId,
             vehicleId: vehicle.id,
@@ -531,8 +598,23 @@ export class VehicleController {
             createdAt: new Date().toISOString(),
             priority: 5,
           }));
+          
+          // Update log to processing status
+          if (fbmLog) {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              status: 'queued',
+              stage: 'task_created',
+              queuedAt: new Date(),
+            });
+          }
         } else {
           logger.warn('Redis not available - Soldier Worker task created but not queued');
+          if (fbmLog) {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              riskLevel: 'high',
+              riskFactors: [{ message: 'Redis not available - task may not be processed', severity: 'high' }],
+            });
+          }
         }
 
         // Create a pending Facebook post record
@@ -554,7 +636,8 @@ export class VehicleController {
           success: true,
           message: 'Task queued for Soldier Worker. Your listing will be processed automatically.',
           data: { 
-            taskId: task.id, 
+            taskId: task.id,
+            fbmLogId: fbmLog?.id,
             method: 'soldier',
             status: 'queued',
             pixelTracking: includePixelTracking,
@@ -577,6 +660,23 @@ export class VehicleController {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         logger.error(`Soldier Worker post failed for vehicle ${id}: ${errorMessage}`);
+        
+        // Log the failure
+        if (fbmLog) {
+          try {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              status: 'failed',
+              stage: 'task_created',
+              errorCode: 'SOLDIER_INIT_ERROR',
+              errorMessage: errorMessage,
+              errorDetails: { stack: error instanceof Error ? error.stack : null },
+              completedAt: new Date(),
+            });
+          } catch (e) {
+            logger.error(`Failed to update FBM log with error: ${e}`);
+          }
+        }
+        
         throw new AppError(`Soldier Worker error: ${errorMessage}`, 500);
       }
     }

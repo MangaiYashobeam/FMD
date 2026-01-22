@@ -1360,8 +1360,16 @@ class IAISoldier {
   async executeTask(task) {
     console.log('🎯 Executing task:', task.type);
     
+    // Extract fbmLogId for tracking if present
+    const fbmLogId = task.data?.fbmLogId || null;
+    
     try {
-      await this.updateTaskStatus(task.id, 'processing');
+      await this.updateTaskStatus(task.id, 'processing', null, fbmLogId);
+      
+      // Report stage change to FBM log
+      if (fbmLogId) {
+        await this.reportFBMEvent(fbmLogId, 'stage_change', 'extension_received', 'Task received by extension');
+      }
       
       let result = null;
       
@@ -1379,8 +1387,19 @@ class IAISoldier {
           result = await this.messenger.sendMessage(task.data.message);
           break;
           
+        case 'POST_TO_MARKETPLACE':
         case 'create_listing':
-          result = await this.lister.createListing(task.data.vehicle, task.data.images);
+          // Report navigation stage
+          if (fbmLogId) {
+            await this.reportFBMEvent(fbmLogId, 'stage_change', 'fb_navigated', 'Navigating to Facebook Marketplace');
+          }
+          
+          result = await this.lister.createListing(task.data.vehicle, task.data.images || task.data.vehicle?.photos);
+          
+          // Report completion stage
+          if (fbmLogId && result?.success) {
+            await this.reportFBMEvent(fbmLogId, 'stage_change', 'submit', 'Listing form submitted', result);
+          }
           break;
           
         case 'collect_stats':
@@ -1400,11 +1419,20 @@ class IAISoldier {
           console.warn('Unknown task type:', task.type);
       }
       
-      await this.updateTaskStatus(task.id, 'completed', result);
+      await this.updateTaskStatus(task.id, 'completed', result, fbmLogId);
       
     } catch (error) {
       console.error('Task execution failed:', error);
-      await this.updateTaskStatus(task.id, 'failed', { error: error.message });
+      
+      // Report error to FBM log
+      if (fbmLogId) {
+        await this.reportFBMEvent(fbmLogId, 'error', 'form_filling', `Task failed: ${error.message}`, { 
+          stack: error.stack,
+          taskType: task.type,
+        });
+      }
+      
+      await this.updateTaskStatus(task.id, 'failed', { error: error.message }, fbmLogId);
     }
   }
   
@@ -1466,7 +1494,7 @@ class IAISoldier {
   /**
    * Update task status on server
    */
-  async updateTaskStatus(taskId, status, result = null) {
+  async updateTaskStatus(taskId, status, result = null, fbmLogId = null) {
     try {
       await fetch(`${IAI_CONFIG.API.PRODUCTION}/extension/tasks/${taskId}/status`, {
         method: 'POST',
@@ -1476,8 +1504,90 @@ class IAISoldier {
         },
         body: JSON.stringify({ status, result }),
       });
+      
+      // Also update FBM Post Log if we have a log ID
+      if (fbmLogId) {
+        await this.updateFBMLog(fbmLogId, status, result);
+      }
     } catch (e) {
       console.debug('Failed to update task status:', e);
+    }
+  }
+  
+  /**
+   * Update FBM Post Log for tracking/debugging
+   */
+  async updateFBMLog(logId, status, result = null) {
+    try {
+      const statusMap = {
+        'processing': 'processing',
+        'completed': 'completed',
+        'failed': 'failed',
+        'pending': 'queued',
+      };
+      
+      const stageMap = {
+        'processing': 'extension_received',
+        'completed': 'verify',
+        'failed': 'form_filling',
+      };
+      
+      const payload = {
+        status: statusMap[status] || status,
+        stage: stageMap[status] || 'processing',
+        source: 'extension',
+      };
+      
+      if (result) {
+        if (result.error) {
+          payload.errorCode = 'IAI_ERROR';
+          payload.errorMessage = result.error;
+          payload.errorDetails = result;
+        } else {
+          payload.responseData = result;
+          if (result.postId || result.fbPostId) {
+            payload.fbPostId = result.postId || result.fbPostId;
+          }
+        }
+      }
+      
+      await fetch(`${IAI_CONFIG.API.PRODUCTION}/fbm-posts/internal/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({ logId, ...payload }),
+      });
+      
+      console.debug('FBM log updated:', logId, payload);
+    } catch (e) {
+      console.debug('Failed to update FBM log:', e);
+    }
+  }
+  
+  /**
+   * Report FBM stage progress event
+   */
+  async reportFBMEvent(logId, eventType, stage, message, details = null) {
+    try {
+      await fetch(`${IAI_CONFIG.API.PRODUCTION}/fbm-posts/internal/event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({
+          logId,
+          eventType,  // stage_change, error, warning, info, debug
+          stage,
+          message,
+          details,
+          source: 'extension',
+        }),
+      });
+    } catch (e) {
+      console.debug('Failed to report FBM event:', e);
     }
   }
   

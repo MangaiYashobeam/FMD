@@ -576,6 +576,9 @@ app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default)
 // Error Monitoring & AI Intervention System
 app.use('/api/error-monitoring', ring5AuthBarrier, require('./routes/error-monitoring.routes').default); // Error monitoring & AI intervention
 
+// FBM Posts Tracking & Debugging System
+app.use('/api/fbm-posts', ring5AuthBarrier, require('./routes/fbm-posts.routes').default); // FBM post tracking (requires auth)
+
 // ============================================
 // SPA Fallback - serve index.html for all non-API routes
 // ============================================

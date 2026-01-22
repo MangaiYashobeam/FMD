@@ -60,6 +60,7 @@ import FacebookConfigPage from './pages/admin/FacebookConfigPage';
 import ExtensionConfigPage from './pages/admin/ExtensionConfigPage';
 import APIDashboardPage from './pages/admin/APIDashboardPage';
 import ErrorMonitoringPage from './pages/admin/ErrorMonitoringPage';
+import FBMPostsPage from './pages/admin/FBMPostsPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -152,6 +153,7 @@ function App() {
               <Route path="extension" element={<ExtensionConfigPage />} />
               <Route path="api-dashboard" element={<APIDashboardPage />} />
               <Route path="errors" element={<ErrorMonitoringPage />} />
+              <Route path="fbm-posts" element={<FBMPostsPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

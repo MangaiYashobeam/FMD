@@ -18,6 +18,7 @@ import {
   Puzzle,
   Terminal,
   AlertTriangle,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'AI Center', href: '/admin/ai-center', icon: Brain },
   { name: 'API Dashboard', href: '/admin/api-dashboard', icon: Terminal },
+  { name: 'FBM Posts', href: '/admin/fbm-posts', icon: Send },
   { name: 'Error Monitoring', href: '/admin/errors', icon: AlertTriangle },
   { name: 'Accounts', href: '/admin/accounts', icon: Building2 },
   { name: 'Users', href: '/admin/users', icon: Users },
