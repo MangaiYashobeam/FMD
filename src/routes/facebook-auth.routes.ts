@@ -206,11 +206,17 @@ router.post('/callback', async (req: Request, res: Response) => {
       },
     });
   } catch (error: unknown) {
-    const err = error as { response?: { data?: unknown }; message?: string };
-    logger.error('Extension OAuth error:', err.response?.data || err.message);
+    const err = error as { response?: { data?: unknown; status?: number }; message?: string };
+    const errorDetails = {
+      message: err.message,
+      responseData: err.response?.data,
+      responseStatus: err.response?.status,
+    };
+    logger.error('Extension OAuth error:', JSON.stringify(errorDetails, null, 2));
     res.status(500).json({
       success: false,
-      error: err.message || 'Failed to complete Facebook authentication',
+      error: err.response?.data?.error?.message || err.message || 'Failed to complete Facebook authentication',
+      details: process.env.NODE_ENV !== 'production' ? errorDetails : undefined,
     });
   }
 });
