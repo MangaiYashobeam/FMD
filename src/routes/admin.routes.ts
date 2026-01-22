@@ -380,4 +380,44 @@ router.put(
  */
 router.post('/extension/config/test', asyncHandler(systemController.testExtensionConfig));
 
+// ============================================
+// Error Monitoring Routes - Nova Diagnostics (SUPER_ADMIN)
+// ============================================
+
+/**
+ * @route   GET /api/admin/errors
+ * @desc    Get all system errors for Nova diagnostics
+ * @access  Super Admin
+ */
+router.get('/errors', asyncHandler(systemController.getSystemErrors));
+
+/**
+ * @route   GET /api/admin/errors/stats
+ * @desc    Get error statistics and trends
+ * @access  Super Admin
+ */
+router.get('/errors/stats', asyncHandler(systemController.getErrorStats));
+
+/**
+ * @route   GET /api/admin/errors/extension
+ * @desc    Get extension-specific errors
+ * @access  Super Admin
+ */
+router.get('/errors/extension', asyncHandler(systemController.getExtensionErrors));
+
+/**
+ * @route   POST /api/admin/errors/:errorId/resolve
+ * @desc    Mark an error as resolved with diagnostic notes
+ * @access  Super Admin
+ */
+router.post(
+  '/errors/:errorId/resolve',
+  validate([
+    param('errorId').isString().withMessage('Invalid error ID'),
+    body('resolution').optional().trim().isLength({ max: 1000 }),
+    body('preventionPlan').optional().trim().isLength({ max: 1000 }),
+  ]),
+  asyncHandler(systemController.resolveError)
+);
+
 export default router;

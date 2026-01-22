@@ -306,7 +306,8 @@ function FacebookAdPreviewModal({
     vehicle.description || generateDefaultDescription(vehicle)
   );
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>(photos.slice(0, 10));
-  const [postMethod, setPostMethod] = useState<'api' | 'pixel' | 'iai' | 'soldier'>('iai');
+  const [postMethod, setPostMethod] = useState<'api' | 'iai' | 'soldier'>('iai');
+  const [includePixelTracking, setIncludePixelTracking] = useState(true);
   const [posting, setPosting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
@@ -352,6 +353,7 @@ function FacebookAdPreviewModal({
         description,
         photos: selectedPhotos,
         method: postMethod,
+        includePixelTracking,
       });
     } finally {
       setPosting(false);
@@ -509,114 +511,114 @@ function FacebookAdPreviewModal({
                   <p className="text-xs text-gray-500 mt-1">{description.length}/5000 characters</p>
                 </div>
 
-                {/* Photo Selection - Available Photos */}
+                {/* Photos - Drag to Reorder (Merged Section) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Available Photos (click to select)
+                    Photos ({selectedPhotos.length}/10) - Drag to reorder, click to remove
                   </label>
-                  <div className="grid grid-cols-6 gap-2 max-h-32 overflow-y-auto p-1 bg-gray-50 rounded-lg">
-                    {photos.map((photo, i) => (
-                      <button
-                        key={i}
-                        onClick={() => togglePhotoSelection(photo)}
-                        className={cn(
-                          'relative aspect-square rounded-lg overflow-hidden border-2 transition-all',
-                          selectedPhotos.includes(photo) 
-                            ? 'border-blue-500 ring-2 ring-blue-200 opacity-50' 
-                            : 'border-gray-200 hover:border-gray-300'
-                        )}
-                      >
-                        <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-3 h-3" />
-                        {selectedPhotos.includes(photo) && (
-                          <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-2.5 h-2.5 text-white" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Selected Photos - Drag to Reorder */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Selected Photos ({selectedPhotos.length}/10) - Drag to reorder
-                  </label>
-                  <p className="text-xs text-gray-500 mb-2">First photo will be the main listing image</p>
-                  <div className="flex flex-wrap gap-2 p-2 bg-blue-50 rounded-lg min-h-[80px] border-2 border-dashed border-blue-200">
-                    {selectedPhotos.length === 0 ? (
-                      <p className="text-gray-400 text-sm m-auto">Click photos above to select</p>
+                  <p className="text-xs text-gray-500 mb-2">First photo will be the main listing image. Drag photos to change order.</p>
+                  
+                  {/* All photos in one draggable grid */}
+                  <div className="grid grid-cols-5 gap-3 p-3 bg-gray-50 rounded-lg min-h-[120px]">
+                    {photos.length === 0 ? (
+                      <p className="text-gray-400 text-sm col-span-5 m-auto py-8">No photos available</p>
                     ) : (
-                      selectedPhotos.map((photo, i) => (
-                        <div
-                          key={photo}
-                          draggable
-                          onDragStart={() => handleDragStart(i)}
-                          onDragOver={(e) => handleDragOver(e, i)}
-                          onDragLeave={handleDragLeave}
-                          onDrop={() => handleDrop(i)}
-                          onDragEnd={handleDragEnd}
-                          className={cn(
-                            'relative w-16 h-16 rounded-lg overflow-hidden border-2 cursor-move transition-all group',
-                            i === 0 ? 'ring-2 ring-green-400 border-green-500' : 'border-blue-300',
-                            draggedPhotoIndex === i && 'opacity-50 scale-95',
-                            dragOverIndex === i && 'ring-2 ring-purple-500 scale-105'
-                          )}
-                        >
-                          <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-3 h-3" />
-                          
-                          {/* Order number badge */}
-                          <div className={cn(
-                            'absolute top-0.5 left-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold',
-                            i === 0 ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
-                          )}>
-                            {i + 1}
-                          </div>
-                          
-                          {/* Drag handle */}
-                          <div className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <GripVertical className="w-3 h-3 text-white drop-shadow-lg" />
-                          </div>
-                          
-                          {/* Remove button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              togglePhotoSelection(photo);
-                            }}
-                            className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      photos.map((photo, i) => {
+                        const selectedIndex = selectedPhotos.indexOf(photo);
+                        const isSelected = selectedIndex !== -1;
+                        
+                        return (
+                          <div
+                            key={photo}
+                            draggable={isSelected}
+                            onDragStart={() => isSelected && handleDragStart(selectedIndex)}
+                            onDragOver={(e) => isSelected && handleDragOver(e, selectedIndex)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={() => isSelected && handleDrop(selectedIndex)}
+                            onDragEnd={handleDragEnd}
+                            onClick={() => togglePhotoSelection(photo)}
+                            className={cn(
+                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer group',
+                              isSelected 
+                                ? selectedIndex === 0 
+                                  ? 'ring-2 ring-green-400 border-green-500 cursor-move' 
+                                  : 'border-blue-500 bg-blue-50 cursor-move'
+                                : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100',
+                              isSelected && draggedPhotoIndex === selectedIndex && 'opacity-50 scale-95',
+                              isSelected && dragOverIndex === selectedIndex && 'ring-2 ring-purple-500 scale-105'
+                            )}
                           >
-                            <X className="w-2.5 h-2.5 text-white" />
-                          </button>
-                          
-                          {/* Move arrows */}
-                          <div className="absolute bottom-0.5 left-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {i > 0 && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  movePhoto(i, 'left');
-                                }}
-                                className="w-4 h-4 bg-white/80 rounded flex items-center justify-center hover:bg-white"
-                              >
-                                <ArrowLeft className="w-2.5 h-2.5 text-gray-700" />
-                              </button>
+                            <VehicleImage src={photo} alt="" className="w-full h-full object-cover" iconSize="w-4 h-4" />
+                            
+                            {/* Selection indicator / Order number */}
+                            {isSelected ? (
+                              <div className={cn(
+                                'absolute top-1 left-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md',
+                                selectedIndex === 0 ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+                              )}>
+                                {selectedIndex + 1}
+                              </div>
+                            ) : (
+                              <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-gray-400/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Plus className="w-3 h-3 text-white" />
+                              </div>
                             )}
-                            {i < selectedPhotos.length - 1 && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  movePhoto(i, 'right');
-                                }}
-                                className="w-4 h-4 bg-white/80 rounded flex items-center justify-center hover:bg-white"
-                              >
-                                <ArrowRight className="w-2.5 h-2.5 text-gray-700" />
-                              </button>
+                            
+                            {/* Drag handle for selected */}
+                            {isSelected && (
+                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <GripVertical className="w-4 h-4 text-white drop-shadow-lg" />
+                              </div>
+                            )}
+                            
+                            {/* Main photo indicator */}
+                            {isSelected && selectedIndex === 0 && (
+                              <div className="absolute bottom-1 left-1 right-1">
+                                <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full font-medium">Main Photo</span>
+                              </div>
+                            )}
+                            
+                            {/* Move arrows for selected photos */}
+                            {isSelected && (
+                              <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {selectedIndex > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      movePhoto(selectedIndex, 'left');
+                                    }}
+                                    className="w-5 h-5 bg-white/90 rounded flex items-center justify-center hover:bg-white shadow-sm"
+                                  >
+                                    <ArrowLeft className="w-3 h-3 text-gray-700" />
+                                  </button>
+                                )}
+                                {selectedIndex < selectedPhotos.length - 1 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      movePhoto(selectedIndex, 'right');
+                                    }}
+                                    className="w-5 h-5 bg-white/90 rounded flex items-center justify-center hover:bg-white shadow-sm"
+                                  >
+                                    <ArrowRight className="w-3 h-3 text-gray-700" />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
+                  </div>
+                  
+                  {/* Selected count indicator */}
+                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                    <span>Click unselected photos to add them</span>
+                    <span className={cn(
+                      selectedPhotos.length >= 10 ? 'text-orange-600 font-medium' : ''
+                    )}>
+                      {selectedPhotos.length}/10 selected
+                    </span>
                   </div>
                 </div>
 
@@ -677,21 +679,34 @@ function FacebookAdPreviewModal({
                         <p className="text-xs text-gray-500">Direct API posting (requires approval)</p>
                       </div>
                     </label>
+                  </div>
+                  
+                  {/* Facebook Pixel Addon */}
+                  <div className="mt-4 pt-4 border-t border-gray-200">
                     <label className={cn(
-                      'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
-                      postMethod === 'pixel' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                      'flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all',
+                      includePixelTracking ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'
                     )}>
                       <input
-                        type="radio"
-                        name="postMethod"
-                        checked={postMethod === 'pixel'}
-                        onChange={() => setPostMethod('pixel')}
-                        className="text-blue-600"
+                        type="checkbox"
+                        checked={includePixelTracking}
+                        onChange={(e) => setIncludePixelTracking(e.target.checked)}
+                        className="mt-1 text-green-600 rounded"
                       />
-                      <Share2 className="w-5 h-5 text-green-600" />
-                      <div>
-                        <p className="font-medium text-gray-900">Facebook Pixel</p>
-                        <p className="text-xs text-gray-500">Track conversions with pixel events</p>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Share2 className="w-5 h-5 text-green-600" />
+                          <p className="font-medium text-gray-900">Include Facebook Pixel Tracking</p>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Fire conversion events to track user engagement and enable retargeting ads.
+                        </p>
+                        {includePixelTracking && (
+                          <div className="mt-2 text-xs text-green-700 bg-green-100 px-2 py-1 rounded inline-flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Pixel events will be recorded when listing is posted
+                          </div>
+                        )}
                       </div>
                     </label>
                   </div>
@@ -873,35 +888,36 @@ function FacebookAdPreviewModal({
                   </div>
                 )}
 
-                {postMethod === 'pixel' && (
+                {/* Pixel Tracking Info (when enabled) */}
+                {includePixelTracking && (
                   <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl">
                     <div className="flex items-start gap-3">
                       <Share2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="font-semibold text-green-900">Facebook Pixel Tracking</h4>
+                        <h4 className="font-semibold text-green-900">Pixel Tracking Enabled</h4>
                         <p className="text-sm text-green-700 mt-1">
-                          Tracking only - does not create listings:
+                          The following events will be tracked:
                         </p>
                         <ul className="text-sm text-green-700 mt-2 space-y-1">
                           <li className="flex items-center gap-2">
-                            <AlertCircle className="w-3 h-3" />
-                            This does NOT post to Marketplace
+                            <CheckCircle className="w-3 h-3" />
+                            ViewContent - When listing is viewed
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Fires conversion tracking events
+                            InitiateCheckout - When buyer shows interest
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Helps with retargeting ads
+                            Lead - When message is sent
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Tracks user engagement with vehicles
+                            Enable retargeting ads to interested users
                           </li>
                         </ul>
                         <p className="text-xs text-green-600 mt-2 font-medium">
-                          💡 Use IAI or Soldier to actually post to Marketplace
+                          📊 View pixel metrics in the Analytics dashboard
                         </p>
                       </div>
                     </div>
@@ -1071,6 +1087,7 @@ export default function InventoryPage() {
       description: string;
       photos: string[];
       method: string;
+      includePixelTracking?: boolean;
     }) => {
       // This will trigger the IAI task for the extension
       return vehiclesApi.postToFacebook(data.vehicleId, {
@@ -1079,6 +1096,7 @@ export default function InventoryPage() {
         description: data.description,
         photos: data.photos,
         method: data.method,
+        includePixelTracking: data.includePixelTracking,
       });
     },
     onSuccess: (response) => {
@@ -1089,16 +1107,15 @@ export default function InventoryPage() {
       const data = response?.data?.data;
       const method = data?.method || 'unknown';
       const message = response?.data?.message || 'Task created successfully';
+      const pixelEnabled = data?.pixelTracking;
       
       // Display appropriate success message based on method
       if (method === 'iai') {
-        toast.success(`IAI Task Queued! ${message}`);
+        toast.success(`IAI Task Queued! ${message}${pixelEnabled ? ' (Pixel tracking enabled)' : ''}`);
       } else if (method === 'soldier') {
-        toast.success(`Soldier Worker Task Queued! ${message}`);
+        toast.success(`Soldier Worker Task Queued! ${message}${pixelEnabled ? ' (Pixel tracking enabled)' : ''}`);
       } else if (method === 'api') {
         toast.info(`Facebook API: ${message}`);
-      } else if (method === 'pixel') {
-        toast.info(`Pixel Event Prepared: ${message}`);
       } else {
         toast.success(message);
       }

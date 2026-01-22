@@ -105,6 +105,7 @@ model Account {
   adfConfiguration  ADFConfiguration?
   leads             Lead[]
   teamInvitations   TeamInvitation[]
+  pixelEvents       PixelEvent[]
 
   @@map("accounts")
 }
@@ -340,6 +341,40 @@ model FacebookPost {
 }
 
 // ============================================
+// Facebook Pixel Tracking
+// ============================================
+
+model PixelEvent {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  vehicleId String?  @map("vehicle_id")
+  
+  // Event Details
+  eventType  String   @map("event_type") // ViewContent, InitiateCheckout, Lead, Purchase
+  eventId    String   @map("event_id")   // Unique event ID
+  eventData  Json     @map("event_data") // Full pixel event data
+  source     String   @default("unknown") // marketplace_post, website, app
+  
+  // User Info (anonymized)
+  userAgent  String?  @map("user_agent")
+  ipHash     String?  @map("ip_hash")
+  
+  // Timestamps
+  firedAt    DateTime? @map("fired_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  
+  // Relations
+  account Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([vehicleId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("pixel_events")
+}
+
+// ============================================
 // Vehicle Management
 // ============================================
 
@@ -423,6 +458,7 @@ model Vehicle {
   photos        VehiclePhoto[]
   facebookPosts FacebookPost[]
   leads         Lead[]
+  pixelEvents   PixelEvent[]
 
   @@unique([accountId, vin])
   @@index([accountId, status])

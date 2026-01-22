@@ -114,12 +114,21 @@ async function login(email, password) {
       throw new Error(data.message || 'Login failed');
     }
     
-    // Store token and user
+    // Get user's account ID
+    const accountId = data.data.user.accounts?.[0]?.id || data.data.user.accountId;
+    
+    // Store token, user, and accountId (needed for task polling)
     await chrome.storage.local.set({
       authToken: data.data.accessToken,
       refreshToken: data.data.refreshToken,
       user: data.data.user,
+      accountId: accountId,
     });
+    
+    // Notify background to start task polling
+    chrome.runtime.sendMessage({ type: 'START_TASK_POLLING' });
+    
+    console.log('✅ Login successful, accountId:', accountId);
     
     state.user = data.data.user;
     showDashboard();
@@ -127,7 +136,7 @@ async function login(email, password) {
   } catch (error) {
     showLoginError(error.message);
   } finally {
-    showLoginLoading(false);
+    showLoginLoading(false));
   }
 }
 

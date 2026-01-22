@@ -98,6 +98,106 @@ function checkFacebookLogin() {
 }
 
 // ============================================
+// ERROR DETECTION & REPORTING
+// ============================================
+
+// Track errors for AI assistance
+let errorHistory = [];
+let userStruggleIndicators = {
+  failedAttempts: 0,
+  lastAttemptTime: null,
+  samePageTime: 0,
+  idleTime: 0,
+};
+
+// Report error to server for Nova diagnostics
+async function reportErrorToServer(error, context = {}) {
+  try {
+    const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+    
+    if (!authToken) return;
+    
+    const errorReport = {
+      error: typeof error === 'string' ? error : error.message || 'Unknown error',
+      stackTrace: error.stack || null,
+      url: window.location.href,
+      timestamp: new Date().toISOString(),
+      context: {
+        ...context,
+        accountId,
+        pageState: await analyzePageState(),
+        userStruggle: { ...userStruggleIndicators },
+        errorHistory: errorHistory.slice(-5), // Last 5 errors
+      },
+    };
+    
+    // Add to local history
+    errorHistory.push({
+      time: Date.now(),
+      error: errorReport.error,
+    });
+    if (errorHistory.length > 20) errorHistory.shift();
+    
+    const response = await fetch('https://dealersface.com/api/extension/report-error', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(errorReport),
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      // Show diagnostic to user via AI assistant
+      if (data.diagnostic) {
+        showAIAssistantForError(data.diagnostic);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to report error:', e);
+  }
+}
+
+// Detect user struggling with the interface
+function detectUserStruggle() {
+  // Reset if user succeeded
+  if (userStruggleIndicators.failedAttempts >= 3) {
+    showAIAssistantForError(`It looks like you're having trouble. I detected ${userStruggleIndicators.failedAttempts} failed attempts. Can I help?`);
+    userStruggleIndicators.failedAttempts = 0;
+  }
+  
+  // Check if user has been on the same page too long
+  if (userStruggleIndicators.samePageTime > 60000) { // 1 minute
+    showAIAssistantForError('Taking a while? I can help you fill this form faster. Click "Auto-Fill" to get started!');
+    userStruggleIndicators.samePageTime = 0;
+  }
+}
+
+// Track failed form interactions
+function trackFailedAttempt() {
+  userStruggleIndicators.failedAttempts++;
+  userStruggleIndicators.lastAttemptTime = Date.now();
+  detectUserStruggle();
+}
+
+// Global error handler
+window.addEventListener('error', (event) => {
+  if (event.message && event.message.includes('Dealers Face')) {
+    reportErrorToServer(event.error || event.message, { type: 'window_error' });
+  }
+});
+
+// Track time on page for struggle detection
+let pageLoadTime = Date.now();
+setInterval(() => {
+  if (window.location.href.includes('/marketplace/create')) {
+    userStruggleIndicators.samePageTime = Date.now() - pageLoadTime;
+    detectUserStruggle();
+  }
+}, 30000); // Check every 30 seconds
+
+// ============================================
 // IAI TASK EXECUTION
 // ============================================
 
@@ -123,6 +223,17 @@ async function executeIAITask(task) {
   } catch (error) {
     console.error('IAI task failed:', error);
     logNavigationEvent('task_error', { error: error.message, step: navigationState.currentStep });
+    
+    // Report error for Nova diagnostics
+    await reportErrorToServer(error, {
+      type: 'task_error',
+      taskId: task.id,
+      taskType: task.type,
+      step: navigationState.currentStep,
+    });
+    
+    // Track failed attempt
+    trackFailedAttempt();
     
     // Notify background of failure
     chrome.runtime.sendMessage({
@@ -1086,8 +1197,374 @@ function sleep(ms) {
 }
 
 // ============================================
+// AI ASSISTANT WIDGET
+// ============================================
+
+let aiAssistantVisible = false;
+let aiAssistantContainer = null;
+
+function createAIAssistantWidget() {
+  if (aiAssistantContainer) return;
+  
+  aiAssistantContainer = document.createElement('div');
+  aiAssistantContainer.id = 'df-ai-assistant';
+  aiAssistantContainer.innerHTML = `
+    <style>
+      #df-ai-widget {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 999999;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      #df-ai-toggle {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366F1 0%, #3B82F6 100%);
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #df-ai-toggle:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 25px rgba(99, 102, 241, 0.5);
+      }
+      #df-ai-toggle svg { width: 28px; height: 28px; color: white; }
+      #df-ai-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: #EF4444;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        min-width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 0 5px;
+      }
+      #df-ai-panel {
+        position: absolute;
+        bottom: 65px;
+        right: 0;
+        width: 350px;
+        max-height: 500px;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      #df-ai-panel.visible { display: flex; }
+      #df-ai-header {
+        padding: 16px;
+        background: linear-gradient(135deg, #6366F1 0%, #3B82F6 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      #df-ai-header-icon {
+        width: 40px;
+        height: 40px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #df-ai-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+      #df-ai-header p { margin: 4px 0 0; font-size: 12px; opacity: 0.9; }
+      #df-ai-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        max-height: 300px;
+      }
+      .df-ai-msg {
+        margin-bottom: 12px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      .df-ai-msg.assistant {
+        background: #F3F4F6;
+        border-bottom-left-radius: 4px;
+      }
+      .df-ai-msg.user {
+        background: #3B82F6;
+        color: white;
+        margin-left: 40px;
+        border-bottom-right-radius: 4px;
+      }
+      .df-ai-msg.error {
+        background: #FEE2E2;
+        color: #991B1B;
+        border-left: 3px solid #EF4444;
+      }
+      .df-ai-msg.success {
+        background: #D1FAE5;
+        color: #065F46;
+        border-left: 3px solid #10B981;
+      }
+      #df-ai-input-area {
+        padding: 12px;
+        border-top: 1px solid #E5E7EB;
+        display: flex;
+        gap: 8px;
+      }
+      #df-ai-input {
+        flex: 1;
+        padding: 10px 14px;
+        border: 1px solid #D1D5DB;
+        border-radius: 20px;
+        font-size: 14px;
+        outline: none;
+      }
+      #df-ai-input:focus { border-color: #6366F1; }
+      #df-ai-send {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #6366F1;
+        border: none;
+        cursor: pointer;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #df-ai-send:hover { background: #4F46E5; }
+      .df-quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 0 16px 12px;
+      }
+      .df-quick-btn {
+        padding: 6px 12px;
+        border: 1px solid #D1D5DB;
+        border-radius: 16px;
+        background: white;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .df-quick-btn:hover {
+        background: #F3F4F6;
+        border-color: #6366F1;
+        color: #6366F1;
+      }
+    </style>
+    <div id="df-ai-widget">
+      <button id="df-ai-toggle" title="Dealers Face AI Assistant">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+        <span id="df-ai-badge">!</span>
+      </button>
+      <div id="df-ai-panel">
+        <div id="df-ai-header">
+          <div id="df-ai-header-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 17L12 22L22 17" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 12L12 17L22 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <h3>Nexus - AI Assistant</h3>
+            <p>Here to help with Facebook Marketplace</p>
+          </div>
+        </div>
+        <div id="df-ai-messages">
+          <div class="df-ai-msg assistant">
+            👋 Hi! I'm Nexus, your AI assistant for Facebook Marketplace. I can help you with:
+            <ul style="margin: 8px 0 0; padding-left: 20px;">
+              <li>Posting vehicle listings</li>
+              <li>Fixing form errors</li>
+              <li>Understanding Facebook's requirements</li>
+              <li>Troubleshooting issues</li>
+            </ul>
+          </div>
+        </div>
+        <div class="df-quick-actions">
+          <button class="df-quick-btn" onclick="dfAIQuickAction('help')">🆘 Help</button>
+          <button class="df-quick-btn" onclick="dfAIQuickAction('status')">📊 Status</button>
+          <button class="df-quick-btn" onclick="dfAIQuickAction('retry')">🔄 Retry</button>
+          <button class="df-quick-btn" onclick="dfAIQuickAction('fill')">📝 Auto-Fill</button>
+        </div>
+        <div id="df-ai-input-area">
+          <input id="df-ai-input" type="text" placeholder="Ask me anything..." onkeypress="if(event.key==='Enter') dfAISend()">
+          <button id="df-ai-send" onclick="dfAISend()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(aiAssistantContainer);
+  
+  // Toggle panel
+  document.getElementById('df-ai-toggle').addEventListener('click', () => {
+    const panel = document.getElementById('df-ai-panel');
+    panel.classList.toggle('visible');
+    aiAssistantVisible = panel.classList.contains('visible');
+  });
+}
+
+// Global functions for the widget
+window.dfAISend = async function() {
+  const input = document.getElementById('df-ai-input');
+  const message = input.value.trim();
+  if (!message) return;
+  
+  addAIMessage(message, 'user');
+  input.value = '';
+  
+  // Get AI response from server
+  try {
+    const response = await fetchAIResponse(message);
+    addAIMessage(response, 'assistant');
+  } catch (error) {
+    addAIMessage(`Sorry, I encountered an error: ${error.message}`, 'error');
+  }
+};
+
+window.dfAIQuickAction = async function(action) {
+  switch (action) {
+    case 'help':
+      addAIMessage('I need help with this page', 'user');
+      const pageState = await analyzePageState();
+      const helpText = generateHelpForPage(pageState);
+      addAIMessage(helpText, 'assistant');
+      break;
+    case 'status':
+      addAIMessage('Show current status', 'user');
+      const status = getTaskStatus();
+      addAIMessage(status, 'assistant');
+      break;
+    case 'retry':
+      addAIMessage('Retry the last action', 'user');
+      addAIMessage('🔄 Retrying last action...', 'assistant');
+      // Retry logic
+      break;
+    case 'fill':
+      addAIMessage('Auto-fill the form', 'user');
+      if (pendingTasks.length > 0) {
+        await executeIAITask(pendingTasks[0]);
+        addAIMessage('✅ Form auto-fill started!', 'success');
+      } else {
+        addAIMessage('No pending tasks to fill. Queue a vehicle from the app first.', 'assistant');
+      }
+      break;
+  }
+};
+
+function addAIMessage(text, type = 'assistant') {
+  const container = document.getElementById('df-ai-messages');
+  if (!container) return;
+  
+  const msg = document.createElement('div');
+  msg.className = `df-ai-msg ${type}`;
+  msg.innerHTML = text;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function fetchAIResponse(message) {
+  // Get credentials
+  const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+  
+  if (!authToken) {
+    return 'Please log in to the Dealers Face extension first to use AI assistance.';
+  }
+  
+  const response = await fetch('https://dealersface.com/api/extension/ai-chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({
+      message,
+      context: {
+        url: window.location.href,
+        pageType: window.location.href.includes('/marketplace') ? 'marketplace' : 'facebook',
+        accountId,
+      },
+    }),
+  });
+  
+  if (!response.ok) throw new Error('AI service unavailable');
+  
+  const data = await response.json();
+  return data.response || 'I couldn\'t process that request.';
+}
+
+function generateHelpForPage(pageState) {
+  if (pageState.isCreateListingPage) {
+    if (pageState.errors.length > 0) {
+      return `⚠️ I see some issues on this form:\n\n${pageState.errors.map(e => `• ${e}`).join('\n')}\n\nWould you like me to help fix these?`;
+    }
+    return `You're on the vehicle listing page. I can see ${pageState.formElements.length} form fields.\n\nClick "Auto-Fill" to populate the form with your queued vehicle, or ask me specific questions!`;
+  }
+  
+  if (pageState.isMarketplace) {
+    return 'You\'re browsing Marketplace. Navigate to "Sell" or "Create New Listing" to post a vehicle.';
+  }
+  
+  return 'I\'m here to help with Facebook Marketplace. What would you like to do?';
+}
+
+function getTaskStatus() {
+  if (pendingTasks.length === 0) {
+    return '📭 No pending tasks. Queue a vehicle from the Dealers Face app to get started.';
+  }
+  return `📋 ${pendingTasks.length} task(s) pending:\n\n${pendingTasks.map((t, i) => `${i+1}. ${t.type} - ${t.status}`).join('\n')}`;
+}
+
+// Show AI assistant when errors are detected
+function showAIAssistantForError(errorDetails) {
+  createAIAssistantWidget();
+  
+  // Show badge
+  const badge = document.getElementById('df-ai-badge');
+  if (badge) {
+    badge.style.display = 'flex';
+    badge.textContent = '!';
+  }
+  
+  // Open panel and add error message
+  const panel = document.getElementById('df-ai-panel');
+  if (panel) {
+    panel.classList.add('visible');
+    addAIMessage(`🚨 I detected an issue: ${errorDetails}\n\nWould you like me to help fix this?`, 'error');
+  }
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
+
+// Create AI assistant widget on marketplace pages
+if (window.location.href.includes('facebook.com/marketplace')) {
+  setTimeout(createAIAssistantWidget, 2000);
+}
 
 // Notify background that we're on a Facebook page
 chrome.runtime.sendMessage({

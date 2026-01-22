@@ -171,6 +171,8 @@ async function pollForTasks() {
     const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
     if (!authToken || !accountId) return;
     
+    console.log(`🔍 Polling for tasks (account: ${accountId})...`);
+    
     const response = await fetch(
       `${API_BASE_URL}/api/extension/tasks/${accountId}`,
       {
@@ -181,23 +183,109 @@ async function pollForTasks() {
       }
     );
     
-    if (!response.ok) return;
+    if (!response.ok) {
+      console.warn('Task polling failed:', response.status);
+      return;
+    }
     
     const tasks = await response.json();
     
     if (tasks && tasks.length > 0) {
-      console.log(`📋 Found ${tasks.length} pending tasks`);
+      console.log(`📋 Found ${tasks.length} pending tasks:`, tasks.map(t => t.type));
       
       // Update badge
       chrome.action.setBadgeText({ text: String(tasks.length) });
+      chrome.action.setBadgeBackgroundColor({ color: '#22C55E' });
       
       // Notify any open Facebook tabs about pending tasks
-      notifyFacebookTabs(tasks);
+      await notifyFacebookTabs(tasks);
+      
+      // Auto-execute first pending task if we have a Facebook tab ready
+      const pendingTask = tasks.find(t => t.status === 'pending');
+      if (pendingTask) {
+        console.log(`🎯 Auto-executing task: ${pendingTask.id} (${pendingTask.type})`);
+        await autoExecuteTask(pendingTask);
+      }
     } else {
       chrome.action.setBadgeText({ text: '' });
+      console.log('📋 No pending tasks');
     }
   } catch (error) {
     console.debug('Task polling error:', error);
+  }
+}
+
+async function autoExecuteTask(task) {
+  // Find or create a Facebook tab
+  let tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  
+  if (tabs.length === 0) {
+    console.log('📍 Opening Facebook Marketplace...');
+    const newTab = await chrome.tabs.create({
+      url: 'https://www.facebook.com/marketplace/create/vehicle/',
+      active: true,
+    });
+    
+    // Wait for page to load
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    tabs = [newTab];
+  }
+  
+  // Send task to content script
+  const targetTab = tabs[0];
+  
+  // Ensure tab is active
+  await chrome.tabs.update(targetTab.id, { active: true });
+  
+  try {
+    // Update task status to processing
+    await updateTaskStatus(task.id, 'processing');
+    
+    console.log(`📤 Sending task to tab ${targetTab.id}...`);
+    
+    const result = await chrome.tabs.sendMessage(targetTab.id, {
+      type: 'EXECUTE_IAI_TASK',
+      task: task,
+    });
+    
+    console.log('📥 Task execution result:', result);
+    
+    if (result?.success) {
+      await updateTaskStatus(task.id, 'completed', result);
+      console.log(`✅ Task ${task.id} completed`);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Failed to execute task:', error);
+    
+    // Retry with injected script
+    try {
+      console.log('🔄 Retrying with script injection...');
+      await chrome.scripting.executeScript({
+        target: { tabId: targetTab.id },
+        files: ['content.js'],
+      });
+      
+      // Wait for script to initialize
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Try again
+      const retryResult = await chrome.tabs.sendMessage(targetTab.id, {
+        type: 'EXECUTE_IAI_TASK',
+        task: task,
+      });
+      
+      if (retryResult?.success) {
+        await updateTaskStatus(task.id, 'completed', retryResult);
+      }
+      
+      return retryResult;
+    } catch (retryError) {
+      console.error('Retry also failed:', retryError);
+      await updateTaskStatus(task.id, 'failed', { error: retryError.message });
+      throw retryError;
+    }
   }
 }
 

@@ -670,4 +670,242 @@ router.post('/posting', authenticate, async (req: AuthRequest, res: Response) =>
   }
 });
 
+// ============================================
+// AI Chat Assistant
+// ============================================
+
+/**
+ * POST /api/extension/ai-chat
+ * Get AI assistance for the extension user
+ * Layer-based: User context → Account context → System
+ */
+router.post('/ai-chat', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { message, context } = req.body;
+    
+    if (!message) {
+      res.status(400).json({ error: 'Message is required' });
+      return;
+    }
+    
+    const userId = req.user!.id;
+    const accountId = context?.accountId;
+    
+    // Get user info for personalization
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true },
+    });
+    
+    // Get account info if provided
+    let accountInfo = null;
+    if (accountId) {
+      accountInfo = await prisma.account.findUnique({
+        where: { id: accountId },
+        select: { dealershipName: true },
+      });
+    }
+    
+    // Build context-aware system prompt
+    const systemPrompt = `You are Nexus, an AI assistant for the Dealers Face Chrome extension.
+You help users post vehicles to Facebook Marketplace.
+
+User: ${user?.firstName || 'User'} ${user?.lastName || ''}
+Dealership: ${accountInfo?.dealershipName || 'Unknown'}
+
+Current Page: ${context?.url || 'Unknown'}
+Page Type: ${context?.pageType || 'Unknown'}
+
+Your role:
+1. Help users navigate Facebook Marketplace
+2. Troubleshoot posting issues
+3. Explain form fields and requirements
+4. Provide step-by-step guidance
+5. Detect and explain errors
+
+Be concise, helpful, and friendly. Use emojis sparingly to be clear.
+If you detect an error or issue, explain what it means and how to fix it.`;
+
+    // Use OpenAI/AI service to generate response
+    // For now, provide rule-based responses
+    const response = await generateAIResponse(message, systemPrompt, context);
+    
+    // Log AI interaction for learning
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'AI_CHAT',
+        entityType: 'extension',
+        entityId: accountId || 'no-account',
+        metadata: {
+          message,
+          context,
+          response,
+        },
+      },
+    });
+    
+    res.json({ response });
+  } catch (error) {
+    logger.error('AI chat error:', error);
+    res.status(500).json({ 
+      error: 'AI service temporarily unavailable',
+      response: 'I\'m having trouble connecting right now. Please try again or contact support.',
+    });
+  }
+});
+
+/**
+ * POST /api/extension/report-error
+ * Report errors from extension for diagnostics
+ */
+router.post('/report-error', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { error, context, stackTrace, url, timestamp } = req.body;
+    const userId = req.user!.id;
+    const accountId = context?.accountId;
+    
+    // Log error for Nova super admin diagnostics
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'EXTENSION_ERROR',
+        entityType: 'extension',
+        entityId: accountId || 'no-account',
+        metadata: {
+          error,
+          context,
+          stackTrace,
+          url,
+          timestamp: timestamp || new Date().toISOString(),
+          userAgent: req.headers['user-agent'],
+          severity: classifyErrorSeverity(error),
+        },
+      },
+    });
+    
+    logger.warn(`🚨 Extension error reported by user ${userId}:`, {
+      error,
+      url,
+      accountId,
+    });
+    
+    // Generate diagnostic suggestion
+    const diagnostic = await generateErrorDiagnostic(error, context);
+    
+    res.json({ 
+      success: true,
+      diagnostic,
+    });
+  } catch (err) {
+    logger.error('Report error failed:', err);
+    res.status(500).json({ error: 'Failed to report error' });
+  }
+});
+
+// Helper function for AI responses
+async function generateAIResponse(message: string, systemPrompt: string, context: any): Promise<string> {
+  const lowerMessage = message.toLowerCase();
+  
+  // Context-aware responses
+  if (context?.url?.includes('/marketplace/create')) {
+    if (lowerMessage.includes('help') || lowerMessage.includes('stuck')) {
+      return `📝 You're on the listing creation page! Here's what to do:
+
+1. **Item for Sale** - Select "Vehicle" 
+2. **Vehicle Type** - Choose Car/Truck
+3. **Year, Make, Model** - Fill in the vehicle details
+4. **Price** - Enter the listing price
+5. **Location** - Your dealership location
+6. **Photos** - Add vehicle images
+
+💡 Tip: Click "Auto-Fill" to populate these fields automatically from your queued vehicle!`;
+    }
+    
+    if (lowerMessage.includes('error') || lowerMessage.includes('not working')) {
+      return `🔧 Common form issues:
+
+• **"Field required"** - Make sure all required fields are filled
+• **Photos not uploading** - Try smaller images (<10MB each)
+• **Location not found** - Try a nearby city instead
+• **Page freezing** - Refresh and try again
+
+What specific error are you seeing?`;
+    }
+  }
+  
+  if (lowerMessage.includes('post') && lowerMessage.includes('vehicle')) {
+    return `To post a vehicle:
+
+1. 🚗 Go to Dealers Face web app
+2. 📋 Find the vehicle in Inventory
+3. 🖱️ Click "Post to Facebook" → Select "IAI Soldier"
+4. ✅ The task will appear in your extension
+5. 🔄 Click "Execute" or enable Auto-Execute
+
+Is your vehicle queued? Check the extension sidebar!`;
+  }
+  
+  if (lowerMessage.includes('connect') || lowerMessage.includes('login')) {
+    return `To connect your Facebook account:
+
+1. Open the extension sidebar
+2. Log in with your Dealers Face credentials
+3. Make sure you're logged into Facebook in this browser
+4. Navigate to facebook.com/marketplace
+
+⚠️ Stay logged into Facebook for posting to work!`;
+  }
+  
+  // Default helpful response
+  return `I can help with:
+
+• 📝 **Posting vehicles** - How to list on Marketplace
+• 🔧 **Troubleshooting** - Fix common errors
+• 📊 **Status check** - See your pending tasks
+• 🚀 **Quick tips** - Best practices
+
+What would you like to know?`;
+}
+
+// Classify error severity for Nova
+function classifyErrorSeverity(error: string): string {
+  const lowerError = error.toLowerCase();
+  
+  if (lowerError.includes('auth') || lowerError.includes('token') || lowerError.includes('unauthorized')) {
+    return 'high';
+  }
+  if (lowerError.includes('network') || lowerError.includes('timeout') || lowerError.includes('connection')) {
+    return 'medium';
+  }
+  if (lowerError.includes('not found') || lowerError.includes('missing')) {
+    return 'low';
+  }
+  
+  return 'medium';
+}
+
+// Generate diagnostic for error
+async function generateErrorDiagnostic(error: string, context: any): Promise<string> {
+  const lowerError = error.toLowerCase();
+  
+  if (lowerError.includes('element not found') || lowerError.includes('selector')) {
+    return 'Facebook may have updated their page. Try refreshing. If this persists, we\'ll update the extension.';
+  }
+  
+  if (lowerError.includes('unauthorized') || lowerError.includes('403')) {
+    return 'Session expired. Please log in again to the extension.';
+  }
+  
+  if (lowerError.includes('network') || lowerError.includes('fetch')) {
+    return 'Network issue detected. Check your internet connection and try again.';
+  }
+  
+  if (lowerError.includes('timeout')) {
+    return 'Page took too long to respond. Try refreshing Facebook and retry.';
+  }
+  
+  return 'An unexpected error occurred. Our team has been notified and will investigate.';
+}
+
 export default router;

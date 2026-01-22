@@ -58,6 +58,7 @@ import EmailSettingsPage from './pages/admin/EmailSettingsPage';
 import FacebookConfigPage from './pages/admin/FacebookConfigPage';
 import ExtensionConfigPage from './pages/admin/ExtensionConfigPage';
 import APIDashboardPage from './pages/admin/APIDashboardPage';
+import ErrorMonitoringPage from './pages/admin/ErrorMonitoringPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -148,6 +149,7 @@ function App() {
               <Route path="facebook" element={<FacebookConfigPage />} />
               <Route path="extension" element={<ExtensionConfigPage />} />
               <Route path="api-dashboard" element={<APIDashboardPage />} />
+              <Route path="errors" element={<ErrorMonitoringPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

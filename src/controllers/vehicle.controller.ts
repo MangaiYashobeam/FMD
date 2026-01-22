@@ -293,12 +293,13 @@ export class VehicleController {
   /**
    * Post vehicle to Facebook via multiple methods
    * - IAI: Browser automation through Chrome extension
+   * - Soldier: Server-side headless browser automation
    * - API: Facebook Graph API (requires Business verification)
-   * - Pixel: Tracking only (fires conversion events)
+   * Plus optional Facebook Pixel tracking for retargeting
    */
   async postToFacebook(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
-    const { title, price, description, photos, method } = req.body;
+    const { title, price, description, photos, method, includePixelTracking } = req.body;
 
     // Get the vehicle with account and Facebook profiles
     const vehicle = await prisma.vehicle.findUnique({
@@ -379,10 +380,55 @@ export class VehicleController {
       dealerCertified: vehicle.dealerCertified,
     };
 
+    // Helper function to create pixel event for tracking
+    const createPixelEvent = async () => {
+      if (!includePixelTracking) return null;
+      
+      const pixelEventData = {
+        event: 'InitiateCheckout',
+        eventId: `post_${vehicle.id}_${Date.now()}`,
+        vehicleData: {
+          content_type: 'vehicle',
+          content_ids: [vehicle.id],
+          content_name: vehicleData.title,
+          value: vehicleData.price,
+          currency: 'USD',
+          content_category: 'Vehicles',
+          year: vehicle.year,
+          make: vehicle.make,
+          model: vehicle.model,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      // Store pixel event in database for metrics tracking
+      try {
+        await prisma.pixelEvent.create({
+          data: {
+            accountId: vehicle.accountId,
+            vehicleId: vehicle.id,
+            eventType: 'InitiateCheckout',
+            eventId: pixelEventData.eventId,
+            eventData: pixelEventData as any,
+            source: 'marketplace_post',
+          },
+        });
+        logger.info(`Pixel event recorded for vehicle ${id}: ${pixelEventData.eventId}`);
+      } catch (e) {
+        // Table may not exist yet, log and continue
+        logger.warn(`Pixel event storage failed (table may not exist): ${e}`);
+      }
+
+      return pixelEventData;
+    };
+
     // =====================================================
     // METHOD 1: IAI (Browser Automation via Chrome Extension)
     // =====================================================
     if (method === 'iai') {
+      // Create pixel event if enabled
+      const pixelEvent = await createPixelEvent();
+
       const task = await prisma.extensionTask.create({
         data: {
           accountId: vehicle.accountId,
@@ -393,6 +439,7 @@ export class VehicleController {
           data: {
             action: 'create_listing',
             vehicle: vehicleData,
+            pixelTracking: includePixelTracking ? pixelEvent : null,
             instructions: {
               navigateTo: 'marketplace_create_vehicle',
               fillForm: true,
@@ -416,7 +463,7 @@ export class VehicleController {
         });
       }
 
-      logger.info(`IAI task created for vehicle ${id}: ${task.id}`);
+      logger.info(`IAI task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}`);
 
       res.json({
         success: true,
@@ -425,6 +472,7 @@ export class VehicleController {
           taskId: task.id, 
           method: 'iai',
           status: 'pending',
+          pixelTracking: includePixelTracking,
           instructions: [
             '1. Ensure Chrome Extension is installed and logged in',
             '2. Open Facebook.com in the same browser',
@@ -437,48 +485,100 @@ export class VehicleController {
     }
 
     // =====================================================
-    // METHOD 2: PIXEL (Conversion Tracking Only)
+    // METHOD 2: SOLDIER WORKERS (Server-side Headless Browser)
     // =====================================================
-    if (method === 'pixel') {
-      // Fire a "ViewContent" and "InitiateCheckout" event for the vehicle
-      // This helps with retargeting and conversion tracking
-      const pixelEventData = {
-        event: 'InitiateCheckout',
-        eventId: `post_${vehicle.id}_${Date.now()}`,
-        vehicleData: {
-          content_type: 'vehicle',
-          content_ids: [vehicle.id],
-          content_name: vehicleData.title,
-          value: vehicleData.price,
-          currency: 'USD',
-          content_category: 'Vehicles',
-          year: vehicle.year,
-          make: vehicle.make,
-          model: vehicle.model,
-        },
-        timestamp: new Date().toISOString(),
-      };
+    if (method === 'soldier') {
+      // Create pixel event if enabled
+      const pixelEvent = await createPixelEvent();
 
-      // Store the pixel event for the frontend to fire
-      // (Pixel events must be fired from the browser, not server)
-      
-      logger.info(`Pixel event prepared for vehicle ${id}`);
+      // Queue task for Python Soldier Workers (headless Playwright browsers)
+      try {
+        // Create task in database for tracking
+        const task = await prisma.extensionTask.create({
+          data: {
+            accountId: vehicle.accountId,
+            type: 'SOLDIER_POST_TO_MARKETPLACE',
+            status: 'pending',
+            priority: 5,
+            vehicleId: vehicle.id,
+            data: {
+              action: 'soldier_create_listing',
+              vehicle: vehicleData,
+              pixelTracking: includePixelTracking ? pixelEvent : null,
+              targetPlatform: 'facebook_marketplace',
+              useHeadlessBrowser: true,
+              workerType: 'soldier',
+              instructions: {
+                navigateTo: 'marketplace_create_vehicle',
+                fillForm: true,
+                uploadPhotos: true,
+                handleCaptcha: true,
+                submit: false, // Require manual approval setting
+              },
+            },
+          },
+        });
 
-      res.json({
-        success: true,
-        message: 'Pixel tracking event prepared. Note: Pixel cannot directly post to Marketplace.',
-        data: { 
-          method: 'pixel',
-          event: pixelEventData,
-          instructions: [
-            'Facebook Pixel is for TRACKING only, not posting.',
-            'The pixel event will be fired when users interact with this vehicle.',
-            'Use IAI method to actually post to Facebook Marketplace.',
-          ],
-          note: 'Facebook Pixel tracks conversions but cannot create Marketplace listings.',
-        },
-      });
-      return;
+        // Push to Redis queue for Soldier Workers to pick up
+        const redisQueue = getRedisConnection();
+        if (redisQueue) {
+          await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify({
+            taskId: task.id,
+            type: 'POST_TO_MARKETPLACE',
+            accountId: vehicle.accountId,
+            vehicleId: vehicle.id,
+            vehicle: vehicleData,
+            createdAt: new Date().toISOString(),
+            priority: 5,
+          }));
+        } else {
+          logger.warn('Redis not available - Soldier Worker task created but not queued');
+        }
+
+        // Create a pending Facebook post record
+        const fbProfile = vehicle.account.facebookProfiles?.[0];
+        if (fbProfile) {
+          await prisma.facebookPost.create({
+            data: {
+              vehicleId: vehicle.id,
+              profileId: fbProfile.id,
+              status: 'queued_soldier',
+              message: vehicleData.description,
+            },
+          });
+        }
+
+        logger.info(`Soldier Worker task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}`);
+
+        res.json({
+          success: true,
+          message: 'Task queued for Soldier Worker. Your listing will be processed automatically.',
+          data: { 
+            taskId: task.id, 
+            method: 'soldier',
+            status: 'queued',
+            pixelTracking: includePixelTracking,
+            estimatedProcessingTime: '1-5 minutes',
+            features: [
+              '🤖 Fully automated headless browser posting',
+              '🔒 Secure server-side processing',
+              '📸 Automatic photo upload',
+              '🛡️ Anti-detection measures',
+              '⚡ No browser extension required',
+            ],
+            instructions: [
+              'Your listing is being processed by our Soldier Workers',
+              'You will receive a notification when complete',
+              'Check the posting status in Settings > Posting History',
+            ],
+          },
+        });
+        return;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(`Soldier Worker post failed for vehicle ${id}: ${errorMessage}`);
+        throw new AppError(`Soldier Worker error: ${errorMessage}`, 500);
+      }
     }
 
     // =====================================================
@@ -560,109 +660,17 @@ export class VehicleController {
       }
     }
 
-    // =====================================================
-    // METHOD 4: SOLDIER WORKERS (Headless Browser Automation)
-    // =====================================================
-    if (method === 'soldier') {
-      // Queue task for Python Soldier Workers (headless Playwright browsers)
-      try {
-        // Create task in database for tracking
-        const task = await prisma.extensionTask.create({
-          data: {
-            accountId: vehicle.accountId,
-            type: 'SOLDIER_POST_TO_MARKETPLACE',
-            status: 'pending',
-            priority: 5,
-            vehicleId: vehicle.id,
-            data: {
-              action: 'soldier_create_listing',
-              vehicle: vehicleData,
-              targetPlatform: 'facebook_marketplace',
-              useHeadlessBrowser: true,
-              workerType: 'soldier',
-              instructions: {
-                navigateTo: 'marketplace_create_vehicle',
-                fillForm: true,
-                uploadPhotos: true,
-                handleCaptcha: true,
-                submit: false, // Require manual approval setting
-              },
-            },
-          },
-        });
-
-        // Push to Redis queue for Soldier Workers to pick up
-        const redisQueue = getRedisConnection();
-        if (redisQueue) {
-          await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify({
-            taskId: task.id,
-            type: 'POST_TO_MARKETPLACE',
-            accountId: vehicle.accountId,
-            vehicleId: vehicle.id,
-            vehicle: vehicleData,
-            createdAt: new Date().toISOString(),
-            priority: 5,
-          }));
-        } else {
-          logger.warn('Redis not available - Soldier Worker task created but not queued');
-        }
-
-        // Create a pending Facebook post record
-        const fbProfile = vehicle.account.facebookProfiles?.[0];
-        if (fbProfile) {
-          await prisma.facebookPost.create({
-            data: {
-              vehicleId: vehicle.id,
-              profileId: fbProfile.id,
-              status: 'queued_soldier',
-              message: vehicleData.description,
-            },
-          });
-        }
-
-        logger.info(`Soldier Worker task created for vehicle ${id}: ${task.id}`);
-
-        res.json({
-          success: true,
-          message: 'Task queued for Soldier Worker. Your listing will be processed automatically.',
-          data: { 
-            taskId: task.id, 
-            method: 'soldier',
-            status: 'queued',
-            estimatedProcessingTime: '1-5 minutes',
-            features: [
-              '🤖 Fully automated headless browser posting',
-              '🔒 Secure server-side processing',
-              '📸 Automatic photo upload',
-              '🛡️ Anti-detection measures',
-              '⚡ No browser extension required',
-            ],
-            instructions: [
-              'Your listing is being processed by our Soldier Workers',
-              'You will receive a notification when complete',
-              'Check the posting status in Settings > Posting History',
-            ],
-          },
-        });
-        return;
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        logger.error(`Soldier Worker post failed for vehicle ${id}: ${errorMessage}`);
-        throw new AppError(`Soldier Worker error: ${errorMessage}`, 500);
-      }
-    }
-
     // Unknown method
     res.json({
       success: false,
-      message: `Unknown posting method: ${method}. Use 'iai', 'api', 'pixel', or 'soldier'.`,
+      message: `Unknown posting method: ${method}. Use 'iai', 'api', or 'soldier'.`,
       data: { 
         availableMethods: {
           iai: 'Browser automation via Chrome Extension - RECOMMENDED for Marketplace',
           soldier: 'Headless browser automation via Soldier Workers - Server-side processing',
           api: 'Facebook Graph API - Page posts only, no Marketplace',
-          pixel: 'Conversion tracking only - Cannot create listings',
         },
+        note: 'Facebook Pixel tracking is an optional addon, not a posting method.',
       },
     });
   }

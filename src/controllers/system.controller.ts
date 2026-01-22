@@ -1229,3 +1229,333 @@ export const getAllFacebookProfiles = async (req: Request, res: Response, next: 
     next(error);
   }
 };
+
+// ============================================
+// Error Monitoring for Nova Super Admin
+// ============================================
+
+/**
+ * Get all system errors for Nova diagnostics
+ */
+export const getSystemErrors = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { severity, source, resolved, limit = 100, offset = 0 } = req.query;
+
+    // Build where clause
+    const where: any = {
+      action: { in: ['EXTENSION_ERROR', 'API_ERROR', 'SYSTEM_ERROR', 'AUTH_ERROR'] },
+    };
+
+    // Filter by severity if provided
+    if (severity) {
+      where.metadata = {
+        path: ['severity'],
+        equals: severity,
+      };
+    }
+
+    // Filter by source (extension, api, system)
+    if (source) {
+      where.entityType = source;
+    }
+
+    // Get errors from audit log
+    const [errors, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(Number(limit), 500),
+        skip: Number(offset),
+      }),
+      prisma.auditLog.count({ where }),
+    ]);
+
+    // Parse errors into diagnostic format
+    const diagnosticErrors = errors.map(err => {
+      const metadata = (err.metadata as any) || {};
+      return {
+        id: err.id,
+        type: err.action,
+        source: err.entityType,
+        accountId: err.entityId,
+        severity: metadata.severity || 'medium',
+        error: metadata.error || err.details || 'Unknown error',
+        context: {
+          url: metadata.url,
+          stackTrace: metadata.stackTrace,
+          userAgent: metadata.userAgent,
+        },
+        userStruggle: metadata.userStruggle,
+        user: err.user,
+        timestamp: err.createdAt,
+        isResolved: metadata.resolved || false,
+        resolution: metadata.resolution,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        errors: diagnosticErrors,
+        pagination: {
+          total,
+          limit: Number(limit),
+          offset: Number(offset),
+          hasMore: Number(offset) + errors.length < total,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get error statistics for Nova dashboard
+ */
+export const getErrorStats = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const errorActions = ['EXTENSION_ERROR', 'API_ERROR', 'SYSTEM_ERROR', 'AUTH_ERROR'];
+
+    // Get counts by time period
+    const [last24h, lastWeek, lastMonth, totalErrors] = await Promise.all([
+      prisma.auditLog.count({
+        where: {
+          action: { in: errorActions },
+          createdAt: { gte: oneDayAgo },
+        },
+      }),
+      prisma.auditLog.count({
+        where: {
+          action: { in: errorActions },
+          createdAt: { gte: oneWeekAgo },
+        },
+      }),
+      prisma.auditLog.count({
+        where: {
+          action: { in: errorActions },
+          createdAt: { gte: oneMonthAgo },
+        },
+      }),
+      prisma.auditLog.count({
+        where: { action: { in: errorActions } },
+      }),
+    ]);
+
+    // Get errors by type for last 24h
+    const recentErrors = await prisma.auditLog.findMany({
+      where: {
+        action: { in: errorActions },
+        createdAt: { gte: oneDayAgo },
+      },
+      select: { action: true, entityType: true, metadata: true },
+    });
+
+    // Aggregate by severity
+    const severityCounts = { high: 0, medium: 0, low: 0 };
+    const sourceCounts: Record<string, number> = {};
+
+    for (const err of recentErrors) {
+      const metadata = (err.metadata as any) || {};
+      const severity = metadata.severity || 'medium';
+      severityCounts[severity as keyof typeof severityCounts]++;
+
+      const source = err.entityType || 'unknown';
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+    }
+
+    // Get top error messages
+    const errorMessages: Record<string, number> = {};
+    for (const err of recentErrors) {
+      const metadata = (err.metadata as any) || {};
+      const message = (metadata.error || 'Unknown error').substring(0, 100);
+      errorMessages[message] = (errorMessages[message] || 0) + 1;
+    }
+
+    const topErrors = Object.entries(errorMessages)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([message, count]) => ({ message, count }));
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          last24h,
+          lastWeek,
+          lastMonth,
+          total: totalErrors,
+        },
+        bySeverity: severityCounts,
+        bySource: sourceCounts,
+        topErrors,
+        healthStatus: last24h > 100 ? 'critical' : last24h > 50 ? 'warning' : 'healthy',
+        alertThreshold: {
+          critical: 100,
+          warning: 50,
+          current: last24h,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get extension-specific errors for diagnostics
+ */
+export const getExtensionErrors = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limit = 50, offset = 0 } = req.query;
+
+    const [errors, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where: {
+          action: 'EXTENSION_ERROR',
+        },
+        include: {
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(Number(limit), 200),
+        skip: Number(offset),
+      }),
+      prisma.auditLog.count({
+        where: { action: 'EXTENSION_ERROR' },
+      }),
+    ]);
+
+    // Analyze extension errors for patterns
+    const patterns: Record<string, { count: number; suggestions: string[] }> = {};
+    
+    for (const err of errors) {
+      const metadata = (err.metadata as any) || {};
+      const errorText = metadata.error || '';
+      
+      // Classify error patterns
+      if (errorText.includes('element not found') || errorText.includes('selector')) {
+        if (!patterns['selector_issues']) {
+          patterns['selector_issues'] = {
+            count: 0,
+            suggestions: [
+              'Facebook may have updated their UI - check for selector changes',
+              'Consider using more resilient selector strategies (aria-labels, roles)',
+              'Add fallback selectors for common elements',
+            ],
+          };
+        }
+        patterns['selector_issues'].count++;
+      }
+      
+      if (errorText.includes('timeout') || errorText.includes('took too long')) {
+        if (!patterns['timeout_issues']) {
+          patterns['timeout_issues'] = {
+            count: 0,
+            suggestions: [
+              'Facebook may be slow - consider increasing timeout',
+              'Network issues on user side',
+              'Heavy page load - wait for complete render',
+            ],
+          };
+        }
+        patterns['timeout_issues'].count++;
+      }
+      
+      if (errorText.includes('auth') || errorText.includes('token') || errorText.includes('403')) {
+        if (!patterns['auth_issues']) {
+          patterns['auth_issues'] = {
+            count: 0,
+            suggestions: [
+              'User needs to re-authenticate',
+              'Token may have expired',
+              'Check if user is still logged into Facebook',
+            ],
+          };
+        }
+        patterns['auth_issues'].count++;
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        errors: errors.map(err => {
+          const metadata = (err.metadata as any) || {};
+          return {
+            id: err.id,
+            error: metadata.error,
+            url: metadata.url,
+            severity: metadata.severity || 'medium',
+            context: metadata.context,
+            userStruggle: metadata.userStruggle,
+            user: err.user,
+            timestamp: err.createdAt,
+          };
+        }),
+        patterns,
+        pagination: {
+          total,
+          limit: Number(limit),
+          offset: Number(offset),
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Resolve an error with diagnostic notes
+ */
+export const resolveError = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { errorId } = req.params;
+    const { resolution, preventionPlan } = req.body;
+
+    const error = await prisma.auditLog.findUnique({
+      where: { id: errorId },
+    });
+
+    if (!error) {
+      throw new AppError('Error not found', 404);
+    }
+
+    // Update metadata with resolution
+    const currentMetadata = (error.metadata as any) || {};
+    await prisma.auditLog.update({
+      where: { id: errorId },
+      data: {
+        metadata: {
+          ...currentMetadata,
+          resolved: true,
+          resolvedAt: new Date().toISOString(),
+          resolution,
+          preventionPlan,
+        },
+      },
+    });
+
+    logger.info(`Error ${errorId} resolved`, { resolution, preventionPlan });
+
+    res.json({
+      success: true,
+      message: 'Error marked as resolved',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
