@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { AppError } from '@/middleware/errorHandler';
 import prisma from '@/config/database';
 import { UserRole } from './rbac';
+import { logger } from '@/utils/logger';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -34,13 +35,22 @@ export const authenticate = async (
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
-      id: string;
-      email: string;
+      id?: string;
+      userId?: string;  // Support both formats for compatibility
+      email?: string;
     };
+
+    // Support both 'id' and 'userId' in token payload
+    const userId = decoded.id || decoded.userId;
+    
+    if (!userId) {
+      logger.error('Token missing user ID', { decoded: { hasId: !!decoded.id, hasUserId: !!decoded.userId }, path: req.path });
+      throw new AppError('Invalid token: missing user ID', 401);
+    }
 
     // Get user from database
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
+      where: { id: userId },
       include: {
         accountUsers: {
           include: {
@@ -57,11 +67,11 @@ export const authenticate = async (
     // Check if user is super admin (has SUPER_ADMIN role in any account)
     const isSuperAdmin = user.accountUsers.some(au => au.role === 'SUPER_ADMIN');
 
-    // Update last login
-    await prisma.user.update({
+    // Update last login (async, don't wait)
+    prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
-    });
+    }).catch(() => {}); // Ignore errors
 
     // Attach user to request
     req.user = {
