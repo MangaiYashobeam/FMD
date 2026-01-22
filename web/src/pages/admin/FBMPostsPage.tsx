@@ -34,8 +34,8 @@ import {
   Info,
   Bug,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import api from '@/lib/api';
+import { cn } from '../../lib/utils';
+import api from '../../lib/api';
 
 interface FBMStats {
   total: number;
