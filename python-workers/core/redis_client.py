@@ -351,6 +351,53 @@ class RedisQueue:
         await self.client.delete(key)
     
     # ==========================================
+    # Browser Pool Stats
+    # ==========================================
+    
+    async def get_browser_pool_stats(self) -> Dict[str, Any]:
+        """Get browser pool statistics"""
+        try:
+            # Count browser instances from Redis keys
+            browser_keys = await self.client.keys(f"{self.BROWSER_PREFIX}*")
+            session_keys = await self.client.keys(f"{self.SESSION_PREFIX}*")
+            
+            return {
+                'total': len(browser_keys),
+                'sessions': len(session_keys),
+                'timestamp': datetime.utcnow().isoformat()
+            }
+        except Exception as e:
+            logger.warning("Failed to get browser pool stats", error=str(e))
+            return {'total': 0, 'sessions': 0, 'error': str(e)}
+    
+    async def store_session_stats(self, stats: Dict[str, Any]):
+        """Store session health stats in Redis"""
+        try:
+            key = "fmd:session:stats"
+            stats['updated_at'] = datetime.utcnow().isoformat()
+            await self.client.hset(key, mapping={k: json.dumps(v) if isinstance(v, (dict, list)) else str(v) for k, v in stats.items()})
+            await self.client.expire(key, 600)  # 10 minute TTL
+            logger.debug("Session stats stored", stats=stats)
+        except Exception as e:
+            logger.warning("Failed to store session stats", error=str(e))
+    
+    async def get_session_stats(self) -> Optional[Dict[str, Any]]:
+        """Get session health stats from Redis"""
+        try:
+            key = "fmd:session:stats"
+            data = await self.client.hgetall(key)
+            if data:
+                for k, v in data.items():
+                    try:
+                        data[k] = json.loads(v)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            return data if data else None
+        except Exception as e:
+            logger.warning("Failed to get session stats", error=str(e))
+            return None
+    
+    # ==========================================
     # Pub/Sub for Real-time Updates
     # ==========================================
     
