@@ -145,10 +145,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Cache-Control"] = "no-store"
         
-        # Add rate limit headers
-        remaining = await rate_limiter.get_remaining(client_ip)
-        response.headers["X-RateLimit-Remaining"] = str(remaining)
-        response.headers["X-RateLimit-Limit"] = str(security_config.rate_limit_requests)
+        # Add rate limit headers (only for non-health endpoints)
+        if request.url.path != "/health":
+            rate_limiter = get_rate_limiter()
+            remaining = await rate_limiter.get_remaining(client_ip)
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+            response.headers["X-RateLimit-Limit"] = str(security_config.rate_limit_requests)
         
         # Log request (audit)
         duration_ms = (time.time() - start_time) * 1000
