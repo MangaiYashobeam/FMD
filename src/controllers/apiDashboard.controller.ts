@@ -69,6 +69,8 @@ let serviceStatuses: Map<string, ServiceInfo> = new Map();
 let panicModeActive = false;
 let panicModeActivatedAt: Date | null = null;
 let panicModeActivatedBy: string | null = null;
+let initialHealthCheckDone = false;
+let serverStartTime = Date.now();
 
 // ============================================
 // Endpoint Definitions
@@ -237,6 +239,12 @@ async function checkExternalService(url: string, timeout: number = 5000): Promis
  */
 export async function getDashboardData(_req: AuthRequest, res: Response): Promise<void> {
   try {
+    // Run initial health check if not done yet
+    if (!initialHealthCheckDone) {
+      // Don't await - run in background
+      initializeHealthChecks().catch(err => logger.error('Background health check failed:', err));
+    }
+    
     // Check if panic mode is active
     if (panicModeActive) {
       res.json({
@@ -256,7 +264,10 @@ export async function getDashboardData(_req: AuthRequest, res: Response): Promis
           runningServices: 0,
           stoppedServices: 0,
         },
-      });      return;    }
+        serverRuntime: getServerRuntime(),
+      });
+      return;
+    }
 
     // Build endpoints with metrics
     const endpoints: EndpointInfo[] = API_ENDPOINTS.map(ep => {
@@ -313,6 +324,7 @@ export async function getDashboardData(_req: AuthRequest, res: Response): Promis
       services,
       summary,
       recentActivity,
+      serverRuntime: getServerRuntime(),
       lastUpdated: new Date(),
     });
   } catch (error) {
@@ -994,4 +1006,83 @@ export async function getEndpointCategories(_req: AuthRequest, res: Response): P
     logger.error('Get endpoint categories error:', error);
     res.status(500).json({ error: 'Failed to get categories' });
   }
+}
+
+/**
+ * Initialize health checks on startup
+ * This runs automatically when the server starts to populate initial statuses
+ */
+export async function initializeHealthChecks(): Promise<void> {
+  if (initialHealthCheckDone) return;
+  
+  logger.info('🏥 Running initial health checks for API Dashboard...');
+  
+  const baseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
+  
+  // Run health checks in batches
+  const batchSize = 5;
+  let healthy = 0, degraded = 0, down = 0;
+  
+  for (let i = 0; i < API_ENDPOINTS.length; i += batchSize) {
+    const batch = API_ENDPOINTS.slice(i, i + batchSize);
+    
+    await Promise.all(
+      batch.map(async (endpoint) => {
+        const start = Date.now();
+        const metrics = getMetrics(endpoint.id);
+        
+        try {
+          const testPath = endpoint.path.replace(/:[\w]+/g, 'test');
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const response = await fetch(`${baseUrl}${testPath}`, {
+            method: 'HEAD',
+            headers: { 'X-Health-Check': 'true' },
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          
+          const responseTime = Date.now() - start;
+          metrics.lastResponseTime = responseTime;
+          metrics.lastChecked = new Date();
+          metrics.totalRequests++;
+          metrics.totalResponseTime += responseTime;
+          
+          // 401/403 means endpoint works but needs auth - that's healthy
+          if (response.ok || response.status === 401 || response.status === 403 || response.status === 400 || response.status === 404) {
+            metrics.status = responseTime < 1000 ? 'healthy' : 'degraded';
+            if (metrics.status === 'healthy') healthy++;
+            else degraded++;
+          } else if (response.status >= 500) {
+            metrics.status = 'down';
+            metrics.totalErrors++;
+            down++;
+          } else {
+            metrics.status = 'healthy';
+            healthy++;
+          }
+        } catch {
+          metrics.status = 'down';
+          metrics.lastChecked = new Date();
+          metrics.totalErrors++;
+          down++;
+        }
+      })
+    );
+  }
+  
+  initialHealthCheckDone = true;
+  logger.info(`✅ Initial health checks complete: ${healthy} healthy, ${degraded} degraded, ${down} down`);
+}
+
+/**
+ * Get server runtime information
+ */
+export function getServerRuntime(): { uptime: number; startedAt: Date } {
+  const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+  return {
+    uptime: uptimeSeconds,
+    startedAt: new Date(serverStartTime),
+  };
 }

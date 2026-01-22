@@ -734,6 +734,17 @@ const startServer = async () => {
       const { initScheduledJobs } = require('./services/scheduled-jobs.service');
       initScheduledJobs();
       logger.info(`📧 Scheduled email reports initialized`);
+      
+      // Initialize API Dashboard health checks (delayed to allow server to fully start)
+      setTimeout(async () => {
+        try {
+          const { initializeHealthChecks } = require('./controllers/apiDashboard.controller');
+          await initializeHealthChecks();
+          logger.info(`📊 API Dashboard health checks initialized`);
+        } catch (error) {
+          logger.warn('⚠️ Failed to initialize API Dashboard health checks:', error);
+        }
+      }, 3000); // Wait 3 seconds for server to be fully ready
     });
   } catch (error) {
     logger.error('❌ Failed to start server:', error);
