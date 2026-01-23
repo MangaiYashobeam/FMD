@@ -63,8 +63,7 @@ const SAFE_COMMANDS = [
 ];
 
 // Active terminal sessions (for future real-time streaming)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const activeSessions: Map<string, {
+export const activeSessions: Map<string, {
   output: string[];
   status: 'running' | 'completed' | 'error';
   startedAt: Date;
