@@ -141,10 +141,13 @@ services:
       REDIS_URL: redis://redis:6379
       API_BASE_URL: http://api:3000
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      WORKER_SECRET: ${ENCRYPTION_KEY}
       MAX_BROWSERS_PER_POOL: ${MAX_BROWSERS_PER_POOL:-10}
     depends_on:
-      - redis
-      - api
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
     volumes:
       - browser_sessions:/app/sessions
     healthcheck:
@@ -170,12 +173,16 @@ services:
       REDIS_URL: redis://redis:6379
       API_BASE_URL: http://api:3000
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      WORKER_SECRET: ${ENCRYPTION_KEY}
       WORKER_ID: worker-${HOSTNAME:-1}
       MAX_CONCURRENT_BROWSERS: ${MAX_CONCURRENT_BROWSERS:-3}
       HEADLESS: "true"
+      TASK_QUEUE_NAME: fmd:tasks:soldier:pending
     depends_on:
-      - redis
-      - worker-api
+      redis:
+        condition: service_healthy
+      worker-api:
+        condition: service_healthy
     volumes:
       - browser_sessions:/app/sessions
       - /dev/shm:/dev/shm

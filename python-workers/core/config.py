@@ -57,8 +57,9 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 100
     rate_limit_window: int = 60
     
-    # Queue settings (backwards compatibility)
-    task_queue_name: str = "fmd:tasks:pending"
+    # Queue settings - IMPORTANT: Must match what Node.js API pushes to
+    # Default: fmd:tasks:soldier:pending (for soldier worker tasks)
+    task_queue_name: str = "fmd:tasks:soldier:pending"
     max_task_retries: int = 3
     
     # Paths

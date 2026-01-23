@@ -616,6 +616,107 @@ async def setup_session(
     }
 
 
+class ImportSessionRequest(BaseModel):
+    """Request to import session cookies from browser"""
+    account_id: str
+    cookies: list[dict] = Field(..., description="Browser cookies array from document.cookie or browser export")
+    local_storage: Optional[dict] = Field(default=None, description="Local storage key-value pairs")
+    origin: str = Field(default="https://www.facebook.com", description="Origin URL for cookies")
+
+
+@app.post("/api/sessions/import", dependencies=[Depends(verify_api_key)])
+async def import_session(request: ImportSessionRequest):
+    """
+    Import session cookies from an external browser
+    
+    This allows importing cookies captured from a real browser login.
+    Useful for:
+    - Bypassing security checkpoints that occur on new browsers
+    - Importing sessions from browsers where 2FA was completed manually
+    - Transferring existing logged-in sessions
+    
+    Cookie format should be an array of objects with at least:
+    - name: cookie name
+    - value: cookie value
+    - domain: cookie domain (e.g., ".facebook.com")
+    
+    Optional fields: path, expires, httpOnly, secure, sameSite
+    """
+    session_manager = app.state.session_manager
+    
+    # Validate cookies have required fields
+    for cookie in request.cookies:
+        if not all(k in cookie for k in ['name', 'value']):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cookie missing required fields (name, value): {cookie}"
+            )
+        # Set defaults for optional fields
+        if 'domain' not in cookie:
+            cookie['domain'] = '.facebook.com'
+        if 'path' not in cookie:
+            cookie['path'] = '/'
+    
+    # Create storage state in Playwright format
+    storage_state = {
+        'cookies': request.cookies,
+        'origins': [{
+            'origin': request.origin,
+            'localStorage': [
+                {'name': k, 'value': v} 
+                for k, v in (request.local_storage or {}).items()
+            ]
+        }]
+    }
+    
+    # Save the session
+    success = await session_manager.save_session(
+        account_id=request.account_id,
+        storage_state=storage_state
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save session")
+    
+    return {
+        'success': True,
+        'account_id': request.account_id,
+        'cookies_imported': len(request.cookies),
+        'message': 'Session imported successfully. Worker can now use this session for automation.'
+    }
+
+
+@app.get("/api/sessions/{account_id}/validate", dependencies=[Depends(verify_api_key)])
+async def validate_session_live(account_id: str, background_tasks: BackgroundTasks):
+    """
+    Queue a live validation of the session by actually logging into Facebook
+    
+    This launches a browser with the saved session to verify it's still valid.
+    """
+    redis = app.state.redis
+    settings = get_settings()
+    
+    task_id = f"validate_{uuid.uuid4().hex}"
+    
+    task_data = {
+        'id': task_id,
+        'type': 'validate_session',
+        'account_id': account_id,
+        'data': {},
+        'priority': 'high',
+        'created_at': datetime.utcnow().isoformat(),
+        'retry_count': 0
+    }
+    
+    await redis.enqueue_task(task_data, priority=8)
+    
+    return {
+        'task_id': task_id,
+        'status': 'queued',
+        'message': 'Session validation queued. Check task status for results.'
+    }
+
+
 @app.get("/api/queue/stats", dependencies=[Depends(verify_api_key)])
 async def get_queue_stats():
     """Get queue statistics"""

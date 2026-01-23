@@ -886,5 +886,127 @@ export class FacebookController {
       message: 'Marketplace post confirmed successfully',
     });
   }
-}
 
+  /**
+   * Import Facebook session cookies for worker automation
+   * POST /api/facebook/session/import
+   */
+  async importSession(req: AuthRequest, res: Response) {
+    const { accountId, cookies, localStorage, origin } = req.body;
+
+    // Verify user has access to the account
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied to this account', 403);
+    }
+
+    // Call Python worker API to store the session
+    const workerApiUrl = process.env.WORKER_API_URL || 'http://worker-api:8000';
+    const workerSecret = process.env.WORKER_SECRET || process.env.ENCRYPTION_KEY || '';
+
+    try {
+      const response = await axios.post(
+        `${workerApiUrl}/api/sessions/import`,
+        {
+          account_id: accountId,
+          cookies,
+          local_storage: localStorage || {},
+          origin: origin || 'https://www.facebook.com',
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': workerSecret,
+          },
+          timeout: 30000,
+        }
+      );
+
+      logger.info(`Facebook session imported for account ${accountId}: ${cookies.length} cookies`);
+
+      res.json({
+        success: true,
+        data: response.data,
+        message: 'Session cookies imported successfully. Worker can now automate this account.',
+      });
+    } catch (error: any) {
+      logger.error('Failed to import Facebook session:', error.response?.data || error.message);
+      throw new AppError(
+        error.response?.data?.detail || 'Failed to import session to worker',
+        error.response?.status || 500
+      );
+    }
+  }
+
+  /**
+   * Check Facebook session status for automation
+   * GET /api/facebook/session/status/:accountId
+   */
+  async getSessionStatus(req: AuthRequest, res: Response) {
+    const { accountId } = req.params;
+
+    // Verify user has access to the account
+    const hasAccess = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError('Access denied to this account', 403);
+    }
+
+    // Call Python worker API to check session status
+    const workerApiUrl = process.env.WORKER_API_URL || 'http://worker-api:8000';
+    const workerSecret = process.env.WORKER_SECRET || process.env.ENCRYPTION_KEY || '';
+
+    try {
+      const response = await axios.get(
+        `${workerApiUrl}/api/sessions/${accountId}`,
+        {
+          headers: {
+            'X-API-Key': workerSecret,
+          },
+          timeout: 10000,
+        }
+      );
+
+      res.json({
+        success: true,
+        data: {
+          accountId,
+          hasSession: response.data.has_session,
+          checkedAt: response.data.checked_at,
+        },
+        message: response.data.has_session 
+          ? 'Session found and can be used for automation'
+          : 'No session found. Import cookies to enable automation.',
+      });
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        res.json({
+          success: true,
+          data: {
+            accountId,
+            hasSession: false,
+            checkedAt: new Date().toISOString(),
+          },
+          message: 'No session found. Import cookies to enable automation.',
+        });
+        return;
+      }
+      logger.error('Failed to check session status:', error.response?.data || error.message);
+      throw new AppError(
+        error.response?.data?.detail || 'Failed to check session status',
+        error.response?.status || 500
+      );
+    }
+  }
+}

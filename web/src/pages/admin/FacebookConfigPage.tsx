@@ -24,6 +24,8 @@ import {
   Activity,
   Eye,
   EyeOff,
+  Cookie,
+  Upload,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -75,7 +77,7 @@ interface ConnectedAccount {
   }[];
 }
 
-type TabType = 'config' | 'connections' | 'profiles';
+type TabType = 'config' | 'connections' | 'profiles' | 'sessions';
 
 export default function FacebookConfigPage() {
   const queryClient = useQueryClient();
@@ -93,6 +95,11 @@ export default function FacebookConfigPage() {
   });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Session import state
+  const [sessionAccountId, setSessionAccountId] = useState('');
+  const [sessionCookiesJson, setSessionCookiesJson] = useState('');
+  const [sessionImporting, setSessionImporting] = useState(false);
 
   // Fetch Facebook configuration
   const { data: configData, isLoading: configLoading, refetch: refetchConfig } = useQuery({
@@ -342,6 +349,7 @@ export default function FacebookConfigPage() {
             { id: 'config', label: 'App Configuration', icon: Settings },
             { id: 'connections', label: 'Connected Accounts', icon: Link2 },
             { id: 'profiles', label: 'All Profiles', icon: Users },
+            { id: 'sessions', label: 'Worker Sessions', icon: Cookie },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -634,6 +642,158 @@ export default function FacebookConfigPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {/* Worker Sessions Tab */}
+      {activeTab === 'sessions' && (
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Import Session Card */}
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Upload className="h-5 w-5 text-orange-500" />
+              <h2 className="text-lg font-semibold">Import Browser Session</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Import Facebook session cookies from a browser to enable automated posting without manual login.
+            </p>
+            
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+              <h4 className="font-medium text-amber-800 mb-2">How to export cookies:</h4>
+              <ol className="text-sm text-amber-700 list-decimal list-inside space-y-1">
+                <li>Login to Facebook in Chrome normally</li>
+                <li>Open Developer Tools (F12) → Application → Cookies</li>
+                <li>Select "https://www.facebook.com"</li>
+                <li>Right-click → Export all cookies as JSON</li>
+                <li>Or use "EditThisCookie" extension to export</li>
+              </ol>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!sessionAccountId || !sessionCookiesJson) return;
+              
+              try {
+                setSessionImporting(true);
+                setErrorMessage(null);
+                
+                // Parse cookies JSON
+                let cookies;
+                try {
+                  cookies = JSON.parse(sessionCookiesJson);
+                  if (!Array.isArray(cookies)) {
+                    throw new Error('Cookies must be an array');
+                  }
+                } catch (parseErr) {
+                  setErrorMessage('Invalid JSON format. Cookies must be a JSON array.');
+                  return;
+                }
+                
+                // Call API to import
+                const response = await adminApi.post('/facebook/session/import', {
+                  accountId: sessionAccountId,
+                  cookies,
+                });
+                
+                if (response.data.success) {
+                  setSuccessMessage(`Session imported: ${cookies.length} cookies saved for automation.`);
+                  setSessionCookiesJson('');
+                  setTimeout(() => setSuccessMessage(null), 5000);
+                }
+              } catch (err: any) {
+                setErrorMessage(err.response?.data?.message || err.message || 'Failed to import session');
+              } finally {
+                setSessionImporting(false);
+              }
+            }} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Account ID</label>
+                <select
+                  value={sessionAccountId}
+                  onChange={(e) => setSessionAccountId(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  required
+                >
+                  <option value="">Select account...</option>
+                  {configData?.accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Cookies JSON</label>
+                <textarea
+                  value={sessionCookiesJson}
+                  onChange={(e) => setSessionCookiesJson(e.target.value)}
+                  placeholder='[{"name": "c_user", "value": "...", "domain": ".facebook.com"}, ...]'
+                  rows={8}
+                  className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+                  required
+                />
+                <p className="text-xs text-gray-500">
+                  Paste the exported cookies JSON array. Required cookies: c_user, xs, datr
+                </p>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={sessionImporting || !sessionAccountId || !sessionCookiesJson}
+                className="w-full"
+              >
+                {sessionImporting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Import Session Cookies
+              </Button>
+            </form>
+          </Card>
+
+          {/* Session Info Card */}
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield className="h-5 w-5 text-green-500" />
+              <h2 className="text-lg font-semibold">About Worker Sessions</h2>
+            </div>
+            
+            <div className="space-y-4 text-sm">
+              <p className="text-gray-600">
+                Worker sessions allow our Python automation workers to post to Facebook Marketplace
+                on behalf of your accounts without requiring the Chrome extension.
+              </p>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-800 mb-2">Required Cookies:</h4>
+                <ul className="text-blue-700 space-y-1">
+                  <li><code className="bg-blue-100 px-1 rounded">c_user</code> - Your Facebook user ID</li>
+                  <li><code className="bg-blue-100 px-1 rounded">xs</code> - Session token</li>
+                  <li><code className="bg-blue-100 px-1 rounded">datr</code> - Browser fingerprint</li>
+                  <li><code className="bg-blue-100 px-1 rounded">fr</code> - Facebook tracking (optional)</li>
+                </ul>
+              </div>
+              
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 className="font-medium text-purple-800 mb-2">Security Notes:</h4>
+                <ul className="text-purple-700 space-y-1 list-disc list-inside">
+                  <li>Cookies are encrypted with AES-256 at rest</li>
+                  <li>Sessions expire after 30 days or when Facebook invalidates them</li>
+                  <li>Worker uses stealth browser to avoid detection</li>
+                  <li>Sessions are isolated per account</li>
+                </ul>
+              </div>
+              
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-800 mb-2">Automation Status:</h4>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+                  <span className="text-gray-700">Python Workers: 2 active</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Workers will automatically pick up and process posting tasks.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
 
       {/* Revoke Modal */}
