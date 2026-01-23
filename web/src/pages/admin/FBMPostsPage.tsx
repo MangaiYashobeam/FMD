@@ -157,7 +157,7 @@ export default function FBMPostsPage() {
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<FBMStats>({
     queryKey: ['fbm-admin-stats', timeRange],
     queryFn: async () => {
-      const response = await api.get(`/fbm-posts/admin/stats?timeRange=${timeRange}`);
+      const response = await api.get(`/api/fbm-posts/admin/stats?timeRange=${timeRange}`);
       return response.data.data;
     },
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -173,7 +173,7 @@ export default function FBMPostsPage() {
         timeRange,
         ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v)),
       });
-      const response = await api.get(`/fbm-posts/admin/logs?${params}`);
+      const response = await api.get(`/api/fbm-posts/admin/logs?${params}`);
       return response.data.data;
     },
     refetchInterval: 15000, // Refresh every 15 seconds
@@ -183,7 +183,7 @@ export default function FBMPostsPage() {
   const { data: accounts } = useQuery({
     queryKey: ['fbm-admin-accounts', timeRange],
     queryFn: async () => {
-      const response = await api.get(`/fbm-posts/admin/accounts?timeRange=${timeRange}`);
+      const response = await api.get(`/api/fbm-posts/admin/accounts?timeRange=${timeRange}`);
       return response.data.data;
     },
   });
@@ -191,7 +191,7 @@ export default function FBMPostsPage() {
   // Retry mutation
   const retryMutation = useMutation({
     mutationFn: async ({ logId, method }: { logId: string; method?: string }) => {
-      return api.post(`/fbm-posts/admin/logs/${logId}/retry`, { method });
+      return api.post(`/api/fbm-posts/admin/logs/${logId}/retry`, { method });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fbm-admin-logs'] });
@@ -199,9 +199,19 @@ export default function FBMPostsPage() {
     },
   });
 
+  // Fetch system health
+  const { data: systemHealth, refetch: refetchHealth } = useQuery({
+    queryKey: ['fbm-system-health'],
+    queryFn: async () => {
+      const response = await api.get('/api/fbm-posts/admin/system-health');
+      return response.data.data;
+    },
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
+
   // Fetch log detail
   const fetchLogDetail = async (logId: string) => {
-    const response = await api.get(`/fbm-posts/admin/logs/${logId}`);
+    const response = await api.get(`/api/fbm-posts/admin/logs/${logId}`);
     setSelectedLog(response.data.data);
     setShowDetailModal(true);
   };
@@ -224,6 +234,23 @@ export default function FBMPostsPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* System Health Indicator */}
+            <div className={cn(
+              'px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium',
+              systemHealth?.healthStatus === 'healthy' && 'bg-green-100 text-green-800',
+              systemHealth?.healthStatus === 'degraded' && 'bg-yellow-100 text-yellow-800',
+              systemHealth?.healthStatus === 'critical' && 'bg-red-100 text-red-800',
+              !systemHealth && 'bg-gray-100 text-gray-600'
+            )}>
+              <div className={cn(
+                'w-2 h-2 rounded-full animate-pulse',
+                systemHealth?.healthStatus === 'healthy' && 'bg-green-500',
+                systemHealth?.healthStatus === 'degraded' && 'bg-yellow-500',
+                systemHealth?.healthStatus === 'critical' && 'bg-red-500',
+                !systemHealth && 'bg-gray-400'
+              )} />
+              {systemHealth?.healthStatus?.toUpperCase() || 'Loading...'}
+            </div>
             <select
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
@@ -238,6 +265,7 @@ export default function FBMPostsPage() {
               onClick={() => {
                 refetchStats();
                 refetchLogs();
+                refetchHealth();
               }}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
@@ -366,6 +394,140 @@ export default function FBMPostsPage() {
           </div>
         </div>
       </div>
+
+      {/* System Health & Queue Status Panel */}
+      {systemHealth && (
+        <div className={cn(
+          'rounded-xl border p-4 mb-6',
+          systemHealth.healthStatus === 'healthy' && 'bg-green-50 border-green-200',
+          systemHealth.healthStatus === 'degraded' && 'bg-yellow-50 border-yellow-200',
+          systemHealth.healthStatus === 'critical' && 'bg-red-50 border-red-200'
+        )}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Queue Status & System Health
+            </h3>
+            <span className="text-xs text-gray-500">
+              Last checked: {format(new Date(systemHealth.lastChecked), 'HH:mm:ss')}
+            </span>
+          </div>
+
+          {/* Issues Alert */}
+          {systemHealth.issues?.length > 0 && (
+            <div className="mb-4 p-3 bg-white/50 rounded-lg">
+              <h4 className="text-sm font-medium text-red-800 mb-2 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                Active Issues ({systemHealth.issues.length})
+              </h4>
+              <ul className="space-y-1">
+                {systemHealth.issues.map((issue: string, idx: number) => (
+                  <li key={idx} className="text-sm text-red-700 flex items-center gap-2">
+                    <span className="w-1 h-1 rounded-full bg-red-500" />
+                    {issue}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Queue Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+            <div className="bg-white rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-blue-600">{systemHealth.queue?.queued || 0}</div>
+              <div className="text-xs text-gray-500">Queued</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-purple-600">{systemHealth.queue?.processing || 0}</div>
+              <div className="text-xs text-gray-500">Processing</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 text-center">
+              <div className={cn('text-2xl font-bold', systemHealth.queue?.stuckInQueue > 0 ? 'text-red-600' : 'text-gray-400')}>
+                {systemHealth.queue?.stuckInQueue || 0}
+              </div>
+              <div className="text-xs text-gray-500">Stuck in Queue</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 text-center">
+              <div className={cn('text-2xl font-bold', systemHealth.queue?.stuckProcessing > 0 ? 'text-red-600' : 'text-gray-400')}>
+                {systemHealth.queue?.stuckProcessing || 0}
+              </div>
+              <div className="text-xs text-gray-500">Stuck Processing</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-orange-600">{systemHealth.workers?.extensionTasks || 0}</div>
+              <div className="text-xs text-gray-500">Extension Tasks</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-indigo-600">{systemHealth.workers?.soldierTasks || 0}</div>
+              <div className="text-xs text-gray-500">Soldier Tasks</div>
+            </div>
+          </div>
+
+          {/* Last Hour Metrics */}
+          <div className="bg-white rounded-lg p-3">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Last Hour Performance</h4>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-green-600">✓ {systemHealth.metrics?.lastHour?.succeeded || 0} succeeded</span>
+              <span className="text-red-600">✗ {systemHealth.metrics?.lastHour?.failed || 0} failed</span>
+              <span className={cn(
+                'font-medium',
+                (systemHealth.metrics?.lastHour?.successRate || 100) >= 80 ? 'text-green-600' : 
+                (systemHealth.metrics?.lastHour?.successRate || 100) >= 50 ? 'text-yellow-600' : 'text-red-600'
+              )}>
+                {systemHealth.metrics?.lastHour?.successRate || 100}% success rate
+              </span>
+            </div>
+          </div>
+
+          {/* Queued Posts Detail */}
+          {systemHealth.queue?.queuedPosts?.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Posts in Queue ({systemHealth.queue.queuedPosts.length})</h4>
+              <div className="bg-white rounded-lg divide-y max-h-40 overflow-y-auto">
+                {systemHealth.queue.queuedPosts.map((post: any) => (
+                  <div key={post.id} className="p-2 text-sm flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => fetchLogDetail(post.id)}>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3 h-3 text-blue-500" />
+                      <span className="font-medium">{post.vehicle}</span>
+                      <span className="text-gray-400 text-xs">{post.stockNumber}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={cn('px-2 py-0.5 rounded text-xs', methodConfig[post.method]?.color || 'bg-gray-100')}>
+                        {post.method}
+                      </span>
+                      <span className="text-gray-500 text-xs">{post.waitTime} min</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Stuck Posts Alert */}
+          {systemHealth.queue?.stuckPosts?.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium text-red-700 mb-2 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Stuck Posts ({systemHealth.queue.stuckPosts.length})
+              </h4>
+              <div className="bg-red-100 rounded-lg divide-y divide-red-200 max-h-40 overflow-y-auto">
+                {systemHealth.queue.stuckPosts.map((post: any) => (
+                  <div key={post.id} className="p-2 text-sm flex items-center justify-between hover:bg-red-50 cursor-pointer" onClick={() => fetchLogDetail(post.id)}>
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-3 h-3 text-red-500" />
+                      <span className="font-medium text-red-800">{post.vehicle}</span>
+                      <span className="text-red-400 text-xs">({post.status})</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-red-600 text-xs font-medium">{post.age} min old</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recent Failures Alert */}
       {stats?.recentFails && stats.recentFails.length > 0 && (

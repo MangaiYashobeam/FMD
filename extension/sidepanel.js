@@ -146,13 +146,50 @@ async function login(email, password) {
 }
 
 async function logout() {
-  await chrome.storage.local.remove(['authToken', 'refreshToken', 'user']);
+  await chrome.storage.local.remove(['authToken', 'refreshToken', 'user', 'accountId']);
   state = { user: null, vehicles: [], groups: [], queue: [], searchQuery: '' };
   showLogin();
 }
 
+// Token Refresh Function
+async function refreshAuthToken() {
+  try {
+    const result = await chrome.storage.local.get(['refreshToken']);
+    
+    if (!result.refreshToken) {
+      throw new Error('No refresh token available');
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken: result.refreshToken }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Token refresh failed');
+    }
+    
+    // Store new tokens
+    await chrome.storage.local.set({
+      authToken: data.data.accessToken,
+      refreshToken: data.data.refreshToken || result.refreshToken,
+    });
+    
+    console.log('✅ Token refreshed successfully');
+    return data.data.accessToken;
+  } catch (error) {
+    console.error('❌ Token refresh failed:', error);
+    throw error;
+  }
+}
+
 // API Functions
-async function apiRequest(endpoint, method = 'GET', body = null) {
+async function apiRequest(endpoint, method = 'GET', body = null, isRetry = false) {
   const result = await chrome.storage.local.get(['authToken']);
   
   const options = {
@@ -174,8 +211,20 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
   const data = await response.json();
   
   if (!response.ok) {
+    if (response.status === 401 && !isRetry) {
+      // Token expired, try to refresh
+      try {
+        await refreshAuthToken();
+        // Retry the original request with new token
+        return apiRequest(endpoint, method, body, true);
+      } catch (refreshError) {
+        // Refresh failed, logout
+        await logout();
+        throw new Error('Session expired. Please login again.');
+      }
+    }
     if (response.status === 401) {
-      // Token expired, logout
+      // Refresh already tried, logout
       await logout();
       throw new Error('Session expired. Please login again.');
     }

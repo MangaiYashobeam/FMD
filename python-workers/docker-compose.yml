@@ -30,7 +30,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
-      - API_BASE_URL=${API_BASE_URL:-https://fmd-production.up.railway.app}
+      - API_BASE_URL=${API_BASE_URL:-https://dealersface.com}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - MAX_BROWSERS_PER_POOL=10
     depends_on:

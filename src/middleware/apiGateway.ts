@@ -113,17 +113,30 @@ export const ring1Gateway = (req: Request, res: Response, next: NextFunction): v
 const ipWhitelist = new Set<string>(
   (process.env.IP_WHITELIST || '').split(',').filter(Boolean)
 );
+const superAdminIPs = new Set<string>(
+  (process.env.SUPER_ADMIN_IPS || '').split(',').filter(Boolean)
+);
 const ipBlacklist = new Set<string>();
 const ipRequestCounts = new Map<string, { count: number; firstRequest: Date }>();
 
 /**
  * IP-based security with adaptive blocking
+ * Super Admin IPs ALWAYS bypass all checks
  */
 export const ring2IPSentinel = (req: Request, res: Response, next: NextFunction): void => {
   const context = (req as any).securityContext as SecurityContext;
   const ip = context.clientIP;
 
-  // Check whitelist first (bypass all IP checks)
+  // SUPER ADMIN IPs bypass EVERYTHING - no rate limits, no blacklist
+  if (superAdminIPs.has(ip)) {
+    // Also remove from blacklist if somehow added
+    ipBlacklist.delete(ip);
+    context.rings.ipSentinel = true;
+    context.passedRings++;
+    return next();
+  }
+
+  // Check whitelist (bypass all IP checks)
   if (ipWhitelist.has(ip)) {
     context.rings.ipSentinel = true;
     context.passedRings++;

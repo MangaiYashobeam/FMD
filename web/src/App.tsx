@@ -44,6 +44,7 @@ import LeadsPage from './pages/LeadsPage';
 import MessagesPage from './pages/MessagesPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import PostingSettingsPage from './pages/PostingSettingsPage';
+import FBMPostsUserPage from './pages/FBMPostsUserPage';
 // Admin Pages
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AccountsPage from './pages/admin/AccountsPage';
@@ -61,6 +62,7 @@ import ExtensionConfigPage from './pages/admin/ExtensionConfigPage';
 import APIDashboardPage from './pages/admin/APIDashboardPage';
 import ErrorMonitoringPage from './pages/admin/ErrorMonitoringPage';
 import FBMPostsPage from './pages/admin/FBMPostsPage';
+import IAICommandCenter from './pages/admin/IAICommandCenterV2';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -127,6 +129,7 @@ function App() {
               <Route path="team" element={<TeamPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="posting" element={<PostingSettingsPage />} />
+              <Route path="fbm-posts" element={<FBMPostsUserPage />} />
             </Route>
 
             {/* Admin routes (Super Admin only) */}
@@ -154,6 +157,7 @@ function App() {
               <Route path="api-dashboard" element={<APIDashboardPage />} />
               <Route path="errors" element={<ErrorMonitoringPage />} />
               <Route path="fbm-posts" element={<FBMPostsPage />} />
+              <Route path="iai-command" element={<IAICommandCenter />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

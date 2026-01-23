@@ -2,10 +2,13 @@
 // Enhanced with IAI Soldier Task Polling and Marketplace Automation
 
 const API_BASE_URL = 'https://dealersface.com';
-const TASK_POLL_INTERVAL = 5000; // 5 seconds
+const TASK_POLL_INTERVAL = 5000; // 5 seconds - Production: Check frequently
+const HEARTBEAT_CHECK_INTERVAL = 3000; // 3 seconds - Verify we're alive
 
 let taskPollingInterval = null;
+let heartbeatCheckInterval = null;
 let isPolling = false;
+let isAwake = false;
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener((details) => {
@@ -95,8 +98,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Token Refresh Function
+async function refreshAuthToken() {
+  try {
+    const result = await chrome.storage.local.get(['refreshToken']);
+    
+    if (!result.refreshToken) {
+      throw new Error('No refresh token available');
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken: result.refreshToken }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Token refresh failed');
+    }
+    
+    // Store new tokens
+    await chrome.storage.local.set({
+      authToken: data.data.accessToken,
+      refreshToken: data.data.refreshToken || result.refreshToken,
+    });
+    
+    console.log('✅ Token refreshed successfully');
+    return data.data.accessToken;
+  } catch (error) {
+    console.error('❌ Token refresh failed:', error);
+    throw error;
+  }
+}
+
 // Handle API requests through background script (to avoid CORS issues)
-async function handleApiRequest(endpoint, method = 'GET', data = null) {
+async function handleApiRequest(endpoint, method = 'GET', data = null, isRetry = false) {
   const tokenResult = await chrome.storage.local.get(['authToken']);
   const token = tokenResult.authToken;
   
@@ -122,6 +162,16 @@ async function handleApiRequest(endpoint, method = 'GET', data = null) {
     const responseData = await response.json();
     
     if (!response.ok) {
+      // Handle token expiration
+      if (response.status === 401 && !isRetry) {
+        try {
+          await refreshAuthToken();
+          // Retry the original request
+          return handleApiRequest(endpoint, method, data, true);
+        } catch (refreshError) {
+          throw new Error('Session expired. Please login again.');
+        }
+      }
       throw new Error(responseData.message || 'API request failed');
     }
     
@@ -136,6 +186,42 @@ async function handleApiRequest(endpoint, method = 'GET', data = null) {
 // TASK POLLING SYSTEM
 // ============================================
 
+async function sendHeartbeat() {
+  try {
+    const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+    if (!authToken || !accountId) return;
+    
+    await fetch(`${API_BASE_URL}/api/extension/heartbeat`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ accountId }),
+    });
+    
+    console.log('💓 Heartbeat sent');
+  } catch (error) {
+    console.error('Heartbeat error:', error);
+  }
+}
+
+function startHeartbeat() {
+  if (heartbeatInterval) return; // Already sending heartbeats
+  
+  console.log('💓 Starting heartbeat...');
+  sendHeartbeat(); // Send initial heartbeat
+  heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  console.log('💔 Heartbeat stopped');
+}
+
 async function startTaskPolling() {
   if (taskPollingInterval) return; // Already polling
   
@@ -147,6 +233,9 @@ async function startTaskPolling() {
   
   console.log('🎖️ Starting IAI Task Polling...');
   isPolling = true;
+  
+  // Start heartbeat
+  startHeartbeat();
   
   // Initial poll
   await pollForTasks();
@@ -161,19 +250,30 @@ function stopTaskPolling() {
     taskPollingInterval = null;
   }
   isPolling = false;
+  
+  // Stop heartbeat
+  stopHeartbeat();
+  
   console.log('🛑 Task Polling stopped');
 }
 
 async function pollForTasks() {
-  if (!isPolling) return;
+  if (!isPolling) {
+    console.log('⚠️ pollForTasks called but isPolling=false');
+    return;
+  }
   
   try {
     const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
-    if (!authToken || !accountId) return;
+    if (!authToken || !accountId) {
+      console.log('❌ No credentials - cannot poll');
+      return;
+    }
     
-    console.log(`🔍 Polling for tasks (account: ${accountId})...`);
+    const now = new Date().toLocaleTimeString();
+    console.log(`🔍 [${now}] IAI SOLDIER CHECKING FOR TASKS (account: ${accountId})...`);
     
-    const response = await fetch(
+    let response = await fetch(
       `${API_BASE_URL}/api/extension/tasks/${accountId}`,
       {
         headers: {
@@ -182,6 +282,28 @@ async function pollForTasks() {
         },
       }
     );
+    
+    // Handle token expiration
+    if (response.status === 401) {
+      console.log('🔄 Token expired during polling, refreshing...');
+      try {
+        const newToken = await refreshAuthToken();
+        // Retry with new token
+        response = await fetch(
+          `${API_BASE_URL}/api/extension/tasks/${accountId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${newToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      } catch (refreshError) {
+        console.error('❌ Token refresh failed during polling:', refreshError);
+        stopTaskPolling();
+        return;
+      }
+    }
     
     if (!response.ok) {
       console.warn('Task polling failed:', response.status);
@@ -393,12 +515,32 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // STARTUP
 // ============================================
 
-// Check if we should start polling on extension load
+// AGGRESSIVE AUTO-START: Wake up IAI soldiers immediately on browser launch
 chrome.storage.local.get(['authToken', 'accountId'], (result) => {
   if (result.authToken && result.accountId) {
-    console.log('🎖️ Credentials found, starting task polling...');
+    console.log('🎖️ IAI SOLDIER AWAKE - Starting aggressive task polling...');
+    isAwake = true;
     startTaskPolling();
+    
+    // Set badge to show we're active
+    chrome.action.setBadgeText({ text: 'ON' });
+    chrome.action.setBadgeBackgroundColor({ color: '#10B981' });
+  } else {
+    console.log('⚠️ IAI waiting for credentials - Please log in');
+    chrome.action.setBadgeText({ text: '!' });
+    chrome.action.setBadgeBackgroundColor({ color: '#F59E0B' });
   }
 });
 
-console.log('🎖️ Dealers Face background script loaded - IAI Ready');
+// Keep-alive ping every 30 seconds
+setInterval(() => {
+  console.log('💓 IAI Soldier heartbeat check');
+  chrome.storage.local.get(['authToken'], (result) => {
+    if (result.authToken && !isPolling) {
+      console.log('⚠️ IAI was asleep! Waking up now...');
+      startTaskPolling();
+    }
+  });
+}, 30000);
+
+console.log('🎖️ Dealers Face IAI SOLDIER - READY FOR PRODUCTION BATTLE');

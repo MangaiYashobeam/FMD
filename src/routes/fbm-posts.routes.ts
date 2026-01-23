@@ -300,6 +300,80 @@ export class FBMPostLogService {
       default: return new Date(now.getTime() - 24 * 60 * 60 * 1000);
     }
   }
+
+  /**
+   * Notify Nova about FBM events for AI awareness
+   * This allows Nova to proactively assist with posting issues
+   */
+  static async notifyAI(logId: string, eventType: 'post_initiated' | 'post_completed' | 'post_failed' | 'high_risk', details?: any) {
+    try {
+      // Get log with related data
+      const log = await prisma.fBMPostLog.findUnique({
+        where: { id: logId },
+        include: {
+          vehicle: { select: { year: true, make: true, model: true, vin: true, stockNumber: true } },
+          user: { select: { id: true, email: true, firstName: true } },
+          account: { select: { id: true, name: true } },
+        },
+      });
+
+      if (!log) return;
+
+      // For failed posts or high risk, create AI context entry
+      if (eventType === 'post_failed' || eventType === 'high_risk') {
+        const aiContext = {
+          type: 'fbm_posting_alert',
+          severity: eventType === 'post_failed' ? 'error' : 'warning',
+          accountId: log.accountId,
+          userId: log.userId,
+          summary: eventType === 'post_failed' 
+            ? `FBM Post Failed: ${log.vehicle?.year} ${log.vehicle?.make} ${log.vehicle?.model}` 
+            : `High Risk FBM Post: ${log.vehicle?.year} ${log.vehicle?.make} ${log.vehicle?.model}`,
+          details: {
+            logId,
+            vehicleId: log.vehicleId,
+            method: log.method,
+            status: log.status,
+            stage: log.stage,
+            errorCode: log.errorCode,
+            errorMessage: log.errorMessage,
+            riskLevel: log.riskLevel,
+            riskFactors: log.riskFactors,
+            attemptNumber: log.attemptNumber,
+            ...details,
+          },
+          suggestedAction: eventType === 'post_failed' 
+            ? 'Check error details and consider retry with different method'
+            : 'Review risk factors before proceeding',
+          timestamp: new Date().toISOString(),
+        };
+
+        // Store in AI memory for context-aware responses
+        try {
+          await prisma.aIMemory.create({
+            data: {
+              providerId: 'system',
+              memoryType: 'fbm_alert',
+              accountId: log.accountId,
+              key: `fbm_alert_${logId}`,
+              value: aiContext,
+              importance: eventType === 'post_failed' ? 0.8 : 0.6,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+            },
+          });
+          logger.info(`AI notified about FBM ${eventType}: ${logId}`);
+        } catch (memErr) {
+          // AIMemory table might not exist, just log
+          logger.debug(`AI Memory storage skipped: ${memErr}`);
+        }
+      }
+
+      // Log for Nova's dashboard awareness
+      logger.info(`📢 FBM Event [${eventType}]: ${log.vehicle?.year} ${log.vehicle?.make} ${log.vehicle?.model} (${log.method}) - ${log.status}`);
+    } catch (error) {
+      logger.error('Failed to notify AI about FBM event:', error);
+    }
+  }
 }
 
 // ============================================
@@ -535,6 +609,182 @@ router.get('/admin/accounts', requireRole(UserRole.SUPER_ADMIN), async (req: Aut
   }
 });
 
+/**
+ * GET /api/fbm-posts/admin/system-health
+ * Get comprehensive system health and queue status (Super Admin only)
+ */
+router.get('/admin/system-health', requireRole(UserRole.SUPER_ADMIN), async (_req: AuthRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    // Get queue status - posts stuck in non-terminal states
+    const [
+      queuedPosts,
+      processingPosts,
+      initiatedPosts,
+      recentFailed,
+      recentSucceeded,
+      extensionTasks,
+      soldierTasks,
+    ] = await Promise.all([
+      // Posts stuck in queued status
+      prisma.fBMPostLog.findMany({
+        where: { status: 'queued' },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          vehicle: { select: { year: true, make: true, model: true, stockNumber: true } },
+          account: { select: { name: true } },
+        },
+      }),
+      // Posts currently processing
+      prisma.fBMPostLog.findMany({
+        where: { status: { in: ['processing', 'posting', 'verifying'] } },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          vehicle: { select: { year: true, make: true, model: true, stockNumber: true } },
+          account: { select: { name: true } },
+        },
+      }),
+      // Posts stuck in initiated (never got queued)
+      prisma.fBMPostLog.findMany({
+        where: { 
+          status: 'initiated',
+          createdAt: { lt: oneHourAgo }, // More than 1 hour old
+        },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          vehicle: { select: { year: true, make: true, model: true, stockNumber: true } },
+          account: { select: { name: true } },
+        },
+      }),
+      // Recent failures in last hour
+      prisma.fBMPostLog.count({
+        where: { 
+          success: false,
+          createdAt: { gte: oneHourAgo },
+        },
+      }),
+      // Recent successes in last hour
+      prisma.fBMPostLog.count({
+        where: { 
+          success: true,
+          createdAt: { gte: oneHourAgo },
+        },
+      }),
+      // Pending extension tasks
+      prisma.extensionTask.findMany({
+        where: { status: { in: ['pending', 'in_progress'] } },
+      }),
+      // Pending soldier worker tasks (if table exists)
+      prisma.$queryRaw`
+        SELECT COUNT(*) as count FROM "SoldierWorkerTask" 
+        WHERE status IN ('pending', 'processing')
+      `.catch(() => [{ count: 0 }]),
+    ]);
+
+    // Analyze queue health
+    const stuckInQueueForTooLong = queuedPosts.filter(p => {
+      const queueTime = new Date(p.queuedAt || p.createdAt).getTime();
+      return (now.getTime() - queueTime) > 30 * 60 * 1000; // More than 30 min in queue
+    });
+
+    const processingForTooLong = processingPosts.filter(p => {
+      const processTime = new Date(p.processingAt || p.createdAt).getTime();
+      return (now.getTime() - processTime) > 15 * 60 * 1000; // More than 15 min processing
+    });
+
+    // Build health status
+    const issues: string[] = [];
+    if (stuckInQueueForTooLong.length > 0) {
+      issues.push(`${stuckInQueueForTooLong.length} posts stuck in queue > 30 min`);
+    }
+    if (processingForTooLong.length > 0) {
+      issues.push(`${processingForTooLong.length} posts processing > 15 min`);
+    }
+    if (initiatedPosts.length > 0) {
+      issues.push(`${initiatedPosts.length} posts stuck in initiated > 1 hour`);
+    }
+    if (recentFailed > recentSucceeded && (recentFailed + recentSucceeded) > 5) {
+      issues.push(`High failure rate in last hour: ${recentFailed}/${recentFailed + recentSucceeded}`);
+    }
+
+    const healthStatus = issues.length === 0 ? 'healthy' : 
+                        issues.length <= 2 ? 'degraded' : 'critical';
+
+    res.json({
+      success: true,
+      data: {
+        healthStatus,
+        issues,
+        lastChecked: now.toISOString(),
+        queue: {
+          queued: queuedPosts.length,
+          processing: processingPosts.length,
+          stuckInQueue: stuckInQueueForTooLong.length,
+          stuckProcessing: processingForTooLong.length,
+          stuckInitiated: initiatedPosts.length,
+          queuedPosts: queuedPosts.map(p => ({
+            id: p.id,
+            vehicle: `${p.vehicle?.year} ${p.vehicle?.make} ${p.vehicle?.model}`,
+            stockNumber: p.vehicle?.stockNumber,
+            account: p.account?.name,
+            method: p.method,
+            createdAt: p.createdAt,
+            queuedAt: p.queuedAt,
+            waitTime: Math.round((now.getTime() - new Date(p.queuedAt || p.createdAt).getTime()) / 1000 / 60),
+          })),
+          processingPosts: processingPosts.map(p => ({
+            id: p.id,
+            vehicle: `${p.vehicle?.year} ${p.vehicle?.make} ${p.vehicle?.model}`,
+            stockNumber: p.vehicle?.stockNumber,
+            account: p.account?.name,
+            method: p.method,
+            status: p.status,
+            stage: p.stage,
+            createdAt: p.createdAt,
+            processingTime: Math.round((now.getTime() - new Date(p.processingAt || p.createdAt).getTime()) / 1000 / 60),
+          })),
+          stuckPosts: [...stuckInQueueForTooLong, ...processingForTooLong, ...initiatedPosts].map(p => ({
+            id: p.id,
+            vehicle: `${p.vehicle?.year} ${p.vehicle?.make} ${p.vehicle?.model}`,
+            stockNumber: p.vehicle?.stockNumber,
+            account: p.account?.name,
+            status: p.status,
+            method: p.method,
+            age: Math.round((now.getTime() - new Date(p.createdAt).getTime()) / 1000 / 60),
+          })),
+        },
+        workers: {
+          extensionTasks: extensionTasks.length,
+          soldierTasks: Number((soldierTasks as any)[0]?.count || 0),
+          pendingTasks: extensionTasks.map((t: any) => ({
+            id: t.id,
+            type: t.type,
+            status: t.status,
+            vehicleId: t.vehicleId,
+            accountId: t.accountId,
+            createdAt: t.createdAt,
+          })),
+        },
+        metrics: {
+          lastHour: {
+            succeeded: recentSucceeded,
+            failed: recentFailed,
+            total: recentSucceeded + recentFailed,
+            successRate: (recentSucceeded + recentFailed) > 0 
+              ? Math.round((recentSucceeded / (recentSucceeded + recentFailed)) * 100)
+              : 100,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Error getting system health:', error);
+    res.status(500).json({ success: false, error: 'Failed to get system health' });
+  }
+});
+
 // ============================================
 // User/Account Routes
 // ============================================
@@ -719,6 +969,16 @@ router.post('/internal/update', async (req: AuthRequest, res: Response) => {
     }
 
     const updatedLog = await FBMPostLogService.updateLog(logId, updates);
+    
+    // Notify AI about status changes
+    if (updates.status === 'completed') {
+      await FBMPostLogService.notifyAI(logId, 'post_completed');
+    } else if (updates.status === 'failed') {
+      await FBMPostLogService.notifyAI(logId, 'post_failed', { errorCode: updates.errorCode, errorMessage: updates.errorMessage });
+    } else if (updates.riskLevel === 'high' || updates.riskLevel === 'critical') {
+      await FBMPostLogService.notifyAI(logId, 'high_risk');
+    }
+    
     res.json({ success: true, data: updatedLog });
   } catch (error) {
     logger.error('Error updating FBM log:', error);
@@ -751,6 +1011,138 @@ router.post('/internal/event', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     logger.error('Error adding FBM event:', error);
     res.status(500).json({ success: false, error: 'Failed to add FBM event' });
+  }
+});
+
+/**
+ * GET /api/fbm-posts/ai/context
+ * Get FBM context for AI assistant (Nova)
+ * Returns current issues, recent failures, and suggested actions
+ */
+router.get('/ai/context', async (req: AuthRequest, res: Response) => {
+  try {
+    const accountId = req.user!.accountIds[0];
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Get recent failures and issues
+    const [
+      recentFailures,
+      stuckPosts,
+      activeAlerts,
+      stats24h,
+    ] = await Promise.all([
+      // Recent failures in last 24h
+      prisma.fBMPostLog.findMany({
+        where: {
+          ...(accountId ? { accountId } : {}),
+          success: false,
+          createdAt: { gte: twentyFourHoursAgo },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: {
+          vehicle: { select: { year: true, make: true, model: true, stockNumber: true } },
+          account: { select: { name: true } },
+        },
+      }),
+      // Posts stuck in non-terminal states
+      prisma.fBMPostLog.findMany({
+        where: {
+          ...(accountId ? { accountId } : {}),
+          status: { in: ['queued', 'processing', 'posting'] },
+          createdAt: { lt: oneHourAgo },
+        },
+        include: {
+          vehicle: { select: { year: true, make: true, model: true, stockNumber: true } },
+          account: { select: { name: true } },
+        },
+      }),
+      // AI alerts from memory
+      prisma.aIMemory.findMany({
+        where: {
+          ...(accountId ? { accountId } : {}),
+          memoryType: 'fbm_alert',
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }).catch(() => []), // Handle if table doesn't exist
+      // 24h stats
+      FBMPostLogService.getStats(accountId, '24h'),
+    ]);
+
+    // Build context for AI
+    const context = {
+      summary: {
+        last24h: {
+          total: stats24h.total,
+          succeeded: stats24h.succeeded,
+          failed: stats24h.failed,
+          successRate: stats24h.successRate,
+        },
+        currentIssues: {
+          stuckPosts: stuckPosts.length,
+          recentFailures: recentFailures.length,
+          activeAlerts: activeAlerts.length,
+        },
+      },
+      issues: [] as any[],
+      suggestions: [] as string[],
+    };
+
+    // Add stuck posts as issues
+    stuckPosts.forEach(post => {
+      context.issues.push({
+        type: 'stuck_post',
+        severity: 'warning',
+        message: `Post for ${post.vehicle?.year} ${post.vehicle?.make} ${post.vehicle?.model} stuck in ${post.status} for over 1 hour`,
+        logId: post.id,
+        vehicle: `${post.vehicle?.year} ${post.vehicle?.make} ${post.vehicle?.model}`,
+        stockNumber: post.vehicle?.stockNumber,
+        status: post.status,
+        method: post.method,
+        account: post.account?.name,
+      });
+    });
+
+    // Add recent failures as issues
+    recentFailures.forEach(fail => {
+      context.issues.push({
+        type: 'failed_post',
+        severity: 'error',
+        message: `Post failed: ${fail.errorMessage || 'Unknown error'}`,
+        logId: fail.id,
+        vehicle: `${fail.vehicle?.year} ${fail.vehicle?.make} ${fail.vehicle?.model}`,
+        stockNumber: fail.vehicle?.stockNumber,
+        errorCode: fail.errorCode,
+        errorMessage: fail.errorMessage,
+        method: fail.method,
+        account: fail.account?.name,
+        canRetry: fail.retryCount < 3,
+      });
+    });
+
+    // Generate suggestions based on issues
+    if (stuckPosts.length > 0) {
+      context.suggestions.push('Consider checking worker health - posts are getting stuck');
+    }
+    if (stats24h.successRate < 80 && stats24h.total > 5) {
+      context.suggestions.push(`Success rate is low (${stats24h.successRate}%). Review recent failure patterns.`);
+    }
+    const extensionFailures = recentFailures.filter(f => f.method === 'iai').length;
+    const soldierFailures = recentFailures.filter(f => f.method === 'soldier').length;
+    if (extensionFailures > soldierFailures && extensionFailures > 2) {
+      context.suggestions.push('Extension (IAI) method is failing more often. Consider using Soldier method for reliability.');
+    }
+    if (soldierFailures > extensionFailures && soldierFailures > 2) {
+      context.suggestions.push('Soldier worker is failing more often. Check Python worker logs.');
+    }
+
+    res.json({ success: true, data: context });
+  } catch (error) {
+    logger.error('Error getting AI context:', error);
+    res.status(500).json({ success: false, error: 'Failed to get AI context' });
   }
 });
 

@@ -440,6 +440,8 @@ export class VehicleController {
           requestData: { title, price, description, photos, method, includePixelTracking },
         });
         logger.info(`FBM Post Log created: ${fbmLog.id} for vehicle ${id}`);
+        // Notify AI about post initiation
+        await FBMPostLogService.notifyAI(fbmLog.id, 'post_initiated');
       } catch (logError) {
         // Log error but don't block the post
         logger.error(`Failed to create FBM Post Log: ${logError}`);
@@ -535,6 +537,8 @@ export class VehicleController {
           requestData: { title, price, description, photos, method, includePixelTracking },
         });
         logger.info(`FBM Post Log created: ${fbmLog.id} for vehicle ${id} (soldier method)`);
+        // Notify AI about post initiation
+        await FBMPostLogService.notifyAI(fbmLog.id, 'post_initiated');
       } catch (logError) {
         // Log error but don't block the post
         logger.error(`Failed to create FBM Post Log: ${logError}`);

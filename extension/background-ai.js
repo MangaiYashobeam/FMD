@@ -18,9 +18,21 @@ const CONFIG = {
   FACEBOOK_APP_ID: null, // Fetched from server - not hardcoded
   POLL_INTERVAL_MS: 10000,
   OAUTH_REDIRECT_URI: chrome.identity.getRedirectURL(), // No suffix - matches Facebook config
+  TASK_POLL_INTERVAL: 5000, // 5 seconds - IAI Soldier task polling
+  HEARTBEAT_CHECK_INTERVAL: 30000, // 30 seconds - Verify we're alive
 };
 
 console.log('OAuth Redirect URI:', CONFIG.OAUTH_REDIRECT_URI);
+
+// ============================================
+// IAI Soldier - Task Polling State
+// ============================================
+
+let taskPollingInterval = null;
+let heartbeatCheckInterval = null;
+let isPolling = false;
+let isAwake = false;
+let soldierInfo = null; // { id, soldierId, status }
 
 // ============================================
 // State
@@ -66,6 +78,414 @@ async function fetchFacebookConfig() {
     console.error('Failed to fetch Facebook config:', error);
     // Return cached config if available
     return facebookConfig;
+  }
+}
+
+// ============================================
+// IAI Soldier - Registration & Tracking
+// ============================================
+
+/**
+ * Register this browser instance as an IAI Soldier
+ */
+async function registerIAISoldier() {
+  try {
+    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+    if (!savedAuth || !savedAuth.accessToken || !savedAuth.dealerAccountId) {
+      console.log('❌ Cannot register IAI - not authenticated');
+      return null;
+    }
+    
+    // Get browser ID from storage or generate new one
+    let { browserId } = await chrome.storage.local.get(['browserId']);
+    if (!browserId) {
+      browserId = crypto.randomUUID();
+      await chrome.storage.local.set({ browserId });
+    }
+    
+    // Get geolocation (optional) - use ip-api.com which allows CORS
+    let locationData = {};
+    try {
+      const ipResponse = await fetch('http://ip-api.com/json/');
+      if (ipResponse.ok) {
+        const ipData = await ipResponse.json();
+        if (ipData.status === 'success') {
+          locationData = {
+            ipAddress: ipData.query,
+            locationCountry: ipData.country,
+            locationCity: ipData.city,
+            locationLat: ipData.lat,
+            locationLng: ipData.lon,
+            timezone: ipData.timezone,
+          };
+        }
+      }
+    } catch (e) {
+      console.log('Could not fetch location:', e.message);
+      // Fallback: skip geolocation, it's optional
+    }
+    
+    // Register with server
+    const accountId = savedAuth.dealerAccountId || savedAuth.accountId;
+    const userId = savedAuth.userId || savedAuth.user?.id;
+    
+    console.log('📡 Registering IAI Soldier...', { accountId, userId, browserId });
+    
+    const response = await fetch(
+      `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/register`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountId,
+          userId,
+          browserId,
+          extensionVersion: chrome.runtime.getManifest().version,
+          userAgent: navigator.userAgent,
+          ...locationData,
+        }),
+      }
+    );
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Registration failed:', response.status, errorText);
+      throw new Error(`Registration failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    soldierInfo = data.soldier;
+    
+    console.log(`✅ IAI Soldier registered: ${soldierInfo.soldierId}`);
+    
+    // Store soldier info
+    await chrome.storage.local.set({ soldierInfo });
+    
+    return soldierInfo;
+  } catch (error) {
+    console.error('❌ IAI registration error:', error);
+    return null;
+  }
+}
+
+/**
+ * Send IAI heartbeat
+ */
+async function sendIAIHeartbeat() {
+  if (!soldierInfo) {
+    return;
+  }
+  
+  try {
+    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+    if (!savedAuth || !savedAuth.accessToken) {
+      return;
+    }
+    
+    const status = isPolling ? (isAwake ? 'working' : 'online') : 'idle';
+    
+    await fetch(
+      `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/heartbeat`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          soldierId: soldierInfo.soldierId,
+          accountId: savedAuth.dealerAccountId,
+          status,
+        }),
+      }
+    );
+  } catch (error) {
+    console.error('Heartbeat error:', error);
+  }
+}
+
+/**
+ * Log IAI activity
+ */
+async function logIAIActivity(eventType, data) {
+  if (!soldierInfo) {
+    return;
+  }
+  
+  try {
+    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+    if (!savedAuth || !savedAuth.accessToken) {
+      return;
+    }
+    
+    await fetch(
+      `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/log-activity`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          soldierId: soldierInfo.soldierId,
+          accountId: savedAuth.dealerAccountId,
+          eventType,
+          ...data,
+        }),
+      }
+    );
+  } catch (error) {
+    console.error('Log activity error:', error);
+  }
+}
+
+// ============================================
+// IAI Soldier - Task Polling Functions
+// ============================================
+
+/**
+ * Start aggressive IAI task polling
+ */
+async function startIAITaskPolling() {
+  if (isPolling) {
+    console.log('✅ IAI Soldier already polling');
+    return;
+  }
+  
+  const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+  if (!savedAuth || !savedAuth.isAuthenticated || !savedAuth.dealerAccountId) {
+    console.log('❌ Cannot start IAI - not authenticated');
+    return;
+  }
+  
+  // Register as IAI Soldier
+  if (!soldierInfo) {
+    soldierInfo = await registerIAISoldier();
+    if (!soldierInfo) {
+      console.error('❌ Failed to register IAI Soldier');
+      return;
+    }
+  }
+  
+  isPolling = true;
+  isAwake = true;
+  console.log(`🚀 IAI SOLDIER ${soldierInfo.soldierId} WAKING UP - Starting aggressive task polling...`);
+  
+  // Log wake-up event
+  await logIAIActivity('status_change', {
+    message: `Soldier ${soldierInfo.soldierId} came online`,
+    eventData: { previousStatus: 'offline', newStatus: 'online' },
+  });
+  
+  // Update badge to show we're active
+  chrome.action.setBadgeText({ text: 'ON' });
+  chrome.action.setBadgeBackgroundColor({ color: '#22C55E' });
+  
+  // Start polling immediately
+  await pollForIAITasks();
+  
+  // Then poll every 5 seconds
+  taskPollingInterval = setInterval(pollForIAITasks, CONFIG.TASK_POLL_INTERVAL);
+  
+  // Heartbeat check every 30 seconds
+  heartbeatCheckInterval = setInterval(checkIAIHeartbeat, CONFIG.HEARTBEAT_CHECK_INTERVAL);
+  
+  console.log('✅ IAI Soldier active - polling every 5 seconds');
+}
+
+/**
+ * Stop IAI task polling
+ */
+function stopIAITaskPolling() {
+  if (!isPolling) {
+    return;
+  }
+  
+  isPolling = false;
+  isAwake = false;
+  
+  if (taskPollingInterval) {
+    clearInterval(taskPollingInterval);
+    taskPollingInterval = null;
+  }
+  
+  if (heartbeatCheckInterval) {
+    clearInterval(heartbeatCheckInterval);
+    heartbeatCheckInterval = null;
+  }
+  
+  chrome.action.setBadgeText({ text: '' });
+  console.log('😴 IAI Soldier stopped');
+}
+
+/**
+ * Poll for pending IAI tasks
+ */
+async function pollForIAITasks() {
+  if (!isPolling) {
+    return;
+  }
+  
+  try {
+    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+    if (!savedAuth || !savedAuth.accessToken || !savedAuth.dealerAccountId) {
+      console.log('❌ No credentials - cannot poll');
+      return;
+    }
+    
+    const now = new Date().toLocaleTimeString();
+    console.log(`🔍 [${now}] IAI SOLDIER CHECKING FOR TASKS (account: ${savedAuth.dealerAccountId})...`);
+    
+    let response = await fetch(
+      `${CONFIG.API_URL.replace('/api', '')}/api/extension/tasks/${savedAuth.dealerAccountId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    // Handle token expiration - try to refresh
+    if (response.status === 401) {
+      console.log('🔄 Token expired, attempting to refresh...');
+      try {
+        // Try to get a new token via the login flow
+        const newAuth = await initiateOAuth();
+        if (newAuth && newAuth.accessToken) {
+          // Update storage
+          authState = newAuth;
+          await chrome.storage.local.set({ authState: newAuth });
+          
+          // Retry with new token
+          response = await fetch(
+            `${CONFIG.API_URL.replace('/api', '')}/api/extension/tasks/${newAuth.dealerAccountId}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${newAuth.accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+          console.log('✅ Token refreshed, retrying task poll');
+        }
+      } catch (refreshError) {
+        console.error('❌ Token refresh failed:', refreshError);
+        console.log('⚠️ Please reload extension and log in again via side panel');
+        stopIAITaskPolling();
+        
+        // Show notification to user
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icons/icon128.svg',
+          title: 'IAI Soldier - Login Required',
+          message: 'Your session expired. Please open the side panel and log in again.',
+          priority: 2
+        });
+        return;
+      }
+    }
+    
+    if (!response.ok) {
+      console.warn('Task polling failed:', response.status);
+      return;
+    }
+    
+    const tasks = await response.json();
+    
+    if (tasks && tasks.length > 0) {
+      console.log(`📋 TASKS FOUND: ${tasks.length} READY TO EXECUTE`, tasks.map(t => t.type));
+      
+      // Update badge with task count
+      chrome.action.setBadgeText({ text: String(tasks.length) });
+      chrome.action.setBadgeBackgroundColor({ color: '#EF4444' });
+      
+      // Show notification
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/icon128.svg',
+        title: 'IAI Soldier - Tasks Available',
+        message: `${tasks.length} posting tasks ready to execute`,
+        priority: 2
+      });
+      
+      // Auto-execute first task
+      const pendingTask = tasks.find(t => t.status === 'pending');
+      if (pendingTask) {
+        console.log(`🎯 Auto-executing task: ${pendingTask.id} (${pendingTask.type})`);
+        await executeIAITask(pendingTask);
+      }
+    } else {
+      console.log(`✓ Found ${tasks ? tasks.length : 0} tasks for account ${savedAuth.dealerAccountId}`);
+      
+      // Update badge to show we're still active
+      chrome.action.setBadgeText({ text: 'ON' });
+      chrome.action.setBadgeBackgroundColor({ color: '#22C55E' });
+    }
+    
+  } catch (error) {
+    console.error('❌ IAI polling error:', error);
+  }
+}
+
+/**
+ * Execute an IAI task
+ */
+async function executeIAITask(task) {
+  try {
+    console.log('🚀 Executing IAI task:', task.id, task.type);
+    
+    // Log task start
+    await logIAIActivity('task_start', {
+      taskId: task.id,
+      taskType: task.type,
+      message: `Starting task ${task.type} for vehicle ${task.data?.vehicle?.stockNumber || 'unknown'}`,
+    });
+    
+    // Find or create a Facebook tab
+    const tabs = await chrome.tabs.query({ url: 'https://www.facebook.com/*' });
+    let fbTab = tabs[0];
+    
+    if (!fbTab) {
+      // Create new Facebook tab
+      fbTab = await chrome.tabs.create({ url: 'https://www.facebook.com/marketplace/create/vehicle' });
+      // Wait for tab to load
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    
+    // Send task to content script
+    await chrome.tabs.sendMessage(fbTab.id, {
+      type: 'EXECUTE_IAI_TASK',
+      task: task
+    });
+    
+    console.log('✅ Task sent to content script');
+    
+  } catch (error) {
+    console.error('❌ Failed to execute IAI task:', error);
+    
+    // Log error
+    await logIAIActivity('error', {
+      taskId: task.id,
+      taskType: task.type,
+      message: `Task execution failed: ${error.message}`,
+      eventData: { error: error.message, stack: error.stack },
+    });
+  }
+}
+
+/**
+ * Check IAI heartbeat - ensure we're still alive
+ */
+async function checkIAIHeartbeat() {
+  if (isPolling) {
+    console.log(`💓 IAI Soldier ${soldierInfo?.soldierId || 'unknown'} heartbeat - Still alive and polling`);
+    
+    // Send heartbeat to server via IAI endpoint
+    await sendIAIHeartbeat();
   }
 }
 
@@ -334,9 +754,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleMessage(message, sender) {
   switch (message.type) {
     case 'LOGIN':
-      return await initiateOAuth();
+      const loginResult = await initiateOAuth();
+      // Start IAI polling after successful login
+      if (loginResult && loginResult.accessToken) {
+        await startIAITaskPolling();
+      }
+      return loginResult;
       
     case 'LOGOUT':
+      // Stop IAI polling on logout
+      stopIAITaskPolling();
       authState = {
         isAuthenticated: false,
         accessToken: null,
@@ -432,6 +859,54 @@ async function handleMessage(message, sender) {
         });
       }
       return { success: true };
+    
+    case 'START_IAI_POLLING':
+      await startIAITaskPolling();
+      return { success: true, message: 'IAI Soldier activated' };
+    
+    case 'STOP_IAI_POLLING':
+      stopIAITaskPolling();
+      return { success: true, message: 'IAI Soldier deactivated' };
+    
+    case 'IAI_TASK_COMPLETED':
+      // Update task status on server
+      try {
+        const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+        if (savedAuth && savedAuth.accessToken) {
+          await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/extension/tasks/${message.taskId}/complete`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${savedAuth.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ result: message.result })
+          });
+        }
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to report task completion:', error);
+        return { success: false, error: error.message };
+      }
+    
+    case 'IAI_TASK_FAILED':
+      // Update task status on server
+      try {
+        const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+        if (savedAuth && savedAuth.accessToken) {
+          await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/extension/tasks/${message.taskId}/failed`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${savedAuth.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ error: message.error })
+          });
+        }
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to report task failure:', error);
+        return { success: false, error: error.message };
+      }
       
     default:
       throw new Error(`Unknown message type: ${message.type}`);
@@ -514,27 +989,40 @@ async function getAccountInfo() {
  * Get vehicles from server inventory
  */
 async function getVehicles() {
-  const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+  const { authState } = await chrome.storage.local.get(['authState']);
   
-  if (!authToken) {
+  if (!authState?.accessToken) {
     return { success: false, error: 'Not authenticated' };
   }
   
   try {
-    const response = await fetch(`${CONFIG.API_URL}/vehicles?accountId=${accountId}&status=ACTIVE&limit=100`, {
+    // Use dealersface.com API to fetch vehicles
+    const accountId = authState.dealerAccountId || authState.accountId;
+    const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/vehicles?accountId=${accountId}&status=ACTIVE&limit=100`, {
       headers: {
-        'Authorization': `Bearer ${authToken}`,
+        'Authorization': `Bearer ${authState.accessToken}`,
+        'Content-Type': 'application/json',
       },
     });
     
     if (!response.ok) {
+      // Try to refresh token if unauthorized
+      if (response.status === 401) {
+        console.log('🔄 Token expired, refreshing...');
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          // Retry with new token
+          return await getVehicles();
+        }
+      }
       throw new Error(`HTTP ${response.status}`);
     }
     
     const data = await response.json();
+    console.log('✅ Fetched vehicles:', data.data?.vehicles?.length || data.data?.length || 0);
     return { 
       success: true, 
-      data: data.data || data.vehicles || data || [] 
+      data: data.data?.vehicles || data.data || data.vehicles || [] 
     };
   } catch (error) {
     console.error('Failed to fetch vehicles:', error);
@@ -737,6 +1225,12 @@ chrome.storage.local.get('authState', async (result) => {
   if (result.authState) {
     authState = result.authState;
     console.log('Auth state loaded:', authState.isAuthenticated);
+    
+    // Auto-start IAI polling if authenticated
+    if (authState.isAuthenticated && authState.dealerAccountId) {
+      console.log('🚀 Auto-starting IAI Soldier (user is authenticated)');
+      await startIAITaskPolling();
+    }
   }
   
   // Fetch Facebook config from server
@@ -744,7 +1238,7 @@ chrome.storage.local.get('authState', async (result) => {
 });
 
 // Handle extension install/update
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('Extension installed:', details.reason);
   
   if (details.reason === 'install') {
@@ -752,7 +1246,15 @@ chrome.runtime.onInstalled.addListener((details) => {
     chrome.tabs.create({
       url: 'https://dealersface.com/extension/welcome',
     });
+  } else if (details.reason === 'update') {
+    // On update, restart IAI polling if user is logged in
+    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+    if (savedAuth && savedAuth.isAuthenticated && savedAuth.dealerAccountId) {
+      console.log('🔄 Extension updated - restarting IAI Soldier');
+      await startIAITaskPolling();
+    }
   }
 });
 
 console.log('DF-Auto Sim background service worker started');
+console.log('🎯 IAI Soldier ready - will start polling on login');

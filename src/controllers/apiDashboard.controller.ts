@@ -97,6 +97,8 @@ const API_ENDPOINTS: Omit<EndpointInfo, 'status' | 'lastChecked' | 'responseTime
   
   // Extension Endpoints
   { id: 'ext-health', path: '/api/extension/health', method: 'GET', description: 'Extension health check', category: 'extension', protected: false, rateLimit: null },
+  { id: 'ext-heartbeat', path: '/api/extension/heartbeat', method: 'POST', description: 'Extension heartbeat ping', category: 'extension', protected: true, rateLimit: 120 },
+  { id: 'ext-status', path: '/api/extension/status/:accountId', method: 'GET', description: 'Check extension online status', category: 'extension', protected: true, rateLimit: 60 },
   { id: 'ext-tasks-get', path: '/api/extension/tasks/:accountId', method: 'GET', description: 'Get pending tasks', category: 'extension', protected: true, rateLimit: 120 },
   { id: 'ext-tasks-create', path: '/api/extension/tasks', method: 'POST', description: 'Create task', category: 'extension', protected: true, rateLimit: 60 },
   { id: 'ext-tasks-status', path: '/api/extension/tasks/:taskId/status', method: 'POST', description: 'Update task status', category: 'extension', protected: true, rateLimit: 120 },

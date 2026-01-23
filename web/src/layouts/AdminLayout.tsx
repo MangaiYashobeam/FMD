@@ -19,15 +19,18 @@ import {
   Terminal,
   AlertTriangle,
   Send,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
 import FloatingAIChat from '../components/ai/FloatingAIChat';
 import { FacebookConnectionStatus } from '../components/FacebookConnectionStatus';
+import { ExtensionStatus } from '../components/ExtensionStatus';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'AI Center', href: '/admin/ai-center', icon: Brain },
+  { name: 'IAI Command', href: '/admin/iai-command', icon: Zap },
   { name: 'API Dashboard', href: '/admin/api-dashboard', icon: Terminal },
   { name: 'FBM Posts', href: '/admin/fbm-posts', icon: Send },
   { name: 'Error Monitoring', href: '/admin/errors', icon: AlertTriangle },
@@ -49,11 +52,13 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const { user, logout, impersonation } = useAuth();
   
-  // Check if we're on the AI Center page
+  // Check if we're on the AI Center page or IAI Command page
   const isAICenterPage = location.pathname === '/admin/ai-center';
+  const isIAICommandPage = location.pathname === '/admin/iai-command';
+  const isDarkPage = isAICenterPage || isIAICommandPage;
 
   return (
-    <div className={`flex h-screen bg-gray-50 ${impersonation.isImpersonating ? 'pt-10' : ''}`}>
+    <div className={`flex h-screen ${isDarkPage ? 'bg-gray-900' : 'bg-gray-50'} ${impersonation.isImpersonating ? 'pt-10' : ''}`}>
       {/* Impersonation Banner */}
       <ImpersonationBanner />
 
@@ -116,6 +121,11 @@ export default function AdminLayout() {
 
           {/* User Section */}
           <div className="flex-shrink-0 border-t border-slate-700">
+            {/* Extension Status */}
+            <div className="px-4 py-3 border-b border-slate-700">
+              <ExtensionStatus variant="compact" className="text-slate-300" />
+            </div>
+            
             {/* Facebook Status */}
             <div className="px-4 py-3 border-b border-slate-700">
               <FacebookConnectionStatus variant="compact" className="text-slate-300" />
@@ -168,7 +178,7 @@ export default function AdminLayout() {
 
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden md:pt-0 pt-14">
-        <main className="flex-1 relative overflow-y-auto focus:outline-none bg-gray-50">
+        <main className={`flex-1 relative overflow-y-auto focus:outline-none ${isDarkPage ? 'bg-gray-900 p-0' : 'bg-gray-50 p-6'}`}>
           <Outlet />
         </main>
       </div>

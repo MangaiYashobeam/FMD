@@ -146,14 +146,39 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           }
         };
 
-        eventSourceRef.current.onerror = () => {
+        eventSourceRef.current.onerror = (error) => {
+          console.error('EventSource error:', error);
           setIsConnected(false);
           eventSourceRef.current?.close();
+          eventSourceRef.current = null;
           
-          // Reconnect after 5 seconds
+          // Reconnect after 5 seconds with fresh token
           if (!reconnectTimeoutRef.current) {
-            reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = setTimeout(async () => {
               reconnectTimeoutRef.current = null;
+              
+              // Try to refresh token before reconnecting
+              try {
+                const refreshToken = localStorage.getItem('refreshToken');
+                if (refreshToken) {
+                  const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken }),
+                  });
+                  
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (data.accessToken) {
+                      localStorage.setItem('accessToken', data.accessToken);
+                      console.log('🔄 Token refreshed before SSE reconnect');
+                    }
+                  }
+                }
+              } catch (err) {
+                console.error('Token refresh error before SSE reconnect:', err);
+              }
+              
               connect();
             }, 5000);
           }

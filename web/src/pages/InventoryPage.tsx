@@ -30,8 +30,6 @@ import {
   Share2,
   RefreshCw,
   GripVertical,
-  ArrowLeft,
-  ArrowRight,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -312,8 +310,9 @@ function FacebookAdPreviewModal({
   const [posting, setPosting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
-  const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [draggedPhoto, setDraggedPhoto] = useState<string | null>(null);
+  const [dragOverPhoto, setDragOverPhoto] = useState<string | null>(null);
+  const [wasDragging, setWasDragging] = useState(false);
 
   const handleRefresh = async () => {
     if (!onRefresh) return;
@@ -369,59 +368,92 @@ function FacebookAdPreviewModal({
     }
   };
 
-  // Drag and drop for reordering selected photos - handleDrop and handleDragEnd used inline
+  // Unified drag and drop for ALL photos (selected and unselected)
+  // Photos can be swapped by dragging next to each other
+  const handleDragStart = (e: React.DragEvent, photo: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', photo);
+    setDraggedPhoto(photo);
+  };
 
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+  const handleDragOver = (e: React.DragEvent, targetPhoto: string) => {
+    if (draggedPhoto && draggedPhoto !== targetPhoto) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDragOverPhoto(targetPhoto);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetPhoto: string) => {
     e.preventDefault();
     
-    if (draggedPhotoIndex === null || draggedPhotoIndex === targetIndex) {
-      setDraggedPhotoIndex(null);
-      setDragOverIndex(null);
+    if (!draggedPhoto || draggedPhoto === targetPhoto) {
+      setDraggedPhoto(null);
+      setDragOverPhoto(null);
       return;
     }
 
-    const newPhotos = [...selectedPhotos];
-    const [draggedPhoto] = newPhotos.splice(draggedPhotoIndex, 1);
-    
-    // Calculate new target index after removal
-    const adjustedTargetIndex = draggedPhotoIndex < targetIndex ? targetIndex - 1 : targetIndex;
-    newPhotos.splice(adjustedTargetIndex, 0, draggedPhoto);
-    
-    setSelectedPhotos(newPhotos);
-    
-    // Update current photo index if needed
-    if (currentPhotoIndex === draggedPhotoIndex) {
-      setCurrentPhotoIndex(adjustedTargetIndex);
-    } else if (draggedPhotoIndex < currentPhotoIndex && adjustedTargetIndex >= currentPhotoIndex) {
-      setCurrentPhotoIndex(currentPhotoIndex - 1);
-    } else if (draggedPhotoIndex > currentPhotoIndex && adjustedTargetIndex <= currentPhotoIndex) {
-      setCurrentPhotoIndex(currentPhotoIndex + 1);
+    const isDraggedSelected = selectedPhotos.includes(draggedPhoto);
+    const isTargetSelected = selectedPhotos.includes(targetPhoto);
+
+    if (isDraggedSelected && isTargetSelected) {
+      // Both selected: swap their positions in selectedPhotos
+      const newPhotos = [...selectedPhotos];
+      const draggedIdx = newPhotos.indexOf(draggedPhoto);
+      const targetIdx = newPhotos.indexOf(targetPhoto);
+      [newPhotos[draggedIdx], newPhotos[targetIdx]] = [newPhotos[targetIdx], newPhotos[draggedIdx]];
+      setSelectedPhotos(newPhotos);
+      
+      // Update current photo index if needed
+      if (currentPhotoIndex === draggedIdx) {
+        setCurrentPhotoIndex(targetIdx);
+      } else if (currentPhotoIndex === targetIdx) {
+        setCurrentPhotoIndex(draggedIdx);
+      }
+    } else if (isDraggedSelected && !isTargetSelected) {
+      // Selected dropped on unselected: replace target with dragged, move dragged out
+      const newPhotos = selectedPhotos.filter(p => p !== draggedPhoto);
+      const targetIdx = newPhotos.indexOf(targetPhoto);
+      if (targetIdx >= 0) {
+        // Target is in selected (shouldn't happen but handle it)
+        newPhotos[targetIdx] = draggedPhoto;
+      } else {
+        // Target not selected - add dragged at end
+        if (newPhotos.length < 10) {
+          newPhotos.push(draggedPhoto);
+        }
+      }
+      setSelectedPhotos(newPhotos);
+    } else if (!isDraggedSelected && isTargetSelected) {
+      // Unselected dropped on selected: add dragged, kick out last if needed
+      const targetIdx = selectedPhotos.indexOf(targetPhoto);
+      const newPhotos = [...selectedPhotos];
+      
+      if (newPhotos.length >= 10) {
+        // Replace target with dragged (swap them)
+        newPhotos[targetIdx] = draggedPhoto;
+      } else {
+        // Just insert dragged at target position
+        newPhotos.splice(targetIdx, 0, draggedPhoto);
+      }
+      
+      setSelectedPhotos(newPhotos.slice(0, 10)); // Keep max 10
+    } else {
+      // Both unselected: do nothing (they're not in the selection)
     }
     
-    setDraggedPhotoIndex(null);
-    setDragOverIndex(null);
+    setDraggedPhoto(null);
+    setDragOverPhoto(null);
   };
 
   const handleDragEnd = () => {
-    setDraggedPhotoIndex(null);
-    setDragOverIndex(null);
-  };
-
-  // Move photo left or right
-  const movePhoto = (index: number, direction: 'left' | 'right') => {
-    const newIndex = direction === 'left' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= selectedPhotos.length) return;
-    
-    const newPhotos = [...selectedPhotos];
-    [newPhotos[index], newPhotos[newIndex]] = [newPhotos[newIndex], newPhotos[index]];
-    setSelectedPhotos(newPhotos);
-    
-    // Update current photo index
-    if (currentPhotoIndex === index) {
-      setCurrentPhotoIndex(newIndex);
-    } else if (currentPhotoIndex === newIndex) {
-      setCurrentPhotoIndex(index);
+    // Mark that we were dragging to prevent click handler
+    if (draggedPhoto !== null) {
+      setWasDragging(true);
+      setTimeout(() => setWasDragging(false), 100);
     }
+    setDraggedPhoto(null);
+    setDragOverPhoto(null);
   };
 
   return (
@@ -527,130 +559,127 @@ function FacebookAdPreviewModal({
                   
                   <p className="text-xs text-gray-500 mb-2">First photo will be the main listing image. Drag photos to change order.</p>
                   
-                  {/* All photos in one draggable grid */}
+                  {/* Photos grid - Selected photos first in order, then unselected */}
                   <div className="grid grid-cols-5 gap-3 p-3 bg-gray-50 rounded-lg min-h-[120px]">
                     {photos.length === 0 ? (
                       <p className="text-gray-400 text-sm col-span-5 m-auto py-8">No photos available</p>
                     ) : (
-                      photos.map((photo) => {
-                        const selectedIndex = selectedPhotos.indexOf(photo);
-                        const isSelected = selectedIndex !== -1;
-                        // Show "won't upload" for photos beyond position 10 when all 10 slots are filled
-                        const wouldExceedLimit = !isSelected && selectedPhotos.length >= 10;
-                        const isDragging = draggedPhotoIndex !== null;
-                        
-                        return (
-                          <div
-                            key={photo}
-                            draggable={isSelected}
-                            onDragStart={(e) => {
-                              if (isSelected) {
-                                e.dataTransfer.effectAllowed = 'move';
-                                e.dataTransfer.setData('text/plain', selectedIndex.toString());
-                                setDraggedPhotoIndex(selectedIndex);
-                              }
-                            }}
-                            onDragOver={(e) => {
-                              if (isSelected && draggedPhotoIndex !== null && draggedPhotoIndex !== selectedIndex) {
+                      <>
+                        {/* Selected photos - rendered in their correct order */}
+                        {selectedPhotos.map((photo, selectedIndex) => {
+                          const isDragging = draggedPhoto !== null;
+                          const isBeingDragged = draggedPhoto === photo;
+                          const isDropTarget = dragOverPhoto === photo;
+                          
+                          return (
+                            <div
+                              key={`selected-${photo}`}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, photo)}
+                              onDragOver={(e) => handleDragOver(e, photo)}
+                              onDragLeave={(e) => {
                                 e.preventDefault();
-                                e.dataTransfer.dropEffect = 'move';
-                                setDragOverIndex(selectedIndex);
-                              }
-                            }}
-                            onDragLeave={(e) => {
-                              e.preventDefault();
-                              setDragOverIndex(null);
-                            }}
-                            onDrop={(e) => {
-                              if (isSelected) {
-                                handleDrop(e, selectedIndex);
-                              }
-                            }}
-                            onDragEnd={handleDragEnd}
-                            onClick={() => !wouldExceedLimit && !isDragging && togglePhotoSelection(photo)}
-                            className={cn(
-                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group select-none',
-                              isSelected 
-                                ? selectedIndex === 0 
-                                  ? 'ring-2 ring-green-400 border-green-500 cursor-grab active:cursor-grabbing' 
-                                  : 'border-blue-500 bg-blue-50 cursor-grab active:cursor-grabbing'
-                                : wouldExceedLimit
-                                  ? 'border-red-200 bg-red-50 opacity-40 cursor-not-allowed'
-                                  : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100 cursor-pointer',
-                              isSelected && draggedPhotoIndex === selectedIndex && 'opacity-50 scale-95',
-                              isSelected && dragOverIndex === selectedIndex && 'ring-2 ring-purple-500 scale-105'
-                            )}
-                          >
-                            {/* Image with pointer-events-none during drag to prevent event capture */}
-                            <div className={cn('w-full h-full', isDragging && 'pointer-events-none')}>
-                              <VehicleImage src={photo} alt="" className="w-full h-full object-cover pointer-events-none" iconSize="w-4 h-4" />
-                            </div>
-                            
-                            {/* Selection indicator / Order number */}
-                            {isSelected ? (
+                                setDragOverPhoto(null);
+                              }}
+                              onDrop={(e) => handleDrop(e, photo)}
+                              onDragEnd={handleDragEnd}
+                              onClick={() => !isDragging && !wasDragging && togglePhotoSelection(photo)}
+                              title={selectedIndex === 0 ? 'Main Photo 🌟 - Drag to reorder or click to remove' : `Photo ${selectedIndex + 1} - Drag to reorder or click to remove`}
+                              className={cn(
+                                'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group select-none cursor-grab active:cursor-grabbing',
+                                selectedIndex === 0 
+                                  ? 'ring-2 ring-green-400 border-green-500' 
+                                  : 'border-blue-500 bg-blue-50',
+                                isBeingDragged && 'opacity-50 scale-95',
+                                isDropTarget && 'ring-2 ring-purple-500 scale-105'
+                              )}
+                            >
+                              <div className="w-full h-full">
+                                <VehicleImage src={photo} alt="" className="w-full h-full object-cover pointer-events-none" iconSize="w-4 h-4" />
+                              </div>
+                              
+                              {/* Order number badge */}
                               <div className={cn(
                                 'absolute top-1 left-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md pointer-events-none',
                                 selectedIndex === 0 ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
                               )}>
                                 {selectedIndex + 1}
                               </div>
-                            ) : wouldExceedLimit ? (
-                              <div className="absolute inset-0 flex items-center justify-center bg-red-900/50 pointer-events-none">
-                                <div className="text-center">
-                                  <X className="w-6 h-6 text-white mx-auto" />
-                                  <span className="text-[10px] text-white font-medium block mt-0.5">Won't Upload</span>
+                              
+                              {/* Drag handle */}
+                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <GripVertical className="w-4 h-4 text-white drop-shadow-lg pointer-events-none" />
+                              </div>
+                              
+                              {/* Main photo indicator */}
+                              {selectedIndex === 0 && (
+                                <div className="absolute bottom-1 left-1 right-1 pointer-events-none">
+                                  <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full font-medium">Main Photo</span>
                                 </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        
+                        {/* Unselected photos - NOW DRAGGABLE TOO */}
+                        {photos.filter(photo => !selectedPhotos.includes(photo)).map((photo) => {
+                          const wouldExceedLimit = selectedPhotos.length >= 10;
+                          const isDragging = draggedPhoto !== null;
+                          const isBeingDragged = draggedPhoto === photo;
+                          const isDropTarget = dragOverPhoto === photo;
+                          
+                          return (
+                            <div
+                              key={`unselected-${photo}`}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, photo)}
+                              onDragOver={(e) => handleDragOver(e, photo)}
+                              onDragLeave={(e) => {
+                                e.preventDefault();
+                                setDragOverPhoto(null);
+                              }}
+                              onDrop={(e) => handleDrop(e, photo)}
+                              onDragEnd={handleDragEnd}
+                              onClick={() => !isDragging && !wasDragging && !wouldExceedLimit && togglePhotoSelection(photo)}
+                              title={wouldExceedLimit ? "🚫 Won't Upload (10 photo limit) - Drag to swap with selected photo" : '➕ Click to add or drag to swap with selected photo'}
+                              className={cn(
+                                'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group select-none',
+                                wouldExceedLimit
+                                  ? 'border-red-200 bg-red-50 cursor-grab active:cursor-grabbing'
+                                  : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100 cursor-grab active:cursor-grabbing',
+                                isBeingDragged && 'opacity-30 scale-95',
+                                isDropTarget && wouldExceedLimit && 'ring-2 ring-blue-500 scale-105',
+                                isDropTarget && !wouldExceedLimit && 'ring-2 ring-purple-500 scale-105'
+                              )}
+                            >
+                              <VehicleImage src={photo} alt="" className="w-full h-full object-cover pointer-events-none" iconSize="w-4 h-4" />
+                              
+                              {/* "Won't Upload" overlay - but still draggable */}
+                              {wouldExceedLimit && !isBeingDragged && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-red-900/50 pointer-events-none">
+                                  <div className="text-center">
+                                    <X className="w-6 h-6 text-white mx-auto" />
+                                    <span className="text-[10px] text-white font-medium block mt-0.5">Won't Upload</span>
+                                    <span className="text-[9px] text-white/80 block mt-0.5">Drag to swap</span>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Add icon for unselected photos under limit */}
+                              {!wouldExceedLimit && !isBeingDragged && (
+                                <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-gray-400/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                  <Plus className="w-3 h-3 text-white" />
+                                </div>
+                              )}
+                              
+                              {/* Drag handle for unselected */}
+                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <GripVertical className="w-4 h-4 text-white drop-shadow-lg pointer-events-none" />
                               </div>
-                            ) : (
-                              <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-gray-400/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                <Plus className="w-3 h-3 text-white" />
-                              </div>
-                            )}
-                            
-                            {/* Drag handle for selected */}
-                            {isSelected && (
-                              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                <GripVertical className="w-4 h-4 text-white drop-shadow-lg" />
-                              </div>
-                            )}
-                            
-                            {/* Main photo indicator */}
-                            {isSelected && selectedIndex === 0 && (
-                              <div className="absolute bottom-1 left-1 right-1 pointer-events-none">
-                                <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full font-medium">Main Photo</span>
-                              </div>
-                            )}
-                            
-                            {/* Move arrows for selected photos - only show when not dragging */}
-                            {isSelected && !isDragging && (
-                              <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {selectedIndex > 0 && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      movePhoto(selectedIndex, 'left');
-                                    }}
-                                    className="w-5 h-5 bg-white/90 rounded flex items-center justify-center hover:bg-white shadow-sm"
-                                  >
-                                    <ArrowLeft className="w-3 h-3 text-gray-700" />
-                                  </button>
-                                )}
-                                {selectedIndex < selectedPhotos.length - 1 && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      movePhoto(selectedIndex, 'right');
-                                    }}
-                                    className="w-5 h-5 bg-white/90 rounded flex items-center justify-center hover:bg-white shadow-sm"
-                                  >
-                                    <ArrowRight className="w-3 h-3 text-gray-700" />
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
+                            </div>
+                          );
+                        })}
+                      </>
                     )}
                   </div>
                   
@@ -662,6 +691,33 @@ function FacebookAdPreviewModal({
                     )}>
                       {selectedPhotos.length}/10 selected
                     </span>
+                  </div>
+                  
+                  {/* Usage Instructions */}
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-xs font-semibold text-blue-900 mb-2">📸 How to Use Photo Selection</h4>
+                    <ul className="space-y-1.5 text-xs text-blue-800">
+                      <li className="flex items-start gap-2">
+                        <span className="font-bold text-blue-600 flex-shrink-0">1.</span>
+                        <span><strong>Click numbered photo</strong> to add/remove from selection (max 10)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="font-bold text-blue-600 flex-shrink-0">2.</span>
+                        <span><strong>Drag & drop</strong> any photo to reorder - swap positions instantly</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="font-bold text-blue-600 flex-shrink-0">3.</span>
+                        <span><strong>First photo (green border)</strong> = Main listing image on Facebook</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="font-bold text-blue-600 flex-shrink-0">4.</span>
+                        <span><strong>"Won't Upload" photos</strong> (faded red) can be dragged to swap with selected ones</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="font-bold text-blue-600 flex-shrink-0">5.</span>
+                        <span><strong>Uncheck numbered photos</strong> to free slots and add different images</span>
+                      </li>
+                    </ul>
                   </div>
                 </div>
 

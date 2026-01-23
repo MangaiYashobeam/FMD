@@ -37,6 +37,9 @@ interface ExtensionTask {
 // In-memory task queue (use Redis in production for scalability)
 const taskQueue: Map<string, ExtensionTask> = new Map();
 
+// Store extension heartbeats (accountId -> last ping timestamp)
+const extensionHeartbeats: Map<string, { lastPing: Date; userEmail: string }> = new Map();
+
 /**
  * Clean old tasks from memory
  */
@@ -48,6 +51,88 @@ function cleanOldTasks() {
     }
   });
 }
+
+// ============================================
+// Extension Status & Heartbeat
+// ============================================
+
+/**
+ * POST /api/extension/heartbeat
+ * Extension sends heartbeat every 30 seconds to indicate it's online
+ */
+router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { accountId } = req.body;
+    
+    if (!accountId) {
+      res.status(400).json({ error: 'accountId is required' });
+      return;
+    }
+    
+    // Verify access
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId,
+      },
+    });
+    
+    if (!accountUser) {
+      res.status(403).json({ error: 'Access denied to this account' });
+      return;
+    }
+    
+    // Update heartbeat
+    extensionHeartbeats.set(accountId, {
+      lastPing: new Date(),
+      userEmail: req.user!.email,
+    });
+    
+    res.json({ success: true, timestamp: new Date() });
+  } catch (error) {
+    logger.error('Extension heartbeat error:', error);
+    res.status(500).json({ error: 'Failed to record heartbeat' });
+  }
+});
+
+/**
+ * GET /api/extension/status/:accountId
+ * Check if extension is online for an account
+ */
+router.get('/status/:accountId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const accountId = req.params.accountId as string;
+    
+    // Verify access
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId,
+      },
+    });
+    
+    if (!accountUser) {
+      res.status(403).json({ error: 'Access denied to this account' });
+      return;
+    }
+    
+    const heartbeat = extensionHeartbeats.get(accountId);
+    const isOnline = heartbeat && (Date.now() - heartbeat.lastPing.getTime() < 60000); // Online if pinged in last 60s
+    
+    res.json({
+      success: true,
+      data: {
+        accountId,
+        isOnline,
+        lastPing: heartbeat?.lastPing || null,
+        userEmail: heartbeat?.userEmail || null,
+      },
+    });
+  } catch (error) {
+    logger.error('Extension status check error:', error);
+    res.status(500).json({ error: 'Failed to check status' });
+  }
+});
 
 // ============================================
 // Task Routes

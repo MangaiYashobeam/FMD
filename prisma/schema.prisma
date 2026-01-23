@@ -51,6 +51,7 @@ model User {
   dealerAccount       DealerAccount?
   sentInvitations     TeamInvitation[]     @relation("InvitedBy")
   fbmPostLogs         FBMPostLog[]
+  iaiSoldiers         IAISoldier[]
 
   @@map("users")
 }
@@ -108,6 +109,8 @@ model Account {
   teamInvitations   TeamInvitation[]
   pixelEvents       PixelEvent[]
   fbmPostLogs       FBMPostLog[]
+  iaiSoldiers       IAISoldier[]
+  iaiActivityLogs   IAIActivityLog[]
 
   @@map("accounts")
 }
@@ -2883,4 +2886,134 @@ model AIInterventionSummary {
   @@index([periodStart, periodEnd])
   @@index([accountId])
   @@map("ai_intervention_summaries")
+}
+
+// ============================================
+// IAI Soldier Command Center
+// ============================================
+
+model IAISoldier {
+  id            String   @id @default(uuid())
+  soldierNumber Int      @default(autoincrement()) @map("soldier_number")
+  soldierId     String   @unique @map("soldier_id") // IAI-0, IAI-1, etc.
+  accountId     String   @map("account_id")
+  userId        String?  @map("user_id")
+
+  // Status
+  status   String  @default("offline") // online, offline, working, idle, error
+  isActive Boolean @default(true) @map("is_active")
+
+  // Identity
+  browserId        String? @map("browser_id")
+  extensionVersion String? @map("extension_version")
+  userAgent        String? @map("user_agent")
+
+  // Location & Network
+  ipAddress        String?  @map("ip_address")
+  locationCountry  String?  @map("location_country")
+  locationCity     String?  @map("location_city")
+  locationLat      Decimal? @map("location_lat") @db.Decimal(10, 8)
+  locationLng      Decimal? @map("location_lng") @db.Decimal(11, 8)
+  timezone         String?
+
+  // Performance Stats
+  tasksCompleted       Int      @default(0) @map("tasks_completed")
+  tasksFailed          Int      @default(0) @map("tasks_failed")
+  totalRuntimeMinutes  Int      @default(0) @map("total_runtime_minutes")
+  avgTaskDurationSec   Int?     @map("avg_task_duration_sec")
+  successRate          Decimal? @map("success_rate") @db.Decimal(5, 2)
+
+  // Current Work
+  currentTaskId        String?   @map("current_task_id")
+  currentTaskType      String?   @map("current_task_type")
+  currentTaskStartedAt DateTime? @map("current_task_started_at")
+
+  // Heartbeat
+  lastHeartbeatAt DateTime? @map("last_heartbeat_at")
+  lastPollAt      DateTime? @map("last_poll_at")
+  lastTaskAt      DateTime? @map("last_task_at")
+  lastError       String?
+  lastErrorAt     DateTime? @map("last_error_at")
+
+  // Session
+  sessionStartAt DateTime? @map("session_start_at")
+  sessionEndAt   DateTime? @map("session_end_at")
+  totalSessions  Int       @default(0) @map("total_sessions")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account            Account                    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user               User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  activityLogs       IAIActivityLog[]
+  performanceSnapshots IAIPerformanceSnapshot[]
+
+  @@index([accountId])
+  @@index([status])
+  @@index([soldierId])
+  @@index([lastHeartbeatAt])
+  @@map("iai_soldiers")
+}
+
+model IAIActivityLog {
+  id        String @id @default(uuid())
+  soldierId String @map("soldier_id")
+  accountId String @map("account_id")
+
+  // Event Details
+  eventType String @map("event_type") // heartbeat, task_start, task_complete, task_fail, status_change, error
+  eventData Json?  @map("event_data")
+  message   String?
+
+  // Task Reference
+  taskId     String? @map("task_id")
+  taskType   String? @map("task_type")
+  taskResult Json?   @map("task_result")
+
+  // Location at time of event
+  ipAddress   String?  @map("ip_address")
+  locationLat Decimal? @map("location_lat") @db.Decimal(10, 8)
+  locationLng Decimal? @map("location_lng") @db.Decimal(11, 8)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  soldier IAISoldier @relation(fields: [soldierId], references: [id], onDelete: Cascade)
+  account Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([soldierId])
+  @@index([accountId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("iai_activity_logs")
+}
+
+model IAIPerformanceSnapshot {
+  id        String @id @default(uuid())
+  soldierId String @map("soldier_id")
+
+  // Snapshot Time
+  snapshotAt DateTime @default(now()) @map("snapshot_at")
+
+  // Metrics
+  tasksInPeriod  Int      @default(0) @map("tasks_in_period")
+  successCount   Int      @default(0) @map("success_count")
+  failureCount   Int      @default(0) @map("failure_count")
+  avgDurationSec Int?     @map("avg_duration_sec")
+  cpuUsage       Decimal? @map("cpu_usage") @db.Decimal(5, 2)
+  memoryUsageMb  Int?     @map("memory_usage_mb")
+
+  // Status
+  status      String @map("status")
+  errorsCount Int    @default(0) @map("errors_count")
+
+  // Relations
+  soldier IAISoldier @relation(fields: [soldierId], references: [id], onDelete: Cascade)
+
+  @@index([soldierId])
+  @@index([snapshotAt])
+  @@map("iai_performance_snapshots")
 }

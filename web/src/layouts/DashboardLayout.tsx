@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
 import FloatingAIChat from '../components/ai/FloatingAIChat';
 import { FacebookConnectionStatus } from '../components/FacebookConnectionStatus';
+import { ExtensionStatus } from '../components/ExtensionStatus';
 import {
   LayoutDashboard,
   Package,
@@ -21,6 +22,7 @@ import {
   MessageCircle,
   BarChart3,
   Send,
+  Activity,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DealersFaceIcon } from '../components/ui/Logo';
@@ -33,6 +35,7 @@ const navigation = [
   { name: 'Analytics', href: '/app/analytics', icon: BarChart3 },
   { name: 'Facebook', href: '/app/facebook', icon: Facebook },
   { name: 'Auto-Post', href: '/app/posting', icon: Send },
+  { name: 'FBM Posts', href: '/app/fbm-posts', icon: Activity },
   { name: 'Sync', href: '/app/sync', icon: RefreshCw },
   { name: 'Team', href: '/app/team', icon: Users },
   { name: 'Settings', href: '/app/settings', icon: Settings },
@@ -193,6 +196,9 @@ export default function DashboardLayout() {
 
             {/* Right side actions */}
             <div className="flex items-center gap-4">
+              {/* Extension Status */}
+              <ExtensionStatus variant="mini" />
+              
               {/* Facebook Connection Status */}
               <FacebookConnectionStatus variant="mini" />
               

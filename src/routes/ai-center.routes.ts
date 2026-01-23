@@ -12,6 +12,8 @@ import { authenticate, AuthRequest } from '@/middleware/auth';
 import { requireSuperAdmin } from '@/middleware/rbac';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { deepseekService } from '@/services/deepseek.service';
+import { aiMemoryService, MemoryScope, MemoryCategory } from '@/services/ai-memory.service';
+import { logger } from '@/utils/logger';
 
 const router = Router();
 
@@ -419,11 +421,38 @@ async function executeNovaTool(toolCommand: string): Promise<NovaToolResult> {
 }
 
 /**
+ * Get memory context for the super admin
+ */
+async function getMemoryContext(userId: string): Promise<string> {
+  try {
+    const memoryContext = {
+      userId,
+      userRole: 'super_admin' as const,
+    };
+    
+    const memories = await aiMemoryService.getContextForAI(memoryContext);
+    return memories;
+  } catch (error) {
+    logger.error('Failed to get memory context:', error);
+    return '';
+  }
+}
+
+/**
  * Gathers REAL system data to inject into Nova's context
  * This is what makes Nova actually useful - she gets real data, not just a prompt
  */
-async function getNovaSystemContext(): Promise<string> {
+async function getNovaSystemContext(userId?: string): Promise<string> {
   const context: string[] = ['=== REAL-TIME SYSTEM STATUS (Injected at query time) ==='];
+  
+  // Add memory context if userId provided
+  if (userId) {
+    const memoryStr = await getMemoryContext(userId);
+    if (memoryStr) {
+      context.push('\n📚 YOUR MEMORY (From Database):');
+      context.push(memoryStr);
+    }
+  }
   
   // NOVA TOOL INSTRUCTIONS
   context.push('\n🛠️ YOUR TOOLS - You have ROOT ACCESS to the codebase:');
@@ -456,7 +485,7 @@ async function getNovaSystemContext(): Promise<string> {
   
   // Database Status
   context.push('\n🗄️ DATABASE STATUS:');
-  context.push(`- DATABASE_URL: ${process.env.DATABASE_URL ? '✅ Configured (PostgreSQL on Railway)' : '❌ Missing'}`);
+  context.push(`- DATABASE_URL: ${process.env.DATABASE_URL ? '✅ Configured (PostgreSQL on VPS)' : '❌ Missing'}`);
   
   // Facebook Integration Status
   context.push('\n📱 FACEBOOK INTEGRATION STATUS:');
@@ -619,10 +648,11 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
       
       // NOVA CONTEXT INJECTION: If user is asking about system status, inject REAL data
       const lastUserMessage = chatMessages.filter((m: any) => m.role === 'user').pop()?.content || '';
+      const userId = req.user?.id;
       if (needsSystemContext(lastUserMessage)) {
-        const realContext = await getNovaSystemContext();
+        const realContext = await getNovaSystemContext(userId);
         systemMessage = systemMessage + '\n\n' + realContext;
-        console.log('[Nova] Injected real-time system context');
+        console.log('[Nova] Injected real-time system context with memory');
       }
       
       // Use Claude Sonnet 4 (January 2026 current model)
@@ -1328,6 +1358,183 @@ router.post('/learn', asyncHandler(async (_req: AuthRequest, res: Response) => {
   res.json({
     success: true,
     message: 'Interaction recorded for learning',
+  });
+}));
+
+// ============================================
+// Memory Management Routes
+// ============================================
+
+/**
+ * GET /api/ai-center/memories
+ * Get all memories for the current user context
+ */
+router.get('/memories', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ success: false, message: 'User not authenticated' });
+    return;
+  }
+
+  const memoryContext = {
+    userId,
+    userRole: 'super_admin' as const,
+  };
+
+  const memories = await aiMemoryService.getMemoriesForContext(memoryContext, { limit: 100 });
+  
+  res.json({
+    success: true,
+    data: {
+      memories,
+      count: memories.length,
+      context: memoryContext,
+    },
+  });
+}));
+
+/**
+ * POST /api/ai-center/memories/seed
+ * Seed the AI memory database with production knowledge
+ */
+router.post('/memories/seed', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ success: false, message: 'User not authenticated' });
+    return;
+  }
+
+  logger.info(`[AI Memory] Seeding memories for user ${userId}`);
+
+  const memoryContext = {
+    userId,
+    userRole: 'super_admin' as const,
+  };
+
+  // Production knowledge to seed
+  const productionMemories = [
+    {
+      scope: MemoryScope.GLOBAL,
+      category: MemoryCategory.FACT,
+      key: 'platform_identity',
+      value: {
+        name: 'DealersFace',
+        domain: 'dealersface.com',
+        company: 'GAD Productions',
+        purpose: 'SaaS platform for automotive dealership management',
+        tech_stack: {
+          frontend: 'React 18 + TypeScript + Vite + Tailwind CSS',
+          backend: 'Node.js + Express + TypeScript',
+          database: 'PostgreSQL via Prisma ORM',
+          cache: 'Redis',
+          deployment: 'Docker on VPS (46.4.224.182)',
+        },
+      },
+      summary: 'DealersFace is a SaaS platform by GAD Productions for automotive dealerships',
+      importance: 1.0,
+    },
+    {
+      scope: MemoryScope.GLOBAL,
+      category: MemoryCategory.FACT,
+      key: 'production_infrastructure',
+      value: {
+        vps_ip: '46.4.224.182',
+        domain: 'dealersface.com',
+        deployment_path: '/opt/facemydealer',
+        docker_compose: 'docker-compose.production.yml',
+        containers: ['api', 'postgres', 'redis', 'traefik', 'worker-api', 'browser-worker'],
+      },
+      summary: 'Production runs on VPS 46.4.224.182 with Docker containers',
+      importance: 1.0,
+    },
+    {
+      scope: MemoryScope.ROLE,
+      category: MemoryCategory.INSTRUCTION,
+      key: 'server_access',
+      value: {
+        ssh_command: 'ssh root@46.4.224.182',
+        deployment_path: '/opt/facemydealer',
+        commands: {
+          view_logs: 'docker compose -f docker-compose.production.yml logs -f --tail=100',
+          restart_api: 'docker compose -f docker-compose.production.yml restart api',
+          rebuild_deploy: 'docker compose -f docker-compose.production.yml build api --no-cache && docker compose -f docker-compose.production.yml up -d api',
+          check_status: 'docker compose -f docker-compose.production.yml ps',
+        },
+      },
+      summary: 'SSH server access commands for deployment and troubleshooting',
+      importance: 1.0,
+    },
+    {
+      scope: MemoryScope.ROLE,
+      category: MemoryCategory.INSTRUCTION,
+      key: 'troubleshooting_guide',
+      value: {
+        '403_forbidden': {
+          causes: ['CSRF token missing', 'Invalid JWT', 'User inactive'],
+          fix: 'Check server logs, add route to CSRF skip list if needed',
+        },
+        '401_unauthorized': {
+          causes: ['Missing Bearer token', 'Expired JWT'],
+          fix: 'Force re-login or check JWT_SECRET',
+        },
+        '502_bad_gateway': {
+          causes: ['API container crashed'],
+          fix: 'docker compose restart api',
+        },
+      },
+      summary: 'Common error troubleshooting guide',
+      importance: 0.95,
+    },
+    {
+      scope: MemoryScope.ROLE,
+      category: MemoryCategory.PERSONALITY,
+      key: 'nova_identity',
+      value: {
+        name: 'Nova',
+        full_name: 'Neural Operations & Virtual Administrator',
+        role: 'Super Admin AI Assistant + Developer Companion',
+        capabilities: ['Full codebase knowledge', 'Production server commands', 'Database queries', 'Debugging'],
+      },
+      summary: "Nova's identity and capabilities",
+      importance: 1.0,
+    },
+  ];
+
+  let created = 0;
+  let updated = 0;
+
+  for (const mem of productionMemories) {
+    try {
+      await aiMemoryService.createMemory(memoryContext, {
+        scope: mem.scope,
+        category: mem.category,
+        key: mem.key,
+        value: mem.value,
+        summary: mem.summary,
+        importance: mem.importance,
+      });
+      created++;
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        // Duplicate key, count as updated
+        updated++;
+        logger.info(`Memory ${mem.key} already exists, skipping`);
+      } else {
+        logger.error(`Failed to create memory ${mem.key}:`, error);
+      }
+    }
+  }
+
+  logger.info(`[AI Memory] Seeded ${created} new, ${updated} existing memories`);
+
+  res.json({
+    success: true,
+    message: `Memory seeding complete: ${created} created, ${updated} updated`,
+    data: {
+      created,
+      updated,
+      total: productionMemories.length,
+    },
   });
 }));
 
