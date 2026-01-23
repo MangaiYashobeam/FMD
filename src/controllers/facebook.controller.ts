@@ -949,7 +949,7 @@ export class FacebookController {
    * GET /api/facebook/session/status/:accountId
    */
   async getSessionStatus(req: AuthRequest, res: Response) {
-    const { accountId } = req.params;
+    const accountId = req.params.accountId as string;
 
     // Verify user has access to the account
     const hasAccess = await prisma.accountUser.findFirst({
