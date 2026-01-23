@@ -586,6 +586,9 @@ app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default)
 // Error Monitoring & AI Intervention System
 app.use('/api/error-monitoring', ring5AuthBarrier, require('./routes/error-monitoring.routes').default); // Error monitoring & AI intervention
 
+// Nova Monitoring Integration (AI-powered error alerts & chat history)
+app.use('/api/nova', require('./routes/nova-monitoring.routes').default); // Nova monitoring (mixed auth - SSE public with token)
+
 // FBM Posts Tracking & Debugging System
 app.use('/api/fbm-posts', ring5AuthBarrier, require('./routes/fbm-posts.routes').default); // FBM post tracking (requires auth)
 
@@ -728,6 +731,16 @@ const startServer = async () => {
     } catch (error) {
       logger.warn('⚠️  Error Monitoring service initialization failed:', error);
       logger.info('Continuing without error monitoring...');
+    }
+
+    // Initialize Nova Monitoring Integration (wires error monitoring to Nova AI)
+    try {
+      const { novaMonitoringService } = await import('@/services/nova-monitoring.service');
+      await novaMonitoringService.initialize();
+      logger.info('✅ Nova Monitoring service initialized (error alerts wired to Nova AI)');
+    } catch (error) {
+      logger.warn('⚠️  Nova Monitoring service initialization failed:', error);
+      logger.info('Continuing without Nova monitoring integration...');
     }
 
     // Auto-promote default super admin users from environment
