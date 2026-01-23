@@ -473,6 +473,9 @@ app.use('/api', (req, res, next) => {
     '/accounts',
     // IAI Admin routes (prototype browser testing)
     '/admin/iai',
+    // AI Center routes (AI memory, chat)
+    '/ai-center',
+    '/ai/',
   ];
   
   if (skipPaths.some(p => req.path.startsWith(p))) {
