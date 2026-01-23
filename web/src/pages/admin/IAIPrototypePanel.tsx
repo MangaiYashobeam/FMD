@@ -383,11 +383,21 @@ class IAIWebSocketManager {
 // Production mode - connects to real backend
 const PRODUCTION_MODE = true;
 
+// Mode types
+export type IAIMode = 'live' | 'simulation';
+
+interface WorkerHealthResponse {
+  status: string;
+  workers_active: number;
+  message?: string;
+}
+
 interface CreateSoldierResponse {
   success: boolean;
   sessionId: string;
   workerConnected: boolean;
   message: string;
+  mode: IAIMode;
 }
 
 interface ActionResult {
@@ -408,9 +418,18 @@ interface ActionResult {
   error?: string;
 }
 
-async function createPrototypeSoldier(targetUrl?: string): Promise<CreateSoldierResponse> {
+async function checkWorkerHealth(): Promise<WorkerHealthResponse> {
   try {
-    const response = await api.post('/api/admin/iai/prototype/create', { targetUrl });
+    const response = await api.get('/api/admin/iai/worker/health');
+    return response.data;
+  } catch (error: any) {
+    return { status: 'offline', workers_active: 0, message: error.message };
+  }
+}
+
+async function createPrototypeSoldier(targetUrl?: string, forceMode?: IAIMode): Promise<CreateSoldierResponse> {
+  try {
+    const response = await api.post('/api/admin/iai/prototype/create', { targetUrl, forceMode });
     return response.data;
   } catch (error: any) {
     console.error('Failed to create prototype soldier:', error);
@@ -885,10 +904,43 @@ export default function IAIPrototypePanel() {
   const [apiEndpoint, setApiEndpoint] = useState('');
   const [showApiConfig, setShowApiConfig] = useState(false);
   
+  // LIVE vs SIMULATION mode
+  const [iaiMode, setIaiMode] = useState<IAIMode>('live');
+  const [workerStatus, setWorkerStatus] = useState<WorkerHealthResponse | null>(null);
+  const [checkingWorker, setCheckingWorker] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
+  
   const logsEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<IAIWebSocketManager | null>(null);
 
   const activeSoldier = soldiers.find((s) => s.id === selectedSoldier);
+
+  // Check worker health on mount and periodically
+  const checkWorker = useCallback(async () => {
+    setCheckingWorker(true);
+    try {
+      const health = await checkWorkerHealth();
+      setWorkerStatus(health);
+      if (health.status !== 'healthy' && health.workers_active === 0 && iaiMode === 'live') {
+        setLastError('Python Worker not connected. Switch to Simulation mode or start the worker.');
+      } else {
+        setLastError(null);
+      }
+    } catch (error) {
+      setWorkerStatus({ status: 'offline', workers_active: 0, message: 'Failed to check worker' });
+      if (iaiMode === 'live') {
+        setLastError('Cannot connect to Python Worker API');
+      }
+    } finally {
+      setCheckingWorker(false);
+    }
+  }, [iaiMode]);
+
+  useEffect(() => {
+    checkWorker();
+    const interval = setInterval(checkWorker, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [checkWorker]);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -980,7 +1032,14 @@ export default function IAIPrototypePanel() {
   }, []);
 
   const createSoldier = async () => {
+    // In LIVE mode, check if worker is available first
+    if (iaiMode === 'live' && workerStatus?.status !== 'healthy' && workerStatus?.workers_active === 0) {
+      setLastError('❌ Cannot create LIVE soldier: Python Worker not connected. Start the worker or switch to Simulation mode.');
+      return;
+    }
+    
     setIsConnecting(true);
+    setLastError(null);
     
     const newSoldier: PrototypeSoldier = {
       id: generateId(),
@@ -1002,10 +1061,23 @@ export default function IAIPrototypePanel() {
 
     try {
       // Request backend to create actual browser session
-      addLog(newSoldier.id, 'system', '🤖 Creating IAI Prototype Soldier...');
-      addLog(newSoldier.id, 'info', '🌐 Connecting to Python Worker API...');
+      addLog(newSoldier.id, 'system', `🤖 Creating IAI Prototype Soldier in ${iaiMode.toUpperCase()} mode...`);
+      addLog(newSoldier.id, 'info', iaiMode === 'live' ? '🌐 Connecting to Python Worker API...' : '🎭 Running in SIMULATION mode (no real browser)');
       
-      const response = await createPrototypeSoldier(targetUrl);
+      const response = await createPrototypeSoldier(targetUrl, iaiMode);
+      
+      // Check if we got a live connection when we requested live mode
+      if (iaiMode === 'live' && !response.workerConnected) {
+        addLog(newSoldier.id, 'error', '❌ LIVE MODE FAILED: Python Worker not available!');
+        addLog(newSoldier.id, 'warn', '⚠️ Switch to Simulation mode or start the Python Worker');
+        setLastError('LIVE mode failed: Python Worker not connected');
+        setSoldiers(prev => prev.map(s => 
+          s.id === newSoldier.id 
+            ? { ...s, status: 'error' }
+            : s
+        ));
+        return;
+      }
       
       setSoldiers(prev => prev.map(s => 
         s.id === newSoldier.id 
@@ -1016,19 +1088,27 @@ export default function IAIPrototypePanel() {
               browserInfo: {
                 userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
                 viewport: { width: 1920, height: 1080 },
-                platform: 'Linux',
+                platform: iaiMode === 'live' ? 'Linux (Python Worker)' : 'Simulation',
               },
             }
           : s
       ));
       
+      // Update mode from response (in case backend changed it)
+      if (response.mode && response.mode !== iaiMode) {
+        setIaiMode(response.mode);
+        addLog(newSoldier.id, 'warn', `⚠️ Mode changed to ${response.mode.toUpperCase()} by backend`);
+      }
+      
       if (response.workerConnected) {
-        addLog(newSoldier.id, 'info', '✅ Connected to Python Worker with real Chromium');
+        addLog(newSoldier.id, 'info', '✅ LIVE MODE: Connected to Python Worker with real Chromium browser');
+        addLog(newSoldier.id, 'info', '📸 Real screenshots and browser automation enabled');
       } else {
-        addLog(newSoldier.id, 'warn', '⚠️ Worker not available - running in simulation mode');
+        addLog(newSoldier.id, 'warn', '🎭 SIMULATION MODE: No real browser - actions are simulated');
+        addLog(newSoldier.id, 'info', '⚠️ Screenshots will be placeholders');
       }
       addLog(newSoldier.id, 'debug', `Session ID: ${response.sessionId}`);
-      addLog(newSoldier.id, 'system', '🟢 Soldier ready for commands');
+      addLog(newSoldier.id, 'system', `🟢 Soldier ready for commands (${response.mode?.toUpperCase() || iaiMode.toUpperCase()})`);
       
       // Subscribe to soldier updates via WebSocket
       if (PRODUCTION_MODE) {
@@ -1037,6 +1117,7 @@ export default function IAIPrototypePanel() {
       
     } catch (error) {
       addLog(newSoldier.id, 'error', `❌ Failed to create soldier: ${(error as Error).message}`);
+      setLastError((error as Error).message);
       setSoldiers(prev => prev.map(s => 
         s.id === newSoldier.id 
           ? { ...s, status: 'error' }
@@ -1100,65 +1181,104 @@ export default function IAIPrototypePanel() {
       let htmlSnapshots = [...soldier.htmlSnapshots];
       let harvestedData = [...soldier.harvestedData];
 
-      // Process results based on action type
-      if (actionType === 'navigate' && result.url) {
-        newUrl = result.url;
-        addLog(soldierId, 'info', `📍 Navigated to: ${newUrl}`);
-      } else if (actionType === 'screenshot' && result.screenshot) {
-        const screenshot: Screenshot = {
-          id: generateId(),
-          timestamp: new Date(),
-          actionId: action.id,
-          dataUrl: result.screenshot,
-          dimensions: { width: 1920, height: 1080 },
-          url: soldier.currentUrl || targetUrl,
-          fullPage: false,
-        };
-        screenshots = [...screenshots, screenshot];
-        addLog(soldierId, 'data', '📷 Screenshot captured');
-      } else if (actionType === 'analyze_html' && result.html) {
-        const analysis = result.analysis || analyzeHTML(result.html);
-        const htmlSnapshot: HTMLSnapshot = {
-          id: generateId(),
-          timestamp: new Date(),
-          actionId: action.id,
-          url: soldier.currentUrl || targetUrl,
-          html: result.html,
-          analysis,
-        };
-        htmlSnapshots = [...htmlSnapshots, htmlSnapshot];
-        addLog(soldierId, 'data', `🔍 HTML analyzed: ${analysis.totalElements} elements, ${analysis.forms.length} forms`);
-      } else if (actionType === 'extract' && result.data) {
-        for (const item of result.data) {
-          const extractedData: HarvestedData = {
+      // Process results based on action type with try-catch to prevent crashes
+      try {
+        if (actionType === 'navigate' && result.url) {
+          newUrl = result.url;
+          addLog(soldierId, 'info', `📍 Navigated to: ${newUrl}`);
+        } else if (actionType === 'screenshot' && result.screenshot) {
+          const screenshot: Screenshot = {
             id: generateId(),
             timestamp: new Date(),
             actionId: action.id,
-            type: item.type as HarvestedData['type'] || 'text',
-            selector: item.selector || actionTarget || '',
-            value: item.content,
-            processed: false,
+            dataUrl: result.screenshot,
+            dimensions: { width: 1920, height: 1080 },
+            url: soldier.currentUrl || targetUrl,
+            fullPage: false,
           };
-          harvestedData = [...harvestedData, extractedData];
+          screenshots = [...screenshots, screenshot];
+          addLog(soldierId, 'data', '📷 Screenshot captured');
+        } else if (actionType === 'analyze_html') {
+          // Safe HTML analysis with error handling
+          let analysis: HTMLAnalysis;
+          if (result.analysis) {
+            analysis = result.analysis;
+          } else if (result.html) {
+            try {
+              analysis = analyzeHTML(result.html);
+            } catch (parseError) {
+              console.error('HTML parsing error:', parseError);
+              analysis = {
+                totalElements: 0,
+                elementCounts: {},
+                forms: [],
+                links: [],
+                images: [],
+                scripts: 0,
+                styles: 0,
+                dataAttributes: [],
+                interactiveElements: [],
+              };
+              addLog(soldierId, 'warn', `⚠️ HTML parsing failed: ${(parseError as Error).message}`);
+            }
+          } else {
+            analysis = {
+              totalElements: 0,
+              elementCounts: {},
+              forms: [],
+              links: [],
+              images: [],
+              scripts: 0,
+              styles: 0,
+              dataAttributes: [],
+              interactiveElements: [],
+            };
+          }
+          const htmlSnapshot: HTMLSnapshot = {
+            id: generateId(),
+            timestamp: new Date(),
+            actionId: action.id,
+            url: soldier.currentUrl || targetUrl,
+            html: result.html || '<html><body>No HTML captured</body></html>',
+            analysis,
+          };
+          htmlSnapshots = [...htmlSnapshots, htmlSnapshot];
+          addLog(soldierId, 'data', `🔍 HTML analyzed: ${analysis.totalElements} elements, ${analysis.forms.length} forms`);
+        } else if (actionType === 'extract' && result.data) {
+          for (const item of result.data) {
+            const extractedData: HarvestedData = {
+              id: generateId(),
+              timestamp: new Date(),
+              actionId: action.id,
+              type: item.type as HarvestedData['type'] || 'text',
+              selector: item.selector || actionTarget || '',
+              value: item.content,
+              processed: false,
+            };
+            harvestedData = [...harvestedData, extractedData];
+          }
+          addLog(soldierId, 'data', `📦 Data extracted from: ${actionTarget}`);
+        } else if (actionType === 'click') {
+          addLog(soldierId, 'info', `🖱️ Clicked: ${result.clicked || actionTarget}`);
+        } else if (actionType === 'type') {
+          addLog(soldierId, 'info', `⌨️ Typed "${result.typed || actionValue}" into ${result.into || actionTarget}`);
+        } else if (actionType === 'wait') {
+          addLog(soldierId, 'info', `⏳ Waited ${result.waited || actionValue}ms`);
+        } else if (actionType === 'scroll') {
+          addLog(soldierId, 'info', `📜 Scrolled by ${result.scrolled || actionValue}px`);
+        } else if (actionType === 'hover') {
+          addLog(soldierId, 'info', `👆 Hovered over: ${result.hovered || actionTarget}`);
+        } else if (actionType === 'select') {
+          addLog(soldierId, 'info', `📋 Selected "${result.selected || actionValue}" from ${actionTarget}`);
+        } else if (actionType === 'custom' || actionType === 'evaluate') {
+          addLog(soldierId, 'info', '⚡ Script executed successfully');
+          if (result.result) {
+            addLog(soldierId, 'data', `Result: ${JSON.stringify(result.result).substring(0, 200)}`);
+          }
         }
-        addLog(soldierId, 'data', `📦 Data extracted from: ${actionTarget}`);
-      } else if (actionType === 'click') {
-        addLog(soldierId, 'info', `🖱️ Clicked: ${result.clicked || actionTarget}`);
-      } else if (actionType === 'type') {
-        addLog(soldierId, 'info', `⌨️ Typed "${result.typed || actionValue}" into ${result.into || actionTarget}`);
-      } else if (actionType === 'wait') {
-        addLog(soldierId, 'info', `⏳ Waited ${result.waited || actionValue}ms`);
-      } else if (actionType === 'scroll') {
-        addLog(soldierId, 'info', `📜 Scrolled by ${result.scrolled || actionValue}px`);
-      } else if (actionType === 'hover') {
-        addLog(soldierId, 'info', `👆 Hovered over: ${result.hovered || actionTarget}`);
-      } else if (actionType === 'select') {
-        addLog(soldierId, 'info', `📋 Selected "${result.selected || actionValue}" from ${actionTarget}`);
-      } else if (actionType === 'custom' || actionType === 'evaluate') {
-        addLog(soldierId, 'info', '⚡ Script executed successfully');
-        if (result.result) {
-          addLog(soldierId, 'data', `Result: ${JSON.stringify(result.result).substring(0, 200)}`);
-        }
+      } catch (processError) {
+        console.error('Error processing action result:', processError);
+        addLog(soldierId, 'warn', `⚠️ Result processing error: ${(processError as Error).message}`);
       }
 
       // Update soldier state
@@ -1181,6 +1301,8 @@ export default function IAIPrototypePanel() {
 
       addLog(soldierId, 'info', `✅ ${actionType} completed in ${duration}ms`);
     } catch (error) {
+      console.error('Action execution error:', error);
+      setLastError((error as Error).message);
       setSoldiers(prev => prev.map(s => {
         if (s.id !== soldierId) return s;
         return {
@@ -1416,8 +1538,23 @@ export default function IAIPrototypePanel() {
 
   const latestHtmlSnapshot = activeSoldier?.htmlSnapshots[activeSoldier.htmlSnapshots.length - 1];
 
+  const isWorkerOnline = workerStatus?.status === 'healthy' || (workerStatus?.workers_active ?? 0) > 0;
+
   return (
     <div className="space-y-6">
+      {/* Error Banner */}
+      {lastError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-800">{lastError}</span>
+          </div>
+          <button onClick={() => setLastError(null)} className="text-red-600 hover:text-red-800">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       {/* Control Header */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
@@ -1428,27 +1565,113 @@ export default function IAIPrototypePanel() {
               {wsConnected ? (
                 <span className="flex items-center gap-1 text-green-600 text-sm font-normal">
                   <Wifi className="w-4 h-4" />
-                  Connected
+                  WS Connected
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-red-600 text-sm font-normal">
                   <WifiOff className="w-4 h-4" />
-                  Disconnected
+                  WS Disconnected
                 </span>
               )}
             </h3>
             <p className="text-gray-600 mt-1">
-              Production-ready soldier control with real browser automation
+              {iaiMode === 'live' 
+                ? '🟢 LIVE MODE: Real browser automation with Python Worker' 
+                : '🎭 SIMULATION MODE: Testing without real browser'}
             </p>
           </div>
           <button
             onClick={createSoldier}
-            disabled={isConnecting}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+            disabled={isConnecting || (iaiMode === 'live' && !isWorkerOnline)}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 ${
+              iaiMode === 'live' 
+                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                : 'bg-orange-600 hover:bg-orange-700 text-white'
+            }`}
           >
             {isConnecting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Create Soldier
+            Create {iaiMode === 'live' ? 'LIVE' : 'SIMULATION'} Soldier
           </button>
+        </div>
+
+        {/* Mode Toggle & Worker Status */}
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4 mb-4 border border-gray-200">
+          <div className="flex items-center justify-between">
+            {/* Mode Toggle */}
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700">IAI Mode:</span>
+              <div className="flex rounded-lg overflow-hidden border border-gray-300">
+                <button
+                  onClick={() => setIaiMode('live')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    iaiMode === 'live'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  🟢 LIVE
+                </button>
+                <button
+                  onClick={() => setIaiMode('simulation')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    iaiMode === 'simulation'
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  🎭 SIMULATION
+                </button>
+              </div>
+            </div>
+
+            {/* Worker Status */}
+            <div className="flex items-center gap-4">
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                isWorkerOnline 
+                  ? 'bg-green-100 text-green-800 border border-green-200' 
+                  : 'bg-red-100 text-red-800 border border-red-200'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${isWorkerOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                <span className="text-sm font-medium">
+                  Python Worker: {isWorkerOnline ? 'ONLINE' : 'OFFLINE'}
+                </span>
+                {isWorkerOnline && workerStatus?.workers_active !== undefined && (
+                  <span className="text-xs">({workerStatus.workers_active} active)</span>
+                )}
+              </div>
+              <button
+                onClick={checkWorker}
+                disabled={checkingWorker}
+                className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                title="Refresh worker status"
+              >
+                <RefreshCw className={`w-4 h-4 ${checkingWorker ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Mode Description */}
+          <div className="mt-3 text-sm text-gray-600">
+            {iaiMode === 'live' ? (
+              <div className="flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+                <div>
+                  <strong>LIVE Mode</strong>: Real Chromium browser via Python Worker. 
+                  {isWorkerOnline 
+                    ? ' Ready for real screenshots, clicks, and FB Marketplace automation.'
+                    : ' ⚠️ Worker not connected - start Python Worker to use LIVE mode.'}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5" />
+                <div>
+                  <strong>SIMULATION Mode</strong>: No real browser. Actions are simulated, screenshots are placeholders.
+                  Useful for testing UI and workflow without Python Worker.
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Target URL Configuration */}

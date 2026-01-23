@@ -837,34 +837,62 @@ async function callWorkerApi(endpoint: string, method: string = 'GET', body?: an
 }
 
 /**
+ * GET /api/admin/iai/worker/health
+ * Check Python worker health status
+ */
+router.get('/worker/health', authenticate, async (_req: AuthRequest, res: Response) => {
+  try {
+    const health = await callWorkerApi('/health') as { status: string; workers_active: number; message?: string };
+    res.json({
+      status: health.status || 'unknown',
+      workers_active: health.workers_active || 0,
+      message: health.message || 'Worker API responded',
+    });
+  } catch (error: any) {
+    res.json({
+      status: 'offline',
+      workers_active: 0,
+      message: error.message || 'Worker API not reachable',
+    });
+  }
+});
+
+/**
  * POST /api/admin/iai/prototype/create
  * Create a new prototype soldier session with real Playwright browser
  */
 router.post('/prototype/create', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { targetUrl } = req.body;
+    const { targetUrl, forceMode } = req.body;
     const sessionId = `proto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Try to use Python worker API first
+    // Try to use Python worker API first (unless forceMode is 'simulation')
     let workerConnected = false;
     let wsUrl = '';
+    let mode: 'live' | 'simulation' = forceMode || 'live';
     
-    try {
-      // Check worker health
-      const health = await callWorkerApi('/health') as { status: string; workers_active: number };
-      workerConnected = health.status === 'healthy' || health.workers_active > 0;
-      
-      if (workerConnected) {
-        // Create a browser session via worker API
-        const sessionResult = await callWorkerApi('/api/sessions/create', 'POST', {
-          account_id: `prototype_${sessionId}`,
-          headless: true,
-          viewport: { width: 1920, height: 1080 },
-        }) as { ws_url?: string; cdp_url?: string };
-        wsUrl = sessionResult.ws_url || sessionResult.cdp_url || '';
+    if (mode === 'live') {
+      try {
+        // Check worker health
+        const health = await callWorkerApi('/health') as { status: string; workers_active: number };
+        workerConnected = health.status === 'healthy' || health.workers_active > 0;
+        
+        if (workerConnected) {
+          // Create a browser session via worker API
+          const sessionResult = await callWorkerApi('/api/sessions/create', 'POST', {
+            account_id: `prototype_${sessionId}`,
+            headless: true,
+            viewport: { width: 1920, height: 1080 },
+          }) as { ws_url?: string; cdp_url?: string };
+          wsUrl = sessionResult.ws_url || sessionResult.cdp_url || '';
+        } else {
+          // If forced live mode but worker not connected, fail
+          mode = 'simulation';
+        }
+      } catch (workerError) {
+        console.log('Worker API not available, using simulation mode:', workerError);
+        mode = 'simulation';
       }
-    } catch (workerError) {
-      console.log('Worker API not available, using local browser:', workerError);
     }
     
     // Store session info
@@ -872,11 +900,12 @@ router.post('/prototype/create', authenticate, async (req: AuthRequest, res: Res
       id: sessionId,
       wsUrl,
       status: 'ready',
+      mode,
       currentUrl: targetUrl || 'about:blank',
       createdAt: new Date(),
       logs: [
-        { timestamp: new Date(), level: 'system', message: '🚀 Prototype soldier session created' },
-        { timestamp: new Date(), level: 'info', message: workerConnected ? 'Connected to Python worker API' : 'Running in standalone mode' },
+        { timestamp: new Date(), level: 'system', message: `🚀 Prototype soldier session created in ${mode.toUpperCase()} mode` },
+        { timestamp: new Date(), level: 'info', message: mode === 'live' ? '✅ Connected to Python worker API' : '⚠️ Running in SIMULATION mode (no real browser)' },
         { timestamp: new Date(), level: 'info', message: `Session ID: ${sessionId}` },
       ],
     };
@@ -887,10 +916,11 @@ router.post('/prototype/create', authenticate, async (req: AuthRequest, res: Res
       success: true,
       sessionId,
       status: 'ready',
-      workerConnected,
-      message: workerConnected 
-        ? 'Prototype soldier created with Python worker backend'
-        : 'Prototype soldier created in standalone mode',
+      mode,
+      workerConnected: mode === 'live',
+      message: mode === 'live'
+        ? '✅ LIVE MODE: Prototype soldier created with Python worker backend'
+        : '⚠️ SIMULATION MODE: No real browser - actions will be simulated',
     });
   } catch (error: any) {
     console.error('Error creating prototype session:', error);
