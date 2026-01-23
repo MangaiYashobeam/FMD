@@ -18,12 +18,6 @@ class RedisQueue:
     Redis-based task queue for distributing posting jobs across workers
     """
     
-    # Queue names
-    TASK_QUEUE = "fmd:tasks:pending"
-    PROCESSING_QUEUE = "fmd:tasks:processing"
-    COMPLETED_QUEUE = "fmd:tasks:completed"
-    FAILED_QUEUE = "fmd:tasks:failed"
-    
     # Session management
     SESSION_PREFIX = "fmd:session:"
     BROWSER_PREFIX = "fmd:browser:"
@@ -33,6 +27,17 @@ class RedisQueue:
         self.settings = get_settings()
         self._client: Optional[redis.Redis] = None
         self._pubsub: Optional[redis.client.PubSub] = None
+        
+        # Queue names - use configurable task queue name from settings
+        # This MUST match what the Node.js API pushes to
+        self.TASK_QUEUE = self.settings.task_queue_name
+        self.PROCESSING_QUEUE = f"{self.settings.task_queue_name.replace(':pending', '')}:processing"
+        self.COMPLETED_QUEUE = f"{self.settings.task_queue_name.replace(':pending', '')}:completed"
+        self.FAILED_QUEUE = f"{self.settings.task_queue_name.replace(':pending', '')}:failed"
+        
+        logger.info("Redis queue initialized", 
+                   task_queue=self.TASK_QUEUE,
+                   processing_queue=self.PROCESSING_QUEUE)
     
     async def connect(self):
         """Establish Redis connection"""
@@ -50,6 +55,14 @@ class RedisQueue:
             await self._client.close()
             self._client = None
             logger.info("Disconnected from Redis")
+    
+    async def ping(self) -> bool:
+        """Check Redis connection by sending PING command"""
+        try:
+            return await self.client.ping()
+        except Exception as e:
+            logger.error("Redis ping failed", error=str(e))
+            return False
     
     @property
     def client(self) -> redis.Redis:
