@@ -109,7 +109,14 @@ async function fetchStats() {
 
 async function fetchSystemInfo() {
   const response = await api.get('/api/admin/iai/system-info');
-  return response.data;
+  // Return the data or a properly structured empty object
+  const data = response.data?.data || response.data;
+  return {
+    containers: data?.containers || {},
+    database: data?.database || { connected: false, totalTables: 0, totalRecords: { soldiers: 0, vehicles: 0, accounts: 0, users: 0 } },
+    chromium: data?.chromium || { activeSessions: 0, totalLaunched: 0, memoryUsage: '0 MB' },
+    environment: data?.environment || { nodeVersion: 'N/A', platform: 'N/A', uptime: 'N/A', memory: { used: '0', total: '0' } },
+  };
 }
 
 async function deleteSoldier(id: string) {
@@ -312,7 +319,7 @@ function SoldierCard({
 }
 
 function SystemDashboard({ systemInfo }: { systemInfo: SystemInfo | undefined }) {
-  if (!systemInfo) {
+  if (!systemInfo || !systemInfo.containers) {
     return (
       <div className="text-center py-12">
         <Database className="w-12 h-12 text-slate-600 mx-auto mb-3" />
@@ -330,32 +337,38 @@ function SystemDashboard({ systemInfo }: { systemInfo: SystemInfo | undefined })
           Docker Containers
         </h3>
         <div className="grid grid-cols-2 gap-4">
-          {Object.entries(systemInfo.containers).map(([name, info]) => (
-            <div key={name} className="bg-slate-800 rounded-xl border border-slate-700 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-bold text-white capitalize">{name}</h4>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium border ${
-                    info.status === 'running'
-                      ? 'bg-green-900/30 text-green-400 border-green-500/30'
-                      : 'bg-red-900/30 text-red-400 border-red-500/30'
-                  }`}
-                >
-                  {info.status}
-                </span>
-              </div>
-              <div className="space-y-1 text-sm text-slate-400">
-                <div className="flex justify-between">
-                  <span>Uptime:</span>
-                  <span className="font-medium text-slate-300">{info.uptime}</span>
+          {Object.keys(systemInfo.containers).length > 0 ? (
+            Object.entries(systemInfo.containers).map(([name, info]) => (
+              <div key={name} className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-white capitalize">{name}</h4>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium border ${
+                      info.status === 'running'
+                        ? 'bg-green-900/30 text-green-400 border-green-500/30'
+                        : 'bg-red-900/30 text-red-400 border-red-500/30'
+                    }`}
+                  >
+                    {info.status}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Restarts:</span>
-                  <span className="font-medium text-slate-300">{info.restarts}</span>
+                <div className="space-y-1 text-sm text-slate-400">
+                  <div className="flex justify-between">
+                    <span>Uptime:</span>
+                    <span className="font-medium text-slate-300">{info.uptime}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Restarts:</span>
+                    <span className="font-medium text-slate-300">{info.restarts}</span>
+                  </div>
                 </div>
               </div>
+            ))
+          ) : (
+            <div className="col-span-2 text-center py-4 text-slate-500">
+              No container data available
             </div>
-          ))}
+          )}
         </div>
       </div>
 
