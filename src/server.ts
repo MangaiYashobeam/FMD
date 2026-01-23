@@ -471,6 +471,8 @@ app.use('/api', (req, res, next) => {
     '/leads',
     // Accounts management
     '/accounts',
+    // IAI Admin routes (prototype browser testing)
+    '/admin/iai',
   ];
   
   if (skipPaths.some(p => req.path.startsWith(p))) {
@@ -547,6 +549,7 @@ app.use('/api/users/me/api-keys', ring5AuthBarrier, require('./routes/apiKey.rou
 app.use('/api/subscriptions', require('./routes/subscription.routes').default); // Mixed (webhook is public)
 app.use('/api/admin', ring5AuthBarrier, require('./routes/admin.routes').default); // Requires admin
 app.use('/api/admin/api-dashboard', ring5AuthBarrier, require('./routes/apiDashboard.routes').default); // API Dashboard (super admin)
+app.use('/api/admin/production', ring5AuthBarrier, require('./routes/production.routes').default); // Production system control (super admin)
 app.use('/api/email', ring5AuthBarrier, emailRoutes);                          // Requires auth
 app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default); // Requires auth
 app.use('/api/messages', ring5AuthBarrier, require('./routes/message.routes').default); // Messages/conversations (requires auth)
@@ -566,6 +569,10 @@ app.use('/api/settings', ring5AuthBarrier, require('./routes/user-settings.route
 // Chrome Extension AI Hybrid System
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (public callback)
 app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
+
+// IAI Soldier Command Center
+app.use('/api/admin/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier tracking (admin)
+app.use('/api/extension/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier registration/heartbeat
 
 // AI Center Routes (requires super admin)
 app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes').default); // AI Center (requires admin)
