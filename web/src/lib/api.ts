@@ -460,6 +460,13 @@ export const adminApi = {
   }) => api.put('/api/admin/extension/config', data),
   
   testExtensionConfig: () => api.post('/api/admin/extension/config/test'),
+  
+  // Facebook Session Management
+  importFacebookSession: (data: { accountId: string; cookies: any[] }) =>
+    api.post('/api/facebook/session/import', data),
+  
+  getFacebookSessionStatus: (accountId: string) =>
+    api.get(`/api/facebook/session/status/${accountId}`),
 };
 
 // Leads API

@@ -689,7 +689,7 @@ export default function FacebookConfigPage() {
                 }
                 
                 // Call API to import
-                const response = await adminApi.post('/facebook/session/import', {
+                const response = await adminApi.importFacebookSession({
                   accountId: sessionAccountId,
                   cookies,
                 });
