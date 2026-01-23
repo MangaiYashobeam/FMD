@@ -670,11 +670,16 @@ export default function FacebookConfigPage() {
 
             <form onSubmit={async (e) => {
               e.preventDefault();
-              if (!sessionAccountId || !sessionCookiesJson) return;
+              if (!sessionAccountId || !sessionCookiesJson) {
+                setErrorMessage('Please select an account and paste cookies JSON');
+                setTimeout(() => setErrorMessage(null), 5000);
+                return;
+              }
               
               try {
                 setSessionImporting(true);
                 setErrorMessage(null);
+                setSuccessMessage(null);
                 
                 // Parse cookies JSON
                 let cookies;
@@ -683,10 +688,24 @@ export default function FacebookConfigPage() {
                   if (!Array.isArray(cookies)) {
                     throw new Error('Cookies must be an array');
                   }
-                } catch (parseErr) {
-                  setErrorMessage('Invalid JSON format. Cookies must be a JSON array.');
+                  if (cookies.length === 0) {
+                    throw new Error('Cookies array is empty');
+                  }
+                  // Validate cookie structure
+                  const hasRequiredCookies = cookies.some((c: any) => 
+                    c.name === 'c_user' || c.name === 'xs'
+                  );
+                  if (!hasRequiredCookies) {
+                    console.warn('Warning: Missing critical Facebook cookies (c_user, xs)');
+                  }
+                } catch (parseErr: any) {
+                  setErrorMessage(`Invalid JSON format: ${parseErr.message}`);
+                  setTimeout(() => setErrorMessage(null), 5000);
+                  setSessionImporting(false);
                   return;
                 }
+                
+                console.log(`[Session Import] Importing ${cookies.length} cookies for account ${sessionAccountId}`);
                 
                 // Call API to import
                 const response = await adminApi.importFacebookSession({
@@ -694,13 +713,26 @@ export default function FacebookConfigPage() {
                   cookies,
                 });
                 
+                console.log('[Session Import] Response:', response.data);
+                
                 if (response.data.success) {
-                  setSuccessMessage(`Session imported: ${cookies.length} cookies saved for automation.`);
+                  setSuccessMessage(`✅ Session imported successfully! ${cookies.length} cookies saved for automation.`);
                   setSessionCookiesJson('');
-                  setTimeout(() => setSuccessMessage(null), 5000);
+                  queryClient.invalidateQueries({ queryKey: ['admin', 'facebook'] });
+                  setTimeout(() => setSuccessMessage(null), 8000);
+                } else {
+                  setErrorMessage(response.data.message || 'Import failed - server returned unsuccessful response');
+                  setTimeout(() => setErrorMessage(null), 5000);
                 }
               } catch (err: any) {
-                setErrorMessage(err.response?.data?.message || err.message || 'Failed to import session');
+                console.error('[Session Import] Error:', err);
+                const errorMsg = err.response?.data?.message 
+                  || err.response?.data?.error 
+                  || err.message 
+                  || 'Failed to import session';
+                const statusCode = err.response?.status;
+                setErrorMessage(`❌ Import failed${statusCode ? ` (${statusCode})` : ''}: ${errorMsg}`);
+                setTimeout(() => setErrorMessage(null), 8000);
               } finally {
                 setSessionImporting(false);
               }

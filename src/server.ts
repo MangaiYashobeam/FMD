@@ -476,6 +476,8 @@ app.use('/api', (req, res, next) => {
     // AI Center routes (AI memory, chat)
     '/ai-center',
     '/ai/',
+    // Facebook session management (admin-authenticated)
+    '/facebook/session',
   ];
   
   if (skipPaths.some(p => req.path.startsWith(p))) {
