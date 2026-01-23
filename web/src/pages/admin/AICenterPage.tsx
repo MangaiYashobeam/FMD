@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import aiCenterService from '../../services/ai-center.service';
 import { parseAIResponse, type ParsedAIResponse } from '../../utils/ai-response-parser';
+import { NovaTerminal } from '../../components/NovaTerminal';
 import type {
   AIProvider,
   DashboardStats,
@@ -233,6 +234,7 @@ export default function AICenterPage() {
     { id: 'dashboard', label: 'Dashboard', icon: Activity },
     { id: 'providers', label: 'AI Providers', icon: Cpu },
     { id: 'chat', label: 'AI Chat', icon: MessageSquare },
+    { id: 'terminal', label: 'Nova Terminal', icon: Terminal },
     { id: 'traces', label: 'API Traces', icon: Terminal },
     { id: 'memory', label: 'Memory', icon: Database },
     { id: 'training', label: 'Training Center', icon: GraduationCap },
@@ -316,6 +318,7 @@ export default function AICenterPage() {
             {activeTab === 'dashboard' && <DashboardTab stats={stats} traces={traces} />}
             {activeTab === 'providers' && <ProvidersTab providers={providers} onRefresh={() => setRefreshKey(k => k + 1)} />}
             {activeTab === 'chat' && <ChatTab selectedProvider={selectedProvider} providers={providers} />}
+            {activeTab === 'terminal' && <TerminalTab />}
             {activeTab === 'traces' && <TracesTab />}
             {activeTab === 'memory' && <MemoryTab />}
             {activeTab === 'training' && <TrainingTab />}
@@ -949,6 +952,58 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
         >
           <Send className="w-5 h-5" />
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Terminal Tab - Nova Terminal VPS Access
+// ============================================
+
+function TerminalTab() {
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Nova Terminal</h2>
+          <p className="text-gray-400">Secure VPS access and system management</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded">SSH CONNECTED</span>
+          <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded">46.4.224.182</span>
+        </div>
+      </div>
+
+      {/* Terminal Component */}
+      <div className="h-[calc(100vh-300px)] min-h-[500px]">
+        <NovaTerminal />
+      </div>
+
+      {/* Documentation */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+          <h4 className="font-semibold text-purple-400 mb-2">🖥️ VPS Mode</h4>
+          <p className="text-gray-400">
+            Direct SSH access to root@46.4.224.182. Execute any command on the production server.
+            Commands run in /opt/facemydealer directory.
+          </p>
+        </div>
+        <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+          <h4 className="font-semibold text-cyan-400 mb-2">🐳 Docker Mode</h4>
+          <p className="text-gray-400">
+            Docker Compose commands for container management. View logs, restart services,
+            manage the production stack.
+          </p>
+        </div>
+        <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
+          <h4 className="font-semibold text-green-400 mb-2">⚡ Quick Actions</h4>
+          <p className="text-gray-400">
+            Pre-configured commands for common tasks. Toggle quick actions panel
+            with the ⚡ button.
+          </p>
+        </div>
       </div>
     </div>
   );

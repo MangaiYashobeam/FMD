@@ -1544,4 +1544,757 @@ router.post('/memories/seed', asyncHandler(async (req: AuthRequest, res: Respons
 
 router.get('/audit/:accountId', aiCenterController.getAuditLogs);
 
+// ============================================
+// NOVA ADVANCED TOOLING ROUTES
+// Production-level system management capabilities
+// ============================================
+
+import { novaToolingService } from '@/services/nova-tooling.service';
+
+// Get comprehensive system health report
+router.get('/nova/health', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const report = await novaToolingService.getSystemHealth();
+  res.json({ success: true, data: report });
+}));
+
+// Read a file from the codebase
+router.post('/nova/file/read', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { path } = req.body;
+  if (!path) {
+    res.status(400).json({ success: false, error: 'File path is required' });
+    return;
+  }
+  const result = await novaToolingService.readFile(path);
+  res.json({ success: result.success, data: result });
+}));
+
+// Write/update a file in the codebase
+router.post('/nova/file/write', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { path, content } = req.body;
+  if (!path || content === undefined) {
+    res.status(400).json({ success: false, error: 'Path and content are required' });
+    return;
+  }
+  const result = await novaToolingService.writeFile(path, content);
+  res.json({ success: result.success, data: result });
+}));
+
+// List directory contents
+router.post('/nova/directory/list', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { path } = req.body;
+  const result = await novaToolingService.listDirectory(path || 'src');
+  res.json({ success: true, data: result });
+}));
+
+// Search for files by pattern
+router.post('/nova/file/search', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { pattern, directory } = req.body;
+  if (!pattern) {
+    res.status(400).json({ success: false, error: 'Search pattern is required' });
+    return;
+  }
+  const results = await novaToolingService.searchFiles(pattern, directory);
+  res.json({ success: true, data: { pattern, results } });
+}));
+
+// Search for content within files
+router.post('/nova/code/search', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { query, directory, extensions } = req.body;
+  if (!query) {
+    res.status(400).json({ success: false, error: 'Search query is required' });
+    return;
+  }
+  const results = await novaToolingService.searchInFiles(query, directory, extensions);
+  res.json({ success: true, data: { query, results, count: results.length } });
+}));
+
+// Analyze a file
+router.post('/nova/file/analyze', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { path } = req.body;
+  if (!path) {
+    res.status(400).json({ success: false, error: 'File path is required' });
+    return;
+  }
+  const result = await novaToolingService.analyzeFile(path);
+  res.json({ success: result.success, data: result });
+}));
+
+// Query database (read-only)
+router.post('/nova/database/query', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { table, options } = req.body;
+  if (!table) {
+    res.status(400).json({ success: false, error: 'Table name is required' });
+    return;
+  }
+  const result = await novaToolingService.queryDatabase(table, options);
+  res.json({ success: result.success, data: result });
+}));
+
+// Get database schema
+router.get('/nova/database/schema', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const result = await novaToolingService.getDatabaseSchema();
+  res.json({ success: result.success, data: result });
+}));
+
+// Get project structure overview
+router.get('/nova/project/structure', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const structure = await novaToolingService.getProjectStructure();
+  res.json({ success: true, data: structure });
+}));
+
+// Get recent errors
+router.get('/nova/errors/recent', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const limit = Number(req.query.limit) || 50;
+  const errors = await novaToolingService.getRecentErrors(limit);
+  res.json({ success: true, data: errors });
+}));
+
+// Get container status
+router.get('/nova/containers/status', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const status = await novaToolingService.getContainerStatus();
+  res.json({ success: true, data: status });
+}));
+
+// Fetch external document/URL content (for HTML editor)
+router.post('/nova/fetch/document', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { url, type } = req.body;
+  
+  if (!url) {
+    res.status(400).json({ success: false, error: 'URL is required' });
+    return;
+  }
+  
+  try {
+    // Validate URL
+    const parsedUrl = new URL(url);
+    
+    // Only allow http/https
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      res.status(400).json({ success: false, error: 'Only HTTP/HTTPS URLs are allowed' });
+      return;
+    }
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Nova-Document-Fetcher/1.0',
+      },
+    });
+    
+    if (!response.ok) {
+      res.status(response.status).json({ 
+        success: false, 
+        error: `Failed to fetch: ${response.status} ${response.statusText}` 
+      });
+      return;
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    let content: string;
+    
+    if (type === 'html' || contentType.includes('text/html')) {
+      content = await response.text();
+    } else if (type === 'json' || contentType.includes('application/json')) {
+      const json = await response.json();
+      content = JSON.stringify(json, null, 2);
+    } else {
+      content = await response.text();
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        url,
+        contentType,
+        content: content.substring(0, 500000), // Limit to 500KB
+        size: content.length,
+        fetchedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}));
+
+// Execute code snippet safely (sandboxed)
+router.post('/nova/execute/snippet', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { code, language } = req.body;
+  
+  if (!code) {
+    res.status(400).json({ success: false, error: 'Code is required' });
+    return;
+  }
+  
+  // Only allow JavaScript snippets that are safe
+  if (language !== 'javascript') {
+    res.status(400).json({ success: false, error: 'Only JavaScript is currently supported' });
+    return;
+  }
+  
+  try {
+    // Create a sandboxed context with limited capabilities
+    const sandboxedCode = `
+      (function() {
+        const console = {
+          log: (...args) => outputs.push(['log', args]),
+          error: (...args) => outputs.push(['error', args]),
+          warn: (...args) => outputs.push(['warn', args]),
+        };
+        const outputs = [];
+        try {
+          ${code}
+        } catch (e) {
+          outputs.push(['error', [e.message]]);
+        }
+        return outputs;
+      })()
+    `;
+    
+    // Execute with timeout
+    const vm = require('vm');
+    const context = vm.createContext({});
+    const result = vm.runInContext(sandboxedCode, context, { timeout: 5000 });
+    
+    res.json({
+      success: true,
+      data: {
+        outputs: result,
+        executedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    res.json({
+      success: false,
+      error: error.message,
+      data: { outputs: [['error', [error.message]]] },
+    });
+  }
+}));
+
+// Get DOM structure analysis for an HTML string
+router.post('/nova/dom/analyze', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { html } = req.body;
+  
+  if (!html) {
+    res.status(400).json({ success: false, error: 'HTML content is required' });
+    return;
+  }
+  
+  try {
+    // Parse HTML and extract structure
+    const tagPattern = /<(\w+)([^>]*)>/g;
+    const tags: { tag: string; attributes: string; count: number }[] = [];
+    const tagCounts: Record<string, number> = {};
+    
+    let match;
+    while ((match = tagPattern.exec(html)) !== null) {
+      const [, tag] = match;
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+    }
+    
+    for (const [tag, count] of Object.entries(tagCounts)) {
+      tags.push({ tag, attributes: '', count });
+    }
+    
+    // Find IDs and classes
+    const idPattern = /id=["']([^"']+)["']/g;
+    const classPattern = /class=["']([^"']+)["']/g;
+    const ids: string[] = [];
+    const classes: string[] = [];
+    
+    while ((match = idPattern.exec(html)) !== null) {
+      ids.push(match[1]);
+    }
+    while ((match = classPattern.exec(html)) !== null) {
+      classes.push(...match[1].split(' ').filter(Boolean));
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        totalElements: Object.values(tagCounts).reduce((a, b) => a + b, 0),
+        tagCounts,
+        uniqueTags: tags.sort((a, b) => b.count - a.count),
+        ids: [...new Set(ids)],
+        classes: [...new Set(classes)],
+        size: html.length,
+        lines: html.split('\n').length,
+        hasDoctype: html.toLowerCase().includes('<!doctype'),
+        hasHead: html.toLowerCase().includes('<head'),
+        hasBody: html.toLowerCase().includes('<body'),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+}));
+
+// Transform/manipulate HTML
+router.post('/nova/dom/transform', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { html, operations } = req.body;
+  
+  if (!html || !operations || !Array.isArray(operations)) {
+    res.status(400).json({ success: false, error: 'HTML and operations array are required' });
+    return;
+  }
+  
+  let result = html;
+  const appliedOps: string[] = [];
+  
+  for (const op of operations) {
+    try {
+      switch (op.type) {
+        case 'replace':
+          // Replace text/pattern
+          if (op.pattern && op.replacement !== undefined) {
+            const regex = new RegExp(op.pattern, op.flags || 'g');
+            result = result.replace(regex, op.replacement);
+            appliedOps.push(`Replaced pattern: ${op.pattern}`);
+          }
+          break;
+          
+        case 'insert':
+          // Insert content at position or before/after selector
+          if (op.position === 'start') {
+            result = op.content + result;
+          } else if (op.position === 'end') {
+            result = result + op.content;
+          } else if (op.before) {
+            result = result.replace(op.before, op.content + op.before);
+          } else if (op.after) {
+            result = result.replace(op.after, op.after + op.content);
+          }
+          appliedOps.push(`Inserted content at ${op.position || 'specified position'}`);
+          break;
+          
+        case 'remove':
+          // Remove matching content
+          if (op.pattern) {
+            const regex = new RegExp(op.pattern, op.flags || 'g');
+            result = result.replace(regex, '');
+            appliedOps.push(`Removed pattern: ${op.pattern}`);
+          }
+          break;
+          
+        case 'wrap':
+          // Wrap content with tags
+          if (op.pattern && op.wrapper) {
+            const regex = new RegExp(`(${op.pattern})`, op.flags || 'g');
+            result = result.replace(regex, op.wrapper.replace('$1', '$1'));
+            appliedOps.push(`Wrapped pattern: ${op.pattern}`);
+          }
+          break;
+          
+        case 'formatHtml':
+          // Basic HTML formatting
+          result = result
+            .replace(/></g, '>\n<')
+            .replace(/\n\s*\n/g, '\n')
+            .trim();
+          appliedOps.push('Formatted HTML');
+          break;
+          
+        case 'minify':
+          // Minify HTML
+          result = result
+            .replace(/\n/g, '')
+            .replace(/\s+/g, ' ')
+            .replace(/>\s+</g, '><')
+            .trim();
+          appliedOps.push('Minified HTML');
+          break;
+      }
+    } catch (opError: any) {
+      appliedOps.push(`Error in ${op.type}: ${opError.message}`);
+    }
+  }
+  
+  res.json({
+    success: true,
+    data: {
+      original: html.substring(0, 1000),
+      result,
+      appliedOperations: appliedOps,
+      sizeBefore: html.length,
+      sizeAfter: result.length,
+    },
+  });
+}));
+
+// Validate HTML
+router.post('/nova/dom/validate', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { html } = req.body;
+  
+  if (!html) {
+    res.status(400).json({ success: false, error: 'HTML content is required' });
+    return;
+  }
+  
+  const issues: { type: 'error' | 'warning'; message: string; line?: number }[] = [];
+  const lines: string[] = html.split('\n');
+  
+  // Check for common issues
+  const openTags: string[] = [];
+  const selfClosingTags = ['br', 'hr', 'img', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'source', 'track', 'wbr'];
+  
+  lines.forEach((line: string, idx: number) => {
+    const lineNum = idx + 1;
+    
+    // Check for unclosed quotes in attributes
+    const quotes = (line.match(/"/g) || []).length;
+    if (quotes % 2 !== 0) {
+      issues.push({ type: 'warning', message: 'Possibly unclosed quote', line: lineNum });
+    }
+    
+    // Check for deprecated tags
+    const deprecatedTags = ['font', 'center', 'marquee', 'blink'];
+    for (const tag of deprecatedTags) {
+      if (new RegExp(`<${tag}[\\s>]`, 'i').test(line)) {
+        issues.push({ type: 'warning', message: `Deprecated tag <${tag}>`, line: lineNum });
+      }
+    }
+    
+    // Check for inline styles
+    if (/style\s*=\s*["']/.test(line)) {
+      issues.push({ type: 'warning', message: 'Inline style found - consider using CSS', line: lineNum });
+    }
+    
+    // Track open/close tags
+    const openMatch = line.match(/<(\w+)(?:\s[^>]*)?(?<!\/)\s*>/g) || [];
+    const closeMatch = line.match(/<\/(\w+)\s*>/g) || [];
+    
+    openMatch.forEach((tagMatch: string) => {
+      const tagName = tagMatch.match(/<(\w+)/)?.[1]?.toLowerCase();
+      if (tagName && !selfClosingTags.includes(tagName)) {
+        openTags.push(tagName);
+      }
+    });
+    
+    closeMatch.forEach((tagMatch: string) => {
+      const tagName = tagMatch.match(/<\/(\w+)/)?.[1]?.toLowerCase();
+      if (tagName) {
+        const lastOpen = openTags.lastIndexOf(tagName);
+        if (lastOpen === -1) {
+          issues.push({ type: 'error', message: `Closing tag </${tagName}> without opening tag`, line: lineNum });
+        } else {
+          openTags.splice(lastOpen, 1);
+        }
+      }
+    });
+  });
+  
+  // Check for unclosed tags at end
+  for (const tag of openTags) {
+    issues.push({ type: 'error', message: `Unclosed tag <${tag}>` });
+  }
+  
+  // Check for DOCTYPE
+  if (!html.toLowerCase().includes('<!doctype')) {
+    issues.push({ type: 'warning', message: 'Missing DOCTYPE declaration' });
+  }
+  
+  // Check for missing charset
+  if (!html.toLowerCase().includes('charset')) {
+    issues.push({ type: 'warning', message: 'Missing charset meta tag' });
+  }
+  
+  res.json({
+    success: true,
+    data: {
+      valid: issues.filter(i => i.type === 'error').length === 0,
+      errorCount: issues.filter(i => i.type === 'error').length,
+      warningCount: issues.filter(i => i.type === 'warning').length,
+      issues,
+    },
+  });
+}));
+
+// ============================================
+// NOVA TERMINAL - Secure VPS Command Execution
+// ============================================
+
+import { novaTerminalService } from '@/services/nova-terminal.service';
+
+// Execute command on VPS
+router.post('/nova/terminal/vps', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { command, timeout, inProjectDir } = req.body;
+  
+  if (!command) {
+    res.status(400).json({ success: false, error: 'Command is required' });
+    return;
+  }
+
+  logger.info(`[Nova Terminal] VPS command requested by ${req.user?.email}: ${command.substring(0, 100)}`);
+  
+  const result = await novaTerminalService.executeVPS(command, {
+    timeout,
+    userId: req.user?.id,
+    inProjectDir,
+  });
+  
+  res.json({ success: result.success, data: result });
+}));
+
+// Execute command locally
+router.post('/nova/terminal/local', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { command, cwd, timeout } = req.body;
+  
+  if (!command) {
+    res.status(400).json({ success: false, error: 'Command is required' });
+    return;
+  }
+
+  logger.info(`[Nova Terminal] Local command requested by ${req.user?.email}: ${command.substring(0, 100)}`);
+  
+  const result = await novaTerminalService.executeLocal(command, {
+    cwd,
+    timeout,
+    userId: req.user?.id,
+  });
+  
+  res.json({ success: result.success, data: result });
+}));
+
+// Execute Docker command on VPS
+router.post('/nova/terminal/docker', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { command, timeout } = req.body;
+  
+  if (!command) {
+    res.status(400).json({ success: false, error: 'Docker command is required' });
+    return;
+  }
+
+  logger.info(`[Nova Terminal] Docker command requested: ${command.substring(0, 100)}`);
+  
+  const result = await novaTerminalService.executeDocker(command, {
+    timeout,
+    userId: req.user?.id,
+  });
+  
+  res.json({ success: result.success, data: result });
+}));
+
+// Get container logs
+router.post('/nova/terminal/logs', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { container, tail, since } = req.body;
+  
+  if (!container) {
+    res.status(400).json({ success: false, error: 'Container name is required' });
+    return;
+  }
+  
+  const result = await novaTerminalService.getContainerLogs(container, { tail, since });
+  res.json({ success: result.success, data: result });
+}));
+
+// Restart container
+router.post('/nova/terminal/restart', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { container } = req.body;
+  
+  if (!container) {
+    res.status(400).json({ success: false, error: 'Container name is required' });
+    return;
+  }
+
+  logger.info(`[Nova Terminal] Container restart requested: ${container}`);
+  
+  const result = await novaTerminalService.restartContainer(container);
+  res.json({ success: result.success, data: result });
+}));
+
+// Get VPS system info
+router.get('/nova/terminal/system-info', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const result = await novaTerminalService.getVPSSystemInfo();
+  res.json({ success: result.success, data: result });
+}));
+
+// Execute database query (read-only)
+router.post('/nova/terminal/db-query', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { query, timeout } = req.body;
+  
+  if (!query) {
+    res.status(400).json({ success: false, error: 'Query is required' });
+    return;
+  }
+
+  logger.info(`[Nova Terminal] DB query requested: ${query.substring(0, 100)}`);
+  
+  const result = await novaTerminalService.executeDatabaseQuery(query, {
+    timeout,
+    userId: req.user?.id,
+  });
+  
+  res.json({ success: result.success, data: result });
+}));
+
+// Create backup
+router.post('/nova/terminal/backup', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { type } = req.body;
+  
+  if (!type || !['database', 'code', 'full'].includes(type)) {
+    res.status(400).json({ success: false, error: 'Valid backup type required: database, code, or full' });
+    return;
+  }
+
+  logger.info(`[Nova Terminal] Backup requested: ${type}`);
+  
+  const result = await novaTerminalService.createBackup(type);
+  res.json({ success: result.success, data: result });
+}));
+
+// List backups
+router.get('/nova/terminal/backups', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const result = await novaTerminalService.listBackups();
+  res.json({ success: result.success, data: result });
+}));
+
+// Get command history
+router.get('/nova/terminal/history', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const limit = Number(req.query.limit) || 50;
+  const target = req.query.target as 'local' | 'vps' | undefined;
+  
+  const history = novaTerminalService.getCommandHistory({ limit, target });
+  res.json({ success: true, data: { history } });
+}));
+
+// Git operations
+router.get('/nova/terminal/git/status', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const result = await novaTerminalService.gitStatus();
+  res.json({ success: result.success, data: result });
+}));
+
+router.post('/nova/terminal/git/pull', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  logger.info('[Nova Terminal] Git pull requested');
+  const result = await novaTerminalService.gitPull();
+  res.json({ success: result.success, data: result });
+}));
+
+router.get('/nova/terminal/git/log', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const count = Number(req.query.count) || 10;
+  const result = await novaTerminalService.gitLog(count);
+  res.json({ success: result.success, data: result });
+}));
+
+// Deployment operations
+router.post('/nova/terminal/deploy', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { service } = req.body;
+  
+  logger.info(`[Nova Terminal] Deploy requested for service: ${service || 'api'}`);
+  
+  const result = await novaTerminalService.rebuildAndDeploy(service || 'api');
+  res.json({ success: result.success, data: result });
+}));
+
+router.post('/nova/terminal/deploy-all', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  logger.info('[Nova Terminal] Full deployment requested');
+  const result = await novaTerminalService.deployAll();
+  res.json({ success: result.success, data: result });
+}));
+
+// ============================================
+// NOVA ADVANCED SEARCH & FILE TOOLS
+// ============================================
+
+// Deep search across codebase
+router.post('/nova/search/deep', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { query, directories, extensions, maxResults, caseSensitive, regex, includeContext } = req.body;
+  
+  if (!query) {
+    res.status(400).json({ success: false, error: 'Search query is required' });
+    return;
+  }
+  
+  const result = await novaToolingService.deepSearch({
+    query,
+    directories,
+    extensions,
+    maxResults,
+    caseSensitive,
+    regex,
+    includeContext,
+  });
+  
+  res.json({ success: result.success, data: result });
+}));
+
+// Get file tree
+router.post('/nova/files/tree', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { directory, maxDepth, includeStats } = req.body;
+  
+  const result = await novaToolingService.getFileTree(directory || 'src', {
+    maxDepth,
+    includeStats,
+  });
+  
+  res.json({ success: result.success, data: result });
+}));
+
+// Batch read files
+router.post('/nova/files/batch-read', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { paths } = req.body;
+  
+  if (!paths || !Array.isArray(paths)) {
+    res.status(400).json({ success: false, error: 'Array of file paths is required' });
+    return;
+  }
+  
+  const result = await novaToolingService.batchReadFiles(paths);
+  res.json({ success: result.success, data: result });
+}));
+
+// Compare files
+router.post('/nova/files/compare', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { path1, path2 } = req.body;
+  
+  if (!path1 || !path2) {
+    res.status(400).json({ success: false, error: 'Two file paths are required' });
+    return;
+  }
+  
+  const result = await novaToolingService.compareFiles(path1, path2);
+  res.json({ success: result.success, data: result });
+}));
+
+// Create file backup
+router.post('/nova/files/backup', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { path } = req.body;
+  
+  if (!path) {
+    res.status(400).json({ success: false, error: 'File path is required' });
+    return;
+  }
+  
+  const result = await novaToolingService.createFileBackup(path);
+  res.json({ success: result.success, data: result });
+}));
+
+// Find and replace (dry run by default)
+router.post('/nova/files/find-replace', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { searchQuery, replaceWith, directories, extensions, dryRun, maxFiles, caseSensitive } = req.body;
+  
+  if (!searchQuery || replaceWith === undefined) {
+    res.status(400).json({ success: false, error: 'Search query and replacement text are required' });
+    return;
+  }
+
+  logger.info(`[Nova Tools] Find/replace requested: "${searchQuery}" -> "${replaceWith}" (dryRun: ${dryRun !== false})`);
+  
+  const result = await novaToolingService.findAndReplace({
+    searchQuery,
+    replaceWith,
+    directories,
+    extensions,
+    dryRun: dryRun !== false, // Default to dry run
+    maxFiles,
+    caseSensitive,
+  });
+  
+  res.json({ success: result.success, data: result });
+}));
+
+// Get project statistics
+router.get('/nova/stats/project', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const result = await novaToolingService.getProjectStats();
+  res.json({ success: result.success, data: result });
+}));
+
 export default router;
