@@ -53,9 +53,10 @@ export class VehicleController {
     }
 
     // Build where clause - support optional status filter
+    // Normalize status to lowercase for case-insensitive matching
     const whereClause: { accountId: string; status?: string } = { accountId };
     if (status) {
-      whereClause.status = status;
+      whereClause.status = status.toLowerCase();
     }
 
     const [vehicles, total] = await Promise.all([

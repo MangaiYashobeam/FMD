@@ -1112,7 +1112,8 @@ async function getVehicles() {
     const accountId = authState?.dealerAccountId || authState?.accountId;
     console.log('📦 Fetching vehicles for account:', accountId);
     
-    const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/vehicles?accountId=${accountId}&status=ACTIVE&limit=100`, {
+    // Fetch all vehicles (no status filter, server handles pagination)
+    const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/vehicles?accountId=${accountId}&limit=100`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
