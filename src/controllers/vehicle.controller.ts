@@ -12,9 +12,11 @@ export class VehicleController {
   /**
    * Get all vehicles for account
    * If no accountId is provided, auto-detect from user's primary account
+   * Supports optional status filter (e.g., ?status=ACTIVE)
    */
   async getVehicles(req: AuthRequest, res: Response) {
     let accountId = req.query.accountId as string;
+    const status = req.query.status as string | undefined; // Optional status filter (ACTIVE, SOLD, etc.)
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
     const skip = (page - 1) * limit;
@@ -50,9 +52,15 @@ export class VehicleController {
       throw new AppError('Access denied to this account', 403);
     }
 
+    // Build where clause - support optional status filter
+    const whereClause: { accountId: string; status?: string } = { accountId };
+    if (status) {
+      whereClause.status = status;
+    }
+
     const [vehicles, total] = await Promise.all([
       prisma.vehicle.findMany({
-        where: { accountId },
+        where: whereClause,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -69,7 +77,7 @@ export class VehicleController {
           },
         },
       }),
-      prisma.vehicle.count({ where: { accountId } }),
+      prisma.vehicle.count({ where: whereClause }),
     ]);
 
     res.json({

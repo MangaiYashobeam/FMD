@@ -990,11 +990,51 @@ router.post('/report-error', authenticate, async (req: AuthRequest, res: Respons
 });
 
 // Helper function for AI responses
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function generateAIResponse(message: string, _systemPrompt: string, context: any): Promise<string> {
+async function generateAIResponse(message: string, systemPrompt: string, context: any): Promise<string> {
+  // Try real AI first if API key is configured
+  const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
+  
+  if (apiKey) {
+    try {
+      const isDeepSeek = !!process.env.DEEPSEEK_API_KEY;
+      const endpoint = isDeepSeek 
+        ? 'https://api.deepseek.com/v1/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions';
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: isDeepSeek ? 'deepseek-chat' : 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message },
+          ],
+          max_tokens: 500,
+          temperature: 0.7,
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+        const aiResponse = data.choices?.[0]?.message?.content;
+        if (aiResponse) {
+          logger.info('AI response generated successfully');
+          return aiResponse;
+        }
+      }
+    } catch (error) {
+      logger.warn('Real AI failed, falling back to rule-based:', error);
+    }
+  }
+  
+  // Fallback to rule-based responses
   const lowerMessage = message.toLowerCase();
   
-  // Context-aware responses
+  // Context-aware responses for Marketplace create page
   if (context?.url?.includes('/marketplace/create')) {
     if (lowerMessage.includes('help') || lowerMessage.includes('stuck')) {
       return `📝 You're on the listing creation page! Here's what to do:
@@ -1021,6 +1061,7 @@ What specific error are you seeing?`;
     }
   }
   
+  // Posting vehicles
   if (lowerMessage.includes('post') && lowerMessage.includes('vehicle')) {
     return `To post a vehicle:
 
@@ -1033,7 +1074,8 @@ What specific error are you seeing?`;
 Is your vehicle queued? Check the extension sidebar!`;
   }
   
-  if (lowerMessage.includes('connect') || lowerMessage.includes('login')) {
+  // Connection/login help
+  if (lowerMessage.includes('connect') || lowerMessage.includes('login') || lowerMessage.includes('sign in')) {
     return `To connect your Facebook account:
 
 1. Open the extension sidebar
@@ -1044,15 +1086,101 @@ Is your vehicle queued? Check the extension sidebar!`;
 ⚠️ Stay logged into Facebook for posting to work!`;
   }
   
+  // Status/tasks help
+  if (lowerMessage.includes('task') || lowerMessage.includes('status') || lowerMessage.includes('pending')) {
+    return `📊 **Checking your tasks:**
+
+• The badge on the extension icon shows pending tasks
+• Open the sidebar to see task details
+• Tasks are executed automatically when you're on Facebook
+
+If tasks aren't appearing:
+1. Make sure you're logged in
+2. Check if the IAI Soldier is active (green badge)
+3. Try refreshing the extension`;
+  }
+  
+  // Photos/images help
+  if (lowerMessage.includes('photo') || lowerMessage.includes('image') || lowerMessage.includes('picture')) {
+    return `📸 **Photo tips for Marketplace:**
+
+• Use high-quality images (min 600x600px)
+• Keep files under 10MB each
+• Show exterior, interior, and any damage
+• Avoid watermarks and text overlays
+• First photo is your main listing image
+
+Having upload issues? Try compressing images first!`;
+  }
+  
+  // Price/pricing help
+  if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('value')) {
+    return `💰 **Pricing your vehicle:**
+
+• Research similar listings in your area
+• Price competitively to stand out
+• "Free" isn't allowed for vehicles
+• Mention if price is negotiable in description
+
+Tip: Slightly lower prices get more visibility!`;
+  }
+  
+  // Description help
+  if (lowerMessage.includes('description') || lowerMessage.includes('write') || lowerMessage.includes('text')) {
+    return `✍️ **Writing great descriptions:**
+
+Include these key details:
+• Year, make, model, trim
+• Mileage and condition
+• Key features (leather, sunroof, etc.)
+• Recent maintenance or repairs
+• Reason for selling
+
+Keep it honest - builds trust with buyers!`;
+  }
+  
+  // Error/problem help
+  if (lowerMessage.includes('error') || lowerMessage.includes('problem') || lowerMessage.includes('issue') || lowerMessage.includes('not working')) {
+    return `🔧 **Troubleshooting common issues:**
+
+1. **Page not loading** - Refresh and try again
+2. **Form errors** - Check required fields
+3. **Photos failing** - Try smaller images
+4. **Session expired** - Re-login in sidebar
+5. **Tasks not executing** - Check Facebook login
+
+Still stuck? Describe the specific error you see!`;
+  }
+  
+  // Greeting responses
+  if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
+    return `👋 Hello! I'm Nexus, your AI assistant for Dealers Face.
+
+I can help you with:
+• Posting vehicles to Marketplace
+• Troubleshooting issues
+• Understanding the extension features
+
+What would you like help with today?`;
+  }
+  
+  // Thank you responses
+  if (lowerMessage.includes('thank') || lowerMessage.includes('thanks')) {
+    return `You're welcome! 😊
+
+Is there anything else I can help you with? I'm here to make your vehicle posting experience smoother!`;
+  }
+  
   // Default helpful response
   return `I can help with:
 
 • 📝 **Posting vehicles** - How to list on Marketplace
 • 🔧 **Troubleshooting** - Fix common errors
 • 📊 **Status check** - See your pending tasks
-• 🚀 **Quick tips** - Best practices
+• 📸 **Photos** - Tips for better images
+• 💰 **Pricing** - Set competitive prices
 
-What would you like to know?`;
+What would you like to know? Try asking about a specific topic!`;
 }
 
 // Classify error severity for Nova

@@ -203,15 +203,39 @@ router.post('/callback', async (req: Request, res: Response) => {
       },
     });
     
-    // Generate JWT token for API auth
+    // Generate JWT tokens for API auth (same as login flow)
+    const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-for-dev';
+    const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'refresh-secret-for-dev';
+    
     const serverToken = jwt.sign(
       { 
         userId: user.id, 
+        id: user.id,
         email: user.email,
+        accountId: dealerAccount.id,
       },
-      process.env.JWT_SECRET || 'fallback-secret-for-dev',
-      { expiresIn: '7d' }
+      jwtSecret,
+      { expiresIn: '24h' }
     );
+    
+    // Generate refresh token for extension (long-lived)
+    const refreshToken = jwt.sign(
+      { 
+        id: user.id,
+        type: 'refresh',
+      },
+      jwtRefreshSecret,
+      { expiresIn: '30d' }
+    );
+    
+    // Save refresh token to database
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      },
+    });
     
     logger.info(`Extension OAuth successful for user ${user.id}`);
     
@@ -220,6 +244,7 @@ router.post('/callback', async (req: Request, res: Response) => {
       accessToken,
       expiresIn: expiresIn || 3600,
       serverToken,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,

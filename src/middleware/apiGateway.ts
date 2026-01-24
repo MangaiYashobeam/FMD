@@ -474,7 +474,8 @@ export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunct
       '/auth/forgot-password', 
       '/auth/refresh-token', 
       '/auth/health', 
-      '/auth/debug-login', 
+      '/auth/debug-login',
+      '/auth/extension-login',      // Extension auto-login redirect
       '/subscriptions/plans', 
       '/subscriptions/webhook', 
       '/health', 

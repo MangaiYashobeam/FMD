@@ -179,4 +179,78 @@ router.get('/sessions', authenticate, asyncHandler(authController.getActiveSessi
  */
 router.post('/sessions/revoke-others', authenticate, asyncHandler(authController.revokeOtherSessions));
 
+/**
+ * @route   GET /api/auth/extension-login
+ * @desc    Handle login from Chrome extension - redirects to dashboard with tokens set
+ * @access  Public (token in query params)
+ */
+router.get('/extension-login', async (req: Request, res: Response) => {
+  try {
+    const { token, refreshToken, redirect = '/dashboard' } = req.query;
+    
+    if (!token || typeof token !== 'string') {
+      // Redirect to login page if no token
+      res.redirect('https://dealersface.com/login?error=missing_token');
+      return;
+    }
+    
+    // Verify the token is valid (don't need to decode fully, just check it works)
+    const jwt = require('jsonwebtoken');
+    const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-for-dev';
+    
+    try {
+      const decoded = jwt.verify(token, jwtSecret);
+      logger.info(`Extension login for user ${decoded.id || decoded.userId}`);
+    } catch (jwtError) {
+      logger.warn('Extension login with invalid token');
+      res.redirect('https://dealersface.com/login?error=invalid_token');
+      return;
+    }
+    
+    // Build the redirect URL with tokens as hash params (so they're not logged in server logs)
+    const redirectPath = typeof redirect === 'string' ? redirect : '/dashboard';
+    const safeRedirect = redirectPath.startsWith('/') ? redirectPath : '/dashboard';
+    
+    // Create HTML page that sets localStorage and redirects
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Logging in...</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; }
+    .loader { text-align: center; }
+    .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #0066ff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="loader">
+    <div class="spinner"></div>
+    <p>Logging you in...</p>
+  </div>
+  <script>
+    try {
+      // Store tokens in localStorage
+      localStorage.setItem('accessToken', ${JSON.stringify(token)});
+      ${refreshToken && typeof refreshToken === 'string' ? `localStorage.setItem('refreshToken', ${JSON.stringify(refreshToken)});` : ''}
+      
+      // Redirect to dashboard
+      window.location.href = ${JSON.stringify(safeRedirect)};
+    } catch (e) {
+      console.error('Failed to set tokens:', e);
+      window.location.href = '/login?error=storage_failed';
+    }
+  </script>
+</body>
+</html>`;
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error: any) {
+    logger.error('Extension login error:', error.message);
+    res.redirect('https://dealersface.com/login?error=server_error');
+  }
+});
+
 export default router;

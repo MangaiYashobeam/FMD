@@ -451,6 +451,7 @@ app.use('/api', (req, res, next) => {
     '/auth/verify-email',
     '/auth/health',
     '/auth/debug-login',
+    '/auth/extension-login', // Extension login redirect
     // AI Center endpoints (uses auth token)
     '/ai-center/chat',
     '/ai-center/models',

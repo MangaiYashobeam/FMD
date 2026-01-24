@@ -35,6 +35,14 @@ const elements = {
   settingsBtn: document.getElementById('settingsBtn'),
   unreadBadge: document.getElementById('unreadBadge'),
   
+  // AI Chat
+  toggleAiChatBtn: document.getElementById('toggleAiChatBtn'),
+  aiChatSection: document.getElementById('aiChatSection'),
+  closeAiChatBtn: document.getElementById('closeAiChatBtn'),
+  aiChatMessages: document.getElementById('aiChatMessages'),
+  aiChatInput: document.getElementById('aiChatInput'),
+  sendAiChatBtn: document.getElementById('sendAiChatBtn'),
+  
   // Activity
   activityList: document.getElementById('activityList'),
   clearActivityBtn: document.getElementById('clearActivityBtn'),
@@ -315,20 +323,52 @@ elements.postVehicleBtn.addEventListener('click', async () => {
   }
 });
 
-// Open Dashboard
+// Open Dashboard - with auth token for auto-login
 elements.openDashboardBtn.addEventListener('click', async () => {
-  await chrome.tabs.create({
-    url: 'https://dealersface.com/dashboard',
-    active: true,
-  });
+  try {
+    const { authToken, refreshToken } = await chrome.storage.local.get(['authToken', 'refreshToken']);
+    
+    // Use the API extension-login route which sets localStorage and redirects
+    let url = 'https://dealersface.com/dashboard';
+    if (authToken) {
+      url = `https://dealersface.com/api/auth/extension-login?token=${encodeURIComponent(authToken)}${refreshToken ? `&refreshToken=${encodeURIComponent(refreshToken)}` : ''}&redirect=/dashboard`;
+    }
+    
+    await chrome.tabs.create({
+      url,
+      active: true,
+    });
+  } catch (error) {
+    console.error('Open dashboard error:', error);
+    await chrome.tabs.create({
+      url: 'https://dealersface.com/dashboard',
+      active: true,
+    });
+  }
 });
 
-// Settings
+// Settings - with auth token for auto-login
 elements.settingsBtn.addEventListener('click', async () => {
-  await chrome.tabs.create({
-    url: 'https://dealersface.com/dashboard/settings',
-    active: true,
-  });
+  try {
+    const { authToken, refreshToken } = await chrome.storage.local.get(['authToken', 'refreshToken']);
+    
+    // Use the API extension-login route which sets localStorage and redirects
+    let url = 'https://dealersface.com/dashboard/settings';
+    if (authToken) {
+      url = `https://dealersface.com/api/auth/extension-login?token=${encodeURIComponent(authToken)}${refreshToken ? `&refreshToken=${encodeURIComponent(refreshToken)}` : ''}&redirect=/dashboard/settings`;
+    }
+    
+    await chrome.tabs.create({
+      url,
+      active: true,
+    });
+  } catch (error) {
+    console.error('Open settings error:', error);
+    await chrome.tabs.create({
+      url: 'https://dealersface.com/dashboard/settings',
+      active: true,
+    });
+  }
 });
 
 // Clear Activity
@@ -337,6 +377,114 @@ elements.clearActivityBtn.addEventListener('click', () => {
   chrome.storage.local.set({ activities: [] });
   renderActivities();
 });
+
+// ============================================
+// AI Chat
+// ============================================
+
+let aiChatVisible = false;
+
+// Toggle AI Chat section
+elements.toggleAiChatBtn?.addEventListener('click', () => {
+  aiChatVisible = !aiChatVisible;
+  elements.aiChatSection.style.display = aiChatVisible ? 'block' : 'none';
+  
+  if (aiChatVisible) {
+    elements.aiChatInput.focus();
+  }
+});
+
+// Close AI Chat
+elements.closeAiChatBtn?.addEventListener('click', () => {
+  aiChatVisible = false;
+  elements.aiChatSection.style.display = 'none';
+});
+
+// Send AI Chat message
+elements.sendAiChatBtn?.addEventListener('click', sendAiMessage);
+
+// Send on Enter key
+elements.aiChatInput?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendAiMessage();
+  }
+});
+
+async function sendAiMessage() {
+  const message = elements.aiChatInput.value.trim();
+  if (!message) return;
+  
+  // Add user message to chat
+  addAiMessage('user', message);
+  elements.aiChatInput.value = '';
+  
+  // Show typing indicator
+  showTypingIndicator();
+  
+  try {
+    const response = await sendMessage({ type: 'AI_CHAT', content: message });
+    console.log('AI chat response:', response);
+    
+    // Remove typing indicator
+    removeTypingIndicator();
+    
+    // Handle both wrapped {success, data} and direct response formats
+    const aiResponse = response?.data?.response || response?.response || response?.data || null;
+    
+    if (aiResponse && typeof aiResponse === 'string') {
+      addAiMessage('assistant', aiResponse);
+    } else if (response.success === false) {
+      addAiMessage('assistant', response.error || 'Sorry, I encountered an error. Please try again.');
+    } else {
+      addAiMessage('assistant', 'I received your message but couldn\'t generate a proper response. Please try again.');
+    }
+  } catch (error) {
+    console.error('AI chat error:', error);
+    removeTypingIndicator();
+    addAiMessage('assistant', 'Sorry, I\'m having trouble connecting. Please try again.');
+  }
+}
+
+function addAiMessage(role, content) {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `ai-message ${role}`;
+  
+  const avatar = role === 'user' ? '👤' : '🤖';
+  
+  messageDiv.innerHTML = `
+    <span class="ai-msg-avatar">${avatar}</span>
+    <div class="ai-msg-content">${escapeHtml(content).replace(/\n/g, '<br>')}</div>
+  `;
+  
+  elements.aiChatMessages.appendChild(messageDiv);
+  elements.aiChatMessages.scrollTop = elements.aiChatMessages.scrollHeight;
+}
+
+function showTypingIndicator() {
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'ai-message assistant';
+  typingDiv.id = 'ai-typing-indicator';
+  typingDiv.innerHTML = `
+    <span class="ai-msg-avatar">🤖</span>
+    <div class="ai-msg-content">
+      <div class="ai-typing">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+  `;
+  elements.aiChatMessages.appendChild(typingDiv);
+  elements.aiChatMessages.scrollTop = elements.aiChatMessages.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  const typingIndicator = document.getElementById('ai-typing-indicator');
+  if (typingIndicator) {
+    typingIndicator.remove();
+  }
+}
 
 // ============================================
 // Activity Log

@@ -90,9 +90,15 @@ async function fetchFacebookConfig() {
  */
 async function registerIAISoldier() {
   try {
-    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
-    if (!savedAuth || !savedAuth.accessToken || !savedAuth.dealerAccountId) {
-      console.log('❌ Cannot register IAI - not authenticated');
+    const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+    
+    // Use authToken (server JWT) for API calls
+    const token = authToken || savedAuth?.accessToken;
+    const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
+    const userId = savedAuth?.userId || savedAuth?.user?.id;
+    
+    if (!token || !accountId) {
+      console.log('❌ Cannot register IAI - not authenticated', { hasToken: !!token, hasAccountId: !!accountId });
       return null;
     }
     
@@ -125,10 +131,6 @@ async function registerIAISoldier() {
       // Fallback: skip geolocation, it's optional
     }
     
-    // Register with server
-    const accountId = savedAuth.dealerAccountId || savedAuth.accountId;
-    const userId = savedAuth.userId || savedAuth.user?.id;
-    
     console.log('📡 Registering IAI Soldier...', { accountId, userId, browserId });
     
     const response = await fetch(
@@ -136,7 +138,7 @@ async function registerIAISoldier() {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -184,36 +186,56 @@ async function registerIAISoldier() {
 }
 
 /**
- * Send IAI heartbeat
+ * Send IAI heartbeat + regular extension heartbeat
+ * Both are needed: IAI heartbeat for the IAI Command Center, regular heartbeat for the Extension Status indicator
  */
 async function sendIAIHeartbeat() {
-  if (!soldierInfo) {
-    return;
-  }
-  
   try {
-    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
-    if (!savedAuth || !savedAuth.accessToken) {
+    const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+    const token = authToken || savedAuth?.accessToken;
+    const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
+    
+    if (!token || !accountId) {
       return;
     }
     
     const status = isPolling ? (isAwake ? 'working' : 'online') : 'idle';
     
+    // Send IAI heartbeat (for IAI Command Center)
+    if (soldierInfo) {
+      await fetch(
+        `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/heartbeat`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            soldierId: soldierInfo.soldierId,
+            accountId,
+            status,
+          }),
+        }
+      );
+    }
+    
+    // Also send regular extension heartbeat (for ExtensionStatus component in web app)
     await fetch(
-      `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/heartbeat`,
+      `${CONFIG.API_URL.replace('/api', '')}/api/extension/heartbeat`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          soldierId: soldierInfo.soldierId,
-          accountId: savedAuth.dealerAccountId,
-          status,
+          accountId,
         }),
       }
     );
+    
+    console.log(`💓 Heartbeat sent for account ${accountId}`);
   } catch (error) {
     console.error('Heartbeat error:', error);
   }
@@ -228,8 +250,11 @@ async function logIAIActivity(eventType, data) {
   }
   
   try {
-    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
-    if (!savedAuth || !savedAuth.accessToken) {
+    const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+    const token = authToken || savedAuth?.accessToken;
+    const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
+    
+    if (!token || !accountId) {
       return;
     }
     
@@ -238,12 +263,12 @@ async function logIAIActivity(eventType, data) {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           soldierId: soldierInfo.soldierId,
-          accountId: savedAuth.dealerAccountId,
+          accountId,
           eventType,
           ...data,
         }),
@@ -267,9 +292,12 @@ async function startIAITaskPolling() {
     return;
   }
   
-  const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
-  if (!savedAuth || !savedAuth.isAuthenticated || !savedAuth.dealerAccountId) {
-    console.log('❌ Cannot start IAI - not authenticated');
+  const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+  const token = authToken || savedAuth?.accessToken;
+  const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
+  
+  if (!token || !accountId) {
+    console.log('❌ Cannot start IAI - not authenticated (token:', !!token, 'accountId:', accountId, ')');
     return;
   }
   
@@ -342,20 +370,23 @@ async function pollForIAITasks() {
   }
   
   try {
-    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
-    if (!savedAuth || !savedAuth.accessToken || !savedAuth.dealerAccountId) {
-      console.log('❌ No credentials - cannot poll');
+    const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+    const token = authToken || savedAuth?.accessToken;
+    const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
+    
+    if (!token || !accountId) {
+      console.log('❌ No credentials - cannot poll (token:', !!token, 'accountId:', accountId, ')');
       return;
     }
     
     const now = new Date().toLocaleTimeString();
-    console.log(`🔍 [${now}] IAI SOLDIER CHECKING FOR TASKS (account: ${savedAuth.dealerAccountId})...`);
+    console.log(`🔍 [${now}] IAI SOLDIER CHECKING FOR TASKS (account: ${accountId})...`);
     
     let response = await fetch(
-      `${CONFIG.API_URL.replace('/api', '')}/api/extension/tasks/${savedAuth.dealerAccountId}`,
+      `${CONFIG.API_URL.replace('/api', '')}/api/extension/tasks/${accountId}`,
       {
         headers: {
-          'Authorization': `Bearer ${savedAuth.accessToken}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       }
@@ -491,14 +522,13 @@ async function executeIAITask(task) {
 
 /**
  * Check IAI heartbeat - ensure we're still alive
+ * Sends heartbeat regardless of polling state so web app knows extension is online
  */
 async function checkIAIHeartbeat() {
-  if (isPolling) {
-    console.log(`💓 IAI Soldier ${soldierInfo?.soldierId || 'unknown'} heartbeat - Still alive and polling`);
-    
-    // Send heartbeat to server via IAI endpoint
-    await sendIAIHeartbeat();
-  }
+  console.log(`💓 Extension heartbeat check - isPolling: ${isPolling}, soldier: ${soldierInfo?.soldierId || 'unknown'}`);
+  
+  // Always send heartbeat to update extension status in web app
+  await sendIAIHeartbeat();
 }
 
 // ============================================
@@ -614,21 +644,27 @@ async function exchangeCodeForToken(code) {
   
   const data = await response.json();
   
-  // Update auth state
+  // Update auth state - use serverToken as the main API token
   authState = {
     isAuthenticated: true,
-    accessToken: data.accessToken,
+    accessToken: data.serverToken, // Use server JWT token for API calls
+    facebookAccessToken: data.accessToken, // Keep Facebook token separately
     userId: data.user.id,
     dealerAccountId: data.dealerAccount?.id,
-    tokenExpiry: Date.now() + (data.expiresIn * 1000),
+    accountId: data.dealerAccount?.id,
+    tokenExpiry: Date.now() + (24 * 60 * 60 * 1000), // 24 hours for server token
+    user: data.user,
   };
   
-  // Save to storage
+  // Save to storage - include refresh token
   await chrome.storage.local.set({
     authState,
     accountId: data.dealerAccount?.id,
     authToken: data.serverToken,
+    refreshToken: data.refreshToken, // Store refresh token for token renewal
   });
+  
+  console.log('✅ OAuth tokens saved successfully');
   
   return data;
 }
@@ -975,6 +1011,10 @@ async function handleMessage(message, sender) {
         console.error('Failed to report task failure:', error);
         return { success: false, error: error.message };
       }
+    
+    case 'AI_CHAT':
+      // Send message to AI assistant (same layer as user)
+      return await sendAIChatMessage(message.content, message.context);
       
     default:
       throw new Error(`Unknown message type: ${message.type}`);
@@ -1057,18 +1097,24 @@ async function getAccountInfo() {
  * Get vehicles from server inventory
  */
 async function getVehicles() {
-  const { authState } = await chrome.storage.local.get(['authState']);
+  const { authState, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
   
-  if (!authState?.accessToken) {
+  // Use authToken (server JWT) for API calls, fallback to authState.accessToken
+  const token = authToken || authState?.accessToken;
+  
+  if (!token) {
+    console.log('❌ No auth token available for getVehicles');
     return { success: false, error: 'Not authenticated' };
   }
   
   try {
     // Use dealersface.com API to fetch vehicles
-    const accountId = authState.dealerAccountId || authState.accountId;
+    const accountId = authState?.dealerAccountId || authState?.accountId;
+    console.log('📦 Fetching vehicles for account:', accountId);
+    
     const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/vehicles?accountId=${accountId}&status=ACTIVE&limit=100`, {
       headers: {
-        'Authorization': `Bearer ${authState.accessToken}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -1082,6 +1128,9 @@ async function getVehicles() {
           // Retry with new token
           return await getVehicles();
         }
+        // If refresh failed, clear auth and return error
+        console.log('❌ Token refresh failed, clearing auth');
+        return { success: false, error: 'Session expired. Please login again.' };
       }
       throw new Error(`HTTP ${response.status}`);
     }
@@ -1220,6 +1269,99 @@ async function recordPosting(vehicleId, platform, status) {
   }
 }
 
+/**
+ * Send AI Chat Message
+ * Connects to the server's AI endpoint for user assistance
+ * Uses the same auth layer as the user's session
+ */
+async function sendAIChatMessage(content, context = {}) {
+  const { authToken, authState } = await chrome.storage.local.get(['authToken', 'authState']);
+  
+  const token = authToken || authState?.accessToken;
+  
+  if (!token) {
+    return { 
+      success: false, 
+      error: 'Not authenticated',
+      response: 'Please log in to use the AI assistant.' 
+    };
+  }
+  
+  try {
+    console.log('🤖 Sending AI chat message:', content.substring(0, 50) + '...');
+    
+    // Get current tab context
+    let tabContext = { ...context };
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab) {
+        tabContext.url = activeTab.url;
+        tabContext.title = activeTab.title;
+        tabContext.pageType = detectPageType(activeTab.url);
+      }
+    } catch (e) {
+      // Tab context is optional
+    }
+    
+    const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/extension/ai-chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        message: content,
+        context: {
+          accountId: authState?.accountId || authState?.dealerAccountId,
+          ...tabContext,
+        },
+      }),
+    });
+    
+    if (!response.ok) {
+      // Try refresh token if 401
+      if (response.status === 401) {
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          return await sendAIChatMessage(content, context);
+        }
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ AI response received');
+    
+    return {
+      success: true,
+      response: data.response || data.content || data.message || 'No response received.',
+    };
+  } catch (error) {
+    console.error('AI chat error:', error);
+    return {
+      success: false,
+      error: error.message,
+      response: 'Sorry, I\'m having trouble connecting. Please try again.',
+    };
+  }
+}
+
+/**
+ * Detect page type from URL
+ */
+function detectPageType(url) {
+  if (!url) return 'unknown';
+  
+  if (url.includes('/marketplace/create')) return 'create-listing';
+  if (url.includes('/marketplace/item')) return 'listing';
+  if (url.includes('/marketplace/inbox')) return 'inbox';
+  if (url.includes('/marketplace')) return 'marketplace';
+  if (url.includes('facebook.com')) return 'facebook';
+  if (url.includes('dealersface.com')) return 'dealersface';
+  
+  return 'other';
+}
+
 // ============================================
 // Tab Management
 // ============================================
@@ -1289,15 +1431,24 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error) => console.error('Failed to set panel behavior:', error));
 
 // Load saved auth state and fetch Facebook config on startup
-chrome.storage.local.get('authState', async (result) => {
+chrome.storage.local.get(['authState', 'authToken'], async (result) => {
   if (result.authState) {
     authState = result.authState;
-    console.log('Auth state loaded:', authState.isAuthenticated);
+    const accountId = authState.dealerAccountId || authState.accountId;
+    console.log('Auth state loaded:', authState.isAuthenticated, 'accountId:', accountId);
     
-    // Auto-start IAI polling if authenticated
-    if (authState.isAuthenticated && authState.dealerAccountId) {
+    // Auto-start IAI polling if authenticated (check both dealerAccountId and accountId)
+    if (authState.isAuthenticated && accountId) {
       console.log('🚀 Auto-starting IAI Soldier (user is authenticated)');
       await startIAITaskPolling();
+      
+      // Send initial heartbeat
+      await sendIAIHeartbeat();
+    } else if (result.authToken) {
+      // Even if authState is incomplete, if we have a token, start heartbeat
+      console.log('📡 Starting heartbeat with existing token');
+      heartbeatCheckInterval = setInterval(checkIAIHeartbeat, CONFIG.HEARTBEAT_CHECK_INTERVAL);
+      await sendIAIHeartbeat();
     }
   }
   
@@ -1316,10 +1467,15 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     });
   } else if (details.reason === 'update') {
     // On update, restart IAI polling if user is logged in
-    const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
-    if (savedAuth && savedAuth.isAuthenticated && savedAuth.dealerAccountId) {
+    const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+    const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
+    if (savedAuth && savedAuth.isAuthenticated && accountId) {
       console.log('🔄 Extension updated - restarting IAI Soldier');
       await startIAITaskPolling();
+    } else if (authToken) {
+      // Start heartbeat if we have a token
+      console.log('🔄 Extension updated - starting heartbeat');
+      heartbeatCheckInterval = setInterval(checkIAIHeartbeat, CONFIG.HEARTBEAT_CHECK_INTERVAL);
     }
   }
 });
