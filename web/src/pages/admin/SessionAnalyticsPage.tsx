@@ -21,27 +21,16 @@ import {
   Monitor,
   Smartphone,
   Tablet,
-  Chrome,
-  Laptop,
   AlertTriangle,
   CheckCircle,
   XCircle,
   Ban,
   RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  Search,
-  Filter,
-  Download,
-  Zap,
   UserCheck,
-  UserX,
-  Skull,
   Radio,
   Thermometer,
   Target,
   History,
-  BarChart3,
   PieChart,
   ArrowUpRight,
   ArrowDownRight,
@@ -311,13 +300,12 @@ const VisitorTypeBadge = ({ type }: { type: string }) => {
 };
 
 export default function SessionAnalyticsPage() {
-  const { showToast } = useToast();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'sessions' | 'visitors' | 'ips' | 'users' | 'logins'>('sessions');
-  const [selectedSession, setSelectedSession] = useState<UserSession | null>(null);
   
   // Queries
-  const { data: sessionStats, isLoading: statsLoading } = useQuery({
+  const { data: sessionStats } = useQuery({
     queryKey: ['session-stats'],
     queryFn: sessionAnalyticsApi.getSessionStats,
     refetchInterval: 30000,
@@ -357,19 +345,19 @@ export default function SessionAnalyticsPage() {
   const terminateSessionMutation = useMutation({
     mutationFn: sessionAnalyticsApi.terminateSession,
     onSuccess: () => {
-      showToast('Session terminated', 'success');
+      toast.success('Session terminated');
       queryClient.invalidateQueries({ queryKey: ['active-sessions'] });
     },
-    onError: () => showToast('Failed to terminate session', 'error'),
+    onError: () => toast.error('Failed to terminate session'),
   });
   
   const blockIPMutation = useMutation({
     mutationFn: ({ ip, reason }: { ip: string; reason?: string }) => sessionAnalyticsApi.blockIP(ip, reason),
     onSuccess: () => {
-      showToast('IP blocked', 'success');
+      toast.success('IP blocked');
       queryClient.invalidateQueries({ queryKey: ['ip-summary'] });
     },
-    onError: () => showToast('Failed to block IP', 'error'),
+    onError: () => toast.error('Failed to block IP'),
   });
 
   const tabs = [
@@ -821,7 +809,7 @@ export default function SessionAnalyticsPage() {
                                 <Ban className="w-4 h-4" />
                               </button>
                             ) : (
-                              <CheckCircle className="w-4 h-4 text-red-400" title="Blocked" />
+                              <CheckCircle className="w-4 h-4 text-red-400" />
                             )}
                           </div>
                         </div>
