@@ -16,15 +16,8 @@ import crypto from 'crypto';
 // Types
 // ============================================
 
-interface _SessionContext {
-  sessionId: string;
-  userId?: string;
-  visitorId?: string;
-  fingerprint: string;
-  ipAddress: string;
-  userAgent: string;
-  isAuthenticated: boolean;
-}
+// Session context interface for tracking
+// Used by middleware to pass context through request pipeline
 
 // ============================================
 // Session ID Generation

@@ -211,7 +211,7 @@ router.get('/sessions/stats', async (_req: AuthRequest, res: Response) => {
  */
 router.post('/sessions/:sessionId/terminate', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { sessionId } = req.params;
+    const sessionId = String(req.params.sessionId);
     
     const session = await prisma.userSession.findUnique({
       where: { id: sessionId },
@@ -320,7 +320,7 @@ router.get('/visitors', async (req: AuthRequest, res: Response) => {
  */
 router.get('/visitors/:visitorId/sessions', async (req: AuthRequest, res: Response) => {
   try {
-    const { visitorId } = req.params;
+    const visitorId = String(req.params.visitorId);
     
     const sessions = await prisma.visitorSession.findMany({
       where: { visitorId },
@@ -367,8 +367,8 @@ router.get('/ip/summary', async (_req: AuthRequest, res: Response) => {
  */
 router.get('/ip/analyze/:ip', async (req: AuthRequest, res: Response) => {
   try {
-    const { ip } = req.params;
-    const userAgent = req.query.userAgent as string;
+    const ip = String(req.params.ip);
+    const userAgent = String(req.query.userAgent || '');
     
     const analysis = await ipIntelligenceService.analyzeIP(ip, userAgent);
     
@@ -643,7 +643,7 @@ router.get('/users/analytics', async (_req: AuthRequest, res: Response) => {
  */
 router.get('/users/:userId/sessions', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId } = req.params;
+    const userId = String(req.params.userId);
     
     const [user, sessions] = await Promise.all([
       prisma.user.findUnique({

@@ -202,7 +202,8 @@ class IPIntelligenceService {
       };
     }
     
-    const _uaLower = userAgent.toLowerCase();
+    // Keep user agent lower for potential future use
+    // const uaLower = userAgent.toLowerCase();
     
     // Check known good bots
     for (const bot of KNOWN_GOOD_BOTS) {
