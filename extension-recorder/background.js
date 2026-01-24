@@ -204,6 +204,9 @@ async function processMessage(message, sender) {
     case 'INJECT_CONTENT_SCRIPT':
       return await handleInjectContentScript(message);
       
+    case 'PING_TAB':
+      return await handlePingTab(message);
+      
     default:
       console.log('[Recorder BG] Unknown message type:', message.type);
       return { success: false, error: 'Unknown message type' };
@@ -257,6 +260,18 @@ async function handleInjectContentScript(message) {
     });
     return { success: true };
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function handlePingTab(message) {
+  try {
+    console.log('[Recorder BG] Pinging tab:', message.tabId);
+    const result = await chrome.tabs.sendMessage(message.tabId, { type: 'PING' });
+    console.log('[Recorder BG] Ping response from tab:', result);
+    return { success: true, ...result };
+  } catch (error) {
+    console.log('[Recorder BG] Ping tab failed:', error.message);
     return { success: false, error: error.message };
   }
 }
