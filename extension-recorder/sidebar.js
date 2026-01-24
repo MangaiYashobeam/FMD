@@ -76,6 +76,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     log('Background script not responding - try reloading extension', 'error');
   }
   
+  // Check and display current auth status
+  const tokenCheck = await chrome.storage.local.get(['fmd_admin_token', 'fmd_token_synced_at']);
+  if (tokenCheck.fmd_admin_token) {
+    const age = tokenCheck.fmd_token_synced_at ? Math.round((Date.now() - tokenCheck.fmd_token_synced_at) / 1000) : null;
+    console.log('[Console] Cached token found, age:', age, 'seconds');
+    updateAuthStatusUI(true, age ? (age < 300 ? 'FRESH' : 'CACHED') : 'CACHED');
+  } else {
+    updateAuthStatusUI(false, 'NONE');
+  }
+  
   // Sync auth token from webapp
   await syncAuthTokenFromWebapp();
   
@@ -235,6 +245,12 @@ function initializeEventListeners() {
   document.getElementById('api-endpoint')?.addEventListener('change', (e) => {
     ConsoleState.config.apiEndpoint = e.target.value;
     saveConfig();
+  });
+  
+  // Sync token button
+  document.getElementById('sync-token-btn')?.addEventListener('click', async () => {
+    log('Manual token sync requested...', 'info');
+    await forceSyncAuthToken();
   });
   
   // Listen for messages from background script
@@ -1682,16 +1698,155 @@ async function syncAuthTokenFromWebapp() {
     if (existing.fmd_admin_token) {
       console.log('[Console] Using existing token (may be stale)');
       log('Using cached auth token', 'info');
+      updateAuthStatusUI(true, 'CACHED');
       return true;
     }
     
     log('No auth token - open dealersface.com and login', 'warning');
     console.log('[Console] No auth token available');
+    updateAuthStatusUI(false, 'NOT FOUND');
     return false;
     
   } catch (error) {
     console.error('[Console] Error syncing auth token:', error);
+    updateAuthStatusUI(false, 'ERROR');
     return false;
+  }
+}
+
+/**
+ * Force sync auth token - tries harder including injecting script
+ */
+async function forceSyncAuthToken() {
+  const authStatus = document.getElementById('auth-status');
+  const authText = document.getElementById('auth-text');
+  
+  if (authStatus) authStatus.style.borderColor = 'rgba(0,150,255,0.5)';
+  if (authText) authText.textContent = '⟳ SYNCING...';
+  
+  try {
+    // First try normal sync
+    console.log('[Console] Force sync: trying normal sync...');
+    
+    // Look for webapp tabs
+    const tabs = await chrome.tabs.query({
+      url: ['https://dealersface.com/*', 'https://www.dealersface.com/*', 'http://localhost:3000/*', 'http://localhost:5173/*']
+    });
+    
+    console.log('[Console] Force sync: found', tabs.length, 'webapp tab(s)');
+    
+    if (tabs.length === 0) {
+      log('No dealersface.com tabs open - please open the webapp', 'error');
+      updateAuthStatusUI(false, 'OPEN WEBAPP');
+      return false;
+    }
+    
+    // Try to inject webapp-bridge if it's not responding
+    for (const tab of tabs) {
+      try {
+        // First try direct message
+        console.log('[Console] Force sync: pinging tab', tab.id);
+        const response = await Promise.race([
+          chrome.tabs.sendMessage(tab.id, { type: 'GET_AUTH_TOKEN' }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+        ]);
+        
+        console.log('[Console] Force sync: got response:', response);
+        
+        if (response?.accessToken) {
+          // Store the token directly
+          await chrome.storage.local.set({
+            fmd_admin_token: response.accessToken,
+            fmd_refresh_token: response.refreshToken,
+            fmd_user_id: response.userId,
+            fmd_token_synced_at: Date.now()
+          });
+          
+          log('Auth token synced successfully!', 'success');
+          updateAuthStatusUI(true, 'SYNCED');
+          return true;
+        }
+      } catch (err) {
+        console.log('[Console] Force sync: tab', tab.id, 'error:', err.message);
+        
+        // Try to inject the bridge script
+        if (err.message === 'timeout' || err.message.includes('Receiving end does not exist')) {
+          console.log('[Console] Force sync: injecting bridge script into tab', tab.id);
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['webapp-bridge.js']
+            });
+            
+            // Wait a moment for it to initialize
+            await new Promise(r => setTimeout(r, 500));
+            
+            // Try again
+            const retryResponse = await Promise.race([
+              chrome.tabs.sendMessage(tab.id, { type: 'GET_AUTH_TOKEN' }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+            ]);
+            
+            console.log('[Console] Force sync: retry response:', retryResponse);
+            
+            if (retryResponse?.accessToken) {
+              await chrome.storage.local.set({
+                fmd_admin_token: retryResponse.accessToken,
+                fmd_refresh_token: retryResponse.refreshToken,
+                fmd_user_id: retryResponse.userId,
+                fmd_token_synced_at: Date.now()
+              });
+              
+              log('Auth token synced after script injection!', 'success');
+              updateAuthStatusUI(true, 'SYNCED');
+              return true;
+            }
+          } catch (injectErr) {
+            console.error('[Console] Force sync: inject error:', injectErr);
+          }
+        }
+      }
+    }
+    
+    // Check if we have a cached token
+    const cached = await chrome.storage.local.get('fmd_admin_token');
+    if (cached.fmd_admin_token) {
+      log('Using cached token (sync failed)', 'warning');
+      updateAuthStatusUI(true, 'CACHED');
+      return true;
+    }
+    
+    log('Token sync failed - make sure you are logged in to dealersface.com', 'error');
+    updateAuthStatusUI(false, 'FAILED');
+    return false;
+    
+  } catch (error) {
+    console.error('[Console] Force sync error:', error);
+    log(`Token sync error: ${error.message}`, 'error');
+    updateAuthStatusUI(false, 'ERROR');
+    return false;
+  }
+}
+
+/**
+ * Update the auth status UI in CONFIG tab
+ */
+function updateAuthStatusUI(hasToken, status) {
+  const authStatus = document.getElementById('auth-status');
+  const authText = document.getElementById('auth-text');
+  
+  if (!authStatus || !authText) return;
+  
+  if (hasToken) {
+    authStatus.style.borderColor = 'rgba(0,255,100,0.5)';
+    authStatus.style.background = 'rgba(0,255,100,0.1)';
+    authText.style.color = '#00ff64';
+    authText.textContent = `✓ AUTH: ${status}`;
+  } else {
+    authStatus.style.borderColor = 'rgba(255,50,50,0.5)';
+    authStatus.style.background = 'rgba(255,50,50,0.1)';
+    authText.style.color = '#ff5050';
+    authText.textContent = `✗ AUTH: ${status}`;
   }
 }
 

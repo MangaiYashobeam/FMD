@@ -292,12 +292,21 @@
                 <span class="api-dot"></span>
                 <span class="api-text">CONNECTED</span>
               </div>
+              <div class="auth-status" id="auth-status" style="margin: 8px 0; padding: 6px; background: rgba(255,100,0,0.1); border: 1px solid rgba(255,100,0,0.3); border-radius: 4px;">
+                <span class="auth-text" id="auth-text" style="color: #ff9500; font-size: 11px;">⚠ AUTH: CHECKING...</span>
+              </div>
               <input type="text" class="api-input" id="api-endpoint" 
                      placeholder="API Endpoint" value="https://dealersface.com/api">
-              <button class="action-btn tertiary" id="test-api-btn">
-                <span class="btn-icon">◈</span>
-                <span class="btn-text">TEST CONNECTION</span>
-              </button>
+              <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <button class="action-btn tertiary" id="test-api-btn" style="flex: 1;">
+                  <span class="btn-icon">◈</span>
+                  <span class="btn-text">TEST</span>
+                </button>
+                <button class="action-btn tertiary" id="sync-token-btn" style="flex: 1; background: rgba(0,200,100,0.1); border-color: rgba(0,200,100,0.5);">
+                  <span class="btn-icon">⟳</span>
+                  <span class="btn-text">SYNC TOKEN</span>
+                </button>
+              </div>
             </div>
           </div>
         </section>
