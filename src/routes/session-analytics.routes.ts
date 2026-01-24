@@ -209,7 +209,7 @@ router.get('/sessions/stats', async (_req: AuthRequest, res: Response) => {
 /**
  * Terminate a session
  */
-router.post('/sessions/:sessionId/terminate', async (req: AuthRequest, res: Response) => {
+router.post('/sessions/:sessionId/terminate', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId } = req.params;
     
@@ -218,7 +218,8 @@ router.post('/sessions/:sessionId/terminate', async (req: AuthRequest, res: Resp
     });
     
     if (!session) {
-      return res.status(404).json({ success: false, error: 'Session not found' });
+      res.status(404).json({ success: false, error: 'Session not found' });
+      return;
     }
     
     const duration = Math.floor((Date.now() - session.loginAt.getTime()) / 1000);
@@ -428,12 +429,13 @@ router.get('/ip/list', async (req: AuthRequest, res: Response) => {
 /**
  * Block an IP
  */
-router.post('/ip/block', async (req: AuthRequest, res: Response) => {
+router.post('/ip/block', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { ipAddress, reason } = req.body;
     
     if (!ipAddress) {
-      return res.status(400).json({ success: false, error: 'IP address required' });
+      res.status(400).json({ success: false, error: 'IP address required' });
+      return;
     }
     
     await prisma.iPIntelligence.upsert({
@@ -472,12 +474,13 @@ router.post('/ip/block', async (req: AuthRequest, res: Response) => {
 /**
  * Unblock an IP
  */
-router.post('/ip/unblock', async (req: AuthRequest, res: Response) => {
+router.post('/ip/unblock', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { ipAddress } = req.body;
     
     if (!ipAddress) {
-      return res.status(400).json({ success: false, error: 'IP address required' });
+      res.status(400).json({ success: false, error: 'IP address required' });
+      return;
     }
     
     await prisma.iPIntelligence.update({
@@ -638,7 +641,7 @@ router.get('/users/analytics', async (_req: AuthRequest, res: Response) => {
 /**
  * Get specific user's sessions
  */
-router.get('/users/:userId/sessions', async (req: AuthRequest, res: Response) => {
+router.get('/users/:userId/sessions', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
     
@@ -655,9 +658,6 @@ router.get('/users/:userId/sessions', async (req: AuthRequest, res: Response) =>
           loginCount: true,
           visitHeatScore: true,
           lastIpAddress: true,
-          accountUsers: {
-            select: { role: true },
-          },
         },
       }),
       prisma.userSession.findMany({
@@ -668,16 +668,14 @@ router.get('/users/:userId/sessions', async (req: AuthRequest, res: Response) =>
     ]);
     
     if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
     }
     
     res.json({
       success: true,
       data: {
-        user: {
-          ...user,
-          role: user.accountUsers[0]?.role || 'UNKNOWN',
-        },
+        user,
         sessions,
       },
     });
@@ -721,12 +719,13 @@ router.get('/bots', async (req: AuthRequest, res: Response) => {
 /**
  * Add known bot
  */
-router.post('/bots', async (req: AuthRequest, res: Response) => {
+router.post('/bots', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name, type, userAgentPattern, ipRanges, isGood, description, website } = req.body;
     
     if (!name || !type) {
-      return res.status(400).json({ success: false, error: 'Name and type required' });
+      res.status(400).json({ success: false, error: 'Name and type required' });
+      return;
     }
     
     const bot = await prisma.knownBot.create({

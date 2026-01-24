@@ -179,7 +179,7 @@ class IPIntelligenceService {
   /**
    * Detect if user agent is a bot
    */
-  detectBot(userAgent: string, ipAddress: string): {
+  detectBot(userAgent: string, _ipAddress?: string): {
     isBot: boolean;
     confidence: number;
     name: string | null;
@@ -202,7 +202,7 @@ class IPIntelligenceService {
       };
     }
     
-    const uaLower = userAgent.toLowerCase();
+    const _uaLower = userAgent.toLowerCase();
     
     // Check known good bots
     for (const bot of KNOWN_GOOD_BOTS) {
@@ -675,7 +675,7 @@ class IPIntelligenceService {
       
       if (!response.ok) return null;
       
-      const data = await response.json();
+      const data = await response.json() as { status: string; country?: string; countryCode?: string; region?: string; regionName?: string; city?: string; zip?: string; lat?: number; lon?: number; timezone?: string; isp?: string; org?: string; as?: string; query?: string };
       
       if (data.status === 'success') {
         // Cache the result
@@ -989,7 +989,7 @@ class IPIntelligenceService {
     return dcPatterns.some(p => p.test(combined));
   }
   
-  private isTorExitNode(ip: string): boolean {
+  private isTorExitNode(_ip: string): boolean {
     // In production, would check against Tor exit node list
     // For now, return false
     return false;

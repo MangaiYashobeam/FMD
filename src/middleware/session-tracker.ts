@@ -16,7 +16,7 @@ import crypto from 'crypto';
 // Types
 // ============================================
 
-interface SessionContext {
+interface _SessionContext {
   sessionId: string;
   userId?: string;
   visitorId?: string;
