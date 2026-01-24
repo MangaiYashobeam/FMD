@@ -14,6 +14,8 @@ import { asyncHandler } from '@/middleware/errorHandler';
 import { deepseekService } from '@/services/deepseek.service';
 import { aiMemoryService, MemoryScope, MemoryCategory } from '@/services/ai-memory.service';
 import { logger } from '@/utils/logger';
+import { novaToolingService } from '@/services/nova-tooling.service';
+import { novaTerminalService } from '@/services/nova-terminal.service';
 
 const router = Router();
 
@@ -228,17 +230,28 @@ router.post('/providers/set-default', asyncHandler(async (req: AuthRequest, res:
 
 // ============================================
 // NOVA CONTEXT INJECTION - Real System Data
+// (novaToolingService handles database operations)
 // ============================================
 
-import { PrismaClient } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
-
-const prisma = new PrismaClient();
-
 /**
- * NOVA TOOL SYSTEM - Gives Nova real access to the codebase
- * Nova can request actions using [[TOOL:action:params]] syntax
+ * NOVA TOOL SYSTEM v2.0 - PRODUCTION GRADE
+ * Powered by novaToolingService for all operations
+ * 
+ * Available Tools:
+ * - read_file:path/to/file.ts - Read file contents
+ * - write_file:path|||content - Write/create a file
+ * - list_dir:path/to/dir - List directory contents
+ * - search_code:term - Search for code patterns
+ * - deep_search:term - Deep search with context
+ * - db_query:table - Query database
+ * - system_health - Get system health report
+ * - file_tree:dir - Get file tree
+ * - analyze_file:path - Analyze file structure
+ * - terminal:command - Execute terminal command (local)
+ * - vps:command - Execute command on VPS
+ * - docker:command - Execute Docker command
+ * - errors:limit - Get recent system errors
+ * - project_stats - Get project statistics
  */
 
 interface NovaToolResult {
@@ -249,174 +262,270 @@ interface NovaToolResult {
 }
 
 /**
- * Execute a Nova tool command
+ * Execute a Nova tool command - PRODUCTION GRADE v2.0
+ * Uses novaToolingService and novaTerminalService for all operations
  */
 async function executeNovaTool(toolCommand: string): Promise<NovaToolResult> {
-  // Parse [[TOOL:action:params]] format
-  const match = toolCommand.match(/\[\[TOOL:(\w+):?(.*?)\]\]/);
-  if (!match) return { tool: 'unknown', success: false, error: 'Invalid tool format' };
+  // Parse [[TOOL:action:params]] format - support multi-line params
+  const match = toolCommand.match(/\[\[TOOL:(\w+):?([\s\S]*?)\]\]/);
+  if (!match) {
+    logger.warn('[Nova Tools] Invalid tool format:', toolCommand.substring(0, 100));
+    return { tool: 'unknown', success: false, error: 'Invalid tool format. Use [[TOOL:action:params]]' };
+  }
   
   const [, action, params] = match;
-  const projectRoot = process.cwd();
+  const toolName = action.toLowerCase();
+  logger.info(`[Nova Tools] Executing: ${toolName}`, { params: params?.substring(0, 100) });
   
   try {
-    switch (action.toLowerCase()) {
-      case 'read_file': {
+    switch (toolName) {
+      // ============================================
+      // FILE OPERATIONS (via novaToolingService)
+      // ============================================
+      
+      case 'read_file':
+      case 'read': {
         const filePath = params.trim();
-        const fullPath = path.join(projectRoot, filePath);
-        if (!fs.existsSync(fullPath)) {
-          return { tool: 'read_file', success: false, error: `File not found: ${filePath}` };
+        if (!filePath) {
+          return { tool: 'read_file', success: false, error: 'File path required. Usage: [[TOOL:read_file:src/server.ts]]' };
         }
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        // Limit to 500 lines to avoid token overflow
-        const lines = content.split('\n').slice(0, 500);
-        return { 
-          tool: 'read_file', 
-          success: true, 
-          data: { path: filePath, content: lines.join('\n'), truncated: content.split('\n').length > 500 }
-        };
+        const result = await novaToolingService.readFile(filePath);
+        return { tool: 'read_file', success: result.success, data: result.content ? { path: filePath, content: result.content, size: result.size } : undefined, error: result.error };
       }
       
-      case 'list_dir': {
-        const dirPath = params.trim() || '.';
-        const fullPath = path.join(projectRoot, dirPath);
-        if (!fs.existsSync(fullPath)) {
-          return { tool: 'list_dir', success: false, error: `Directory not found: ${dirPath}` };
-        }
-        const entries = fs.readdirSync(fullPath, { withFileTypes: true });
-        const items = entries.map(e => ({
-          name: e.name,
-          type: e.isDirectory() ? 'directory' : 'file'
-        }));
-        return { tool: 'list_dir', success: true, data: { path: dirPath, items } };
-      }
-      
-      case 'search_code': {
-        const searchTerm = params.trim();
-        const results: { file: string; line: number; content: string }[] = [];
-        
-        function searchDir(dir: string) {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory() && !['node_modules', '.git', 'dist', 'build'].includes(entry.name)) {
-              searchDir(fullPath);
-            } else if (entry.isFile() && /\.(ts|tsx|js|jsx|json|css|html)$/.test(entry.name)) {
-              try {
-                const content = fs.readFileSync(fullPath, 'utf-8');
-                const lines = content.split('\n');
-                lines.forEach((line, idx) => {
-                  if (line.toLowerCase().includes(searchTerm.toLowerCase())) {
-                    results.push({
-                      file: fullPath.replace(projectRoot, '').replace(/\\/g, '/'),
-                      line: idx + 1,
-                      content: line.trim().substring(0, 200)
-                    });
-                  }
-                });
-              } catch {}
-            }
-          }
-        }
-        
-        searchDir(projectRoot);
-        return { tool: 'search_code', success: true, data: { term: searchTerm, results: results.slice(0, 50) } };
-      }
-      
-      case 'db_query': {
-        const table = params.trim().toLowerCase();
-        let data: any;
-        
-        switch (table) {
-          case 'users':
-            data = await prisma.user.findMany({ 
-              select: { id: true, email: true, firstName: true, lastName: true, isActive: true, createdAt: true },
-              take: 20 
-            });
-            break;
-          case 'accounts':
-            data = await prisma.account.findMany({ 
-              select: { id: true, name: true, dealershipName: true, isActive: true, createdAt: true },
-              take: 20 
-            });
-            break;
-          case 'vehicles':
-            data = await prisma.vehicle.findMany({ 
-              select: { id: true, vin: true, make: true, model: true, year: true, price: true, status: true },
-              take: 20 
-            });
-            break;
-          case 'leads':
-            data = await prisma.lead.findMany({ 
-              select: { id: true, firstName: true, lastName: true, email: true, phone: true, source: true, status: true, createdAt: true },
-              take: 20 
-            });
-            break;
-          case 'facebookprofiles':
-            data = await prisma.facebookProfile.findMany({ 
-              select: { id: true, pageId: true, pageName: true, facebookUserId: true, isActive: true, createdAt: true },
-              take: 20 
-            });
-            break;
-          case 'schema':
-            // Return table names
-            data = ['users', 'accounts', 'vehicles', 'leads', 'facebookProfiles', 'facebookGroups', 'accountUsers', 'accountSettings'];
-            break;
-          default:
-            return { tool: 'db_query', success: false, error: `Unknown table: ${table}. Use 'schema' to see available tables.` };
-        }
-        
-        return { tool: 'db_query', success: true, data: { table, records: data, count: Array.isArray(data) ? data.length : 1 } };
-      }
-      
-      case 'edit_file': {
-        // Format: filepath|||oldContent|||newContent
-        const parts = params.split('|||');
-        if (parts.length !== 3) {
-          return { tool: 'edit_file', success: false, error: 'Format: filepath|||oldContent|||newContent' };
-        }
-        const [filePath, oldContent, newContent] = parts;
-        const fullPath = path.join(projectRoot, filePath.trim());
-        
-        if (!fs.existsSync(fullPath)) {
-          return { tool: 'edit_file', success: false, error: `File not found: ${filePath}` };
-        }
-        
-        let content = fs.readFileSync(fullPath, 'utf-8');
-        if (!content.includes(oldContent.trim())) {
-          return { tool: 'edit_file', success: false, error: 'Old content not found in file' };
-        }
-        
-        content = content.replace(oldContent.trim(), newContent.trim());
-        fs.writeFileSync(fullPath, content, 'utf-8');
-        
-        return { tool: 'edit_file', success: true, data: { path: filePath, message: 'File updated successfully' } };
-      }
-      
-      case 'create_file': {
-        // Format: filepath|||content
+      case 'write_file':
+      case 'write': {
         const parts = params.split('|||');
         if (parts.length !== 2) {
-          return { tool: 'create_file', success: false, error: 'Format: filepath|||content' };
+          return { tool: 'write_file', success: false, error: 'Format: [[TOOL:write_file:path/file.ts|||content]]' };
         }
         const [filePath, content] = parts;
-        const fullPath = path.join(projectRoot, filePath.trim());
-        
-        // Create directory if needed
-        const dir = path.dirname(fullPath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        
-        fs.writeFileSync(fullPath, content.trim(), 'utf-8');
-        return { tool: 'create_file', success: true, data: { path: filePath, message: 'File created successfully' } };
+        const result = await novaToolingService.writeFile(filePath.trim(), content);
+        return { tool: 'write_file', success: result.success, data: result.success ? { path: filePath, message: 'File written successfully' } : undefined, error: result.error };
       }
       
-      default:
-        return { tool: action, success: false, error: `Unknown tool: ${action}` };
+      case 'list_dir':
+      case 'ls': {
+        const dirPath = params.trim() || 'src';
+        const result = await novaToolingService.listDirectory(dirPath);
+        // listDirectory returns DirectoryListing without success/error
+        return { tool: 'list_dir', success: true, data: { path: dirPath, entries: result.entries, count: result.entries.length } };
+      }
+      
+      case 'file_tree':
+      case 'tree': {
+        const dirPath = params.trim() || 'src';
+        const result = await novaToolingService.getFileTree(dirPath, { maxDepth: 3 });
+        // getFileTree returns object with success but no error property
+        return { tool: 'file_tree', success: result.success, data: result };
+      }
+      
+      case 'analyze_file':
+      case 'analyze': {
+        const filePath = params.trim();
+        if (!filePath) {
+          return { tool: 'analyze_file', success: false, error: 'File path required. Usage: [[TOOL:analyze_file:src/server.ts]]' };
+        }
+        const result = await novaToolingService.analyzeFile(filePath);
+        return { tool: 'analyze_file', success: result.success, data: result };
+      }
+      
+      // ============================================
+      // SEARCH OPERATIONS
+      // ============================================
+      
+      case 'search_code':
+      case 'search':
+      case 'grep': {
+        const searchTerm = params.trim();
+        if (!searchTerm) {
+          return { tool: 'search_code', success: false, error: 'Search term required. Usage: [[TOOL:search_code:functionName]]' };
+        }
+        const results = await novaToolingService.searchInFiles(searchTerm);
+        return { tool: 'search_code', success: true, data: { term: searchTerm, results: results.slice(0, 50), total: results.length } };
+      }
+      
+      case 'deep_search': {
+        const searchTerm = params.trim();
+        if (!searchTerm) {
+          return { tool: 'deep_search', success: false, error: 'Search term required. Usage: [[TOOL:deep_search:functionName]]' };
+        }
+        const result = await novaToolingService.deepSearch({ query: searchTerm, includeContext: true, maxResults: 30 });
+        // deepSearch returns object with success but no error property
+        return { tool: 'deep_search', success: result.success, data: result };
+      }
+      
+      case 'find_file':
+      case 'find': {
+        const pattern = params.trim();
+        if (!pattern) {
+          return { tool: 'find_file', success: false, error: 'Pattern required. Usage: [[TOOL:find_file:*.routes.ts]]' };
+        }
+        const results = await novaToolingService.searchFiles(pattern);
+        return { tool: 'find_file', success: true, data: { pattern, files: results.slice(0, 100) } };
+      }
+      
+      // ============================================
+      // DATABASE OPERATIONS
+      // ============================================
+      
+      case 'db_query':
+      case 'db': {
+        const table = params.trim().toLowerCase();
+        if (!table) {
+          return { tool: 'db_query', success: false, error: 'Table required. Usage: [[TOOL:db_query:users]] or [[TOOL:db_query:schema]]' };
+        }
+        const result = await novaToolingService.queryDatabase(table, { limit: 20 });
+        return { tool: 'db_query', success: result.success, data: result.data ? { table, records: result.data, count: result.count } : undefined, error: result.error };
+      }
+      
+      case 'db_schema':
+      case 'schema': {
+        const result = await novaToolingService.getDatabaseSchema();
+        return { tool: 'db_schema', success: result.success, data: result.tables, error: result.error };
+      }
+      
+      // ============================================
+      // SYSTEM HEALTH & MONITORING
+      // ============================================
+      
+      case 'system_health':
+      case 'health': {
+        const report = await novaToolingService.getSystemHealth();
+        return { tool: 'system_health', success: true, data: report };
+      }
+      
+      case 'errors':
+      case 'recent_errors': {
+        const limit = parseInt(params.trim()) || 20;
+        const result = await novaToolingService.getRecentErrors(limit);
+        // getRecentErrors returns { errors: [...] } without success/error
+        return { tool: 'errors', success: true, data: { errors: result.errors, count: result.errors.length } };
+      }
+      
+      case 'project_stats':
+      case 'stats': {
+        const result = await novaToolingService.getProjectStats();
+        return { tool: 'project_stats', success: result.success, data: result };
+      }
+      
+      // ============================================
+      // TERMINAL OPERATIONS (via novaTerminalService)
+      // ============================================
+      
+      case 'terminal':
+      case 'exec':
+      case 'run': {
+        const command = params.trim();
+        if (!command) {
+          return { tool: 'terminal', success: false, error: 'Command required. Usage: [[TOOL:terminal:ls -la]]' };
+        }
+        const result = await novaTerminalService.executeLocal(command, { timeout: 30000 });
+        return { tool: 'terminal', success: result.success, data: result.success ? { command, output: result.output, exitCode: result.exitCode } : undefined, error: result.error };
+      }
+      
+      case 'vps':
+      case 'ssh': {
+        const command = params.trim();
+        if (!command) {
+          return { tool: 'vps', success: false, error: 'Command required. Usage: [[TOOL:vps:docker ps]]' };
+        }
+        const result = await novaTerminalService.executeVPS(command, { timeout: 60000 });
+        return { tool: 'vps', success: result.success, data: result.success ? { command, output: result.output } : undefined, error: result.error };
+      }
+      
+      case 'docker': {
+        const command = params.trim();
+        if (!command) {
+          return { tool: 'docker', success: false, error: 'Command required. Usage: [[TOOL:docker:ps -a]]' };
+        }
+        const result = await novaTerminalService.executeDocker(command, { timeout: 60000 });
+        return { tool: 'docker', success: result.success, data: result.success ? { command, output: result.output } : undefined, error: result.error };
+      }
+      
+      // ============================================
+      // FILE EDITING (legacy support)
+      // ============================================
+      
+      case 'edit_file':
+      case 'edit': {
+        const parts = params.split('|||');
+        if (parts.length !== 3) {
+          return { tool: 'edit_file', success: false, error: 'Format: [[TOOL:edit_file:path|||oldContent|||newContent]]' };
+        }
+        const [filePath, oldContent, newContent] = parts;
+        const readResult = await novaToolingService.readFile(filePath.trim());
+        if (!readResult.success || !readResult.content) {
+          return { tool: 'edit_file', success: false, error: readResult.error || 'File not found' };
+        }
+        if (!readResult.content.includes(oldContent.trim())) {
+          return { tool: 'edit_file', success: false, error: 'Old content not found in file. Make sure to match exact text.' };
+        }
+        const newFileContent = readResult.content.replace(oldContent.trim(), newContent.trim());
+        const writeResult = await novaToolingService.writeFile(filePath.trim(), newFileContent);
+        return { tool: 'edit_file', success: writeResult.success, data: writeResult.success ? { path: filePath, message: 'File updated successfully' } : undefined, error: writeResult.error };
+      }
+      
+      case 'create_file':
+      case 'create': {
+        const parts = params.split('|||');
+        if (parts.length !== 2) {
+          return { tool: 'create_file', success: false, error: 'Format: [[TOOL:create_file:path|||content]]' };
+        }
+        const [filePath, content] = parts;
+        const result = await novaToolingService.writeFile(filePath.trim(), content);
+        return { tool: 'create_file', success: result.success, data: result.success ? { path: filePath, message: 'File created successfully' } : undefined, error: result.error };
+      }
+      
+      // ============================================
+      // HELP & INFO
+      // ============================================
+      
+      case 'help':
+      case 'tools': {
+        const availableTools = [
+          '📁 FILE OPERATIONS:',
+          '  • read_file:path - Read file contents',
+          '  • write_file:path|||content - Write/create file',
+          '  • list_dir:path - List directory',
+          '  • file_tree:path - Get directory tree',
+          '  • analyze_file:path - Analyze file structure',
+          '  • edit_file:path|||old|||new - Edit file content',
+          '',
+          '🔍 SEARCH OPERATIONS:',
+          '  • search_code:term - Search for code',
+          '  • deep_search:term - Deep search with context',
+          '  • find_file:pattern - Find files by pattern',
+          '',
+          '🗄️ DATABASE OPERATIONS:',
+          '  • db_query:table - Query database table',
+          '  • db_schema - Get database schema',
+          '',
+          '📊 SYSTEM MONITORING:',
+          '  • system_health - Get health report',
+          '  • errors:limit - Get recent errors',
+          '  • project_stats - Get project statistics',
+          '',
+          '💻 TERMINAL OPERATIONS:',
+          '  • terminal:command - Run local command',
+          '  • vps:command - Run command on VPS',
+          '  • docker:command - Run Docker command',
+        ];
+        return { tool: 'help', success: true, data: { tools: availableTools.join('\n') } };
+      }
+      
+      default: {
+        logger.warn(`[Nova Tools] Unknown tool requested: ${toolName}`);
+        return { 
+          tool: toolName, 
+          success: false, 
+          error: `Unknown tool: ${toolName}. Use [[TOOL:help]] to see available tools.` 
+        };
+      }
     }
   } catch (error: any) {
-    return { tool: action, success: false, error: error.message };
+    logger.error(`[Nova Tools] Error executing ${toolName}:`, error);
+    return { tool: toolName, success: false, error: error.message || 'Tool execution failed' };
   }
 }
 
@@ -454,20 +563,42 @@ async function getNovaSystemContext(userId?: string): Promise<string> {
     }
   }
   
-  // NOVA TOOL INSTRUCTIONS
-  context.push('\n🛠️ YOUR TOOLS - You have ROOT ACCESS to the codebase:');
-  context.push('You can execute commands using [[TOOL:action:params]] syntax.');
-  context.push('Available tools:');
-  context.push('  • [[TOOL:read_file:path/to/file.ts]] - Read a file');
-  context.push('  • [[TOOL:list_dir:path/to/dir]] - List directory contents');
-  context.push('  • [[TOOL:search_code:searchTerm]] - Search codebase for a term');
-  context.push('  • [[TOOL:db_query:tablename]] - Query database (users, accounts, inventory, leads, facebookprofiles, schema)');
-  context.push('  • [[TOOL:edit_file:path|||oldContent|||newContent]] - Edit a file');
-  context.push('  • [[TOOL:create_file:path|||content]] - Create a new file');
+  // NOVA TOOL INSTRUCTIONS v2.0 - PRODUCTION GRADE
+  context.push('\n🛠️ NOVA TOOLING SYSTEM v2.0 - PRODUCTION GRADE:');
+  context.push('You have ROOT ACCESS. Execute tools using [[TOOL:action:params]] syntax.');
   context.push('');
-  context.push('IMPORTANT: When you use a tool, the system will execute it and show results.');
-  context.push('Use tools to get REAL data before answering questions about the system.');
-  context.push('For file edits, first READ the file, then EDIT with exact content matches.');
+  context.push('📁 FILE OPERATIONS:');
+  context.push('  • [[TOOL:read_file:src/server.ts]] - Read file contents');
+  context.push('  • [[TOOL:write_file:path|||content]] - Write/create a file');
+  context.push('  • [[TOOL:list_dir:src]] - List directory contents');
+  context.push('  • [[TOOL:file_tree:src]] - Get directory tree (max 3 levels)');
+  context.push('  • [[TOOL:analyze_file:src/server.ts]] - Analyze file structure');
+  context.push('  • [[TOOL:edit_file:path|||oldContent|||newContent]] - Edit file content');
+  context.push('');
+  context.push('🔍 SEARCH OPERATIONS:');
+  context.push('  • [[TOOL:search_code:functionName]] - Search for code patterns');
+  context.push('  • [[TOOL:deep_search:term]] - Deep search with context');
+  context.push('  • [[TOOL:find_file:*.routes.ts]] - Find files by pattern');
+  context.push('');
+  context.push('🗄️ DATABASE OPERATIONS:');
+  context.push('  • [[TOOL:db_query:users]] - Query database table');
+  context.push('  • [[TOOL:db_schema]] - Get database schema');
+  context.push('');
+  context.push('📊 SYSTEM MONITORING:');
+  context.push('  • [[TOOL:system_health]] - Get comprehensive health report');
+  context.push('  • [[TOOL:errors:20]] - Get recent system errors');
+  context.push('  • [[TOOL:project_stats]] - Get project statistics');
+  context.push('');
+  context.push('💻 TERMINAL OPERATIONS:');
+  context.push('  • [[TOOL:terminal:ls -la]] - Run local command');
+  context.push('  • [[TOOL:vps:docker ps]] - Run command on VPS via SSH');
+  context.push('  • [[TOOL:docker:logs app]] - Run Docker command on VPS');
+  context.push('');
+  context.push('ℹ️ [[TOOL:help]] - Show all available tools');
+  context.push('');
+  context.push('IMPORTANT: When you use a tool, the system executes it and returns REAL results.');
+  context.push('Always use tools to get REAL data before answering system questions.');
+  context.push('For file edits: READ first, then EDIT with exact content matches.');
   
   // Environment & Config Status
   context.push('\n📦 ENVIRONMENT STATUS:');
@@ -1547,9 +1678,8 @@ router.get('/audit/:accountId', aiCenterController.getAuditLogs);
 // ============================================
 // NOVA ADVANCED TOOLING ROUTES
 // Production-level system management capabilities
+// (novaToolingService imported at top of file)
 // ============================================
-
-import { novaToolingService } from '@/services/nova-tooling.service';
 
 // Get comprehensive system health report
 router.get('/nova/health', asyncHandler(async (_req: AuthRequest, res: Response) => {
@@ -2010,9 +2140,8 @@ router.post('/nova/dom/validate', asyncHandler(async (req: AuthRequest, res: Res
 
 // ============================================
 // NOVA TERMINAL - Secure VPS Command Execution
+// (novaTerminalService imported at top of file)
 // ============================================
-
-import { novaTerminalService } from '@/services/nova-terminal.service';
 
 // Execute command on VPS
 router.post('/nova/terminal/vps', asyncHandler(async (req: AuthRequest, res: Response) => {

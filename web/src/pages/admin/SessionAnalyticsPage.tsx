@@ -220,18 +220,18 @@ const getDeviceIcon = (type: string | null) => {
 
 // API calls
 const sessionAnalyticsApi = {
-  getSessionStats: () => api.get<{ data: SessionStats }>('/session-analytics/sessions/stats').then(r => r.data.data),
-  getActiveSessions: () => api.get<{ data: UserSession[] }>('/session-analytics/sessions/active').then(r => r.data.data),
-  getSessionHistory: (params: any) => api.get<{ data: UserSession[]; pagination: any }>('/session-analytics/sessions/history', { params }).then(r => r.data),
-  terminateSession: (sessionId: string) => api.post(`/session-analytics/sessions/${sessionId}/terminate`),
-  getVisitorAnalytics: () => api.get<{ data: VisitorAnalytics }>('/session-analytics/visitors/analytics').then(r => r.data.data),
-  getVisitors: (params: any) => api.get<{ data: Visitor[]; pagination: any }>('/session-analytics/visitors', { params }).then(r => r.data),
-  getIPSummary: () => api.get<{ data: IPSummary }>('/session-analytics/ip/summary').then(r => r.data.data),
-  getIPList: (params: any) => api.get<{ data: IPRecord[]; pagination: any }>('/session-analytics/ip/list', { params }).then(r => r.data),
-  blockIP: (ipAddress: string, reason?: string) => api.post('/session-analytics/ip/block', { ipAddress, reason }),
-  unblockIP: (ipAddress: string) => api.post('/session-analytics/ip/unblock', { ipAddress }),
-  getUserAnalytics: () => api.get<{ data: UserAnalytics }>('/session-analytics/users/analytics').then(r => r.data.data),
-  getAdminLogins: (params: any) => api.get<{ data: AdminLogin[]; pagination: any }>('/session-analytics/admin-logins', { params }).then(r => r.data),
+  getSessionStats: () => api.get<{ data: SessionStats }>('/api/session-analytics/sessions/stats').then(r => r.data.data),
+  getActiveSessions: () => api.get<{ data: UserSession[] }>('/api/session-analytics/sessions/active').then(r => r.data.data),
+  getSessionHistory: (params: any) => api.get<{ data: UserSession[]; pagination: any }>('/api/session-analytics/sessions/history', { params }).then(r => r.data),
+  terminateSession: (sessionId: string) => api.post(`/api/session-analytics/sessions/${sessionId}/terminate`),
+  getVisitorAnalytics: () => api.get<{ data: VisitorAnalytics }>('/api/session-analytics/visitors/analytics').then(r => r.data.data),
+  getVisitors: (params: any) => api.get<{ data: Visitor[]; pagination: any }>('/api/session-analytics/visitors', { params }).then(r => r.data),
+  getIPSummary: () => api.get<{ data: IPSummary }>('/api/session-analytics/ip/summary').then(r => r.data.data),
+  getIPList: (params: any) => api.get<{ data: IPRecord[]; pagination: any }>('/api/session-analytics/ip/list', { params }).then(r => r.data),
+  blockIP: (ipAddress: string, reason?: string) => api.post('/api/session-analytics/ip/block', { ipAddress, reason }),
+  unblockIP: (ipAddress: string) => api.post('/api/session-analytics/ip/unblock', { ipAddress }),
+  getUserAnalytics: () => api.get<{ data: UserAnalytics }>('/api/session-analytics/users/analytics').then(r => r.data.data),
+  getAdminLogins: (params: any) => api.get<{ data: AdminLogin[]; pagination: any }>('/api/session-analytics/admin-logins', { params }).then(r => r.data),
 };
 
 // Components

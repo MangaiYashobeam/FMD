@@ -1387,6 +1387,70 @@ body {
 .log-entry.info .log-type { color: var(--accent); }
 
 /* ============================================
+   LIVE CONSOLE (On Record Tab)
+   ============================================ */
+
+#live-console {
+  margin-top: 8px;
+}
+
+.console-count {
+  background: var(--primary);
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: auto;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.live-console-container {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  max-height: 180px;
+  min-height: 100px;
+  overflow-y: auto;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  padding: 4px;
+}
+
+.console-entry {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-dim);
+  display: flex;
+  gap: 8px;
+  animation: console-fade-in 0.2s ease;
+}
+
+@keyframes console-fade-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.console-entry:last-child {
+  border-bottom: none;
+}
+
+.console-time {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.console-msg {
+  color: var(--text-secondary);
+  word-break: break-word;
+  flex: 1;
+}
+
+.console-entry.info .console-msg { color: var(--accent); }
+.console-entry.success .console-msg { color: var(--success); }
+.console-entry.warning .console-msg { color: var(--warning); }
+.console-entry.error .console-msg { color: var(--error); }
+.console-entry.event .console-msg { color: var(--text-primary); }
+
+/* ============================================
    FOOTER
    ============================================ */
 

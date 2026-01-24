@@ -602,45 +602,69 @@ export default function IAITrainingPanel() {
   const [detailData, setDetailData] = useState<SessionDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [extensionStatus, setExtensionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [extensionInfo, setExtensionInfo] = useState<{
+    browserId?: string;
+    version?: string;
+    currentTab?: string;
+    recordingActive?: boolean;
+    lastHeartbeat?: string;
+  } | null>(null);
   const [lastSessionCheck, setLastSessionCheck] = useState<Date | null>(null);
   const [newSessionAlert, setNewSessionAlert] = useState(false);
   const queryClient = useQueryClient();
 
-  // Check for extension connection and new sessions
+  // Check for extension connection via heartbeat endpoint
   useEffect(() => {
     const checkExtension = async () => {
       try {
-        // Try to detect extension by checking for recent sessions
-        const response = await api.get('/api/training/sessions?limit=1');
-        if (response.data?.sessions?.length > 0) {
-          const latestSession = response.data.sessions[0];
-          const sessionDate = new Date(latestSession.createdAt);
-          
-          // If session was created in the last 5 minutes, extension is active
-          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-          if (sessionDate > fiveMinutesAgo) {
-            setExtensionStatus('connected');
+        // Check the ROOT console heartbeat status endpoint
+        const statusResponse = await api.get('/api/training/console/status');
+        
+        if (statusResponse.data?.success && statusResponse.data?.connected) {
+          setExtensionStatus('connected');
+          setExtensionInfo({
+            browserId: statusResponse.data.browserId,
+            version: statusResponse.data.version,
+            currentTab: statusResponse.data.currentTab,
+            recordingActive: statusResponse.data.recordingActive,
+            lastHeartbeat: statusResponse.data.lastHeartbeat,
+          });
+        } else {
+          // Fallback: check if there are recent sessions
+          const sessionResponse = await api.get('/api/training/sessions?limit=1');
+          if (sessionResponse.data?.sessions?.length > 0) {
+            const latestSession = sessionResponse.data.sessions[0];
+            const sessionDate = new Date(latestSession.createdAt);
             
-            // Check if this is a NEW session we haven't seen
-            if (lastSessionCheck && sessionDate > lastSessionCheck) {
-              setNewSessionAlert(true);
-              queryClient.invalidateQueries({ queryKey: ['trainingSessions'] });
-              setTimeout(() => setNewSessionAlert(false), 5000);
+            // If session was created in the last 5 minutes, extension might be active
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            if (sessionDate > fiveMinutesAgo) {
+              setExtensionStatus('connected');
+              setExtensionInfo(null);
+              
+              // Check if this is a NEW session we haven't seen
+              if (lastSessionCheck && sessionDate > lastSessionCheck) {
+                setNewSessionAlert(true);
+                queryClient.invalidateQueries({ queryKey: ['trainingSessions'] });
+                setTimeout(() => setNewSessionAlert(false), 5000);
+              }
+              setLastSessionCheck(new Date());
+              return;
             }
-          } else {
-            setExtensionStatus('disconnected');
           }
-          setLastSessionCheck(new Date());
+          setExtensionStatus('disconnected');
+          setExtensionInfo(null);
         }
       } catch {
         setExtensionStatus('disconnected');
+        setExtensionInfo(null);
       }
     };
 
     // Initial check
     checkExtension();
 
-    // Poll every 5 seconds for new sessions
+    // Poll every 5 seconds for connection status
     const interval = setInterval(checkExtension, 5000);
     return () => clearInterval(interval);
   }, [lastSessionCheck, queryClient]);
@@ -756,18 +780,25 @@ export default function IAITrainingPanel() {
             {extensionStatus === 'connected' ? (
               <>
                 <Wifi className="w-4 h-4" />
-                <span className="text-sm font-medium">Extension Connected</span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">ROOT Console Connected</span>
+                  {extensionInfo && (
+                    <span className="text-xs opacity-70">
+                      {extensionInfo.recordingActive ? '● Recording' : '○ Idle'} | v{extensionInfo.version || '?'}
+                    </span>
+                  )}
+                </div>
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
               </>
             ) : extensionStatus === 'connecting' ? (
               <>
-                <Radio className="w-4 h-4" />
-                <span className="text-sm font-medium">Seeking Extension...</span>
+                <Radio className="w-4 h-4 animate-spin" />
+                <span className="text-sm font-medium">Seeking ROOT Console...</span>
               </>
             ) : (
               <>
                 <WifiOff className="w-4 h-4" />
-                <span className="text-sm font-medium">Extension Idle</span>
+                <span className="text-sm font-medium">ROOT Console Offline</span>
               </>
             )}
           </div>

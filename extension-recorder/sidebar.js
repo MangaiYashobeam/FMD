@@ -93,6 +93,11 @@ function initializeDOMReferences() {
     pauseBtn: document.getElementById('pause-btn'),
     markBtn: document.getElementById('mark-btn'),
     
+    // Live Console (on record tab)
+    liveConsole: document.getElementById('live-console'),
+    liveConsoleContainer: document.getElementById('live-console-container'),
+    consoleCount: document.getElementById('console-count'),
+    
     // Stats
     liveStats: document.getElementById('live-stats'),
     statEvents: document.getElementById('stat-events'),
@@ -407,23 +412,32 @@ async function toggleRecording() {
 async function startRecording() {
   try {
     log('Initiating recording sequence...', 'info');
-    log('Checking webapp connection...', 'info');
+    updateStatusIndicator('loading', 'INITIALIZING...');
     
-    // Check webapp connection first
-    const connected = await checkWebappConnection();
-    if (!connected) {
+    // Check webapp connection first (with short timeout)
+    log('Checking webapp connection...', 'info');
+    try {
+      const connected = await Promise.race([
+        checkWebappConnection(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection check timeout')), 3000))
+      ]);
+      if (connected) {
+        log('Webapp connection confirmed', 'success');
+      }
+    } catch {
       log('Webapp offline - recordings will be saved locally', 'warning');
-    } else {
-      log('Webapp connection confirmed', 'success');
     }
     
     // Get current tab via background
     log('Requesting active tab info...', 'info');
+    updateStatusIndicator('loading', 'GETTING TAB...');
+    
     const tabResponse = await chrome.runtime.sendMessage({ type: 'GET_ACTIVE_TAB' });
     console.log('[Console] Tab response:', tabResponse);
     
     if (!tabResponse?.success || !tabResponse.tab) {
       log('No active tab found - check browser permissions', 'error');
+      updateStatusIndicator('error', 'NO TAB FOUND');
       return;
     }
     
@@ -441,7 +455,9 @@ async function startRecording() {
     log(`Tab ID: ${currentTab.id}`, 'info');
     
     // Ensure content script is loaded
-    log('Checking content script status...', 'info');
+    log('Injecting content script...', 'info');
+    updateStatusIndicator('loading', 'INJECTING SCRIPT...');
+    
     const scriptReady = await ensureContentScript(currentTab.id);
     
     if (!scriptReady) {
@@ -452,6 +468,7 @@ async function startRecording() {
     
     log('Content script ready', 'success');
     ConsoleState.contentScriptReady = true;
+    updateStatusIndicator('loading', 'STARTING RECORDING...');
     
     // Start recording based on mode
     log(`Starting ${ConsoleState.currentMode.toUpperCase()} mode recording...`, 'info');
@@ -466,25 +483,36 @@ async function startRecording() {
     log(`Recording failed: ${error.message}`, 'error');
     console.error('Start recording error:', error);
     updateRecordingUI(false);
+    updateStatusIndicator('error', 'RECORDING FAILED');
   }
 }
 
-async function ensureContentScript(tabId) {
+async function ensureContentScript(tabId, retryCount = 0) {
+  const MAX_RETRIES = 2;
+  
   try {
     // Try to ping first via background
     log(`Pinging content script on tab ${tabId}...`, 'info');
     updateScriptConnectionUI('seeking');
     
-    const response = await chrome.runtime.sendMessage({ 
+    // Add timeout to ping
+    const pingPromise = chrome.runtime.sendMessage({ 
       type: 'PING_TAB', 
       tabId 
     });
+    const timeoutPromise = new Promise((resolve) => 
+      setTimeout(() => resolve({ timeout: true }), 2000)
+    );
+    
+    const response = await Promise.race([pingPromise, timeoutPromise]);
     console.log('[Console] Ping response:', response);
     
     if (response?.pong) {
       log('Content script responded to ping', 'success');
       updateScriptConnectionUI('ready');
       return true;
+    } else if (response?.timeout) {
+      log('Ping timed out, script may not be loaded', 'warning');
     } else if (response?.error) {
       log(`Ping failed: ${response.error}`, 'warning');
     }
@@ -505,22 +533,36 @@ async function ensureContentScript(tabId) {
     console.log('[Console] Injection result:', result);
     
     if (!result?.success) {
-      log(`Injection failed: ${result?.error || 'Unknown error'}`, 'error');
+      const errorMsg = result?.error || 'Unknown error';
+      log(`Injection failed: ${errorMsg}`, 'error');
+      
+      // Retry if not at max retries
+      if (retryCount < MAX_RETRIES && !errorMsg.includes('Cannot access')) {
+        log(`Retrying injection (${retryCount + 1}/${MAX_RETRIES})...`, 'warning');
+        await new Promise(r => setTimeout(r, 1000));
+        return ensureContentScript(tabId, retryCount + 1);
+      }
+      
       updateScriptConnectionUI('error');
-      throw new Error(result?.error || 'Injection failed');
+      throw new Error(errorMsg);
     }
     
     log('Scripts injected, waiting for initialization...', 'info');
     
-    // Wait for script to initialize
-    await new Promise(r => setTimeout(r, 500));
+    // Wait for script to initialize (slightly longer)
+    await new Promise(r => setTimeout(r, 800));
     
-    // Verify injection via background
+    // Verify injection via background with timeout
     log('Verifying injection...', 'info');
-    const response = await chrome.runtime.sendMessage({ 
+    const verifyPromise = chrome.runtime.sendMessage({ 
       type: 'PING_TAB', 
       tabId 
     });
+    const verifyTimeoutPromise = new Promise((resolve) => 
+      setTimeout(() => resolve({ timeout: true }), 2000)
+    );
+    
+    const response = await Promise.race([verifyPromise, verifyTimeoutPromise]);
     console.log('[Console] Post-injection ping:', response);
     
     if (response?.pong) {
@@ -528,6 +570,13 @@ async function ensureContentScript(tabId) {
       updateScriptConnectionUI('ready');
       return true;
     } else {
+      // Retry if not at max retries
+      if (retryCount < MAX_RETRIES) {
+        log(`Verification failed, retrying (${retryCount + 1}/${MAX_RETRIES})...`, 'warning');
+        await new Promise(r => setTimeout(r, 1000));
+        return ensureContentScript(tabId, retryCount + 1);
+      }
+      
       log('Content script not responding after injection', 'error');
       updateScriptConnectionUI('error');
       return false;
@@ -545,18 +594,38 @@ async function startSingleTabRecording(tab) {
   try {
     log(`Sending START_RECORDING to tab ${tab.id}...`, 'info');
     
-    // Send message via background
-    const response = await chrome.runtime.sendMessage({
+    // Send message via background with timeout
+    const responsePromise = chrome.runtime.sendMessage({
       type: 'START_RECORDING_TAB',
       tabId: tab.id,
       mode: ConsoleState.currentMode,
       config: ConsoleState.config
     });
     
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Recording start timeout - content script may not be responding')), 5000)
+    );
+    
+    const response = await Promise.race([responsePromise, timeoutPromise]);
+    
     console.log('[Console] Start recording response:', response);
     
-    if (!response?.success) {
-      const errorMsg = response?.error || 'Failed to start recording - no response from content script';
+    if (!response) {
+      log('No response from content script - retrying injection...', 'warning');
+      // Try re-injecting and starting again
+      await ensureContentScript(tab.id);
+      const retryResponse = await chrome.runtime.sendMessage({
+        type: 'START_RECORDING_TAB',
+        tabId: tab.id,
+        mode: ConsoleState.currentMode,
+        config: ConsoleState.config
+      });
+      if (!retryResponse?.success) {
+        throw new Error('Failed after retry - refresh the Facebook page and try again');
+      }
+    } else if (!response.success) {
+      const errorMsg = response.error || 'Failed to start recording';
       log(`Start recording failed: ${errorMsg}`, 'error');
       updateScriptConnectionUI('error');
       throw new Error(errorMsg);
@@ -1193,7 +1262,7 @@ function log(message, type = 'info') {
   // Trim logs to max lines
   trimLogs();
   
-  // Update UI
+  // Update Logs Tab UI
   if (DOM.logsContainer) {
     const logEntry = document.createElement('div');
     logEntry.className = `log-entry ${logType.class}`;
@@ -1212,6 +1281,9 @@ function log(message, type = 'info') {
     }
   }
   
+  // Update Live Console (on Record tab) - last 20 entries
+  updateLiveConsole(time, message, type);
+  
   console.log(`[Console ${type.toUpperCase()}] ${message}`);
 }
 
@@ -1227,7 +1299,39 @@ function clearLogs() {
   if (DOM.logsContainer) {
     DOM.logsContainer.innerHTML = '';
   }
+  // Clear live console too
+  if (DOM.liveConsoleContainer) {
+    DOM.liveConsoleContainer.innerHTML = '';
+  }
+  if (DOM.consoleCount) {
+    DOM.consoleCount.textContent = '0';
+  }
   log('Logs cleared', 'info');
+}
+
+// Update the live console on the Record tab
+function updateLiveConsole(time, message, type) {
+  if (!DOM.liveConsoleContainer) return;
+  
+  const entry = document.createElement('div');
+  entry.className = `console-entry ${type}`;
+  entry.innerHTML = `
+    <span class="console-time">${time}</span>
+    <span class="console-msg">${escapeHtml(message)}</span>
+  `;
+  
+  DOM.liveConsoleContainer.appendChild(entry);
+  DOM.liveConsoleContainer.scrollTop = DOM.liveConsoleContainer.scrollHeight;
+  
+  // Keep only last 20 entries in live console
+  while (DOM.liveConsoleContainer.children.length > 20) {
+    DOM.liveConsoleContainer.removeChild(DOM.liveConsoleContainer.firstChild);
+  }
+  
+  // Update count
+  if (DOM.consoleCount) {
+    DOM.consoleCount.textContent = Math.min(ConsoleState.logs.length, 99);
+  }
 }
 
 function handleLogClick(e) {
@@ -1386,6 +1490,7 @@ async function checkWebappConnection() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     
+    // First check health endpoint
     const response = await fetch(ConsoleState.config.healthEndpoint, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -1402,6 +1507,10 @@ async function checkWebappConnection() {
       ConsoleState.webappConnected = true;
       ConsoleState.lastHeartbeat = Date.now();
       updateConnectionUI(true);
+      
+      // Send heartbeat to training console endpoint
+      await sendHeartbeatToServer();
+      
       return true;
     }
   } catch (error) {
@@ -1416,6 +1525,62 @@ async function checkWebappConnection() {
     }
   }
   return false;
+}
+
+/**
+ * Send heartbeat to training console endpoint
+ * This allows IAI Training Panel to detect real-time extension connection
+ */
+async function sendHeartbeatToServer() {
+  try {
+    const heartbeatUrl = `${ConsoleState.config.apiEndpoint}/training/console/heartbeat`;
+    
+    // Get browser ID from chrome.runtime
+    let browserId = null;
+    try {
+      const manifest = chrome.runtime.getManifest();
+      browserId = chrome.runtime.id || 'unknown';
+    } catch (e) {
+      browserId = 'extension-recorder';
+    }
+    
+    const heartbeatData = {
+      browserId,
+      version: '2.0',
+      currentTab: ConsoleState.currentTab,
+      recordingActive: ConsoleState.isRecording,
+      recordingTabId: ConsoleState.recordingTabId,
+      eventCounts: ConsoleState.eventCounts,
+      mode: ConsoleState.currentMode,
+    };
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    
+    const response = await fetch(heartbeatUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(heartbeatData),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeout);
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        // Update UI to show fully connected (server received heartbeat)
+        const webappStatus = document.getElementById('webapp-status');
+        if (webappStatus) {
+          webappStatus.className = 'conn-status connected';
+          webappStatus.textContent = 'SYNCED';
+        }
+      }
+    }
+  } catch (error) {
+    // Silent fail - heartbeat is secondary to health check
+    console.log('[Console] Heartbeat send failed (non-critical):', error.message);
+  }
 }
 
 function updateConnectionUI(connected) {

@@ -16,7 +16,102 @@ import { requireSuperAdmin } from '../middleware/rbac';
 const router = Router();
 
 // ============================================
-// ALL ROUTES REQUIRE SUPER ADMIN
+// ROOT CONSOLE HEARTBEAT TRACKING
+// ============================================
+
+interface RootConsoleState {
+  connected: boolean;
+  lastHeartbeat: Date | null;
+  browserId: string | null;
+  version: string | null;
+  currentTab: string | null;
+  recordingActive: boolean;
+}
+
+// In-memory store for ROOT console connection state
+const rootConsoleState: RootConsoleState = {
+  connected: false,
+  lastHeartbeat: null,
+  browserId: null,
+  version: null,
+  currentTab: null,
+  recordingActive: false,
+};
+
+// Heartbeat timeout - consider disconnected after 30 seconds
+const HEARTBEAT_TIMEOUT_MS = 30000;
+
+function isRootConsoleConnected(): boolean {
+  if (!rootConsoleState.lastHeartbeat) return false;
+  const timeSinceHeartbeat = Date.now() - rootConsoleState.lastHeartbeat.getTime();
+  return timeSinceHeartbeat < HEARTBEAT_TIMEOUT_MS;
+}
+
+// ============================================
+// PUBLIC HEARTBEAT ENDPOINT (no auth for extension)
+// ============================================
+
+/**
+ * POST /training/console/heartbeat - ROOT Console heartbeat
+ * Called by extension-recorder to maintain connection
+ */
+router.post('/console/heartbeat', async (req, res) => {
+  try {
+    const { browserId, version, currentTab, recordingActive } = req.body;
+    
+    rootConsoleState.connected = true;
+    rootConsoleState.lastHeartbeat = new Date();
+    rootConsoleState.browserId = browserId || null;
+    rootConsoleState.version = version || null;
+    rootConsoleState.currentTab = currentTab || null;
+    rootConsoleState.recordingActive = recordingActive || false;
+    
+    console.log('[ROOT Console] Heartbeat received:', {
+      browserId,
+      version,
+      currentTab,
+      recordingActive,
+    });
+    
+    res.json({
+      success: true,
+      message: 'Heartbeat acknowledged',
+      serverTime: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[ROOT Console] Heartbeat error:', error);
+    res.status(500).json({ success: false, error: 'Heartbeat failed' });
+  }
+});
+
+/**
+ * GET /training/console/status - Get ROOT Console connection status
+ * Called by IAI Training Panel to check if extension is connected
+ */
+router.get('/console/status', async (_req, res) => {
+  try {
+    const connected = isRootConsoleConnected();
+    
+    res.json({
+      success: true,
+      connected,
+      lastHeartbeat: rootConsoleState.lastHeartbeat?.toISOString() || null,
+      browserId: rootConsoleState.browserId,
+      version: rootConsoleState.version,
+      currentTab: rootConsoleState.currentTab,
+      recordingActive: rootConsoleState.recordingActive,
+      timeSinceHeartbeat: rootConsoleState.lastHeartbeat 
+        ? Date.now() - rootConsoleState.lastHeartbeat.getTime()
+        : null,
+    });
+  } catch (error) {
+    console.error('[ROOT Console] Status check error:', error);
+    res.status(500).json({ success: false, error: 'Status check failed' });
+  }
+});
+
+// ============================================
+// ALL OTHER ROUTES REQUIRE SUPER ADMIN
 // ============================================
 
 router.use(authenticate);

@@ -54,10 +54,11 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const { user, logout, impersonation } = useAuth();
   
-  // Check if we're on the AI Center page or IAI Command page
+  // Check if we're on a dark-themed page
   const isAICenterPage = location.pathname === '/admin/ai-center';
   const isIAICommandPage = location.pathname === '/admin/iai-command';
-  const isDarkPage = isAICenterPage || isIAICommandPage;
+  const isSessionAnalyticsPage = location.pathname === '/admin/session-analytics';
+  const isDarkPage = isAICenterPage || isIAICommandPage || isSessionAnalyticsPage;
 
   return (
     <div className={`flex h-screen ${isDarkPage ? 'bg-gray-900' : 'bg-gray-50'} ${impersonation.isImpersonating ? 'pt-10' : ''}`}>
