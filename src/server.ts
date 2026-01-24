@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -54,6 +55,8 @@ import { iipcCheck } from '@/middleware/iipc';
 import iipcRoutes from '@/routes/iipc.routes';
 import postingRoutes from '@/routes/posting.routes';
 import { autoPostService } from '@/services/autopost.service';
+import sessionTracker from '@/middleware/session-tracker';
+import { ipIntelligenceService } from '@/services/ip-intelligence.service';
 
 // Validate security configuration on startup
 validateSecurityConfig();
@@ -112,11 +115,45 @@ app.use(express.static(webDistPath, {
 // Security Middleware (after static files)
 // ============================================
 
+// Cookie parser for visitor fingerprinting
+app.use(cookieParser());
+
 // Intelliceil - Anti-DDoS & Exchange Security (monitors all traffic)
 app.use(intelliceilMonitor);
 
 // IIPC - Internal IP Controller (tracks client IPs for access control)
 app.use(iipcCheck);
+
+// Intelliheat Visitor Tracking - Track all visitors with heat scores
+// This persists visitor data, bot detection, and IP intelligence to database
+app.use(async (req, res, next) => {
+  try {
+    // Skip static files and health checks
+    if (req.path.startsWith('/assets') || req.path === '/health' || req.path.endsWith('.js') || req.path.endsWith('.css')) {
+      return next();
+    }
+    
+    // Get visitor fingerprint from cookie or generate new one
+    const fingerprint = req.cookies?.['_vf'] || `anon_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const ipAddress = sessionTracker.getClientIP(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const country = req.intelliceil?.country;
+    const city = req.intelliceil?.city;
+    
+    // Track visitor asynchronously (don't block request)
+    ipIntelligenceService.trackVisitor(fingerprint, ipAddress, userAgent, country, city).catch(() => {});
+    
+    // Set fingerprint cookie if not present
+    if (!req.cookies?.['_vf']) {
+      res.cookie('_vf', fingerprint, { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax' });
+    }
+    
+    next();
+  } catch (error) {
+    // Don't block on tracking errors
+    next();
+  }
+});
 
 // API-specific Intelliceil protection (blocks malicious traffic)
 app.use('/api', intelliceilMiddleware);

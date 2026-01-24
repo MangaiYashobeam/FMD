@@ -47,6 +47,7 @@
     "basic-ftp": "^5.0.5",
     "bcrypt": "^5.1.1",
     "bullmq": "^5.15.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
     "dotenv": "^16.4.5",
@@ -73,6 +74,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/geoip-lite": "^1.4.4",
     "@types/ua-parser-js": "^0.7.39",
     "@types/xml2js": "^0.4.14",

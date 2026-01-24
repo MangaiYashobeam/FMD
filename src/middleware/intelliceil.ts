@@ -7,6 +7,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { intelliceilService } from '@/services/intelliceil.service';
+import { ipIntelligenceService } from '@/services/ip-intelligence.service';
 import geoip from 'geoip-lite';
 
 // Extend Request type to include Intelliceil data
@@ -153,6 +154,13 @@ export function intelliceilMonitor(req: Request, _res: Response, next: NextFunct
       city,
       lat,
       lon,
+    });
+    
+    // Persist IP intelligence to database asynchronously (for Intelliheat analytics)
+    // This enables heat maps, bot detection, threat assessment in dashboard
+    const userAgent = req.headers['user-agent'] || '';
+    ipIntelligenceService.analyzeIP(ip, userAgent).catch(() => {
+      // Silent fail - don't block request on analytics errors
     });
   } catch (error) {
     // If monitoring fails, continue without blocking
