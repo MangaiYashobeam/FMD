@@ -10,6 +10,14 @@
  * - Collects stats, metrics, and account health
  * 
  * STEALTH MODE ENGAGED - Maximum undetectability
+ * 
+ * ENHANCED v2.0 - Based on proven competitor patterns:
+ * - Close open dropdowns before opening new ones
+ * - Use aria-controls for reliable dropdown detection
+ * - Full pointer event sequence for clicks
+ * - Exact → case-insensitive → no-spaces matching
+ * - Hardcoded fallback values for all dropdowns
+ * - User-configurable delays
  */
 
 // ============================================
@@ -24,13 +32,21 @@ const IAI_CONFIG = {
     AI_SERVICE: 'https://sag.gemquery.com/api/v1',
   },
   
-  // Human Behavior Simulation
+  // Human Behavior Simulation - ENHANCED with competitor patterns
   HUMAN: {
     TYPING: {
-      MIN_DELAY: 35,      // Faster than before - real users vary
+      // Fast typing for dropdowns (like competitor: 10-28ms)
+      DROPDOWN_MIN_DELAY: 10,
+      DROPDOWN_MAX_DELAY: 28,
+      // Normal typing for inputs
+      MIN_DELAY: 35,
       MAX_DELAY: 120,
+      // Fast typing for descriptions (like competitor: 6-18ms)
+      DESC_MIN_DELAY: 6,
+      DESC_MAX_DELAY: 18,
       TYPO_RATE: 0.015,   // 1.5% typo rate
       PAUSE_RATE: 0.08,   // 8% chance of pause
+      LONG_PAUSE_PROBABILITY: 0.12, // 12% like competitor
       PAUSE_DURATION: { MIN: 800, MAX: 2500 },
     },
     MOUSE: {
@@ -41,18 +57,22 @@ const IAI_CONFIG = {
     TIMING: {
       ACTION_DELAY: { MIN: 400, MAX: 1800 },
       PAGE_LOAD_WAIT: { MIN: 1500, MAX: 3500 },
-      THINK_TIME: { MIN: 800, MAX: 3000 },      // Simulates reading
-      SESSION_BREAK: { MIN: 45000, MAX: 180000 }, // Random breaks
+      THINK_TIME: { MIN: 800, MAX: 3000 },
+      SESSION_BREAK: { MIN: 45000, MAX: 180000 },
+      // Dropdown specific timing
+      DROPDOWN_WAIT: 200,        // Wait between dropdown retries (like competitor)
+      DROPDOWN_MAX_ATTEMPTS: 10, // Max retries for dropdown (like competitor)
     },
     SESSION: {
       MAX_ACTIONS_BEFORE_BREAK: { MIN: 15, MAX: 35 },
-      BREAK_CHANCE: 0.05, // 5% chance of random break
+      BREAK_CHANCE: 0.05,
+      OCCASIONAL_LONG_PAUSE_CHANCE: 0.08, // 8% chance after clicks (like competitor)
     },
   },
   
   // Stealth Settings
   STEALTH: {
-    RANDOMIZE_USER_AGENT: false, // Keep native - changing is detectable
+    RANDOMIZE_USER_AGENT: false,
     INJECT_NOISE: true,
     AVOID_DETECTION_PATTERNS: true,
     NATURAL_SCROLL_BEHAVIOR: true,
@@ -64,7 +84,149 @@ const IAI_CONFIG = {
     RETRY_ATTEMPTS: 3,
     RETRY_DELAY: 2000,
   },
+  
+  // FALLBACK VALUES - Hardcoded defaults (like competitor)
+  FALLBACKS: {
+    MAKE: 'Toyota',
+    EXTERIOR_COLOR: 'Black',
+    INTERIOR_COLOR: 'Black',
+    BODY_STYLE: 'Other',
+    FUEL_TYPE: 'Gasoline',
+    CONDITION: 'Excellent',
+    VEHICLE_TYPE: 'Car/Truck',
+    YEAR: '2022',
+  },
 };
+
+// ============================================
+// CORE HELPER FUNCTIONS (Competitor-Proven)
+// ============================================
+
+/**
+ * C(tagName, exactText) - The competitor's simple element finder
+ * Finds element by tag name with exact innerText match
+ * This is PROVEN to work reliably on Facebook
+ */
+function C(tagName, text) {
+  try {
+    const elements = Array.from(document.querySelectorAll(tagName));
+    return elements.find(el => el instanceof HTMLElement && el.innerText?.trim() === text) || null;
+  } catch (e) {
+    console.error('[IAI] Error in C():', e);
+    return null;
+  }
+}
+
+/**
+ * Close any open dropdowns before opening a new one
+ * CRITICAL: Facebook only allows one dropdown open at a time
+ */
+async function closeOpenDropdowns(delay = 200) {
+  try {
+    const openDropdowns = document.querySelectorAll('[aria-expanded="true"][role="combobox"], [aria-expanded="true"][role="listbox"]');
+    if (openDropdowns.length > 0) {
+      console.log(`[IAI] Closing ${openDropdowns.length} open dropdown(s)...`);
+      document.body.click();
+      await new Promise(r => setTimeout(r, delay));
+    }
+  } catch (e) {
+    console.debug('[IAI] Error closing dropdowns:', e);
+  }
+}
+
+/**
+ * Wait for user-configurable delay (like competitor's waitUserDelay)
+ */
+async function waitUserDelay() {
+  try {
+    const result = await chrome.storage?.local?.get('customInputDelaySeconds');
+    const delay = Number(result?.customInputDelaySeconds);
+    if (Number.isFinite(delay) && delay > 0) {
+      const ms = Math.min(Math.max(delay, 0), 10) * 1000;
+      await new Promise(r => setTimeout(r, ms));
+    }
+  } catch (e) {
+    // Ignore - no custom delay configured
+  }
+}
+
+/**
+ * Find dropdown panel using aria-controls (like competitor)
+ */
+function findDropdownPanelByAriaControls(labelElement) {
+  try {
+    const ariaControls = labelElement.getAttribute('aria-controls');
+    if (ariaControls) {
+      return document.getElementById(ariaControls);
+    }
+  } catch (e) {
+    console.debug('[IAI] Error finding dropdown panel:', e);
+  }
+  return null;
+}
+
+/**
+ * Check if dropdown is expanded
+ */
+function isDropdownExpanded(element) {
+  return element?.getAttribute('aria-expanded') === 'true';
+}
+
+/**
+ * Match option text with cascading strategies (like competitor)
+ * 1. Exact match
+ * 2. Case-insensitive match  
+ * 3. No-spaces match
+ */
+function matchOptionText(optionText, searchValue) {
+  if (!optionText || !searchValue) return false;
+  
+  const opt = optionText.trim();
+  const search = searchValue.trim();
+  
+  // Strategy 1: Exact match
+  if (opt === search) return true;
+  
+  // Strategy 2: Case-insensitive
+  if (opt.toLowerCase() === search.toLowerCase()) return true;
+  
+  // Strategy 3: No-spaces match
+  if (opt.toLowerCase().replace(/\s+/g, '') === search.toLowerCase().replace(/\s+/g, '')) return true;
+  
+  return false;
+}
+
+/**
+ * Clean string utility (like competitor's x() function)
+ */
+function cleanString(str) {
+  try {
+    if (typeof str !== 'string') return str?.toString() || '';
+    return str.replace(/\\|"|\\r/g, '');
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Process Make name with special cases (like competitor)
+ */
+function processMakeName(make) {
+  if (!make) return 'Toyota';
+  
+  try {
+    // Special cases that should not be title-cased
+    const preserveCase = ['SRT', 'MINI', 'CODA', 'BMW', 'GMC', 'Land Rover', 'KTM', 'MV Agusta', 'CFMoto'];
+    if (preserveCase.includes(make)) return make;
+    
+    // Title case for others
+    return make.split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  } catch (e) {
+    return make || 'Toyota';
+  }
+}
 
 // ============================================
 // MULTILINGUAL SUPPORT - Facebook UI Recognition
@@ -279,11 +441,20 @@ class IAIStealth {
    */
   async delay(min, max) {
     const baseDelay = this.randomInt(min, max);
-    // Add occasional longer pause (thinking time)
-    const thinkPause = Math.random() < IAI_CONFIG.HUMAN.TYPING.PAUSE_RATE 
-      ? this.randomInt(IAI_CONFIG.HUMAN.TIMING.THINK_TIME.MIN, IAI_CONFIG.HUMAN.TIMING.THINK_TIME.MAX)
+    // Add occasional longer pause (thinking time) - 12% like competitor
+    const thinkPause = Math.random() < IAI_CONFIG.HUMAN.TYPING.LONG_PAUSE_PROBABILITY
+      ? this.randomInt(1000, 2000)
       : 0;
     await new Promise(r => setTimeout(r, baseDelay + thinkPause));
+  }
+  
+  /**
+   * Occasional long pause after action (like competitor)
+   */
+  async occasionalLongPause(probability = 0.08) {
+    if (Math.random() < probability) {
+      await new Promise(r => setTimeout(r, this.randomInt(1000, 2000)));
+    }
   }
   
   /**
@@ -365,9 +536,103 @@ class IAIStealth {
   }
   
   /**
-   * Human-like click with full event sequence
+   * Human-like click with FULL event sequence (like competitor)
+   * Includes: pointerover, mouseover, pointerdown, mousedown, focus, pointerup, mouseup, click
    */
   async click(element) {
+    await this.checkForBreak();
+    
+    // Perform human noise before clicking (like competitor)
+    await this.performHumanNoise(element);
+    
+    // Scroll into view naturally
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await this.delay(200, 400);
+    
+    // Get element position with random offset within bounds (like competitor)
+    const rect = element.getBoundingClientRect();
+    const x = Math.floor(rect.left + Math.max(1, rect.width * Math.random()));
+    const y = Math.floor(rect.top + Math.max(1, rect.height * Math.random()));
+    
+    // Create event dispatcher
+    const dispatchEvent = (type) => {
+      const event = new MouseEvent(type, {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        buttons: 1,
+      });
+      element.dispatchEvent(event);
+    };
+    
+    // Full event sequence (like competitor)
+    dispatchEvent('pointerover');
+    await new Promise(r => setTimeout(r, this.randomInt(10, 40)));
+    
+    dispatchEvent('mouseover');
+    await new Promise(r => setTimeout(r, this.randomInt(10, 40)));
+    
+    dispatchEvent('pointerdown');
+    dispatchEvent('mousedown');
+    await new Promise(r => setTimeout(r, this.randomInt(40, 120)));
+    
+    // Focus if needed
+    if (element.focus) element.focus();
+    await new Promise(r => setTimeout(r, this.randomInt(30, 90)));
+    
+    dispatchEvent('pointerup');
+    dispatchEvent('mouseup');
+    await new Promise(r => setTimeout(r, this.randomInt(20, 80)));
+    
+    dispatchEvent('click');
+    
+    // Human delay after click
+    await this.delay(150, 600);
+    
+    // Occasional long pause after click (8% like competitor)
+    await this.occasionalLongPause(0.08);
+    
+    await this.injectNoise();
+  }
+  
+  /**
+   * Perform human noise before action (like competitor)
+   * Random scroll and mouse movements
+   */
+  async performHumanNoise(element) {
+    try {
+      // Random small scroll
+      const scrollX = this.randomInt(-5, 5);
+      const scrollY = this.randomInt(-30, 30);
+      window.scrollBy({ left: scrollX, top: scrollY, behavior: 'auto' });
+      
+      // Random mouse movement
+      const mouseX = Math.max(0, Math.min(window.innerWidth, 
+        Math.floor(window.innerWidth / 2 + this.randomInt(-120, 120))));
+      const mouseY = Math.max(0, Math.min(window.innerHeight,
+        Math.floor(window.innerHeight / 2 + this.randomInt(-120, 120))));
+      
+      const moves = this.randomInt(1, 3);
+      for (let i = 0; i < moves; i++) {
+        const moveEvent = new MouseEvent('mousemove', {
+          bubbles: true,
+          clientX: mouseX + this.randomInt(-8, 8),
+          clientY: mouseY + this.randomInt(-8, 8),
+        });
+        (element || document.body).dispatchEvent(moveEvent);
+        await new Promise(r => setTimeout(r, this.randomInt(20, 60)));
+      }
+    } catch (e) {
+      // Ignore noise errors
+    }
+  }
+  
+  /**
+   * Human-like click with full event sequence (original preserved for compatibility)
+   */
+  async clickOriginal(element) {
     await this.checkForBreak();
     
     // Scroll into view naturally
@@ -416,10 +681,16 @@ class IAIStealth {
   }
   
   /**
-   * Human-like typing with typos and corrections
+   * Human-like typing with typos, corrections, and variable speed
+   * Enhanced with competitor patterns
    */
-  async type(element, text) {
+  async type(element, text, options = {}) {
     await this.checkForBreak();
+    
+    // Options for different typing speeds
+    const minDelay = options.minDelay || IAI_CONFIG.HUMAN.TYPING.MIN_DELAY;
+    const maxDelay = options.maxDelay || IAI_CONFIG.HUMAN.TYPING.MAX_DELAY;
+    const longPauseProbability = options.longPauseProbability || IAI_CONFIG.HUMAN.TYPING.LONG_PAUSE_PROBABILITY;
     
     // Focus element
     element.focus();
@@ -437,7 +708,7 @@ class IAIStealth {
     for (let i = 0; i < chars.length; i++) {
       const char = chars[i];
       
-      // Occasional typo and correction
+      // Occasional typo and correction (competitor pattern)
       if (Math.random() < IAI_CONFIG.HUMAN.TYPING.TYPO_RATE && i > 0) {
         // Type wrong character
         const wrongChar = String.fromCharCode(char.charCodeAt(0) + (Math.random() > 0.5 ? 1 : -1));
@@ -456,22 +727,16 @@ class IAIStealth {
       currentText += char;
       
       // Variable delay
-      let delay = this.randomInt(
-        IAI_CONFIG.HUMAN.TYPING.MIN_DELAY,
-        IAI_CONFIG.HUMAN.TYPING.MAX_DELAY
-      );
+      let delay = this.randomInt(minDelay, maxDelay);
       
       // Longer pause after punctuation or space
       if (['.', ',', '!', '?', ' '].includes(char)) {
         delay += this.randomInt(50, 200);
       }
       
-      // Occasional thinking pause
-      if (Math.random() < IAI_CONFIG.HUMAN.TYPING.PAUSE_RATE) {
-        delay += this.randomInt(
-          IAI_CONFIG.HUMAN.TIMING.THINK_TIME.MIN,
-          IAI_CONFIG.HUMAN.TIMING.THINK_TIME.MAX
-        );
+      // Occasional long pause (like competitor: every 7-14 chars)
+      if (i > 0 && i % this.randomInt(7, 14) === 0 && Math.random() < longPauseProbability) {
+        delay += this.randomInt(1000, 2000);
       }
       
       await this.delay(delay, delay + 20);
@@ -481,7 +746,32 @@ class IAIStealth {
     element.dispatchEvent(new Event('change', { bubbles: true }));
     element.dispatchEvent(new Event('blur', { bubbles: true }));
     
+    // Wait for user delay if configured
+    await waitUserDelay();
+    
     await this.injectNoise();
+  }
+  
+  /**
+   * Fast typing for dropdown selections (like competitor: 10-28ms)
+   */
+  async typeFast(element, text) {
+    return this.type(element, text, {
+      minDelay: IAI_CONFIG.HUMAN.TYPING.DROPDOWN_MIN_DELAY,
+      maxDelay: IAI_CONFIG.HUMAN.TYPING.DROPDOWN_MAX_DELAY,
+      longPauseProbability: 0.03
+    });
+  }
+  
+  /**
+   * Fast typing for descriptions (like competitor: 6-18ms)
+   */
+  async typeDescription(element, text) {
+    return this.type(element, text, {
+      minDelay: IAI_CONFIG.HUMAN.TYPING.DESC_MIN_DELAY,
+      maxDelay: IAI_CONFIG.HUMAN.TYPING.DESC_MAX_DELAY,
+      longPauseProbability: 0.02
+    });
   }
   
   async typeChar(element, char, currentText) {
@@ -1669,10 +1959,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Enhanced vehicle listing fill with proper Facebook dropdown handling
+ * Enhanced vehicle listing fill with ALL competitor patterns:
+ * - Close open dropdowns before opening new ones
+ * - Use C(tag, text) for element finding
+ * - Use aria-controls for dropdown panels
+ * - Cascading match strategy (exact → case-insensitive → no-spaces)
+ * - Hardcoded fallback values
+ * - Try-catch per field with continuation
+ * - Different field flow for Car/Truck vs Motorcycle
  */
 async function fillVehicleListingEnhanced(vehicle) {
-  console.log('🚗 IAI Filling vehicle listing (Enhanced):', vehicle);
+  console.log('🚗 [IAI Enhanced] Starting vehicle listing fill:', vehicle);
   
   const stealth = new IAIStealth();
   const filledFields = [];
@@ -1683,142 +1980,762 @@ async function fillVehicleListingEnhanced(vehicle) {
   // Wait for page to be ready
   await stealth.delay(1000, 1500);
   
-  // === STEP 1: VEHICLE TYPE (MUST BE FIRST) ===
+  // Determine vehicle category for conditional field flow
+  const vehicleCategory = getVehicleTypeFromData(vehicle);
+  console.log(`[IAI] Vehicle category: ${vehicleCategory}`);
+  
+  // === STEP 1: VEHICLE TYPE (MUST BE FIRST - like competitor) ===
   console.log('📋 Step 1: Selecting vehicle type...');
-  const vehicleType = getVehicleTypeFromData(vehicle);
-  if (await selectFacebookDropdownEnhanced('Vehicle type', vehicleType, stealth)) {
-    filledFields.push('vehicleType');
-    steps.push({ field: 'vehicleType', success: true });
-    await stealth.delay(800, 1200);
-  } else {
+  try {
+    await closeOpenDropdowns();
+    
+    const vehicleTypeLabel = C('label', 'Vehicle type');
+    if (vehicleTypeLabel) {
+      await stealth.click(vehicleTypeLabel);
+      await stealth.delay(500, 800);
+      
+      const vehicleTypeOption = C('span', cleanString(vehicleCategory)) || C('span', 'Car/Truck');
+      if (vehicleTypeOption) {
+        await stealth.click(vehicleTypeOption);
+        filledFields.push('vehicleType');
+        steps.push({ field: 'vehicleType', success: true, value: vehicleCategory });
+        console.log(`✅ Vehicle type selected: ${vehicleCategory}`);
+      } else {
+        // Fallback - try 'Other'
+        const fallbackOption = C('span', 'Other');
+        if (fallbackOption) {
+          await stealth.click(fallbackOption);
+          filledFields.push('vehicleType');
+          steps.push({ field: 'vehicleType', success: true, value: 'Other (fallback)' });
+        } else {
+          failedFields.push('vehicleType');
+          steps.push({ field: 'vehicleType', success: false });
+        }
+      }
+    } else {
+      // Try enhanced dropdown selection as fallback
+      if (await selectFacebookDropdownEnhancedV2('Vehicle type', vehicleCategory, stealth)) {
+        filledFields.push('vehicleType');
+        steps.push({ field: 'vehicleType', success: true });
+      } else {
+        failedFields.push('vehicleType');
+        steps.push({ field: 'vehicleType', success: false });
+        errors.push('Could not find vehicle type dropdown');
+      }
+    }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error selecting vehicle type:', e);
     failedFields.push('vehicleType');
-    errors.push('Could not select vehicle type');
-    steps.push({ field: 'vehicleType', success: false });
+    steps.push({ field: 'vehicleType', success: false, error: e.message });
   }
   
-  // === STEP 2: YEAR ===
+  await stealth.delay(800, 1200);
+  
+  // === STEP 2: YEAR (Dropdown) ===
   console.log('📋 Step 2: Selecting year...');
-  if (vehicle.year) {
-    if (await selectFacebookDropdownEnhanced('Year', String(vehicle.year), stealth)) {
+  try {
+    await closeOpenDropdowns();
+    
+    const yearLabel = C('label', 'Year');
+    const yearValue = String(vehicle.year || '').trim() || IAI_CONFIG.FALLBACKS.YEAR;
+    
+    if (yearLabel) {
+      await stealth.click(yearLabel);
+      await stealth.delay(500, 800);
+      
+      const yearOption = C('span', cleanString(yearValue)) || C('span', IAI_CONFIG.FALLBACKS.YEAR);
+      if (yearOption) {
+        await stealth.click(yearOption);
+        filledFields.push('year');
+        steps.push({ field: 'year', success: true, value: yearValue });
+        console.log(`✅ Year selected: ${yearValue}`);
+      } else {
+        failedFields.push('year');
+        steps.push({ field: 'year', success: false });
+      }
+    } else if (await selectFacebookDropdownEnhancedV2('Year', yearValue, stealth)) {
       filledFields.push('year');
       steps.push({ field: 'year', success: true });
-      await stealth.delay(600, 1000);
     } else {
       failedFields.push('year');
       steps.push({ field: 'year', success: false });
     }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error selecting year:', e);
+    failedFields.push('year');
+    steps.push({ field: 'year', success: false, error: e.message });
   }
   
-  // === STEP 3: MAKE ===
-  console.log('📋 Step 3: Entering make...');
-  if (vehicle.make) {
-    if (await selectFacebookDropdownEnhanced('Make', vehicle.make, stealth) ||
-        await fillFacebookInputEnhanced('Make', vehicle.make, stealth)) {
-      filledFields.push('make');
-      steps.push({ field: 'make', success: true });
-      await stealth.delay(600, 1000);
+  await stealth.delay(600, 1000);
+  
+  // === STEP 3: MAKE (Conditional on vehicle type - like competitor) ===
+  console.log('📋 Step 3: Selecting make...');
+  try {
+    await closeOpenDropdowns();
+    
+    const makeValue = processMakeName(vehicle.make) || IAI_CONFIG.FALLBACKS.MAKE;
+    const makeLabel = C('label', 'Make');
+    
+    if (vehicleCategory === 'Car/Truck' || vehicleCategory === 'Motorcycle') {
+      // Dropdown selection for Car/Truck and Motorcycle
+      if (makeLabel) {
+        await stealth.click(makeLabel);
+        await stealth.delay(500, 800);
+        
+        // Try to find make option with cascading match
+        let makeOption = findOptionWithCascadingMatch(makeValue);
+        
+        if (makeOption) {
+          await stealth.click(makeOption);
+          filledFields.push('make');
+          steps.push({ field: 'make', success: true, value: makeValue });
+          console.log(`✅ Make selected: ${makeValue}`);
+        } else {
+          // Try fallback
+          const fallbackMake = C('span', IAI_CONFIG.FALLBACKS.MAKE);
+          if (fallbackMake) {
+            console.warn(`[IAI] Make '${makeValue}' not found, using fallback '${IAI_CONFIG.FALLBACKS.MAKE}'`);
+            await stealth.click(fallbackMake);
+            filledFields.push('make');
+            steps.push({ field: 'make', success: true, value: IAI_CONFIG.FALLBACKS.MAKE + ' (fallback)' });
+          } else {
+            failedFields.push('make');
+            steps.push({ field: 'make', success: false });
+          }
+        }
+      } else if (await selectFacebookDropdownEnhancedV2('Make', makeValue, stealth)) {
+        filledFields.push('make');
+        steps.push({ field: 'make', success: true });
+      } else {
+        failedFields.push('make');
+        steps.push({ field: 'make', success: false });
+      }
     } else {
-      failedFields.push('make');
-      steps.push({ field: 'make', success: false });
+      // Text input for other vehicle types (like competitor)
+      if (makeLabel) {
+        await stealth.typeFast(makeLabel, cleanString(makeValue) || 'n/a');
+        filledFields.push('make');
+        steps.push({ field: 'make', success: true, value: makeValue });
+      } else if (await fillFacebookInputEnhancedV2('Make', makeValue, stealth)) {
+        filledFields.push('make');
+        steps.push({ field: 'make', success: true });
+      } else {
+        failedFields.push('make');
+        steps.push({ field: 'make', success: false });
+      }
     }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error selecting make:', e);
+    failedFields.push('make');
+    steps.push({ field: 'make', success: false, error: e.message });
   }
   
-  // === STEP 4: MODEL ===
-  console.log('📋 Step 4: Entering model...');
-  if (vehicle.model) {
-    if (await selectFacebookDropdownEnhanced('Model', vehicle.model, stealth) ||
-        await fillFacebookInputEnhanced('Model', vehicle.model, stealth)) {
-      filledFields.push('model');
-      steps.push({ field: 'model', success: true });
-      await stealth.delay(600, 1000);
-    } else {
-      failedFields.push('model');
-      steps.push({ field: 'model', success: false });
-    }
-  }
+  await stealth.delay(600, 1000);
   
-  // === STEP 5: PRICE ===
-  console.log('📋 Step 5: Entering price...');
-  const price = String(vehicle.price || '').replace(/[^0-9]/g, '');
-  if (price) {
-    if (await fillFacebookInputEnhanced('Price', price, stealth)) {
-      filledFields.push('price');
-      steps.push({ field: 'price', success: true });
-    } else {
-      failedFields.push('price');
-      errors.push('Could not fill price');
-      steps.push({ field: 'price', success: false });
+  // === STEP 4: VEHICLE CONDITION (Car/Truck only - like competitor) ===
+  if (vehicleCategory === 'Car/Truck') {
+    console.log('📋 Step 4: Selecting vehicle condition...');
+    try {
+      await closeOpenDropdowns();
+      
+      const conditionLabel = C('label', 'Vehicle condition');
+      if (conditionLabel) {
+        await stealth.click(conditionLabel);
+        await stealth.delay(500, 800);
+        
+        const conditionOption = C('span', vehicle.condition || IAI_CONFIG.FALLBACKS.CONDITION);
+        if (conditionOption) {
+          await stealth.click(conditionOption);
+          filledFields.push('condition');
+          steps.push({ field: 'condition', success: true });
+          console.log('✅ Condition selected');
+        }
+      }
+      await waitUserDelay();
+    } catch (e) {
+      console.error('[IAI] Error selecting condition:', e);
     }
+    
     await stealth.delay(300, 500);
   }
   
-  // === STEP 6: MILEAGE ===
-  console.log('📋 Step 6: Entering mileage...');
-  if (vehicle.mileage) {
-    const mileage = String(vehicle.mileage).replace(/[^0-9]/g, '');
-    if (await fillFacebookInputEnhanced('Mileage', mileage, stealth) ||
-        await fillFacebookInputEnhanced('Vehicle mileage', mileage, stealth)) {
+  // === STEP 5: MILEAGE ===
+  console.log('📋 Step 5: Entering mileage...');
+  try {
+    const mileageValue = String(vehicle.mileage || '0').replace(/,/g, '').replace(/[^0-9]/g, '');
+    const mileageLabel = C('label', 'Mileage');
+    
+    if (mileageLabel) {
+      await stealth.typeFast(mileageLabel, cleanString(mileageValue) || '0');
+      filledFields.push('mileage');
+      steps.push({ field: 'mileage', success: true, value: mileageValue });
+      console.log(`✅ Mileage entered: ${mileageValue}`);
+    } else if (await fillFacebookInputEnhancedV2('Mileage', mileageValue, stealth)) {
       filledFields.push('mileage');
       steps.push({ field: 'mileage', success: true });
     } else {
       failedFields.push('mileage');
       steps.push({ field: 'mileage', success: false });
     }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error entering mileage:', e);
+    failedFields.push('mileage');
+    steps.push({ field: 'mileage', success: false, error: e.message });
+  }
+  
+  await stealth.delay(300, 500);
+  
+  // === STEP 6: EXTERIOR COLOR (Car/Truck - like competitor) ===
+  if (vehicleCategory === 'Car/Truck' || vehicleCategory === 'Motorcycle') {
+    console.log('📋 Step 6: Selecting exterior color...');
+    try {
+      await closeOpenDropdowns();
+      
+      const colorValue = vehicle.exteriorColor || vehicle.color || IAI_CONFIG.FALLBACKS.EXTERIOR_COLOR;
+      const colorLabel = C('label', 'Exterior color');
+      
+      if (colorLabel) {
+        await stealth.click(colorLabel);
+        await stealth.delay(500, 800);
+        
+        let colorOption = findOptionWithCascadingMatch(colorValue);
+        if (colorOption) {
+          await stealth.click(colorOption);
+          filledFields.push('exteriorColor');
+          steps.push({ field: 'exteriorColor', success: true, value: colorValue });
+          console.log(`✅ Exterior color selected: ${colorValue}`);
+        } else {
+          // Fallback to Black
+          const fallbackColor = C('span', IAI_CONFIG.FALLBACKS.EXTERIOR_COLOR);
+          if (fallbackColor) {
+            await stealth.click(fallbackColor);
+            filledFields.push('exteriorColor');
+            steps.push({ field: 'exteriorColor', success: true, value: IAI_CONFIG.FALLBACKS.EXTERIOR_COLOR + ' (fallback)' });
+          }
+        }
+      }
+      await waitUserDelay();
+    } catch (e) {
+      console.error('[IAI] Error selecting exterior color:', e);
+    }
+    
     await stealth.delay(300, 500);
   }
   
-  // === STEP 7: DESCRIPTION ===
-  console.log('📋 Step 7: Entering description...');
-  const description = vehicle.description || generateVehicleDescriptionIAI(vehicle);
-  if (await fillDescriptionEnhanced(description, stealth)) {
-    filledFields.push('description');
-    steps.push({ field: 'description', success: true });
-    console.log('✅ Filled description:', description.substring(0, 50) + '...');
-  } else {
+  // === STEP 7: BODY STYLE (Car/Truck only - like competitor) ===
+  if (vehicleCategory === 'Car/Truck') {
+    console.log('📋 Step 7: Selecting body style...');
+    try {
+      await closeOpenDropdowns();
+      
+      const bodyStyleValue = vehicle.bodyStyle || vehicle.bodyType || IAI_CONFIG.FALLBACKS.BODY_STYLE;
+      const bodyStyleLabel = C('label', 'Body style');
+      
+      if (bodyStyleLabel) {
+        await stealth.click(bodyStyleLabel);
+        await stealth.delay(500, 800);
+        
+        let bodyOption = findOptionWithCascadingMatch(bodyStyleValue);
+        if (bodyOption) {
+          await stealth.click(bodyOption);
+          filledFields.push('bodyStyle');
+          steps.push({ field: 'bodyStyle', success: true });
+        } else {
+          const fallbackBody = C('span', IAI_CONFIG.FALLBACKS.BODY_STYLE);
+          if (fallbackBody) {
+            await stealth.click(fallbackBody);
+            filledFields.push('bodyStyle');
+          }
+        }
+      }
+      await waitUserDelay();
+    } catch (e) {
+      console.error('[IAI] Error selecting body style:', e);
+    }
+    
+    await stealth.delay(300, 500);
+  }
+  
+  // === STEP 8: FUEL TYPE ===
+  console.log('📋 Step 8: Selecting fuel type...');
+  try {
+    await closeOpenDropdowns();
+    
+    const fuelValue = vehicle.fuelType || IAI_CONFIG.FALLBACKS.FUEL_TYPE;
+    const fuelLabel = C('label', 'Fuel type');
+    
+    if (fuelLabel) {
+      await stealth.click(fuelLabel);
+      await stealth.delay(500, 800);
+      
+      let fuelOption = findOptionWithCascadingMatch(fuelValue);
+      if (fuelOption) {
+        await stealth.click(fuelOption);
+        filledFields.push('fuelType');
+        steps.push({ field: 'fuelType', success: true });
+      } else {
+        const fallbackFuel = C('span', IAI_CONFIG.FALLBACKS.FUEL_TYPE);
+        if (fallbackFuel) {
+          await stealth.click(fallbackFuel);
+          filledFields.push('fuelType');
+        }
+      }
+    }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error selecting fuel type:', e);
+  }
+  
+  await stealth.delay(300, 500);
+  
+  // === STEP 9: INTERIOR COLOR (Car/Truck only - like competitor) ===
+  if (vehicleCategory === 'Car/Truck') {
+    console.log('📋 Step 9: Selecting interior color...');
+    try {
+      await closeOpenDropdowns();
+      
+      const intColorValue = vehicle.interiorColor || IAI_CONFIG.FALLBACKS.INTERIOR_COLOR;
+      const intColorLabel = C('label', 'Interior color');
+      
+      if (intColorLabel) {
+        await stealth.click(intColorLabel);
+        await stealth.delay(500, 800);
+        
+        let intColorOption = findOptionWithCascadingMatch(intColorValue);
+        if (intColorOption) {
+          await stealth.click(intColorOption);
+          filledFields.push('interiorColor');
+          steps.push({ field: 'interiorColor', success: true });
+        } else {
+          const fallbackIntColor = C('span', IAI_CONFIG.FALLBACKS.INTERIOR_COLOR);
+          if (fallbackIntColor) {
+            await stealth.click(fallbackIntColor);
+            filledFields.push('interiorColor');
+          }
+        }
+      }
+      await waitUserDelay();
+    } catch (e) {
+      console.error('[IAI] Error selecting interior color:', e);
+    }
+    
+    await stealth.delay(300, 500);
+  }
+  
+  // === STEP 10: MODEL (Entered after other dropdowns - like competitor) ===
+  console.log('📋 Step 10: Entering model...');
+  try {
+    await closeOpenDropdowns();
+    
+    // Build model string like competitor: Model + Trim + Emoji
+    let modelValue = vehicle.model || '';
+    if (vehicle.trim) modelValue += ` ${vehicle.trim}`;
+    
+    const modelLabel = C('label', 'Model');
+    if (modelLabel) {
+      await stealth.typeFast(modelLabel, cleanString(modelValue) || 'n/a');
+      filledFields.push('model');
+      steps.push({ field: 'model', success: true, value: modelValue });
+      console.log(`✅ Model entered: ${modelValue}`);
+    } else if (await fillFacebookInputEnhancedV2('Model', modelValue, stealth)) {
+      filledFields.push('model');
+      steps.push({ field: 'model', success: true });
+    } else {
+      failedFields.push('model');
+      steps.push({ field: 'model', success: false });
+    }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error entering model:', e);
+    failedFields.push('model');
+    steps.push({ field: 'model', success: false, error: e.message });
+  }
+  
+  await stealth.delay(300, 500);
+  
+  // === STEP 11: PRICE ===
+  console.log('📋 Step 11: Entering price...');
+  try {
+    const priceValue = String(vehicle.price || '').replace(/[^0-9]/g, '');
+    const priceLabel = C('label', 'Price');
+    
+    if (priceLabel) {
+      await stealth.typeFast(priceLabel, cleanString(priceValue) || '0');
+      filledFields.push('price');
+      steps.push({ field: 'price', success: true, value: priceValue });
+      console.log(`✅ Price entered: ${priceValue}`);
+    } else if (await fillFacebookInputEnhancedV2('Price', priceValue, stealth)) {
+      filledFields.push('price');
+      steps.push({ field: 'price', success: true });
+    } else {
+      failedFields.push('price');
+      steps.push({ field: 'price', success: false });
+      errors.push('Could not fill price field');
+    }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error entering price:', e);
+    failedFields.push('price');
+    steps.push({ field: 'price', success: false, error: e.message });
+  }
+  
+  await stealth.delay(300, 500);
+  
+  // === STEP 12: DESCRIPTION (Last - like competitor) ===
+  console.log('📋 Step 12: Entering description...');
+  try {
+    const description = vehicle.description || generateVehicleDescriptionIAI(vehicle);
+    const descLabel = C('label', 'Description');
+    
+    if (descLabel) {
+      await stealth.typeDescription(descLabel, cleanString(description));
+      filledFields.push('description');
+      steps.push({ field: 'description', success: true });
+      console.log('✅ Description entered');
+    } else if (await fillDescriptionEnhancedV2(description, stealth)) {
+      filledFields.push('description');
+      steps.push({ field: 'description', success: true });
+    } else {
+      failedFields.push('description');
+      steps.push({ field: 'description', success: false });
+      errors.push('Could not fill description field');
+    }
+    await waitUserDelay();
+  } catch (e) {
+    console.error('[IAI] Error entering description:', e);
     failedFields.push('description');
-    errors.push('Could not fill description');
-    steps.push({ field: 'description', success: false });
-  }
-  
-  // === OPTIONAL FIELDS ===
-  if (vehicle.transmission) {
-    if (await selectFacebookDropdownEnhanced('Transmission', vehicle.transmission, stealth)) {
-      filledFields.push('transmission');
-    }
-    await stealth.delay(300, 500);
-  }
-  
-  if (vehicle.fuelType) {
-    if (await selectFacebookDropdownEnhanced('Fuel type', vehicle.fuelType, stealth)) {
-      filledFields.push('fuelType');
-    }
-    await stealth.delay(300, 500);
-  }
-  
-  if (vehicle.exteriorColor || vehicle.color) {
-    const color = vehicle.exteriorColor || vehicle.color;
-    if (await selectFacebookDropdownEnhanced('Exterior color', color, stealth)) {
-      filledFields.push('exteriorColor');
-    }
-    await stealth.delay(300, 500);
+    steps.push({ field: 'description', success: false, error: e.message });
   }
   
   // === RESULT ANALYSIS ===
   const criticalFields = ['vehicleType', 'year', 'make', 'model', 'price'];
   const criticalFailed = failedFields.filter(f => criticalFields.includes(f));
-  const isSuccess = criticalFailed.length <= 1 && filledFields.length >= 3;
+  const isSuccess = criticalFailed.length <= 1 && filledFields.length >= 4;
   
-  console.log(`📝 Form fill complete: ${filledFields.length} filled, ${failedFields.length} failed`);
-  console.log(`📝 Critical fields failed: ${criticalFailed.join(', ') || 'none'}`);
-  console.log('✅ Form filling complete. Steps:', steps);
+  console.log(`📝 [IAI Enhanced] Form fill complete:
+    - Filled: ${filledFields.length} (${filledFields.join(', ')})
+    - Failed: ${failedFields.length} (${failedFields.join(', ') || 'none'})
+    - Critical Failed: ${criticalFailed.join(', ') || 'none'}
+    - Success: ${isSuccess}`);
   
   return { 
     success: isSuccess, 
     filledFields, 
     failedFields, 
     errors, 
-    steps 
+    steps,
+    vehicleCategory
   };
+}
+
+/**
+ * Find option with cascading match strategy (like competitor)
+ */
+function findOptionWithCascadingMatch(value) {
+  if (!value) return null;
+  
+  const searchValue = String(value).trim();
+  
+  // Strategy 1: Exact match with C()
+  let option = C('span', searchValue);
+  if (option) return option;
+  
+  // Strategy 2: Case-insensitive search in all spans
+  const allSpans = document.querySelectorAll('span');
+  for (const span of allSpans) {
+    if (matchOptionText(span.textContent, searchValue)) {
+      return span;
+    }
+  }
+  
+  // Strategy 3: Search in role="option" elements
+  const options = document.querySelectorAll('[role="option"], [role="menuitem"]');
+  for (const opt of options) {
+    if (matchOptionText(opt.textContent, searchValue)) {
+      return opt;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Enhanced dropdown selection V2 with aria-controls (like competitor)
+ */
+async function selectFacebookDropdownEnhancedV2(labelText, value, stealth) {
+  console.log(`🔽 [IAI V2] Selecting dropdown "${labelText}" = "${value}"`);
+  
+  try {
+    // CRITICAL: Close any open dropdowns first (like competitor)
+    await closeOpenDropdowns();
+    
+    // Find the dropdown label
+    const label = C('label', labelText);
+    if (!label) {
+      console.warn(`❌ Dropdown label "${labelText}" not found`);
+      return false;
+    }
+    
+    console.log(`[IAI V2] Found label for "${labelText}", clicking...`);
+    await stealth.click(label);
+    
+    // Wait and poll for dropdown to open (like competitor: 10 attempts, 200ms each)
+    let dropdownPanel = null;
+    let dropdownFound = false;
+    let ariaControlsId = null;
+    
+    for (let attempt = 0; attempt < IAI_CONFIG.HUMAN.TIMING.DROPDOWN_MAX_ATTEMPTS; attempt++) {
+      await new Promise(r => setTimeout(r, IAI_CONFIG.HUMAN.TIMING.DROPDOWN_WAIT));
+      
+      // Check if label is now expanded
+      const expanded = isDropdownExpanded(label);
+      
+      // Get aria-controls ID (like competitor)
+      if (expanded && !ariaControlsId) {
+        ariaControlsId = label.getAttribute('aria-controls');
+        console.log(`[IAI V2] Label expanded, aria-controls: ${ariaControlsId}`);
+      }
+      
+      // Find dropdown panel by aria-controls ID
+      if (ariaControlsId) {
+        dropdownPanel = document.getElementById(ariaControlsId);
+        if (dropdownPanel) {
+          dropdownFound = true;
+          console.log(`[IAI V2] Dropdown panel found by aria-controls at attempt ${attempt + 1}`);
+          break;
+        }
+      }
+      
+      // Fallback: Find by role="listbox" or role="menu" near label
+      const container = label.closest('form') || label.parentElement?.parentElement;
+      if (container) {
+        const listbox = container.querySelector('[role="listbox"], [role="menu"]');
+        if (listbox && listbox.querySelectorAll('span').length > 0) {
+          dropdownPanel = listbox;
+          dropdownFound = true;
+          console.log(`[IAI V2] Dropdown panel found near label at attempt ${attempt + 1}`);
+          break;
+        }
+      }
+      
+      // Global fallback
+      if (!dropdownPanel) {
+        const globalListbox = document.querySelector('[role="listbox"], [role="menu"]');
+        if (globalListbox) {
+          dropdownPanel = globalListbox;
+          dropdownFound = true;
+          console.warn(`[IAI V2] Found generic dropdown at attempt ${attempt + 1}`);
+          break;
+        }
+      }
+      
+      if (attempt === 4) {
+        console.log(`[IAI V2] Still waiting for dropdown (attempt 5/10)...`);
+      }
+    }
+    
+    if (!dropdownFound) {
+      console.warn(`[IAI V2] Dropdown for "${labelText}" may not have opened, continuing anyway...`);
+    }
+    
+    // Search for option with cascading match
+    const searchValue = String(value).trim();
+    let targetOption = null;
+    
+    if (dropdownPanel) {
+      const spans = dropdownPanel.querySelectorAll('span');
+      console.log(`[IAI V2] Available options in dropdown:`, Array.from(spans).slice(0, 10).map(s => s.textContent?.trim()));
+      
+      // Exact match
+      targetOption = Array.from(spans).find(s => s.textContent?.trim() === searchValue);
+      
+      // Case-insensitive
+      if (!targetOption) {
+        targetOption = Array.from(spans).find(s => 
+          s.textContent?.trim().toLowerCase() === searchValue.toLowerCase()
+        );
+      }
+      
+      // No-spaces match
+      if (!targetOption) {
+        targetOption = Array.from(spans).find(s => 
+          s.textContent?.trim().toLowerCase().replace(/\s+/g, '') === 
+          searchValue.toLowerCase().replace(/\s+/g, '')
+        );
+      }
+    }
+    
+    // Fallback: Search entire document
+    if (!targetOption) {
+      console.log(`[IAI V2] Option not found in dropdown, searching document...`);
+      targetOption = C('span', searchValue);
+      
+      if (!targetOption) {
+        const allSpans = document.querySelectorAll('span');
+        targetOption = Array.from(allSpans).find(s => 
+          s.textContent?.trim().toLowerCase() === searchValue.toLowerCase()
+        );
+      }
+    }
+    
+    if (targetOption) {
+      console.log(`[IAI V2] Option found: "${targetOption.textContent?.trim()}", clicking...`);
+      await stealth.click(targetOption);
+      await stealth.delay(300, 500);
+      console.log(`✅ [IAI V2] Selected "${value}" for "${labelText}"`);
+      return true;
+    }
+    
+    // Try fallback value if applicable
+    const fallbackValue = getFallbackValue(labelText);
+    if (fallbackValue && fallbackValue !== value) {
+      console.warn(`[IAI V2] Option '${value}' not found, trying fallback '${fallbackValue}'`);
+      const fallbackOption = C('span', fallbackValue);
+      if (fallbackOption) {
+        await stealth.click(fallbackOption);
+        await stealth.delay(300, 500);
+        console.log(`✅ [IAI V2] Selected fallback "${fallbackValue}" for "${labelText}"`);
+        return true;
+      }
+    }
+    
+    // Close dropdown if nothing selected
+    document.body.click();
+    await stealth.delay(200, 300);
+    console.warn(`❌ [IAI V2] Could not select option for "${labelText}"`);
+    return false;
+    
+  } catch (e) {
+    console.error(`❌ [IAI V2] Error selecting dropdown "${labelText}":`, e);
+    return false;
+  }
+}
+
+/**
+ * Get fallback value for a field (like competitor)
+ */
+function getFallbackValue(labelText) {
+  const lower = labelText.toLowerCase();
+  if (lower.includes('make')) return IAI_CONFIG.FALLBACKS.MAKE;
+  if (lower.includes('exterior')) return IAI_CONFIG.FALLBACKS.EXTERIOR_COLOR;
+  if (lower.includes('interior')) return IAI_CONFIG.FALLBACKS.INTERIOR_COLOR;
+  if (lower.includes('body')) return IAI_CONFIG.FALLBACKS.BODY_STYLE;
+  if (lower.includes('fuel')) return IAI_CONFIG.FALLBACKS.FUEL_TYPE;
+  if (lower.includes('condition')) return IAI_CONFIG.FALLBACKS.CONDITION;
+  if (lower.includes('vehicle type')) return IAI_CONFIG.FALLBACKS.VEHICLE_TYPE;
+  if (lower.includes('year')) return IAI_CONFIG.FALLBACKS.YEAR;
+  return null;
+}
+
+/**
+ * Enhanced input fill V2 (like competitor's humanTypeText)
+ */
+async function fillFacebookInputEnhancedV2(labelText, value, stealth) {
+  console.log(`📝 [IAI V2] Filling input "${labelText}" = "${value}"`);
+  
+  try {
+    // Find input using C() pattern or aria-label
+    let input = document.querySelector(`input[aria-label*="${labelText}" i]`);
+    
+    if (!input) {
+      input = document.querySelector(`input[placeholder*="${labelText}" i]`);
+    }
+    
+    if (!input) {
+      // Find by nearby label (like competitor)
+      const labels = document.querySelectorAll('label, span, div');
+      for (const label of labels) {
+        if (label.textContent?.toLowerCase().includes(labelText.toLowerCase())) {
+          const container = label.closest('div[data-visualcompletion]') || label.parentElement;
+          if (container) {
+            input = container.querySelector('input:not([type="hidden"]):not([type="checkbox"])');
+            if (input && isVisible(input)) break;
+          }
+        }
+      }
+    }
+    
+    if (!input || !isVisible(input)) {
+      console.warn(`❌ [IAI V2] Input "${labelText}" not found`);
+      return false;
+    }
+    
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await stealth.delay(200, 400);
+    
+    await stealth.click(input);
+    await stealth.delay(100, 200);
+    
+    // Clear and type (like competitor)
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    await stealth.typeFast(input, value);
+    
+    input.blur();
+    await stealth.delay(100, 200);
+    
+    console.log(`✅ [IAI V2] Filled input "${labelText}"`);
+    return true;
+    
+  } catch (e) {
+    console.error(`❌ [IAI V2] Error filling input "${labelText}":`, e);
+    return false;
+  }
+}
+
+/**
+ * Enhanced description fill V2
+ */
+async function fillDescriptionEnhancedV2(description, stealth) {
+  try {
+    let textarea = document.querySelector('textarea[aria-label*="Description" i]');
+    if (!textarea) textarea = document.querySelector('textarea');
+    if (!textarea) textarea = document.querySelector('[contenteditable="true"][aria-label*="Description" i]');
+    if (!textarea) textarea = document.querySelector('[role="textbox"][aria-multiline="true"]');
+    
+    if (!textarea) {
+      const textareas = document.querySelectorAll('textarea, [contenteditable="true"]');
+      for (const ta of textareas) {
+        if (isVisible(ta)) {
+          textarea = ta;
+          break;
+        }
+      }
+    }
+    
+    if (!textarea) {
+      console.warn('❌ [IAI V2] Description textarea not found');
+      return false;
+    }
+    
+    textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await stealth.delay(300, 500);
+    
+    await stealth.click(textarea);
+    await stealth.delay(100, 200);
+    
+    if (textarea.isContentEditable) {
+      textarea.innerHTML = '';
+      textarea.textContent = description;
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: description }));
+    } else {
+      textarea.value = '';
+      await stealth.typeDescription(textarea, description);
+    }
+    
+    textarea.blur();
+    console.log('✅ [IAI V2] Description filled');
+    return true;
+    
+  } catch (e) {
+    console.error('❌ [IAI V2] Error filling description:', e);
+    return false;
+  }
 }
 
 /**
@@ -2306,17 +3223,32 @@ async function uploadVehicleImages(imageUrls) {
 }
 
 /**
- * Click the publish/post button
- * IMPORTANT: Only clicks actual Publish/Post, NOT "Next" button
+ * Click the publish/post button - Enhanced V2
+ * IMPORTANT: Only clicks actual Publish/Post, NEVER "Next" button
+ * Like competitor: Refuses to click Next - means form is incomplete
  */
 async function publishListing() {
-  console.log('📤 IAI Publishing listing...');
+  console.log('📤 [IAI V2] Publishing listing...');
   
   const stealth = new IAIStealth();
   
-  // Priority 1: Look for actual publish/post buttons
-  const publishButtonTexts = ['publish', 'post', 'list item', 'list vehicle', 'submit'];
+  // Priority 1: Look for actual publish/post buttons using C() pattern
+  const publishButtonTexts = ['Publish', 'Post', 'List item', 'List vehicle', 'Submit'];
   
+  // Try C() pattern first (like competitor)
+  for (const text of publishButtonTexts) {
+    const button = C('span', text) || C('div', text);
+    if (button && isVisible(button)) {
+      const clickable = button.closest('[role="button"]') || button.closest('button') || button;
+      console.log(`📤 [IAI V2] Found publish button: "${text}" - clicking`);
+      await stealth.click(clickable);
+      await stealth.delay(2000, 3000);
+      console.log('✅ [IAI V2] Publish button clicked');
+      return { success: true, clicked: true, buttonText: text };
+    }
+  }
+  
+  // Fallback: Search all buttons
   const allButtons = document.querySelectorAll('div[role="button"], button, [aria-label], [tabindex="0"]');
   let bestButton = null;
   let bestPriority = 999;
@@ -2328,7 +3260,7 @@ async function publishListing() {
     const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
     
     // Check for publish/post buttons (priority 1)
-    for (const publishText of publishButtonTexts) {
+    for (const publishText of ['publish', 'post', 'list item', 'list vehicle', 'submit']) {
       if (text === publishText || ariaLabel.includes(publishText)) {
         if (bestPriority > 1) {
           bestButton = el;
@@ -2339,33 +3271,31 @@ async function publishListing() {
     }
     
     // "Next" is NOT clicked - form is incomplete if only Next is visible
+    // This is like competitor behavior
   }
   
   if (bestButton) {
     const buttonText = bestButton.textContent?.trim();
-    console.log(`📤 Found publish button: "${buttonText}" - clicking`);
+    console.log(`📤 [IAI V2] Found publish button: "${buttonText}" - clicking`);
     await stealth.click(bestButton);
     await stealth.delay(2000, 3000);
-    console.log('✅ Publish button clicked');
+    console.log('✅ [IAI V2] Publish button clicked');
     return { success: true, clicked: true, buttonText };
   }
   
-  // Check if "Next" is visible - means form is incomplete
-  for (const el of allButtons) {
-    if (!isVisible(el)) continue;
-    const text = el.textContent?.trim().toLowerCase();
-    if (text === 'next') {
-      console.warn('⚠️ Only "Next" button found - form incomplete');
-      return { 
-        success: false, 
-        clicked: false,
-        error: 'Form incomplete - only Next button found',
-        suggestion: 'Fill all required fields before publishing'
-      };
-    }
+  // Check if "Next" is visible - means form is incomplete (like competitor)
+  const nextButton = C('span', 'Next') || C('div', 'Next');
+  if (nextButton && isVisible(nextButton)) {
+    console.warn('⚠️ [IAI V2] Only "Next" button found - form incomplete');
+    return { 
+      success: false, 
+      clicked: false,
+      error: 'Form incomplete - only Next button found',
+      suggestion: 'Fill all required fields before publishing'
+    };
   }
   
-  console.warn('⚠️ Publish button not found');
+  console.warn('⚠️ [IAI V2] Publish button not found');
   return { success: false, clicked: false, error: 'Publish button not found' };
 }
 
