@@ -36,6 +36,7 @@ from core.security import (
     InvalidInputError,
 )
 from browser.session import SessionManager
+from browser.manager import BrowserPoolManager
 
 logger = structlog.get_logger()
 
@@ -62,6 +63,13 @@ async def lifespan(app: FastAPI):
     app.state.security_monitor = get_security_monitor()
     app.state.input_validator = get_input_validator()
     
+    # Initialize Browser Pool for Nova control
+    browser_pool = BrowserPoolManager(worker_id=settings.worker_id)
+    await browser_pool.start()
+    app.state.browser_pool = browser_pool
+    logger.info("🚀 Browser pool initialized for Nova control",
+               max_browsers=settings.max_concurrent_browsers)
+    
     # Initialize auth manager if secret is configured
     if settings.worker_secret:
         app.state.auth_manager = AuthenticationManager(settings.worker_secret)
@@ -73,6 +81,11 @@ async def lifespan(app: FastAPI):
     
     # Cleanup
     logger.info("Shutting down Worker API")
+    
+    # Stop browser pool
+    if hasattr(app.state, 'browser_pool'):
+        await app.state.browser_pool.stop()
+        logger.info("Browser pool stopped")
 
 
 # =============================================================================
@@ -193,6 +206,11 @@ def create_app() -> FastAPI:
     )
     
     logger.info("CORS configured", origins=cors_origins)
+    
+    # Include browser control routes for Nova
+    from api.browser_routes import router as browser_router
+    app.include_router(browser_router)
+    logger.info("🧠 Nova browser control routes registered")
     
     return app
 

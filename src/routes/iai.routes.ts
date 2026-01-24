@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { novaChromiumService } from '../services/nova-chromium.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -853,6 +854,380 @@ router.get('/worker/health', authenticate, async (_req: AuthRequest, res: Respon
       status: 'offline',
       workers_active: 0,
       message: error.message || 'Worker API not reachable',
+    });
+  }
+});
+
+// ============================================
+// Nova Chromium Browser Control Routes
+// Production-grade AI-controlled browser automation
+// ============================================
+
+/**
+ * GET /api/admin/iai/nova/health
+ * Check Nova browser worker health and availability
+ */
+router.get('/nova/health', authenticate, async (_req: AuthRequest, res: Response) => {
+  try {
+    const isAvailable = await novaChromiumService.isWorkerAvailable();
+    const sessions = await novaChromiumService.listSessions();
+    
+    return res.json({
+      success: true,
+      health: {
+        workerAvailable: isAvailable,
+        status: isAvailable ? 'healthy' : 'unavailable',
+        activeSessions: sessions.length,
+        sessions: sessions.map(s => ({
+          sessionId: s.sessionId,
+          accountId: s.accountId,
+          status: s.status,
+          lastActivity: s.lastActivity,
+        })),
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    console.error('Error checking Nova health:', error);
+    return res.status(500).json({
+      success: false,
+      health: {
+        workerAvailable: false,
+        status: 'error',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  }
+});
+
+/**
+ * POST /api/admin/iai/nova/session
+ * Create a new Nova browser session for an account
+ */
+router.post('/nova/session', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { accountId, headless = true, loadSession = true } = req.body;
+    
+    if (!accountId) {
+      return res.status(400).json({ error: 'accountId is required' });
+    }
+    
+    const session = await novaChromiumService.createSession(accountId, {
+      headless,
+      loadSession,
+    });
+    
+    return res.json({
+      success: true,
+      session: {
+        sessionId: session.sessionId,
+        browserId: session.browserId,
+        accountId: session.accountId,
+        status: session.status,
+        hasSavedSession: session.hasSavedSession,
+      },
+      message: `Nova browser session created for account ${accountId}`,
+    });
+  } catch (error: any) {
+    console.error('Error creating Nova session:', error);
+    return res.status(500).json({ 
+      error: 'Failed to create Nova session',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/admin/iai/nova/:sessionId/action
+ * Execute an action in the Nova browser
+ */
+router.post('/nova/:sessionId/action', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    const { action, selector, url, value, options } = req.body;
+    
+    if (!action) {
+      return res.status(400).json({ error: 'action is required' });
+    }
+    
+    const result = await novaChromiumService.executeAction(sessionId, {
+      action,
+      selector,
+      url,
+      value,
+      options,
+    });
+    
+    return res.json(result);
+  } catch (error: any) {
+    console.error('Error executing Nova action:', error);
+    return res.status(500).json({ 
+      error: 'Failed to execute action',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/admin/iai/nova/:sessionId/state
+ * Get the current state of a Nova browser session
+ */
+router.get('/nova/:sessionId/state', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    
+    const state = await novaChromiumService.getSessionState(sessionId);
+    
+    return res.json({
+      success: true,
+      sessionId,
+      state,
+    });
+  } catch (error: any) {
+    console.error('Error getting Nova state:', error);
+    return res.status(500).json({ 
+      error: 'Failed to get session state',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/admin/iai/nova/:sessionId/screenshot
+ * Capture a screenshot from the Nova browser
+ */
+router.get('/nova/:sessionId/screenshot', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    const fullPage = req.query.fullPage === 'true';
+    
+    const result = await novaChromiumService.captureScreenshot(sessionId, fullPage);
+    
+    return res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('Error capturing screenshot:', error);
+    return res.status(500).json({ 
+      error: 'Failed to capture screenshot',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/admin/iai/nova/:sessionId/batch
+ * Execute multiple actions in sequence
+ */
+router.post('/nova/:sessionId/batch', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    const { actions, stopOnError = true } = req.body;
+    
+    if (!actions || !Array.isArray(actions)) {
+      return res.status(400).json({ error: 'actions array is required' });
+    }
+    
+    const result = await novaChromiumService.executeBatch(sessionId, actions, stopOnError);
+    
+    return res.json(result);
+  } catch (error: any) {
+    console.error('Error executing batch:', error);
+    return res.status(500).json({ 
+      error: 'Failed to execute batch',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/admin/iai/nova/:sessionId
+ * Close a Nova browser session
+ */
+router.delete('/nova/:sessionId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    
+    const success = await novaChromiumService.closeSession(sessionId);
+    
+    return res.json({
+      success,
+      message: success ? 'Session closed' : 'Failed to close session',
+    });
+  } catch (error: any) {
+    console.error('Error closing Nova session:', error);
+    return res.status(500).json({ 
+      error: 'Failed to close session',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/admin/iai/nova/:sessionId/execute-goal
+ * Execute a natural language goal using Nova AI agent
+ * This is the key endpoint for fluent soldier communication
+ */
+router.post('/nova/:sessionId/execute-goal', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    const { goal, context, maxSteps } = req.body;
+    
+    if (!goal) {
+      return res.status(400).json({ error: 'goal is required' });
+    }
+    
+    const result = await novaChromiumService.executeGoal(
+      sessionId,
+      goal,
+      context,
+      maxSteps
+    );
+    
+    return res.json({
+      success: result.success,
+      result,
+    });
+  } catch (error: any) {
+    console.error('Error executing Nova goal:', error);
+    return res.status(500).json({ 
+      error: 'Failed to execute goal',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/admin/iai/nova/sessions
+ * List all active Nova browser sessions
+ */
+router.get('/nova/sessions', authenticate, async (_req: AuthRequest, res: Response) => {
+  try {
+    const sessions = await novaChromiumService.listSessions();
+    
+    res.json({
+      success: true,
+      total: sessions.length,
+      sessions,
+    });
+  } catch (error: any) {
+    console.error('Error listing Nova sessions:', error);
+    res.status(500).json({ 
+      error: 'Failed to list sessions',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/admin/iai/nova/tools
+ * Get available Nova browser control tools
+ */
+router.get('/nova/tools', authenticate, async (_req: AuthRequest, res: Response) => {
+  try {
+    const tools = await novaChromiumService.getAvailableTools();
+    
+    res.json({
+      success: true,
+      tools,
+    });
+  } catch (error: any) {
+    console.error('Error getting Nova tools:', error);
+    res.status(500).json({ 
+      error: 'Failed to get tools',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/admin/iai/nova/:sessionId/send-message
+ * High-level: Send a Facebook message
+ */
+router.post('/nova/:sessionId/send-message', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    const { conversationUrl, message } = req.body;
+    
+    if (!conversationUrl || !message) {
+      return res.status(400).json({ error: 'conversationUrl and message are required' });
+    }
+    
+    const result = await novaChromiumService.sendFacebookMessage(
+      sessionId,
+      conversationUrl,
+      message
+    );
+    
+    return res.json({
+      success: result.success,
+      result,
+    });
+  } catch (error: any) {
+    console.error('Error sending Facebook message:', error);
+    return res.status(500).json({ 
+      error: 'Failed to send message',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/admin/iai/nova/:sessionId/create-listing
+ * High-level: Create a Facebook Marketplace listing
+ */
+router.post('/nova/:sessionId/create-listing', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = req.params.sessionId as string;
+    const { listing } = req.body;
+    
+    if (!listing) {
+      return res.status(400).json({ error: 'listing data is required' });
+    }
+    
+    const result = await novaChromiumService.createMarketplaceListing(
+      sessionId,
+      listing
+    );
+    
+    return res.json({
+      success: result.success,
+      result,
+    });
+  } catch (error: any) {
+    console.error('Error creating listing:', error);
+    return res.status(500).json({ 
+      error: 'Failed to create listing',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/admin/iai/nova/iai/:soldierId/session
+ * Get or create a browser session for a specific IAI soldier
+ */
+router.get('/nova/iai/:soldierId/session', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const soldierId = req.params.soldierId as string;
+    
+    const session = await novaChromiumService.getOrCreateSessionForIAI(soldierId);
+    
+    if (!session) {
+      return res.status(404).json({ error: 'IAI Soldier not found' });
+    }
+    
+    return res.json({
+      success: true,
+      session,
+    });
+  } catch (error: any) {
+    console.error('Error getting IAI session:', error);
+    return res.status(500).json({ 
+      error: 'Failed to get IAI session',
+      details: error.message,
     });
   }
 });

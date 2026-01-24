@@ -1,14 +1,30 @@
 /**
- * Nova Advanced Tooling Service
+ * Nova Advanced Tooling Service v2.0
  * 
- * Production-grade system management tools for Nova AI
- * Provides real file access, system health monitoring, and DOM manipulation
+ * Production-grade system management tools for Nova AI agents
+ * Provides real file access, system health monitoring, SQL operations,
+ * SSH navigation, log monitoring, and AI model management
+ * 
+ * ALL THREE AGENTS (Nova, Soldier, IAI) have access to this tooling
+ * 
+ * @version 2.0.0
+ * @author FMD Engineering Team
  */
 
 import fs from 'fs/promises';
 import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
+
+// Import specialized services
+import { aiModelRegistry, AI_MODELS } from './ai-model-registry.service';
+import { sqlMasterService } from './sql-master.service';
+import { sshRemoteService, logMonitoringService } from './ssh-remote.service';
+
+// execAsync available for future use
+const _execAsync = promisify(exec);
 
 // Project root directory
 const PROJECT_ROOT = process.cwd();
@@ -35,6 +51,12 @@ export interface SystemHealthReport {
   components: ComponentHealth[];
   metrics: SystemMetrics;
   recommendations: string[];
+  activeAgent?: {
+    id: string;
+    name: string;
+    model: string;
+    status: string;
+  };
 }
 
 export interface ComponentHealth {
@@ -90,6 +112,317 @@ export interface DirectoryListing {
 
 class NovaToolingService {
   
+  // ============================================
+  // AI AGENT TOOLING ACCESS
+  // All 3 agents (Nova, Soldier, IAI) can use these tools
+  // ============================================
+
+  /**
+   * Get the currently active AI agent serving requests
+   */
+  getActiveAgent(): {
+    id: string;
+    name: string;
+    codename: string;
+    model: string;
+    modelDisplayName: string;
+    provider: string;
+    color: string;
+    icon: string;
+    status: string;
+  } | null {
+    const agent = aiModelRegistry.getActiveServingAgent();
+    if (!agent) return null;
+
+    const model = AI_MODELS[agent.activeModel];
+    return {
+      id: agent.id,
+      name: agent.name,
+      codename: agent.codename,
+      model: agent.activeModel,
+      modelDisplayName: model?.displayName || 'Unknown',
+      provider: agent.provider,
+      color: agent.color,
+      icon: agent.icon,
+      status: agent.status,
+    };
+  }
+
+  /**
+   * Get all AI agents with their current status
+   */
+  getAllAgents(): {
+    id: string;
+    name: string;
+    codename: string;
+    model: string;
+    modelName: string;
+    provider: string;
+    status: string;
+    role: string;
+    color: string;
+    icon: string;
+    totalRequests: number;
+    avgResponseTime: number;
+  }[] {
+    return aiModelRegistry.getAllAgents().map(agent => {
+      const model = AI_MODELS[agent.activeModel];
+      return {
+        id: agent.id,
+        name: agent.name,
+        codename: agent.codename,
+        model: agent.activeModel,
+        modelName: model?.displayName || 'Unknown',
+        provider: agent.provider,
+        status: agent.status,
+        role: agent.role,
+        color: agent.color,
+        icon: agent.icon,
+        totalRequests: agent.totalRequests,
+        avgResponseTime: Math.round(agent.avgResponseTime),
+      };
+    });
+  }
+
+  /**
+   * Get available AI models for selection
+   */
+  getAvailableModels(): {
+    id: string;
+    provider: string;
+    displayName: string;
+    tier: string;
+    contextWindow: number;
+    capabilities: string[];
+  }[] {
+    return aiModelRegistry.getAllModels().map(model => ({
+      id: model.id,
+      provider: model.provider,
+      displayName: model.displayName,
+      tier: model.tier,
+      contextWindow: model.contextWindow,
+      capabilities: model.capabilities,
+    }));
+  }
+
+  /**
+   * Change the active model for an agent
+   */
+  async setAgentModel(agentId: string, modelId: string): Promise<{
+    success: boolean;
+    previousModel: string;
+    newModel: string;
+    error?: string;
+  }> {
+    return aiModelRegistry.setActiveModelForAgent(agentId, modelId);
+  }
+
+  // ============================================
+  // SQL MASTER TOOLING
+  // Enterprise-grade database operations
+  // ============================================
+
+  /**
+   * Get complete database schema
+   */
+  async getDatabaseSchema() {
+    return sqlMasterService.getDatabaseSchema();
+  }
+
+  /**
+   * Get detailed table information
+   */
+  async getTableInfo(tableName: string) {
+    return sqlMasterService.getTableSchema(tableName);
+  }
+
+  /**
+   * Analyze a SQL query for optimization
+   */
+  async analyzeQuery(query: string) {
+    return sqlMasterService.analyzeQuery(query);
+  }
+
+  /**
+   * Execute a read-only SQL query
+   */
+  async executeSQL<T = any>(query: string) {
+    return sqlMasterService.executeReadQuery<T>(query);
+  }
+
+  /**
+   * Get sample data from a table
+   */
+  async getTableSample(tableName: string, limit: number = 10) {
+    return sqlMasterService.getTableSample(tableName, limit);
+  }
+
+  /**
+   * Get column statistics
+   */
+  async getColumnStats(tableName: string, columnName: string) {
+    return sqlMasterService.getColumnStats(tableName, columnName);
+  }
+
+  /**
+   * Get database performance stats
+   */
+  async getDatabaseStats() {
+    return sqlMasterService.getDatabaseStats();
+  }
+
+  /**
+   * Get index suggestions for optimization
+   */
+  async getIndexSuggestions(tableName: string) {
+    return sqlMasterService.getIndexSuggestions(tableName);
+  }
+
+  /**
+   * Get slow queries (requires pg_stat_statements)
+   */
+  async getSlowQueries(minDurationMs: number = 1000) {
+    return sqlMasterService.getSlowQueries(minDurationMs);
+  }
+
+  /**
+   * Export table data to JSON
+   */
+  async exportTableData(tableName: string, options?: {
+    where?: string;
+    limit?: number;
+    columns?: string[];
+  }) {
+    return sqlMasterService.exportTableToJSON(tableName, options);
+  }
+
+  /**
+   * Get migration status
+   */
+  async getMigrations() {
+    return sqlMasterService.getMigrationStatus();
+  }
+
+  // ============================================
+  // SSH REMOTE OPERATIONS
+  // Secure server management
+  // ============================================
+
+  /**
+   * Execute command on remote server
+   */
+  async sshExecute(serverName: string, command: string, options?: {
+    timeout?: number;
+    sudo?: boolean;
+  }) {
+    return sshRemoteService.executeCommand(serverName, command, options);
+  }
+
+  /**
+   * Get remote server information
+   */
+  async getServerInfo(serverName: string) {
+    return sshRemoteService.getServerInfo(serverName);
+  }
+
+  /**
+   * Get Docker container logs
+   */
+  async getContainerLogs(serverName: string, containerName: string, options?: {
+    tail?: number;
+    since?: string;
+    grep?: string;
+  }) {
+    return sshRemoteService.getContainerLogs(serverName, containerName, options);
+  }
+
+  /**
+   * Restart a Docker container
+   */
+  async restartContainer(serverName: string, containerName: string) {
+    return sshRemoteService.restartContainer(serverName, containerName);
+  }
+
+  /**
+   * Run docker-compose command
+   */
+  async dockerCompose(serverName: string, action: 'up' | 'down' | 'restart' | 'logs' | 'ps', options?: {
+    service?: string;
+    detach?: boolean;
+  }) {
+    return sshRemoteService.dockerCompose(serverName, action, options);
+  }
+
+  /**
+   * Get list of configured SSH servers
+   */
+  getConfiguredServers(): string[] {
+    return sshRemoteService.getConfiguredServers();
+  }
+
+  // ============================================
+  // LOG MONITORING & ALERTS
+  // Real-time system awareness
+  // ============================================
+
+  /**
+   * Process and analyze a log entry
+   */
+  processLog(logLine: string, source: string, container?: string) {
+    return logMonitoringService.processLogEntry(logLine, source, container);
+  }
+
+  /**
+   * Get filtered logs
+   */
+  getLogs(filter?: {
+    level?: ('info' | 'warn' | 'error' | 'debug' | 'critical')[];
+    source?: string;
+    container?: string;
+    startTime?: Date;
+    endTime?: Date;
+    search?: string;
+    limit?: number;
+  }) {
+    return logMonitoringService.getLogs(filter);
+  }
+
+  /**
+   * Get system alerts
+   */
+  getAlerts(filter?: {
+    acknowledged?: boolean;
+    type?: 'error' | 'warning' | 'critical' | 'info';
+  }) {
+    return logMonitoringService.getAlerts(filter);
+  }
+
+  /**
+   * Acknowledge an alert
+   */
+  acknowledgeAlert(alertId: string): boolean {
+    return logMonitoringService.acknowledgeAlert(alertId);
+  }
+
+  /**
+   * Get log statistics
+   */
+  getLogStats() {
+    return logMonitoringService.getLogStats();
+  }
+
+  /**
+   * Add custom notification pattern
+   */
+  addNotificationPattern(config: {
+    type: 'error' | 'warning' | 'critical' | 'info';
+    pattern: string | RegExp;
+    message: string;
+    cooldownMinutes?: number;
+  }) {
+    logMonitoringService.addNotificationPattern(config);
+  }
+
   // ============================================
   // FILE OPERATIONS
   // ============================================
@@ -628,25 +961,6 @@ class NovaToolingService {
       return { success: true, data, count };
     } catch (error: any) {
       logger.error(`[Nova Tools] Database query failed:`, error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Get database schema information
-   */
-  async getDatabaseSchema(): Promise<{ success: boolean; tables?: any[]; error?: string }> {
-    try {
-      const tables = await prisma.$queryRaw<any[]>`
-        SELECT table_name, 
-               (SELECT count(*) FROM information_schema.columns WHERE table_name = t.table_name) as column_count
-        FROM information_schema.tables t
-        WHERE table_schema = 'public'
-        ORDER BY table_name
-      `;
-
-      return { success: true, tables };
-    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
@@ -1403,6 +1717,983 @@ class NovaToolingService {
     stats.largestFiles = stats.largestFiles.slice(0, 20);
 
     return { success: true, stats };
+  }
+
+  // ============================================
+  // GIT & VERSION CONTROL OPERATIONS
+  // ============================================
+
+  /**
+   * Get git status (requires git to be available)
+   */
+  async getGitStatus(): Promise<{
+    success: boolean;
+    branch: string;
+    modified: string[];
+    untracked: string[];
+    staged: string[];
+    ahead: number;
+    behind: number;
+    error?: string;
+  }> {
+    try {
+      const { execSync } = await import('child_process');
+      
+      // Get current branch
+      const branch = execSync('git branch --show-current', { 
+        cwd: PROJECT_ROOT, 
+        encoding: 'utf-8' 
+      }).trim();
+
+      // Get modified files
+      const status = execSync('git status --porcelain', { 
+        cwd: PROJECT_ROOT, 
+        encoding: 'utf-8' 
+      });
+
+      const modified: string[] = [];
+      const untracked: string[] = [];
+      const staged: string[] = [];
+
+      status.split('\n').filter(Boolean).forEach(line => {
+        const statusCode = line.substring(0, 2);
+        const file = line.substring(3);
+        
+        if (statusCode.includes('M') || statusCode.includes('A') || statusCode.includes('D')) {
+          if (statusCode[0] !== ' ') {
+            staged.push(file);
+          }
+          if (statusCode[1] !== ' ') {
+            modified.push(file);
+          }
+        }
+        if (statusCode === '??') {
+          untracked.push(file);
+        }
+      });
+
+      // Get ahead/behind count
+      let ahead = 0, behind = 0;
+      try {
+        const remoteBranch = `origin/${branch}`;
+        const counts = execSync(`git rev-list --left-right --count ${branch}...${remoteBranch}`, {
+          cwd: PROJECT_ROOT,
+          encoding: 'utf-8'
+        }).trim().split('\t');
+        ahead = parseInt(counts[0]) || 0;
+        behind = parseInt(counts[1]) || 0;
+      } catch {
+        // Remote might not exist
+      }
+
+      return { success: true, branch, modified, untracked, staged, ahead, behind };
+    } catch (error: any) {
+      return { 
+        success: false, 
+        branch: '', 
+        modified: [], 
+        untracked: [], 
+        staged: [], 
+        ahead: 0, 
+        behind: 0,
+        error: error.message 
+      };
+    }
+  }
+
+  /**
+   * Get recent git commits
+   */
+  async getGitLog(limit: number = 20): Promise<{
+    success: boolean;
+    commits: {
+      hash: string;
+      shortHash: string;
+      author: string;
+      date: string;
+      message: string;
+    }[];
+    error?: string;
+  }> {
+    try {
+      const { execSync } = await import('child_process');
+      
+      const log = execSync(
+        `git log --pretty=format:"%H|%h|%an|%ci|%s" -n ${limit}`,
+        { cwd: PROJECT_ROOT, encoding: 'utf-8' }
+      );
+
+      const commits = log.split('\n').filter(Boolean).map(line => {
+        const [hash, shortHash, author, date, message] = line.split('|');
+        return { hash, shortHash, author, date, message };
+      });
+
+      return { success: true, commits };
+    } catch (error: any) {
+      return { success: false, commits: [], error: error.message };
+    }
+  }
+
+  /**
+   * Get diff for a specific file or all changes
+   */
+  async getGitDiff(filePath?: string, staged: boolean = false): Promise<{
+    success: boolean;
+    diff: string;
+    additions: number;
+    deletions: number;
+    error?: string;
+  }> {
+    try {
+      const { execSync } = await import('child_process');
+      
+      let cmd = 'git diff';
+      if (staged) cmd += ' --staged';
+      if (filePath) cmd += ` -- ${filePath}`;
+
+      const diff = execSync(cmd, { cwd: PROJECT_ROOT, encoding: 'utf-8' });
+
+      // Count additions and deletions
+      const lines = diff.split('\n');
+      const additions = lines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length;
+      const deletions = lines.filter(l => l.startsWith('-') && !l.startsWith('---')).length;
+
+      return { success: true, diff, additions, deletions };
+    } catch (error: any) {
+      return { success: false, diff: '', additions: 0, deletions: 0, error: error.message };
+    }
+  }
+
+  /**
+   * Create a commit (stages all changes and commits)
+   */
+  async createCommit(message: string, files?: string[]): Promise<{
+    success: boolean;
+    commitHash?: string;
+    error?: string;
+  }> {
+    try {
+      const { execSync } = await import('child_process');
+      
+      // Stage files
+      if (files && files.length > 0) {
+        for (const file of files) {
+          execSync(`git add "${file}"`, { cwd: PROJECT_ROOT });
+        }
+      } else {
+        execSync('git add -A', { cwd: PROJECT_ROOT });
+      }
+
+      // Commit
+      execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: PROJECT_ROOT });
+
+      // Get the commit hash
+      const hash = execSync('git rev-parse HEAD', { 
+        cwd: PROJECT_ROOT, 
+        encoding: 'utf-8' 
+      }).trim();
+
+      logger.info(`[Nova Tools] Created commit: ${hash.substring(0, 7)} - ${message}`);
+      return { success: true, commitHash: hash };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================
+  // DATABASE BACKUP & RESTORE
+  // ============================================
+
+  /**
+   * Create a database dump (PostgreSQL)
+   * This creates a SQL file backup of the database
+   */
+  async createDatabaseDump(options: {
+    tables?: string[];
+    outputPath?: string;
+    includeData?: boolean;
+  } = {}): Promise<{
+    success: boolean;
+    dumpPath?: string;
+    size?: number;
+    tables?: string[];
+    error?: string;
+  }> {
+    try {
+      const { execSync } = await import('child_process');
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const dumpFileName = options.outputPath || `backup_${timestamp}.sql`;
+      const dumpPath = path.join(PROJECT_ROOT, 'backups', dumpFileName);
+
+      // Ensure backups directory exists
+      await fs.mkdir(path.join(PROJECT_ROOT, 'backups'), { recursive: true });
+
+      // Build pg_dump command
+      const dbUrl = process.env.DATABASE_URL;
+      if (!dbUrl) {
+        return { success: false, error: 'DATABASE_URL not configured' };
+      }
+
+      // Parse database URL for connection info
+      let pgDumpCmd = `pg_dump "${dbUrl}"`;
+      
+      if (options.tables && options.tables.length > 0) {
+        pgDumpCmd += options.tables.map(t => ` -t "${t}"`).join('');
+      }
+      
+      if (!options.includeData) {
+        pgDumpCmd += ' --schema-only';
+      }
+
+      pgDumpCmd += ` -f "${dumpPath}"`;
+
+      execSync(pgDumpCmd, { cwd: PROJECT_ROOT });
+
+      const stats = await fs.stat(dumpPath);
+
+      logger.info(`[Nova Tools] Database dump created: ${dumpPath} (${stats.size} bytes)`);
+
+      return { 
+        success: true, 
+        dumpPath: `backups/${dumpFileName}`, 
+        size: stats.size,
+        tables: options.tables || ['all']
+      };
+    } catch (error: any) {
+      logger.error(`[Nova Tools] Database dump failed:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get list of database backups
+   */
+  async listDatabaseBackups(): Promise<{
+    success: boolean;
+    backups: {
+      name: string;
+      path: string;
+      size: number;
+      created: Date;
+    }[];
+  }> {
+    try {
+      const backupsDir = path.join(PROJECT_ROOT, 'backups');
+      
+      try {
+        await fs.access(backupsDir);
+      } catch {
+        return { success: true, backups: [] };
+      }
+
+      const files = await fs.readdir(backupsDir);
+      const backups = await Promise.all(
+        files
+          .filter(f => f.endsWith('.sql') || f.endsWith('.dump'))
+          .map(async (file) => {
+            const stats = await fs.stat(path.join(backupsDir, file));
+            return {
+              name: file,
+              path: `backups/${file}`,
+              size: stats.size,
+              created: stats.birthtime,
+            };
+          })
+      );
+
+      backups.sort((a, b) => b.created.getTime() - a.created.getTime());
+
+      return { success: true, backups };
+    } catch (error: any) {
+      return { success: false, backups: [] };
+    }
+  }
+
+  /**
+   * Export table data to JSON
+   */
+  async exportTableToJSON(tableName: string, options: {
+    where?: Record<string, any>;
+    limit?: number;
+    outputPath?: string;
+  } = {}): Promise<{
+    success: boolean;
+    path?: string;
+    rowCount?: number;
+    error?: string;
+  }> {
+    try {
+      const query = await this.queryDatabase(tableName, {
+        where: options.where,
+        limit: options.limit || 1000,
+      });
+
+      if (!query.success) {
+        return { success: false, error: query.error };
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = options.outputPath || `export_${tableName}_${timestamp}.json`;
+      const outputPath = path.join(PROJECT_ROOT, 'backups', fileName);
+
+      await fs.mkdir(path.join(PROJECT_ROOT, 'backups'), { recursive: true });
+      await fs.writeFile(outputPath, JSON.stringify(query.data, null, 2), 'utf-8');
+
+      logger.info(`[Nova Tools] Exported ${query.data?.length || 0} rows from ${tableName}`);
+
+      return { 
+        success: true, 
+        path: `backups/${fileName}`, 
+        rowCount: query.data?.length || 0 
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================
+  // CODEBASE NAVIGATION & UNDERSTANDING
+  // ============================================
+
+  /**
+   * Get comprehensive codebase architecture overview
+   */
+  async getCodebaseArchitecture(): Promise<{
+    success: boolean;
+    architecture: {
+      overview: string;
+      backend: {
+        entryPoint: string;
+        routesDirectory: string;
+        servicesDirectory: string;
+        middlewareDirectory: string;
+        configDirectory: string;
+        keyFiles: { path: string; description: string }[];
+      };
+      frontend: {
+        entryPoint: string;
+        pagesDirectory: string;
+        componentsDirectory: string;
+        servicesDirectory: string;
+        keyFiles: { path: string; description: string }[];
+      };
+      database: {
+        schemaFile: string;
+        migrationsDirectory: string;
+        seedFiles: string[];
+      };
+      extensions: {
+        mainExtension: string;
+        recorderExtension: string;
+      };
+      workers: {
+        pythonWorkers: string;
+        keyFiles: string[];
+      };
+      deploymentFiles: string[];
+    };
+  }> {
+    return {
+      success: true,
+      architecture: {
+        overview: `
+FaceMyDealer (FMD) is a comprehensive Facebook Marketplace automation platform.
+
+TECH STACK:
+- Backend: Node.js + Express + TypeScript
+- Frontend: React + TypeScript + Vite + TailwindCSS
+- Database: PostgreSQL with Prisma ORM
+- Workers: Python with Playwright for browser automation
+- AI: Multiple providers (Anthropic Claude, OpenAI GPT, DeepSeek)
+- Extensions: Chrome MV3 extensions for FB automation
+- Deployment: Docker + Docker Compose on VPS with Traefik
+
+KEY FEATURES:
+- Facebook Marketplace listing automation
+- AI-powered inventory analysis (Nova AI)
+- IAI (Intelligent Automation Interface) training system
+- Multi-account Facebook management
+- Lead management and CRM
+- Chrome extension for FB interaction
+        `,
+        backend: {
+          entryPoint: 'src/index.ts',
+          routesDirectory: 'src/routes/',
+          servicesDirectory: 'src/services/',
+          middlewareDirectory: 'src/middleware/',
+          configDirectory: 'src/config/',
+          keyFiles: [
+            { path: 'src/index.ts', description: 'Express server entry point' },
+            { path: 'src/routes/index.ts', description: 'Route aggregator' },
+            { path: 'src/routes/ai.routes.ts', description: 'Nova AI chat & analysis endpoints' },
+            { path: 'src/routes/training.routes.ts', description: 'IAI training system routes' },
+            { path: 'src/routes/facebook.routes.ts', description: 'Facebook automation routes' },
+            { path: 'src/routes/vehicles.routes.ts', description: 'Vehicle/inventory management' },
+            { path: 'src/services/ai-service.ts', description: 'Multi-provider AI service' },
+            { path: 'src/services/nova-tooling.service.ts', description: 'Nova advanced tools' },
+            { path: 'src/config/database.ts', description: 'Prisma client initialization' },
+          ],
+        },
+        frontend: {
+          entryPoint: 'web/src/main.tsx',
+          pagesDirectory: 'web/src/pages/',
+          componentsDirectory: 'web/src/components/',
+          servicesDirectory: 'web/src/services/',
+          keyFiles: [
+            { path: 'web/src/App.tsx', description: 'Main React app with routing' },
+            { path: 'web/src/pages/admin/AICenterPage.tsx', description: 'Nova AI command center' },
+            { path: 'web/src/pages/admin/IAITrainingPanel.tsx', description: 'IAI training management' },
+            { path: 'web/src/pages/FacebookAccountsPage.tsx', description: 'FB account management' },
+            { path: 'web/src/pages/VehiclesPage.tsx', description: 'Vehicle inventory' },
+            { path: 'web/src/lib/api.ts', description: 'API client configuration' },
+          ],
+        },
+        database: {
+          schemaFile: 'prisma/schema.prisma',
+          migrationsDirectory: 'prisma/migrations/',
+          seedFiles: ['prisma/seed-plans.ts', 'prisma/seeds/'],
+        },
+        extensions: {
+          mainExtension: 'extension/ - Main IAI Chrome extension',
+          recorderExtension: 'extension-recorder/ - Training recorder extension',
+        },
+        workers: {
+          pythonWorkers: 'python-workers/',
+          keyFiles: [
+            'python-workers/worker.py - Main browser worker',
+            'python-workers/fb_marketplace.py - FB Marketplace automation',
+            'python-workers/image_processor.py - Image handling',
+          ],
+        },
+        deploymentFiles: [
+          'docker-compose.production.yml',
+          'Dockerfile',
+          'deploy.ps1',
+          'railway.json',
+          'Procfile',
+        ],
+      },
+    };
+  }
+
+  /**
+   * Find all usages of a function/class/variable
+   */
+  async findUsages(symbolName: string, options: {
+    directories?: string[];
+    extensions?: string[];
+  } = {}): Promise<{
+    success: boolean;
+    definition?: { file: string; line: number; content: string };
+    usages: { file: string; line: number; content: string; type: 'import' | 'call' | 'reference' }[];
+    totalCount: number;
+  }> {
+    const {
+      directories = ['src', 'web/src'],
+      extensions = ['.ts', '.tsx', '.js', '.jsx'],
+    } = options;
+
+    // Search for the symbol
+    const searchResult = await this.deepSearch({
+      query: symbolName,
+      directories,
+      extensions,
+      maxResults: 100,
+      includeContext: true,
+    });
+
+    if (!searchResult.success) {
+      return { success: false, usages: [], totalCount: 0 };
+    }
+
+    // Categorize results
+    let definition: { file: string; line: number; content: string } | undefined;
+    const usages: { file: string; line: number; content: string; type: 'import' | 'call' | 'reference' }[] = [];
+
+    for (const result of searchResult.results) {
+      const content = result.content.toLowerCase();
+      
+      // Check if it's a definition
+      if (
+        content.includes(`function ${symbolName.toLowerCase()}`) ||
+        content.includes(`const ${symbolName.toLowerCase()}`) ||
+        content.includes(`class ${symbolName.toLowerCase()}`) ||
+        content.includes(`interface ${symbolName.toLowerCase()}`) ||
+        content.includes(`export default function ${symbolName.toLowerCase()}`)
+      ) {
+        if (!definition) {
+          definition = { file: result.file, line: result.line, content: result.content };
+        }
+      }
+      
+      // Categorize usage type
+      let type: 'import' | 'call' | 'reference' = 'reference';
+      if (content.includes('import')) {
+        type = 'import';
+      } else if (result.content.includes(`${symbolName}(`)) {
+        type = 'call';
+      }
+
+      usages.push({
+        file: result.file,
+        line: result.line,
+        content: result.content,
+        type,
+      });
+    }
+
+    return {
+      success: true,
+      definition,
+      usages,
+      totalCount: usages.length,
+    };
+  }
+
+  /**
+   * Get API route documentation
+   */
+  async getAPIRoutesDocs(): Promise<{
+    success: boolean;
+    routes: {
+      method: string;
+      path: string;
+      file: string;
+      line: number;
+      authenticated: boolean;
+      description?: string;
+    }[];
+  }> {
+    const routeFiles = await this.searchFiles('routes', 'src/routes');
+    const routes: {
+      method: string;
+      path: string;
+      file: string;
+      line: number;
+      authenticated: boolean;
+      description?: string;
+    }[] = [];
+
+    for (const filePath of routeFiles) {
+      if (!filePath.endsWith('.ts')) continue;
+
+      const file = await this.readFile(filePath);
+      if (!file.success || !file.content) continue;
+
+      const content = file.content;
+      const lines = content.split('\n');
+      
+      lines.forEach((line, index) => {
+        // Match route definitions
+        const routeMatch = line.match(/router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/i);
+        if (routeMatch) {
+          const [, method, routePath] = routeMatch;
+          
+          // Check if route requires auth
+          const authenticated = 
+            content.includes('authenticate') &&
+            index > content.split('\n').findIndex(l => l.includes('router.use(authenticate)'));
+
+          // Look for JSDoc comment above
+          let description: string | undefined;
+          if (index > 0 && lines[index - 1].includes('*/')) {
+            for (let i = index - 2; i >= 0; i--) {
+              if (lines[i].includes('/**')) {
+                description = lines.slice(i + 1, index - 1)
+                  .map(l => l.replace(/^\s*\*\s*/, '').trim())
+                  .filter(Boolean)
+                  .join(' ');
+                break;
+              }
+            }
+          }
+
+          routes.push({
+            method: method.toUpperCase(),
+            path: routePath,
+            file: filePath,
+            line: index + 1,
+            authenticated,
+            description,
+          });
+        }
+      });
+    }
+
+    return { success: true, routes };
+  }
+
+  // ============================================
+  // NOVA CHROMIUM BROWSER CONTROL
+  // AI-controlled browser automation
+  // ============================================
+
+  /**
+   * Execute a natural language goal using Nova AI agent
+   * This is the primary method for fluent communication with soldiers
+   */
+  async executeNaturalLanguageGoal(
+    sessionId: string,
+    goal: string,
+    context?: Record<string, any>,
+    maxSteps?: number
+  ): Promise<{
+    success: boolean;
+    goal: string;
+    steps: Array<{
+      stepNumber: number;
+      thought: string;
+      action?: string;
+      result?: Record<string, any>;
+      error?: string;
+    }>;
+    finalState: string;
+    totalDurationMs: number;
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const result = await novaChromiumService.executeGoal(sessionId, goal, context, maxSteps);
+      
+      return {
+        success: result.success,
+        goal: result.goal,
+        steps: result.steps,
+        finalState: result.finalState,
+        totalDurationMs: result.totalDurationMs,
+        error: result.error,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        goal,
+        steps: [],
+        finalState: 'error',
+        totalDurationMs: 0,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Create a new browser session for Nova to control
+   */
+  async createBrowserSession(accountId: string, options?: {
+    headless?: boolean;
+    loadSession?: boolean;
+  }): Promise<{
+    success: boolean;
+    session?: {
+      sessionId: string;
+      browserId: string;
+      accountId: string;
+      status: string;
+      hasSavedSession: boolean;
+    };
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const session = await novaChromiumService.createSession(accountId, options);
+      
+      return {
+        success: true,
+        session: {
+          sessionId: session.sessionId,
+          browserId: session.browserId,
+          accountId: session.accountId,
+          status: session.status,
+          hasSavedSession: session.hasSavedSession,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Execute an action in a browser session
+   */
+  async executeBrowserAction(sessionId: string, action: {
+    action: string;
+    selector?: string;
+    url?: string;
+    value?: string;
+    options?: Record<string, any>;
+  }): Promise<{
+    success: boolean;
+    action: string;
+    data: Record<string, any>;
+    error?: string;
+    durationMs: number;
+    screenshot?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const result = await novaChromiumService.executeAction(sessionId, action);
+      
+      return {
+        success: result.success,
+        action: result.action,
+        data: result.data,
+        error: result.error,
+        durationMs: result.durationMs,
+        screenshot: result.screenshot,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        action: action.action,
+        data: {},
+        error: error instanceof Error ? error.message : 'Unknown error',
+        durationMs: 0,
+      };
+    }
+  }
+
+  /**
+   * Navigate browser to a URL
+   */
+  async browserNavigate(sessionId: string, url: string): Promise<{
+    success: boolean;
+    url?: string;
+    error?: string;
+  }> {
+    const result = await this.executeBrowserAction(sessionId, {
+      action: 'navigate',
+      url,
+    });
+    
+    return {
+      success: result.success,
+      url: result.data?.url,
+      error: result.error,
+    };
+  }
+
+  /**
+   * Click an element in the browser
+   */
+  async browserClick(sessionId: string, selector: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    const result = await this.executeBrowserAction(sessionId, {
+      action: 'click',
+      selector,
+    });
+    
+    return {
+      success: result.success,
+      error: result.error,
+    };
+  }
+
+  /**
+   * Type text into an input field
+   */
+  async browserType(sessionId: string, selector: string, value: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    const result = await this.executeBrowserAction(sessionId, {
+      action: 'type',
+      selector,
+      value,
+    });
+    
+    return {
+      success: result.success,
+      error: result.error,
+    };
+  }
+
+  /**
+   * Capture a screenshot for vision analysis
+   */
+  async browserScreenshot(sessionId: string, fullPage = false): Promise<{
+    success: boolean;
+    screenshot?: string;
+    url?: string;
+    title?: string;
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const result = await novaChromiumService.captureScreenshot(sessionId, fullPage);
+      
+      return {
+        success: true,
+        screenshot: result.screenshot,
+        url: result.url,
+        title: result.title,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Get page HTML for analysis
+   */
+  async browserGetHtml(sessionId: string, selector = 'body'): Promise<{
+    success: boolean;
+    html?: string;
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const result = await novaChromiumService.getPageHtml(sessionId, selector);
+      
+      return {
+        success: true,
+        html: result.html,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Send a Facebook message via browser
+   */
+  async browserSendFacebookMessage(
+    sessionId: string,
+    conversationUrl: string,
+    message: string
+  ): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const result = await novaChromiumService.sendFacebookMessage(
+        sessionId,
+        conversationUrl,
+        message
+      );
+      
+      return {
+        success: result.success,
+        error: result.error,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Create a Facebook Marketplace listing via browser
+   */
+  async browserCreateListing(
+    sessionId: string,
+    listing: {
+      year: number;
+      make: string;
+      model: string;
+      price: number;
+      mileage?: number;
+      description?: string;
+      location: string;
+      photos?: string[];
+    }
+  ): Promise<{
+    success: boolean;
+    listingId?: string;
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const result = await novaChromiumService.createMarketplaceListing(sessionId, listing);
+      
+      return {
+        success: result.success,
+        listingId: result.data?.listingId,
+        error: result.error,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Close a browser session
+   */
+  async closeBrowserSession(sessionId: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const success = await novaChromiumService.closeSession(sessionId);
+      
+      return { success };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * List all active browser sessions
+   */
+  async listBrowserSessions(): Promise<{
+    success: boolean;
+    sessions?: Array<{
+      sessionId: string;
+      accountId: string;
+      status: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      const sessions = await novaChromiumService.listSessions();
+      
+      return {
+        success: true,
+        sessions: sessions.map(s => ({
+          sessionId: s.sessionId,
+          accountId: s.accountId,
+          status: s.status,
+        })),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Check if browser worker is available
+   */
+  async isBrowserWorkerAvailable(): Promise<boolean> {
+    try {
+      const { novaChromiumService } = await import('./nova-chromium.service');
+      return novaChromiumService.isWorkerAvailable();
+    } catch {
+      return false;
+    }
   }
 }
 
