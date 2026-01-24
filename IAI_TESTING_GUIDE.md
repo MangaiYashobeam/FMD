@@ -1,4 +1,4 @@
-# IAI System & Vehicle Fetching - Testing Guide
+![1769129923252](image/IAI_TESTING_GUIDE/1769129923252.png)# IAI System & Vehicle Fetching - Testing Guide
 
 ## ✅ COMPLETED FIXES
 
@@ -17,7 +17,7 @@
 - Endpoint: `POST /api/extension/iai/register`
 - Extension code updated to use correct accountId extraction
 - Geolocation changed from ipapi.co → ip-api.com (CORS friendly)
-- Auto-generates soldier ID (IAI-0, IAI-1, etc.)
+- Auto-generates soldier IDz (IAI-0, IAI-1, etc.)
 
 ### 4. IAI Command Center
 - Stats cards now CLICKABLE (filters soldiers by status)

@@ -263,8 +263,13 @@ async function loadVehicles() {
       </div>
     `;
     
-    const data = await apiRequest('/api/vehicles');
+    // Get stored accountId for explicit filtering
+    const storage = await chrome.storage.local.get(['accountId']);
+    const accountIdParam = storage.accountId ? `?accountId=${storage.accountId}` : '';
+    
+    const data = await apiRequest(`/api/vehicles${accountIdParam}`);
     state.vehicles = data.data?.vehicles || [];
+    console.log(`✅ Loaded ${state.vehicles.length} vehicles for account ${storage.accountId || 'auto-detected'}`);
     renderVehicles();
   } catch (error) {
     console.error('Failed to load vehicles:', error);
@@ -272,6 +277,7 @@ async function loadVehicles() {
       <div class="empty-state">
         <span class="empty-icon">⚠️</span>
         <p>Failed to load vehicles</p>
+        <p class="error-detail">${escapeHtml(error.message)}</p>
       </div>
     `;
   }

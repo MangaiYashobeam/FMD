@@ -11,12 +11,29 @@ import { FBMPostLogService } from '@/routes/fbm-posts.routes';
 export class VehicleController {
   /**
    * Get all vehicles for account
+   * If no accountId is provided, auto-detect from user's primary account
    */
   async getVehicles(req: AuthRequest, res: Response) {
-    const accountId = req.query.accountId as string;
+    let accountId = req.query.accountId as string;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
     const skip = (page - 1) * limit;
+
+    // If no accountId provided, get user's first/primary account
+    if (!accountId) {
+      const userAccount = await prisma.accountUser.findFirst({
+        where: { userId: req.user!.id },
+        orderBy: { createdAt: 'asc' }, // Get the first/oldest account
+        select: { accountId: true },
+      });
+      
+      if (!userAccount) {
+        throw new AppError('No account associated with this user', 404);
+      }
+      
+      accountId = userAccount.accountId;
+      logger.info(`Auto-detected accountId ${accountId} for user ${req.user!.id}`);
+    }
 
     // Verify user has access to account (SUPER_ADMIN or account member)
     const hasAccess = await prisma.accountUser.findFirst({
