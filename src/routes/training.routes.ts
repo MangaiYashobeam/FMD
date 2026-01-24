@@ -709,4 +709,56 @@ function generateInjectableCode(session: any, type: string) {
   return code;
 }
 
+// Export handlers for public access (bypassing ring5AuthBarrier)
+export const handleHeartbeat = async (req: any, res: any) => {
+  try {
+    const { browserId, version, currentTab, recordingActive } = req.body;
+    
+    rootConsoleState.connected = true;
+    rootConsoleState.lastHeartbeat = new Date();
+    rootConsoleState.browserId = browserId || null;
+    rootConsoleState.version = version || null;
+    rootConsoleState.currentTab = currentTab || null;
+    rootConsoleState.recordingActive = recordingActive || false;
+    
+    console.log('[ROOT Console] Heartbeat received (public):', {
+      browserId,
+      version,
+      currentTab,
+      recordingActive,
+    });
+    
+    res.json({
+      success: true,
+      message: 'Heartbeat acknowledged',
+      serverTime: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[ROOT Console] Heartbeat error:', error);
+    res.status(500).json({ success: false, error: 'Heartbeat failed' });
+  }
+};
+
+export const getConsoleStatus = async (_req: any, res: any) => {
+  try {
+    const connected = isRootConsoleConnected();
+    
+    res.json({
+      success: true,
+      connected,
+      lastHeartbeat: rootConsoleState.lastHeartbeat?.toISOString() || null,
+      browserId: rootConsoleState.browserId,
+      version: rootConsoleState.version,
+      currentTab: rootConsoleState.currentTab,
+      recordingActive: rootConsoleState.recordingActive,
+      timeSinceHeartbeat: rootConsoleState.lastHeartbeat 
+        ? Date.now() - rootConsoleState.lastHeartbeat.getTime() 
+        : null,
+    });
+  } catch (error) {
+    console.error('[ROOT Console] Status error:', error);
+    res.status(500).json({ success: false, error: 'Status check failed' });
+  }
+};
+
 export default router;

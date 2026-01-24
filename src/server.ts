@@ -625,7 +625,17 @@ app.use('/api/admin/iai', ring5AuthBarrier, require('./routes/iai.routes').defau
 app.use('/api/extension/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier registration/heartbeat
 
 // IAI Training System (Super Admin only)
-app.use('/api/training', ring5AuthBarrier, require('./routes/training.routes').default); // Training recording & injection
+// PUBLIC Heartbeat endpoints - must be BEFORE ring5AuthBarrier for extension access
+const trainingRoutes = require('./routes/training.routes');
+app.post('/api/training/console/heartbeat', express.json(), (req, res) => {
+  // Forward to training routes heartbeat handler
+  trainingRoutes.handleHeartbeat(req, res);
+});
+app.get('/api/training/console/status', (_req, res) => {
+  // Forward to training routes status handler
+  trainingRoutes.getConsoleStatus(_req, res);
+});
+app.use('/api/training', ring5AuthBarrier, trainingRoutes.default); // Training recording & injection
 
 // AI Center Routes (requires super admin)
 app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes').default); // AI Center (requires admin)
