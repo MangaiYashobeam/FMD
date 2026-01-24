@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Puzzle, Circle } from 'lucide-react';
 import { cn } from '../lib/utils';
-import axios from 'axios';
+import { api } from '../lib/api';
 
 interface ExtensionStatusData {
   accountId: string;
@@ -30,7 +30,7 @@ export function ExtensionStatus({ variant = 'full', className }: ExtensionStatus
 
     const checkStatus = async () => {
       try {
-        const response = await axios.get<{ success: boolean; data: ExtensionStatusData }>(
+        const response = await api.get<{ success: boolean; data: ExtensionStatusData }>(
           `/api/extension/status/${accountId}`
         );
         
