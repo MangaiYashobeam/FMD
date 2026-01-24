@@ -482,6 +482,8 @@ export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunct
       '/facebook/deauthorize',
       '/config/facebook',           // Extension config (public)
       '/auth/facebook/callback',    // Facebook OAuth callback
+      '/ai/notifications/stream',   // SSE endpoint (token in query param, handles own auth)
+      '/nova/notifications/stream', // Nova SSE endpoint (token in query param)
     ];
     const isPublicPath = publicPaths.some(p => req.path.includes(p));
     

@@ -3,9 +3,11 @@
 
 const API_BASE_URL = 'https://dealersface.com';
 const TASK_POLL_INTERVAL = 5000; // 5 seconds - Production: Check frequently
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds - Send heartbeat to server
 const HEARTBEAT_CHECK_INTERVAL = 3000; // 3 seconds - Verify we're alive
 
 let taskPollingInterval = null;
+let heartbeatInterval = null;
 let heartbeatCheckInterval = null;
 let isPolling = false;
 let isAwake = false;
