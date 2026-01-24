@@ -54,8 +54,26 @@ function getClientIP(req: Request): string {
  * Main Intelliceil middleware
  * Monitors all incoming requests and blocks malicious traffic
  */
+
+// Paths that should bypass Intelliceil blocking (critical infrastructure)
+const BYPASS_PATHS = [
+  '/api/training/console/heartbeat',
+  '/api/training/console/status',
+  '/api/health',
+  '/health',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/refresh-token',
+];
+
 export function intelliceilMiddleware(req: Request, res: Response, next: NextFunction): void {
   try {
+    // Skip blocking for critical paths
+    if (BYPASS_PATHS.some(p => req.path === p || req.path.endsWith(p))) {
+      next();
+      return;
+    }
+    
     const ip = getClientIP(req);
     
     // Get geo location
