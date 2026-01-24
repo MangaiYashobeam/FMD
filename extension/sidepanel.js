@@ -123,15 +123,27 @@ async function login(email, password) {
     }
     
     // Store token, user, and accountId (needed for task polling)
+    // Also store authState for background-ai.js compatibility
     await chrome.storage.local.set({
       authToken: data.data.accessToken,
       refreshToken: data.data.refreshToken,
       user: data.data.user,
       accountId: accountId,
+      // authState for background-ai.js (IAI Soldier)
+      authState: {
+        isAuthenticated: true,
+        accessToken: data.data.accessToken,
+        userId: data.data.user.id,
+        dealerAccountId: accountId,
+        tokenExpiry: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+      },
     });
     
     // Notify background to start task polling
     chrome.runtime.sendMessage({ type: 'START_TASK_POLLING' });
+    
+    // Also start IAI Soldier polling
+    chrome.runtime.sendMessage({ type: 'START_IAI_POLLING' });
     
     console.log('✅ Login successful, accountId:', accountId, 'User:', data.data.user.email);
     
