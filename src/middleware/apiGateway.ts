@@ -485,6 +485,8 @@ export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunct
       '/auth/facebook/callback',    // Facebook OAuth callback
       '/ai/notifications/stream',   // SSE endpoint (token in query param, handles own auth)
       '/nova/notifications/stream', // Nova SSE endpoint (token in query param)
+      '/training/console/heartbeat', // ROOT Console heartbeat (extension)
+      '/training/console/status',    // ROOT Console status check (extension/webapp)
     ];
     const isPublicPath = publicPaths.some(p => req.path.includes(p));
     
