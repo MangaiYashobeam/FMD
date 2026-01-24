@@ -76,6 +76,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     log('Background script not responding - try reloading extension', 'error');
   }
   
+  // Sync auth token from webapp
+  await syncAuthTokenFromWebapp();
+  
   // Start connection checks
   startConnectionMonitoring();
   
@@ -1628,6 +1631,70 @@ function stopConnectionMonitoring() {
   }
 }
 
+/**
+ * Sync auth token from webapp (dealersface.com) to extension storage
+ * Tries multiple methods:
+ * 1. Check if webapp-bridge already synced the token
+ * 2. Try to send message to webapp tab to get token
+ * 3. Check storage for previously synced token
+ */
+async function syncAuthTokenFromWebapp() {
+  console.log('[Console] Syncing auth token from webapp...');
+  
+  try {
+    // First check if we already have a token synced
+    const existing = await chrome.storage.local.get(['fmd_admin_token', 'fmd_token_synced_at']);
+    if (existing.fmd_admin_token) {
+      const syncedAgo = existing.fmd_token_synced_at ? Date.now() - existing.fmd_token_synced_at : null;
+      console.log('[Console] Existing token found, synced', syncedAgo ? `${Math.round(syncedAgo/1000)}s ago` : 'unknown time ago');
+      
+      // If token was synced recently (within 5 minutes), use it
+      if (syncedAgo && syncedAgo < 5 * 60 * 1000) {
+        log('Auth token loaded from sync', 'success');
+        return true;
+      }
+    }
+    
+    // Try to find a webapp tab and get token from it
+    console.log('[Console] Looking for webapp tabs to sync token...');
+    const tabs = await chrome.tabs.query({
+      url: ['https://dealersface.com/*', 'https://www.dealersface.com/*', 'http://localhost:3000/*', 'http://localhost:5173/*']
+    });
+    
+    if (tabs.length > 0) {
+      console.log('[Console] Found', tabs.length, 'webapp tab(s), requesting token sync...');
+      
+      for (const tab of tabs) {
+        try {
+          const response = await chrome.tabs.sendMessage(tab.id, { type: 'SYNC_AUTH_TOKEN' });
+          if (response?.success) {
+            console.log('[Console] Token synced from webapp tab:', tab.id);
+            log('Auth token synced from webapp', 'success');
+            return true;
+          }
+        } catch (err) {
+          console.log('[Console] Tab', tab.id, 'did not respond:', err.message);
+        }
+      }
+    }
+    
+    // No webapp tabs or sync failed
+    if (existing.fmd_admin_token) {
+      console.log('[Console] Using existing token (may be stale)');
+      log('Using cached auth token', 'info');
+      return true;
+    }
+    
+    log('No auth token - open dealersface.com and login', 'warning');
+    console.log('[Console] No auth token available');
+    return false;
+    
+  } catch (error) {
+    console.error('[Console] Error syncing auth token:', error);
+    return false;
+  }
+}
+
 async function checkWebappConnection() {
   try {
     const controller = new AbortController();
@@ -1845,13 +1912,25 @@ async function sendToWebapp(endpoint, data) {
   
   try {
     // Get auth token
-    const tokenResult = await chrome.storage.local.get('fmd_admin_token');
-    const token = tokenResult.fmd_admin_token;
+    let tokenResult = await chrome.storage.local.get('fmd_admin_token');
+    let token = tokenResult.fmd_admin_token;
     console.log('[DEBUG SEND] Token found:', !!token);
     
+    // If no token, try to sync from webapp
     if (!token) {
-      log('No auth token - please login to webapp first', 'error');
-      console.log('[DEBUG SEND] No auth token!');
+      log('No auth token cached - trying to sync from webapp...', 'warning');
+      console.log('[DEBUG SEND] Attempting auth token sync...');
+      const synced = await syncAuthTokenFromWebapp();
+      if (synced) {
+        tokenResult = await chrome.storage.local.get('fmd_admin_token');
+        token = tokenResult.fmd_admin_token;
+        console.log('[DEBUG SEND] Token after sync:', !!token);
+      }
+    }
+    
+    if (!token) {
+      log('No auth token - please login at dealersface.com', 'error');
+      console.log('[DEBUG SEND] No auth token after sync attempt!');
       return { success: false, error: 'Not authenticated' };
     }
     
@@ -1870,6 +1949,13 @@ async function sendToWebapp(endpoint, data) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.log('[DEBUG SEND] Error response:', errorData);
+      
+      // If 401/403, clear cached token and suggest re-login
+      if (response.status === 401 || response.status === 403) {
+        await chrome.storage.local.remove(['fmd_admin_token', 'fmd_token_synced_at']);
+        log('Auth token expired - please refresh dealersface.com and try again', 'error');
+      }
+      
       throw new Error(errorData.error || `HTTP ${response.status}`);
     }
     

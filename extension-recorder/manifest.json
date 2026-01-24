@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FMD Training Recorder - Super Admin",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "description": "Records DOM interactions for IAI/Soldier training - Super Admin Console",
   "permissions": [
     "activeTab",
@@ -35,6 +35,17 @@
       "css": ["recorder.css"],
       "run_at": "document_idle",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "https://dealersface.com/*",
+        "https://www.dealersface.com/*",
+        "http://localhost:3000/*",
+        "http://localhost:5173/*"
+      ],
+      "js": ["webapp-bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "action": {
