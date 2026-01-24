@@ -29,6 +29,19 @@ const CONFIG = {
 };
 
 // ============================================
+// GLOBAL STATE (must be defined early)
+// ============================================
+
+// Track recording state across tabs - defined early to avoid ReferenceError
+const TabManager = {
+  isRecording: false,
+  sessionId: null,
+  recordingTabs: new Map(),
+  tabSequence: [],
+  allEvents: [],
+};
+
+// ============================================
 // SERVICE WORKER KEEPALIVE
 // This prevents the service worker from going to sleep
 // ============================================
@@ -70,6 +83,9 @@ async function sendHeartbeatToBackend() {
     const token = await getAuthToken();
     const browserId = await getBrowserId();
     
+    // Use typeof to safely check TabManager which may not be defined yet
+    const isRecording = (typeof TabManager !== 'undefined' && TabManager?.isRecording) || false;
+    
     const response = await fetch(`${CONFIG.API_URL}/training/console/heartbeat`, {
       method: 'POST',
       headers: {
@@ -78,10 +94,10 @@ async function sendHeartbeatToBackend() {
       },
       body: JSON.stringify({
         browserId,
-        version: '2.1.0',
+        version: '2.1.1',
         source: 'background',
         currentTab: 'active',
-        recordingActive: TabManager?.isRecording || false,
+        recordingActive: isRecording,
         timestamp: Date.now(),
       }),
     });
@@ -352,8 +368,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ 
         alive: true, 
         timestamp: Date.now(),
-        recording: TabManager?.isRecording || false,
-        tabs: TabManager?.recordingTabs?.size || 0
+        recording: (typeof TabManager !== 'undefined' && TabManager?.isRecording) || false,
+        tabs: (typeof TabManager !== 'undefined' && TabManager?.recordingTabs?.size) || 0
       });
       return true;
       
@@ -649,14 +665,7 @@ async function injectTrainingData(trainingData) {
 // MULTI-TAB MANAGEMENT
 // ============================================
 
-// Track recording state across tabs
-const TabManager = {
-  isRecording: false,
-  sessionId: null,
-  recordingTabs: new Map(), // tabId -> { index, type, url, events }
-  tabSequence: [],          // Order of tab switches
-  allEvents: [],            // All events from all tabs (merged)
-};
+// TabManager is defined at the top of the file (near CONFIG)
 
 /**
  * Start recording across all Facebook tabs
