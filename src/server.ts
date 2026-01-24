@@ -567,6 +567,7 @@ app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default)
 app.use('/api/messages', ring5AuthBarrier, require('./routes/message.routes').default); // Messages/conversations (requires auth)
 app.use('/api/analytics', ring5AuthBarrier, require('./routes/analytics.routes').default); // Analytics dashboard (requires auth)
 app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
+app.use('/api/session-analytics', require('./routes/session-analytics.routes').default); // Session & visitor analytics
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications
 app.use('/api/posting', ring5AuthBarrier, postingRoutes);                      // Auto-posting settings & triggers

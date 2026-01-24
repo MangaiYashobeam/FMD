@@ -27,6 +27,15 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   lastLoginAt   DateTime? @map("last_login_at")
 
+  // IntelliCeil Session Tracking
+  lastActiveAt      DateTime? @map("last_active_at")
+  loginCount        Int       @default(0) @map("login_count")
+  currentSessionId  String?   @map("current_session_id")
+  lastIpAddress     String?   @map("last_ip_address")
+  lastUserAgent     String?   @map("last_user_agent")
+  loginMethod       String?   @map("login_method") // 'email', 'google', 'facebook'
+  visitHeatScore    Int       @default(0) @map("visit_heat_score") // Frequency heat: 0-100
+
   // Two-Factor Authentication
   twoFactorEnabled     Boolean  @default(false) @map("two_factor_enabled")
   twoFactorSecret      String?  @map("two_factor_secret")
@@ -53,6 +62,7 @@ model User {
   fbmPostLogs         FBMPostLog[]
   iaiSoldiers         IAISoldier[]
   trainingSessions    TrainingSession[]
+  userSessions        UserSession[]
 
   @@map("users")
 }
@@ -3182,4 +3192,306 @@ model TrainingPattern {
   @@index([sessionId])
   @@index([patternType])
   @@map("training_patterns")
+}
+
+// ============================================
+// IntelliCeil Session & Visitor Analytics
+// ============================================
+
+// User Session - Authenticated user sessions
+model UserSession {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  sessionToken   String    @unique @map("session_token")
+  
+  // Session Info
+  ipAddress      String    @map("ip_address")
+  userAgent      String    @map("user_agent")
+  deviceType     String?   @map("device_type") // desktop, mobile, tablet
+  browser        String?
+  os             String?
+  
+  // Timing
+  loginAt        DateTime  @default(now()) @map("login_at")
+  lastActiveAt   DateTime  @default(now()) @map("last_active_at")
+  logoutAt       DateTime? @map("logout_at")
+  duration       Int?      @map("duration") // seconds
+  
+  // Status
+  isActive       Boolean   @default(true) @map("is_active")
+  loginMethod    String?   @map("login_method") // email, google, facebook
+  
+  // Security
+  ipInfo         Json?     @map("ip_info") // Full IP analysis data
+  botScore       Int       @default(0) @map("bot_score") // 0-100
+  threatLevel    String    @default("NORMAL") @map("threat_level")
+  
+  // Geolocation
+  country        String?
+  countryCode    String?   @map("country_code")
+  city           String?
+  latitude       Float?
+  longitude      Float?
+  timezone       String?
+  
+  // Relations
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities     SessionActivity[]
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([ipAddress])
+  @@index([loginAt])
+  @@index([isActive])
+  @@map("user_sessions")
+}
+
+// Session Activity - Actions within a session
+model SessionActivity {
+  id          String   @id @default(uuid())
+  sessionId   String   @map("session_id")
+  
+  // Activity Info
+  action      String   // page_view, api_call, login, logout, etc.
+  path        String?  // URL path
+  method      String?  // HTTP method
+  statusCode  Int?     @map("status_code")
+  responseMs  Int?     @map("response_ms")
+  
+  // Details
+  details     Json?
+  timestamp   DateTime @default(now())
+
+  // Relations
+  session     UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([timestamp])
+  @@index([action])
+  @@map("session_activities")
+}
+
+// Visitor - Anonymous/unauthenticated visitors
+model Visitor {
+  id                String    @id @default(uuid())
+  fingerprint       String    @unique // Browser fingerprint
+  
+  // Visit Frequency & Heat
+  visitCount        Int       @default(1) @map("visit_count")
+  heatScore         Int       @default(0) @map("heat_score") // 0-100, frequency indicator
+  firstVisitAt      DateTime  @default(now()) @map("first_visit_at")
+  lastVisitAt       DateTime  @default(now()) @map("last_visit_at")
+  
+  // Visit Classification
+  visitorType       String    @default("first_time") @map("visitor_type") // first_time, returning, frequent, loyal
+  potentialUser     Boolean   @default(false) @map("potential_user")
+  potentialScore    Int       @default(0) @map("potential_score") // 0-100
+  
+  // Conversion
+  convertedAt       DateTime? @map("converted_at")
+  convertedUserId   String?   @map("converted_user_id")
+  
+  // Last Known Info
+  lastIpAddress     String?   @map("last_ip_address")
+  lastUserAgent     String?   @map("last_user_agent")
+  lastCountry       String?   @map("last_country")
+  lastCity          String?   @map("last_city")
+  
+  // Bot Detection
+  isBotConfirmed    Boolean   @default(false) @map("is_bot_confirmed")
+  botScore          Int       @default(0) @map("bot_score")
+  botIndicators     String[]  @default([]) @map("bot_indicators")
+  botName           String?   @map("bot_name") // Googlebot, Bingbot, etc.
+  
+  // Relations
+  visits            VisitorSession[]
+
+  @@index([fingerprint])
+  @@index([heatScore])
+  @@index([visitorType])
+  @@index([isBotConfirmed])
+  @@map("visitors")
+}
+
+// Visitor Session - Individual visit sessions for anonymous users
+model VisitorSession {
+  id            String   @id @default(uuid())
+  visitorId     String   @map("visitor_id")
+  
+  // Session Info
+  sessionToken  String   @unique @map("session_token")
+  ipAddress     String   @map("ip_address")
+  userAgent     String   @map("user_agent")
+  
+  // Timing
+  startedAt     DateTime @default(now()) @map("started_at")
+  endedAt       DateTime? @map("ended_at")
+  duration      Int?
+  pageViews     Int      @default(0) @map("page_views")
+  
+  // Journey
+  entryPage     String?  @map("entry_page")
+  exitPage      String?  @map("exit_page")
+  referrer      String?
+  
+  // Device
+  deviceType    String?  @map("device_type")
+  browser       String?
+  os            String?
+  
+  // Geolocation
+  country       String?
+  countryCode   String?  @map("country_code")
+  city          String?
+  latitude      Float?
+  longitude     Float?
+  
+  // IP Analysis
+  ipInfo        Json?    @map("ip_info")
+  botScore      Int      @default(0) @map("bot_score")
+  
+  // Relations
+  visitor       Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  pageViewed    VisitorPageView[]
+
+  @@index([visitorId])
+  @@index([sessionToken])
+  @@index([ipAddress])
+  @@index([startedAt])
+  @@map("visitor_sessions")
+}
+
+// Visitor Page Views
+model VisitorPageView {
+  id          String   @id @default(uuid())
+  sessionId   String   @map("session_id")
+  
+  path        String
+  title       String?
+  duration    Int?     // seconds on page
+  scrollDepth Int?     @map("scroll_depth") // percentage
+  timestamp   DateTime @default(now())
+
+  // Relations
+  session     VisitorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([path])
+  @@map("visitor_page_views")
+}
+
+// IP Intelligence - Detailed IP analysis cache
+model IPIntelligence {
+  id             String   @id @default(uuid())
+  ipAddress      String   @unique @map("ip_address")
+  
+  // Geolocation
+  country        String?
+  countryCode    String?  @map("country_code")
+  region         String?
+  city           String?
+  latitude       Float?
+  longitude      Float?
+  timezone       String?
+  isp            String?
+  org            String?
+  asn            String?
+  
+  // Threat Assessment
+  threatScore    Int      @default(0) @map("threat_score") // 0-100
+  threatLevel    String   @default("NORMAL") @map("threat_level") // NORMAL, LOW, MEDIUM, HIGH, CRITICAL
+  isProxy        Boolean  @default(false) @map("is_proxy")
+  isVpn          Boolean  @default(false) @map("is_vpn")
+  isTor          Boolean  @default(false) @map("is_tor")
+  isDatacenter   Boolean  @default(false) @map("is_datacenter")
+  isKnownAbuser  Boolean  @default(false) @map("is_known_abuser")
+  
+  // Bot Detection
+  isBotConfirmed Boolean  @default(false) @map("is_bot_confirmed")
+  botScore       Int      @default(0) @map("bot_score")
+  botName        String?  @map("bot_name")
+  botType        String?  @map("bot_type") // search_engine, scraper, monitoring, malicious
+  botIdentifiers String[] @default([]) @map("bot_identifiers")
+  
+  // Request Statistics
+  totalRequests  Int      @default(0) @map("total_requests")
+  requestsToday  Int      @default(0) @map("requests_today")
+  lastRequestAt  DateTime @default(now()) @map("last_request_at")
+  firstSeenAt    DateTime @default(now()) @map("first_seen_at")
+  
+  // Block Status
+  isBlocked      Boolean  @default(false) @map("is_blocked")
+  blockedAt      DateTime? @map("blocked_at")
+  blockedReason  String?  @map("blocked_reason")
+  autoBlocked    Boolean  @default(false) @map("auto_blocked")
+  
+  // Cache
+  lastUpdated    DateTime @default(now()) @map("last_updated")
+  rawData        Json?    @map("raw_data")
+
+  @@index([ipAddress])
+  @@index([threatScore])
+  @@index([isBotConfirmed])
+  @@index([isBlocked])
+  @@map("ip_intelligence")
+}
+
+// Known Bots Registry
+model KnownBot {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  type            String   // search_engine, scraper, monitoring, security, malicious
+  
+  // Identification
+  userAgentPattern String? @map("user_agent_pattern")
+  ipRanges         String[] @default([]) @map("ip_ranges")
+  
+  // Classification
+  isGood           Boolean  @default(false) @map("is_good") // Googlebot = good, Scraper = bad
+  description      String?
+  website          String?
+  
+  // Stats
+  lastSeenAt       DateTime? @map("last_seen_at")
+  totalRequests    Int       @default(0) @map("total_requests")
+  
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([type])
+  @@map("known_bots")
+}
+
+// Admin Login Audit
+model AdminLoginAudit {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  email         String
+  role          String
+  
+  // Login Details
+  ipAddress     String   @map("ip_address")
+  userAgent     String   @map("user_agent")
+  loginMethod   String   @map("login_method")
+  
+  // Status
+  success       Boolean  @default(true)
+  failureReason String?  @map("failure_reason")
+  
+  // Geolocation
+  country       String?
+  city          String?
+  
+  // Security
+  suspicious    Boolean  @default(false)
+  suspiciousReasons String[] @default([]) @map("suspicious_reasons")
+  
+  timestamp     DateTime @default(now())
+
+  @@index([userId])
+  @@index([email])
+  @@index([timestamp])
+  @@index([ipAddress])
+  @@map("admin_login_audit")
 }

@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Send,
   Zap,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
@@ -42,6 +43,7 @@ const navigation = [
   { name: 'Email', href: '/admin/email', icon: Mail },
   { name: 'Reports & Alerts', href: '/admin/email-settings', icon: FileText },
   { name: 'Audit Logs', href: '/admin/audit', icon: Activity },
+  { name: 'Session Analytics', href: '/admin/session-analytics', icon: BarChart3 },
   { name: 'Intelliceil', href: '/admin/security', icon: ShieldAlert },
   { name: 'IIPC', href: '/admin/iipc', icon: Network },
   { name: 'Settings', href: '/admin/settings', icon: Settings },

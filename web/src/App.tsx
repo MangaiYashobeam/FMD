@@ -63,6 +63,7 @@ import APIDashboardPage from './pages/admin/APIDashboardPage';
 import ErrorMonitoringPage from './pages/admin/ErrorMonitoringPage';
 import FBMPostsPage from './pages/admin/FBMPostsPage';
 import IAICommandCenter from './pages/admin/IAICommandCenterV2';
+import SessionAnalyticsPage from './pages/admin/SessionAnalyticsPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -150,6 +151,7 @@ function App() {
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="settings" element={<SystemSettingsPage />} />
               <Route path="security" element={<IntelliceilPage />} />
+              <Route path="session-analytics" element={<SessionAnalyticsPage />} />
               <Route path="iipc" element={<IIPCPage />} />
               <Route path="ai-center" element={<AICenterPage />} />
               <Route path="facebook" element={<FacebookConfigPage />} />

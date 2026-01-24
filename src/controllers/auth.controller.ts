@@ -9,6 +9,8 @@ import { logger } from '@/utils/logger';
 import { AuthRequest } from '@/middleware/auth';
 import { emailService } from '@/services/email.service';
 import { getJwtSecret, getJwtRefreshSecret } from '@/config/security';
+import { recordLogin, recordLogout, getClientIP, linkVisitorToUser } from '@/middleware/session-tracker';
+import { ipIntelligenceService } from '@/services/ip-intelligence.service';
 
 export class AuthController {
   /**
@@ -226,13 +228,31 @@ export class AuthController {
         },
       });
 
-      logger.info(`Login step 7: Updating last login`);
+      logger.info(`Login step 7: Recording session & updating login`);
 
-      // Update last login
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastLoginAt: new Date() },
-      });
+      // Get IP and user agent for session tracking
+      const ipAddress = getClientIP(req);
+      const userAgent = req.get('user-agent') || 'Unknown';
+      const userRole = user.accountUsers[0]?.role || 'VIEWER';
+      
+      // Record login with full session tracking
+      await recordLogin(
+        user.id,
+        user.email,
+        userRole,
+        ipAddress,
+        userAgent,
+        'email',
+        true
+      );
+      
+      // Link any visitor session to this user
+      const fingerprint = ipIntelligenceService.generateFingerprint(
+        ipAddress,
+        userAgent,
+        req.get('accept-language') || ''
+      );
+      await linkVisitorToUser(fingerprint, user.id);
 
       logger.info(`Login step 8: Creating audit log`);
 
@@ -399,6 +419,9 @@ export class AuthController {
         },
       });
     }
+
+    // Record logout and finalize session
+    await recordLogout(req.user!.id);
 
     // Log logout
     await prisma.auditLog.create({
