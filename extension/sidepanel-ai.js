@@ -697,19 +697,27 @@ function showModalView(view) {
  */
 async function fetchVehicles() {
   try {
+    console.log('🚗 [Sidepanel] Fetching vehicles...');
     const response = await sendMessage({ type: 'GET_VEHICLES' });
+    
+    console.log('🚗 [Sidepanel] Response received:', JSON.stringify(response).substring(0, 300));
+    console.log('🚗 [Sidepanel] response.success:', response?.success);
+    console.log('🚗 [Sidepanel] response.data:', response?.data);
+    console.log('🚗 [Sidepanel] response.data?.length:', response?.data?.length);
     
     elements.vehicleSkeleton.style.display = 'none';
     
-    if (response.success && response.data?.length > 0) {
+    if (response && response.success && response.data && response.data.length > 0) {
+      console.log('🚗 [Sidepanel] ✅ Rendering', response.data.length, 'vehicles');
       vehicles = response.data;
       renderVehicleList(vehicles);
       elements.postingOptions.style.display = 'block';
     } else {
+      console.log('🚗 [Sidepanel] ❌ No vehicles or unsuccessful response');
       elements.emptyState.style.display = 'block';
     }
   } catch (error) {
-    console.error('Failed to fetch vehicles:', error);
+    console.error('🚗 [Sidepanel] Failed to fetch vehicles:', error);
     elements.vehicleSkeleton.style.display = 'none';
     elements.emptyState.style.display = 'block';
     elements.emptyState.querySelector('p').textContent = 

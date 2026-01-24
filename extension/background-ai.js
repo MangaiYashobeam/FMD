@@ -850,7 +850,15 @@ async function distributeTask(task) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender)
-    .then(result => sendResponse({ success: true, data: result }))
+    .then(result => {
+      // If the result already has success/data structure, pass it through directly
+      // Otherwise wrap it in the standard format
+      if (result && typeof result === 'object' && 'success' in result) {
+        sendResponse(result);
+      } else {
+        sendResponse({ success: true, data: result });
+      }
+    })
     .catch(error => sendResponse({ success: false, error: error.message }));
   return true; // Keep channel open for async response
 });
