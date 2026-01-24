@@ -314,8 +314,15 @@
   // ============================================
   
   function recordEvent(type, data) {
-    if (!RecorderState.isRecording) return;
-    if (RecorderState.isPaused) return;
+    console.log('[CONTENT DEBUG] recordEvent called:', type);
+    if (!RecorderState.isRecording) {
+      console.log('[CONTENT DEBUG] recordEvent: not recording, returning');
+      return;
+    }
+    if (RecorderState.isPaused) {
+      console.log('[CONTENT DEBUG] recordEvent: paused, returning');
+      return;
+    }
     
     // Check config for specific event types
     if (type === 'scroll' && !CONFIG.captureScrolls) return;
@@ -374,11 +381,20 @@
   // ============================================
   
   function handleClick(e) {
+    console.log('[CONTENT DEBUG] handleClick triggered, isRecording:', RecorderState.isRecording);
+    RecorderState._clickHandled = true;  // Flag that click handler fired
     if (!RecorderState.isRecording) return;
     
     const element = e.target;
     const elementInfo = extractElementInfo(element);
     const fieldType = detectFieldType(elementInfo);
+    console.log('[CONTENT DEBUG] Click recorded on:', { 
+      element: element.tagName, 
+      fieldType,
+      ariaLabel: element.getAttribute?.('aria-label'),
+      id: element.id,
+      className: element.className?.substring?.(0, 50)
+    });
     
     // Check if Ctrl+Click (mark as high-interest)
     const isMarked = e.ctrlKey || e.metaKey;
@@ -772,11 +788,14 @@
   // ============================================
   
   function startRecording(options = {}) {
+    console.log('[CONTENT DEBUG] startRecording called with options:', options);
     if (RecorderState.isRecording) {
+      console.log('[CONTENT DEBUG] Already recording, returning');
       log('Already recording');
       return;
     }
     
+    console.log('[CONTENT DEBUG] Initializing recording state');
     RecorderState.isRecording = true;
     RecorderState.sessionId = `session_${Date.now()}`;
     RecorderState.startTime = Date.now();
@@ -786,8 +805,11 @@
     RecorderState.metadata.recordingType = options.recordingType || 'iai';
     RecorderState.metadata.url = window.location.href;
     
-    // Add event listeners
+    console.log('[CONTENT DEBUG] Adding event listeners to document');
+    
+    // Add event listeners with capture phase (true) to catch events before Facebook handles them
     document.addEventListener('click', handleClick, true);
+    document.addEventListener('mousedown', handleMouseDown, true);  // Also capture mousedown
     document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('input', handleInput, true);
     document.addEventListener('change', handleChange, true);
@@ -796,17 +818,27 @@
     document.addEventListener('blur', handleBlur, true);
     document.addEventListener('drop', handleDrop, true);
     
+    // Also add to window for events that might bubble there
+    window.addEventListener('click', handleClickWindow, true);
+    window.addEventListener('mousedown', handleMouseDownWindow, true);
+    
+    console.log('[CONTENT DEBUG] Setting up file inputs');
     // File inputs
     document.querySelectorAll('input[type="file"]').forEach(input => {
       input.addEventListener('change', handleFileSelect);
     });
     
+    console.log('[CONTENT DEBUG] Setting up mutation observer');
     // Setup observers
     setupMutationObserver();
     
     // URL change polling
     setInterval(checkUrlChange, 500);
     
+    // Set up Shadow DOM observer to catch events in React/Facebook shadow trees
+    setupShadowDOMObserver();
+    
+    console.log('[CONTENT DEBUG] Showing recording indicator');
     // Show recording indicator
     showRecordingIndicator();
     
@@ -821,7 +853,105 @@
       },
     });
     
+    // Confirm to sidebar that recording started
+    try {
+      chrome.runtime.sendMessage({
+        type: 'RECORDING_STARTED',
+        sessionId: RecorderState.sessionId,
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      console.log('[CONTENT DEBUG] Could not notify sidebar:', e.message);
+    }
+    
+    console.log('[CONTENT DEBUG] Recording started successfully:', RecorderState.sessionId);
+    console.log('[CONTENT DEBUG] === EVENT LISTENERS ACTIVE ===');
+    console.log('[CONTENT DEBUG] isRecording:', RecorderState.isRecording);
     log('Recording started', RecorderState.sessionId);
+  }
+  
+  /**
+   * Handle mousedown events (sometimes click doesn't fire on React elements)
+   */
+  function handleMouseDown(e) {
+    console.log('[CONTENT DEBUG] handleMouseDown triggered');
+    if (!RecorderState.isRecording) return;
+    
+    // Don't double-record, just track that we got the mousedown
+    RecorderState._lastMouseDown = {
+      target: e.target,
+      x: e.clientX,
+      y: e.clientY,
+      timestamp: Date.now()
+    };
+  }
+  
+  /**
+   * Window-level click handler (backup)
+   */
+  function handleClickWindow(e) {
+    console.log('[CONTENT DEBUG] handleClickWindow triggered');
+    // If the regular click handler didn't fire (checked via flag), record here
+    if (!RecorderState._clickHandled && RecorderState.isRecording) {
+      console.log('[CONTENT DEBUG] Recording from window click handler (document handler missed)');
+      handleClick(e);
+    }
+    RecorderState._clickHandled = false;
+  }
+  
+  /**
+   * Window-level mousedown handler (backup)
+   */
+  function handleMouseDownWindow(e) {
+    console.log('[CONTENT DEBUG] handleMouseDownWindow triggered');
+    // Track for debugging
+  }
+  
+  /**
+   * Setup Shadow DOM observer for Facebook's React components
+   */
+  function setupShadowDOMObserver() {
+    console.log('[CONTENT DEBUG] Setting up Shadow DOM observer');
+    
+    // Facebook heavily uses React portals and dynamic DOM
+    // Set up a MutationObserver to find and attach to shadow roots
+    const shadowObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.shadowRoot) {
+            attachShadowListeners(node.shadowRoot);
+          }
+          // Also check descendants
+          if (node.querySelectorAll) {
+            node.querySelectorAll('*').forEach(child => {
+              if (child.shadowRoot) {
+                attachShadowListeners(child.shadowRoot);
+              }
+            });
+          }
+        }
+      }
+    });
+    
+    shadowObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+    
+    // Attach to any existing shadow roots
+    document.querySelectorAll('*').forEach(el => {
+      if (el.shadowRoot) {
+        attachShadowListeners(el.shadowRoot);
+      }
+    });
+  }
+  
+  function attachShadowListeners(shadowRoot) {
+    console.log('[CONTENT DEBUG] Attaching listeners to shadow root');
+    shadowRoot.addEventListener('click', handleClick, true);
+    shadowRoot.addEventListener('keydown', handleKeyDown, true);
+    shadowRoot.addEventListener('input', handleInput, true);
+    shadowRoot.addEventListener('change', handleChange, true);
   }
 
   function stopRecording() {
@@ -843,8 +973,9 @@
     
     RecorderState.isRecording = false;
     
-    // Remove event listeners
+    // Remove event listeners from document
     document.removeEventListener('click', handleClick, true);
+    document.removeEventListener('mousedown', handleMouseDown, true);
     document.removeEventListener('keydown', handleKeyDown, true);
     document.removeEventListener('input', handleInput, true);
     document.removeEventListener('change', handleChange, true);
@@ -852,6 +983,10 @@
     document.removeEventListener('focus', handleFocus, true);
     document.removeEventListener('blur', handleBlur, true);
     document.removeEventListener('drop', handleDrop, true);
+    
+    // Remove window listeners
+    window.removeEventListener('click', handleClickWindow, true);
+    window.removeEventListener('mousedown', handleMouseDownWindow, true);
     
     // Stop mutation observer
     if (mutationObserver) {
@@ -1243,15 +1378,22 @@
   // ============================================
   
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('[CONTENT DEBUG] Message received:', message.type, message);
     log('Message received:', message.type);
     
     switch (message.type) {
       // PING - Used to check if content script is loaded
       case 'PING':
+        console.log('[CONTENT DEBUG] PING received, responding with pong');
         sendResponse({ pong: true, isRecording: RecorderState.isRecording });
         break;
         
       case 'START_RECORDING':
+        console.log('[CONTENT DEBUG] START_RECORDING received:', {
+          mode: message.mode,
+          config: message.config,
+          options: message.options
+        });
         // Apply config if provided
         if (message.config) {
           applyConfig(message.config);
@@ -1259,7 +1401,9 @@
         if (message.mode) {
           RecorderState.currentMode = message.mode;
         }
+        console.log('[CONTENT DEBUG] Calling startRecording...');
         startRecording(message.options || {});
+        console.log('[CONTENT DEBUG] startRecording completed, sessionId:', RecorderState.sessionId);
         sendResponse({ success: true, sessionId: RecorderState.sessionId });
         break;
         
@@ -1294,12 +1438,18 @@
         break;
       
       case 'GET_RECORDING_STATUS':
+        console.log('[CONTENT DEBUG] GET_RECORDING_STATUS received');
         const counts = {
           events: RecorderState.events.length,
           clicks: RecorderState.events.filter(e => e.type === 'click').length,
           inputs: RecorderState.events.filter(e => e.type === 'typing' || e.type === 'input').length,
           marks: RecorderState.markedElements.length,
         };
+        console.log('[CONTENT DEBUG] Current recording status:', {
+          isRecording: RecorderState.isRecording,
+          counts,
+          sessionId: RecorderState.sessionId
+        });
         sendResponse({
           isRecording: RecorderState.isRecording,
           isPaused: RecorderState.isPaused || false,
@@ -1447,7 +1597,33 @@
   // INITIALIZATION
   // ============================================
   
+  console.log('%c[FMD Recorder] ========================================', 'background: #8b5cf6; color: white; font-size: 14px; padding: 4px 8px;');
+  console.log('%c[FMD Recorder] Content script loaded on: ' + window.location.href, 'background: #8b5cf6; color: white; font-size: 12px; padding: 2px 8px;');
+  console.log('%c[FMD Recorder] ========================================', 'background: #8b5cf6; color: white; font-size: 14px; padding: 4px 8px;');
+  console.log('[FMD Recorder] To debug, open browser console and type: window.__FMD_RECORDER__.getState()');
+  console.log('[FMD Recorder] To manually start recording: window.__FMD_RECORDER__.startRecording()');
   log('FMD Training Recorder loaded');
+  
+  // Send a message to background that we're ready
+  try {
+    chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', url: window.location.href })
+      .then(response => console.log('[FMD Recorder] Background acknowledged:', response))
+      .catch(err => console.log('[FMD Recorder] Background not available:', err.message));
+  } catch (e) {
+    console.log('[FMD Recorder] Could not notify background:', e.message);
+  }
+  
+  // Add a global test to verify event listeners work
+  // This fires once to verify the capture phase works
+  setTimeout(() => {
+    console.log('[FMD Recorder] Running capture phase test...');
+    const testHandler = (e) => {
+      console.log('%c[FMD Recorder] ✓ Capture phase works! Detected:', 'color: #22c55e;', e.type, 'on', e.target?.tagName);
+      document.removeEventListener('click', testHandler, true);
+    };
+    document.addEventListener('click', testHandler, true);
+    console.log('[FMD Recorder] Click anywhere to verify event capture...');
+  }, 1000);
   
   // Expose for debugging
   window.__FMD_RECORDER__ = {
@@ -1456,6 +1632,29 @@
     stopRecording,
     getEvents: () => RecorderState.events,
     getMarkedElements: () => RecorderState.markedElements,
+    // Debug helpers
+    forceRecordClick: () => {
+      console.log('[FMD Recorder] Forcing test click record');
+      recordEvent('click', {
+        element: { tagName: 'TEST', id: 'test-element' },
+        fieldType: null,
+        isMarked: false,
+        mousePosition: { clientX: 0, clientY: 0, pageX: 0, pageY: 0 },
+        modifiers: { ctrl: false, shift: false, alt: false, meta: false },
+        button: 0,
+      });
+      console.log('[FMD Recorder] Events after force:', RecorderState.events.length);
+    },
+    debug: () => {
+      console.log('=== FMD Recorder Debug ===');
+      console.log('isRecording:', RecorderState.isRecording);
+      console.log('sessionId:', RecorderState.sessionId);
+      console.log('events:', RecorderState.events.length);
+      console.log('markedElements:', RecorderState.markedElements.length);
+      console.log('mode:', RecorderState.currentMode);
+      console.log('Last 3 events:', RecorderState.events.slice(-3));
+      return RecorderState;
+    }
   };
   
 })();

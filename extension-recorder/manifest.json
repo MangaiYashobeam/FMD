@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FMD Training Recorder - Super Admin",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Records DOM interactions for IAI/Soldier training - Super Admin Console",
   "permissions": [
     "activeTab",
@@ -34,7 +34,7 @@
       ],
       "js": ["recorder.js"],
       "css": ["recorder.css"],
-      "run_at": "document_start",
+      "run_at": "document_idle",
       "all_frames": true
     }
   ],

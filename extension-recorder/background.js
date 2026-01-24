@@ -1,12 +1,13 @@
 /**
  * FMD Training Recorder - Background Service Worker
- * SUPER ADMIN ROOT CONSOLE v2.0
+ * SUPER ADMIN ROOT CONSOLE v2.1
  * 
  * Handles:
  * - Recording session management
  * - API communication with backend
  * - Training data storage and retrieval
  * - Side panel management
+ * - Keepalive mechanism for service worker
  */
 
 // ============================================
@@ -17,7 +18,198 @@ const CONFIG = {
   API_URL: 'https://dealersface.com/api',
   // API_URL: 'http://localhost:5000/api',
   AUTH_TOKEN_KEY: 'fmd_admin_token',
+  KEEPALIVE_INTERVAL: 20000, // 20 seconds keepalive (internal only)
+  HEARTBEAT_INTERVAL: 60000, // 60 seconds heartbeat to backend (increased to avoid rate limiting)
 };
+
+// ============================================
+// SERVICE WORKER KEEPALIVE
+// This prevents the service worker from going to sleep
+// ============================================
+
+let keepaliveInterval = null;
+let heartbeatInterval = null;
+let heartbeatBackoffUntil = null;
+let heartbeatFailCount = 0;
+
+function startKeepalive() {
+  console.log('[Recorder BG] Starting keepalive mechanism');
+  
+  // Clear existing intervals
+  if (keepaliveInterval) clearInterval(keepaliveInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  
+  // Internal keepalive - just to keep service worker alive (no network calls)
+  keepaliveInterval = setInterval(() => {
+    console.log('[Recorder BG] Keepalive tick', new Date().toISOString());
+  }, CONFIG.KEEPALIVE_INTERVAL);
+  
+  // Backend heartbeat - to maintain connection with IAI Panel
+  // NOTE: sidebar.js also sends heartbeats at 30s, so background uses 60s to reduce overlap
+  heartbeatInterval = setInterval(sendHeartbeatToBackend, CONFIG.HEARTBEAT_INTERVAL);
+  
+  // Send initial heartbeat after a small delay (to let sidebar go first)
+  setTimeout(sendHeartbeatToBackend, 5000);
+}
+
+async function sendHeartbeatToBackend() {
+  try {
+    // Check if we're in backoff period
+    if (heartbeatBackoffUntil && Date.now() < heartbeatBackoffUntil) {
+      const remainingMs = heartbeatBackoffUntil - Date.now();
+      console.log(`[Recorder BG] Heartbeat skipped - in backoff for ${Math.ceil(remainingMs/1000)}s more`);
+      return;
+    }
+    
+    const token = await getAuthToken();
+    const browserId = await getBrowserId();
+    
+    const response = await fetch(`${CONFIG.API_URL}/training/console/heartbeat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      },
+      body: JSON.stringify({
+        browserId,
+        version: '2.1.0',
+        source: 'background',
+        currentTab: 'active',
+        recordingActive: TabManager?.isRecording || false,
+        timestamp: Date.now(),
+      }),
+    });
+    
+    if (response.ok) {
+      console.log('[Recorder BG] Heartbeat sent successfully');
+      // Reset backoff on success
+      heartbeatFailCount = 0;
+      heartbeatBackoffUntil = null;
+      // Broadcast to sidebar that connection is alive
+      chrome.runtime.sendMessage({ 
+        type: 'BACKEND_HEARTBEAT_SUCCESS',
+        timestamp: Date.now()
+      }).catch(() => {});
+    } else if (response.status === 429) {
+      // Rate limited - implement exponential backoff
+      heartbeatFailCount++;
+      const backoffSeconds = Math.min(120, 60 * Math.pow(2, heartbeatFailCount - 1)); // 60s, 120s, capped at 120s
+      heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
+      console.warn(`[Recorder BG] Rate limited (429) - backing off for ${backoffSeconds}s`);
+    } else {
+      console.warn('[Recorder BG] Heartbeat failed:', response.status);
+      heartbeatFailCount++;
+      if (heartbeatFailCount >= 3) {
+        const backoffSeconds = 30;
+        heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
+      }
+    }
+  } catch (error) {
+    console.error('[Recorder BG] Heartbeat error:', error.message);
+    heartbeatFailCount++;
+    if (heartbeatFailCount >= 2) {
+      const backoffSeconds = 30;
+      heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
+    }
+  }
+}
+
+/**
+ * Log a message to the backend health log system
+ */
+async function logToBackend(type, message, data = null) {
+  try {
+    await fetch(`${CONFIG.API_URL}/training/console/log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type,
+        source: 'extension',
+        message,
+        data,
+      }),
+    });
+  } catch (error) {
+    console.error('[Recorder BG] Failed to log to backend:', error.message);
+  }
+}
+
+async function getBrowserId() {
+  const result = await chrome.storage.local.get('fmd_browser_id');
+  if (result.fmd_browser_id) {
+    return result.fmd_browser_id;
+  }
+  const browserId = 'browser_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  await chrome.storage.local.set({ fmd_browser_id: browserId });
+  return browserId;
+}
+
+// Start keepalive when background script loads
+startKeepalive();
+
+// Log startup
+logToBackend('connection', 'Extension background script started');
+
+// ============================================
+// TAB QUERY HANDLERS
+// These are separated out to ensure they execute reliably
+// ============================================
+
+async function getActiveTabHandler(sendResponse) {
+  console.log('[Recorder BG] getActiveTabHandler executing...');
+  try {
+    // First try: active tab in current window
+    let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    let tab = tabs[0];
+    console.log('[Recorder BG] Active tab query result:', tab ? { id: tab.id, url: tab.url } : 'none');
+    
+    // If no active tab, try last focused window
+    if (!tab) {
+      console.log('[Recorder BG] No active tab, trying lastFocusedWindow...');
+      tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      tab = tabs[0];
+    }
+    
+    // If still no tab, get any Facebook tab
+    if (!tab) {
+      console.log('[Recorder BG] No active tab, trying Facebook tabs...');
+      const fbTabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+      if (fbTabs.length > 0) {
+        tab = fbTabs[0];
+        console.log('[Recorder BG] Using first Facebook tab:', tab.id, tab.url);
+      }
+    }
+    
+    // Last resort: any tab
+    if (!tab) {
+      console.log('[Recorder BG] Getting any tab as last resort...');
+      const allTabs = await chrome.tabs.query({});
+      if (allTabs.length > 0) {
+        tab = allTabs[0];
+      }
+    }
+    
+    console.log('[Recorder BG] Final GET_ACTIVE_TAB result:', tab ? { id: tab.id, url: tab.url } : 'no tab found');
+    sendResponse({ success: !!tab, tab: tab || null });
+  } catch (error) {
+    console.error('[Recorder BG] GET_ACTIVE_TAB error:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+async function getFacebookTabsHandler(sendResponse) {
+  console.log('[Recorder BG] getFacebookTabsHandler executing...');
+  try {
+    const fbTabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+    console.log('[Recorder BG] Facebook tabs found:', fbTabs.length, fbTabs.map(t => ({ id: t.id, url: t.url?.substring(0, 50) })));
+    sendResponse({ success: true, tabs: fbTabs });
+  } catch (error) {
+    console.error('[Recorder BG] GET_FACEBOOK_TABS error:', error);
+    sendResponse({ success: false, error: error.message, tabs: [] });
+  }
+}
 
 // ============================================
 // SIDE PANEL INITIALIZATION
@@ -134,11 +326,53 @@ async function syncLocalSessions() {
 // ============================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[Recorder BG] Message:', message.type);
+  const messageTime = new Date().toISOString();
+  console.log(`[Recorder BG ${messageTime}] Message:`, message.type, 'from:', sender.tab?.id || 'sidebar');
   
+  // Handle synchronous messages that need immediate response
+  switch (message.type) {
+    case 'PING':
+      console.log('[Recorder BG] PING received - responding with PONG');
+      sendResponse({ pong: true, timestamp: Date.now() });
+      return true;
+      
+    case 'CONTENT_SCRIPT_READY':
+      console.log('[Recorder BG] Content script ready on tab:', sender.tab?.id, 'url:', message.url);
+      sendResponse({ acknowledged: true });
+      return true;
+      
+    case 'HEALTH_CHECK':
+      console.log('[Recorder BG] Health check received');
+      sendResponse({ 
+        alive: true, 
+        timestamp: Date.now(),
+        recording: TabManager?.isRecording || false,
+        tabs: TabManager?.recordingTabs?.size || 0
+      });
+      return true;
+      
+    // CRITICAL: Handle tab queries with explicit async handling
+    case 'GET_ACTIVE_TAB':
+      console.log('[Recorder BG] GET_ACTIVE_TAB received');
+      getActiveTabHandler(sendResponse);
+      return true; // Keep channel open for async response
+      
+    case 'GET_FACEBOOK_TABS':
+      console.log('[Recorder BG] GET_FACEBOOK_TABS received');
+      getFacebookTabsHandler(sendResponse);
+      return true; // Keep channel open for async response
+  }
+  
+  // Handle async messages
   handleMessage(message, sender)
-    .then(sendResponse)
-    .catch(error => sendResponse({ success: false, error: error.message }));
+    .then(response => {
+      console.log(`[Recorder BG] Response for ${message.type}:`, response);
+      sendResponse(response);
+    })
+    .catch(error => {
+      console.error(`[Recorder BG] Error handling ${message.type}:`, error);
+      sendResponse({ success: false, error: error.message });
+    });
   
   return true;
 });
@@ -264,30 +498,43 @@ async function handleMessage(message, sender) {
     
     case 'PING_TAB':
       // Relay PING to content script
+      console.log('[BG DEBUG] PING_TAB received for tab:', message.tabId);
       try {
         const pingResult = await chrome.tabs.sendMessage(message.tabId, { type: 'PING' });
+        console.log('[BG DEBUG] PING response:', pingResult);
         return { success: true, pong: pingResult?.pong };
       } catch (error) {
+        console.error('[BG DEBUG] PING_TAB error:', error);
         return { success: false, error: error.message };
       }
     
     case 'START_RECORDING_TAB':
       // Start recording on a specific tab
+      console.log('[BG DEBUG] START_RECORDING_TAB received:', {
+        tabId: message.tabId,
+        mode: message.mode,
+        config: message.config
+      });
       try {
+        console.log('[BG DEBUG] Sending START_RECORDING to tab', message.tabId);
         const startResult = await chrome.tabs.sendMessage(message.tabId, {
           type: 'START_RECORDING',
           mode: message.mode || 'training',
           config: message.config || {}
         });
+        console.log('[BG DEBUG] START_RECORDING response from content script:', startResult);
         return startResult;
       } catch (error) {
+        console.error('[BG DEBUG] START_RECORDING_TAB error:', error);
         return { success: false, error: error.message };
       }
     
     case 'STOP_RECORDING_TAB':
       // Stop recording on a specific tab
+      console.log('[BG DEBUG] STOP_RECORDING_TAB received for tab:', message.tabId);
       try {
         const stopResult = await chrome.tabs.sendMessage(message.tabId, { type: 'STOP_RECORDING' });
+        console.log('[BG DEBUG] STOP_RECORDING response:', stopResult);
         return stopResult;
       } catch (error) {
         return { success: false, error: error.message };
@@ -325,10 +572,13 @@ async function handleMessage(message, sender) {
     
     case 'GET_RECORDING_STATUS_TAB':
       // Get recording status from a specific tab
+      console.log('[BG DEBUG] GET_RECORDING_STATUS_TAB for tab:', message.tabId);
       try {
         const statusResult = await chrome.tabs.sendMessage(message.tabId, { type: 'GET_RECORDING_STATUS' });
+        console.log('[BG DEBUG] GET_RECORDING_STATUS_TAB response:', statusResult);
         return statusResult;
       } catch (error) {
+        console.error('[BG DEBUG] GET_RECORDING_STATUS_TAB error:', error);
         return { success: false, error: error.message };
       }
     
@@ -348,26 +598,11 @@ async function handleMessage(message, sender) {
         return { success: false, error: error.message };
       }
     
-    case 'GET_ACTIVE_TAB':
-      // Get the currently active tab
-      try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        return { success: true, tab };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    
-    case 'GET_FACEBOOK_TABS':
-      // Get all Facebook tabs
-      try {
-        const fbTabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
-        return { success: true, tabs: fbTabs };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
+    // GET_ACTIVE_TAB and GET_FACEBOOK_TABS are now handled in sync section above
       
     default:
-      return { success: false, error: 'Unknown message type' };
+      console.log('[Recorder BG] Unknown message type:', message.type);
+      return { success: false, error: `Unknown message type: ${message.type}` };
   }
 }
 

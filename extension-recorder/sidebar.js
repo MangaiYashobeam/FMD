@@ -33,7 +33,10 @@ const ConsoleState = {
   contentScriptReady: false,
   lastHeartbeat: null,
   connectionRetries: 0,
-  maxRetries: 5
+  maxRetries: 5,
+  // Rate limiting backoff
+  heartbeatBackoffUntil: null,
+  heartbeatFailCount: 0
 };
 
 // Heartbeat interval
@@ -62,6 +65,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   log('System initialized', 'success');
   
+  // Test background script connection immediately
+  try {
+    console.log('[Console] Testing background script connection...');
+    const testResponse = await sendMessageWithTimeout({ type: 'GET_ACTIVE_TAB' }, 3000);
+    console.log('[Console] Background script test response:', testResponse);
+    log('Background script connected', 'success');
+  } catch (bgError) {
+    console.error('[Console] Background script not responding:', bgError);
+    log('Background script not responding - try reloading extension', 'error');
+  }
+  
   // Start connection checks
   startConnectionMonitoring();
   
@@ -70,6 +84,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   log('Ready for recording operations', 'info');
 });
+
+/**
+ * Send message to background with timeout
+ */
+async function sendMessageWithTimeout(message, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`Message timeout after ${timeoutMs}ms for type: ${message.type}`));
+    }, timeoutMs);
+    
+    chrome.runtime.sendMessage(message, (response) => {
+      clearTimeout(timeout);
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
 
 function initializeDOMReferences() {
   DOM = {
@@ -395,27 +429,48 @@ function selectMode(mode) {
 // ============================================
 
 async function toggleRecording() {
+  console.log('[DEBUG TOGGLE] toggleRecording called, isRecording:', ConsoleState.isRecording);
+  log(`Toggle recording clicked - currently ${ConsoleState.isRecording ? 'recording' : 'not recording'}`, 'info');
+  
   // Prevent double-clicks
   DOM.recordBtn.disabled = true;
   
   try {
     if (ConsoleState.isRecording) {
+      console.log('[DEBUG TOGGLE] Calling stopRecording...');
       await stopRecording();
     } else {
+      console.log('[DEBUG TOGGLE] Calling startRecording...');
       await startRecording();
     }
+  } catch (error) {
+    console.error('[DEBUG TOGGLE] Error in toggleRecording:', error);
+    log(`Toggle recording error: ${error.message}`, 'error');
   } finally {
+    console.log('[DEBUG TOGGLE] Re-enabling button');
     DOM.recordBtn.disabled = false;
   }
 }
 
 async function startRecording() {
+  console.log('[DEBUG START] startRecording called');
   try {
     log('Initiating recording sequence...', 'info');
+    console.log('[DEBUG START] Step 1: Updating status indicator');
     updateStatusIndicator('loading', 'INITIALIZING...');
+    
+    // Wake up background script first with a ping
+    console.log('[DEBUG START] Step 1.5: Waking up background script...');
+    try {
+      const pingResponse = await sendMessageWithTimeout({ type: 'PING' }, 2000);
+      console.log('[DEBUG START] Background woke up:', pingResponse);
+    } catch (pingErr) {
+      console.warn('[DEBUG START] Background ping failed, continuing anyway:', pingErr.message);
+    }
     
     // Check webapp connection first (with short timeout)
     log('Checking webapp connection...', 'info');
+    console.log('[DEBUG START] Step 2: Checking webapp connection');
     try {
       const connected = await Promise.race([
         checkWebappConnection(),
@@ -423,16 +478,50 @@ async function startRecording() {
       ]);
       if (connected) {
         log('Webapp connection confirmed', 'success');
+        console.log('[DEBUG START] Webapp connected:', connected);
       }
-    } catch {
+    } catch (connErr) {
       log('Webapp offline - recordings will be saved locally', 'warning');
+      console.log('[DEBUG START] Webapp connection failed:', connErr.message);
     }
     
     // Get current tab via background
     log('Requesting active tab info...', 'info');
+    console.log('[DEBUG START] Step 3: Getting active tab');
     updateStatusIndicator('loading', 'GETTING TAB...');
     
-    const tabResponse = await chrome.runtime.sendMessage({ type: 'GET_ACTIVE_TAB' });
+    let tabResponse;
+    try {
+      // Use the new sendMessageWithTimeout for better error handling
+      console.log('[DEBUG START] Sending GET_ACTIVE_TAB via sendMessageWithTimeout...');
+      tabResponse = await sendMessageWithTimeout({ type: 'GET_ACTIVE_TAB' }, 8000); // Increased timeout
+      console.log('[DEBUG START] Tab response:', tabResponse);
+    } catch (tabError) {
+      console.error('[DEBUG START] GET_ACTIVE_TAB error:', tabError);
+      log(`Tab query error: ${tabError.message}`, 'error');
+      
+      // Fallback: Try to get Facebook tabs directly
+      log('Trying fallback: querying Facebook tabs...', 'info');
+      updateStatusIndicator('loading', 'FINDING FACEBOOK...');
+      try {
+        const fbResponse = await sendMessageWithTimeout({ type: 'GET_FACEBOOK_TABS' }, 8000); // Increased timeout
+        console.log('[DEBUG START] Facebook tabs fallback:', fbResponse);
+        if (fbResponse?.success && fbResponse.tabs?.length > 0) {
+          tabResponse = { success: true, tab: fbResponse.tabs[0] };
+          log(`Found Facebook tab via fallback: ${fbResponse.tabs[0].url?.substring(0, 40)}...`, 'success');
+        } else {
+          log('No Facebook tabs found - please open Facebook first', 'error');
+          updateStatusIndicator('error', 'OPEN FACEBOOK FIRST');
+          return;
+        }
+      } catch (fbError) {
+        console.error('[DEBUG START] Facebook tabs fallback error:', fbError);
+        log(`Fallback failed: ${fbError.message}`, 'error');
+        updateStatusIndicator('error', 'TAB QUERY FAILED');
+        return;
+      }
+    }
+    
     console.log('[Console] Tab response:', tabResponse);
     
     if (!tabResponse?.success || !tabResponse.tab) {
@@ -490,24 +579,27 @@ async function startRecording() {
 async function ensureContentScript(tabId, retryCount = 0) {
   const MAX_RETRIES = 2;
   
+  console.log('[Console] ensureContentScript called for tab:', tabId, 'retry:', retryCount);
+  
   try {
     // Try to ping first via background
     log(`Pinging content script on tab ${tabId}...`, 'info');
     updateScriptConnectionUI('seeking');
     
-    // Add timeout to ping
-    const pingPromise = chrome.runtime.sendMessage({ 
-      type: 'PING_TAB', 
-      tabId 
-    });
-    const timeoutPromise = new Promise((resolve) => 
-      setTimeout(() => resolve({ timeout: true }), 2000)
-    );
+    // Use sendMessageWithTimeout for ping
+    let response;
+    try {
+      response = await sendMessageWithTimeout({ 
+        type: 'PING_TAB', 
+        tabId 
+      }, 2000);
+      console.log('[Console] Ping response:', response);
+    } catch (pingError) {
+      console.log('[Console] Ping timeout/error:', pingError.message);
+      response = { timeout: true, error: pingError.message };
+    }
     
-    const response = await Promise.race([pingPromise, timeoutPromise]);
-    console.log('[Console] Ping response:', response);
-    
-    if (response?.pong) {
+    if (response?.success && response?.pong) {
       log('Content script responded to ping', 'success');
       updateScriptConnectionUI('ready');
       return true;
@@ -517,6 +609,7 @@ async function ensureContentScript(tabId, retryCount = 0) {
       log(`Ping failed: ${response.error}`, 'warning');
     }
   } catch (e) {
+    console.error('[Console] Ping exception:', e);
     log(`Ping exception: ${e.message}`, 'warning');
   }
   
@@ -525,11 +618,12 @@ async function ensureContentScript(tabId, retryCount = 0) {
   updateScriptConnectionUI('injecting');
   
   try {
-    // Use background to inject
-    const result = await chrome.runtime.sendMessage({
+    // Use background to inject with timeout
+    console.log('[Console] Sending INJECT_CONTENT_SCRIPT for tab:', tabId);
+    const result = await sendMessageWithTimeout({
       type: 'INJECT_CONTENT_SCRIPT',
       tabId
-    });
+    }, 5000);
     console.log('[Console] Injection result:', result);
     
     if (!result?.success) {
@@ -554,18 +648,20 @@ async function ensureContentScript(tabId, retryCount = 0) {
     
     // Verify injection via background with timeout
     log('Verifying injection...', 'info');
-    const verifyPromise = chrome.runtime.sendMessage({ 
-      type: 'PING_TAB', 
-      tabId 
-    });
-    const verifyTimeoutPromise = new Promise((resolve) => 
-      setTimeout(() => resolve({ timeout: true }), 2000)
-    );
+    let verifyResponse;
+    try {
+      verifyResponse = await sendMessageWithTimeout({ 
+        type: 'PING_TAB', 
+        tabId 
+      }, 3000);
+    } catch (verifyError) {
+      console.log('[Console] Verification timeout:', verifyError.message);
+      verifyResponse = { timeout: true };
+    }
     
-    const response = await Promise.race([verifyPromise, verifyTimeoutPromise]);
-    console.log('[Console] Post-injection ping:', response);
+    console.log('[Console] Post-injection ping:', verifyResponse);
     
-    if (response?.pong) {
+    if (verifyResponse?.success && verifyResponse?.pong) {
       log('Content script injection verified', 'success');
       updateScriptConnectionUI('ready');
       return true;
@@ -591,37 +687,57 @@ async function ensureContentScript(tabId, retryCount = 0) {
 }
 
 async function startSingleTabRecording(tab) {
+  console.log('[DEBUG SINGLE TAB] startSingleTabRecording called for tab:', tab.id, tab.url);
   try {
     log(`Sending START_RECORDING to tab ${tab.id}...`, 'info');
     
-    // Send message via background with timeout
-    const responsePromise = chrome.runtime.sendMessage({
+    console.log('[DEBUG SINGLE TAB] Preparing message:', {
       type: 'START_RECORDING_TAB',
       tabId: tab.id,
       mode: ConsoleState.currentMode,
       config: ConsoleState.config
     });
     
-    // Add timeout to prevent hanging
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Recording start timeout - content script may not be responding')), 5000)
-    );
-    
-    const response = await Promise.race([responsePromise, timeoutPromise]);
-    
-    console.log('[Console] Start recording response:', response);
+    // Send message via background with proper timeout handling
+    let response;
+    try {
+      response = await sendMessageWithTimeout({
+        type: 'START_RECORDING_TAB',
+        tabId: tab.id,
+        mode: ConsoleState.currentMode,
+        config: ConsoleState.config
+      }, 5000);
+      console.log('[Console] Start recording response:', response);
+    } catch (startError) {
+      console.error('[Console] Start recording timeout/error:', startError);
+      log(`Recording start error: ${startError.message}`, 'error');
+      
+      // Try re-injecting and starting again
+      log('Retrying after re-injection...', 'warning');
+      await ensureContentScript(tab.id);
+      try {
+        response = await sendMessageWithTimeout({
+          type: 'START_RECORDING_TAB',
+          tabId: tab.id,
+          mode: ConsoleState.currentMode,
+          config: ConsoleState.config
+        }, 5000);
+      } catch (retryError) {
+        throw new Error('Failed after retry - refresh the Facebook page and try again');
+      }
+    }
     
     if (!response) {
       log('No response from content script - retrying injection...', 'warning');
       // Try re-injecting and starting again
       await ensureContentScript(tab.id);
-      const retryResponse = await chrome.runtime.sendMessage({
+      response = await sendMessageWithTimeout({
         type: 'START_RECORDING_TAB',
         tabId: tab.id,
         mode: ConsoleState.currentMode,
         config: ConsoleState.config
-      });
-      if (!retryResponse?.success) {
+      }, 5000);
+      if (!response?.success) {
         throw new Error('Failed after retry - refresh the Facebook page and try again');
       }
     } else if (!response.success) {
@@ -693,9 +809,11 @@ async function startMultiTabRecording() {
 }
 
 async function stopRecording() {
+  console.log('[DEBUG STOP] stopRecording called');
   try {
     log('Stopping recording...', 'info');
     log('Gathering session data from content script...', 'info');
+    console.log('[DEBUG STOP] currentMode:', ConsoleState.currentMode, 'recordingTabId:', ConsoleState.recordingTabId);
     
     let sessionData;
     
@@ -878,10 +996,12 @@ function updateRecordingUI(isRecording) {
 let statsInterval = null;
 
 function startStatsPolling() {
+  console.log('[DEBUG STATS] startStatsPolling called');
   stopStatsPolling(); // Clear any existing interval
   
   statsInterval = setInterval(async () => {
     if (!ConsoleState.isRecording) {
+      console.log('[DEBUG STATS] Not recording, stopping polling');
       stopStatsPolling();
       return;
     }
@@ -898,19 +1018,22 @@ function startStatsPolling() {
         }
       } else {
         // Use background relay for single tab status
+        console.log('[DEBUG STATS] Polling status for tab:', ConsoleState.recordingTabId);
         response = await chrome.runtime.sendMessage({
           type: 'GET_RECORDING_STATUS_TAB',
           tabId: ConsoleState.recordingTabId
         });
+        console.log('[DEBUG STATS] Status response:', response);
       }
       
       if (response?.counts) {
         ConsoleState.eventCounts = response.counts;
         updateStats();
+        console.log('[DEBUG STATS] Updated counts:', response.counts);
       }
     } catch (error) {
       // Tab might be closed or navigated away
-      console.warn('Stats polling error:', error);
+      console.warn('[DEBUG STATS] Stats polling error:', error);
     }
   }, 500);
 }
@@ -1471,17 +1594,22 @@ function startConnectionMonitoring() {
     }
   }, 10000); // Every 10 seconds
   
-  // Start heartbeat interval - sends to server every 5 seconds
+  // Start heartbeat interval - sends to server every 30 seconds (reduced from 5 to avoid rate limiting)
   // IMPORTANT: Always send heartbeat regardless of webappConnected state
   // The heartbeat IS what establishes connection, not the other way around
   heartbeatInterval = setInterval(async () => {
+    // Skip if we're in backoff period
+    if (ConsoleState.heartbeatBackoffUntil && Date.now() < ConsoleState.heartbeatBackoffUntil) {
+      console.log('[Console] Heartbeat skipped - in backoff period');
+      return;
+    }
     console.log('[Console] Heartbeat tick - sending heartbeat...');
     try {
       await sendHeartbeatToServer();
     } catch (e) {
       console.error('[Console] Heartbeat interval error:', e);
     }
-  }, 5000);
+  }, 30000); // Changed from 5000 to 30000 (30 seconds) to avoid rate limiting
   
   // Also send initial heartbeat immediately
   sendHeartbeatToServer().catch(e => console.error('[Console] Initial heartbeat error:', e));
@@ -1523,8 +1651,8 @@ async function checkWebappConnection() {
       ConsoleState.lastHeartbeat = Date.now();
       updateConnectionUI(true);
       
-      // Send heartbeat to training console endpoint
-      await sendHeartbeatToServer();
+      // NOTE: Don't send heartbeat here - heartbeatInterval handles it
+      // This prevents double-sending which causes rate limiting
       
       return true;
     }
@@ -1548,6 +1676,13 @@ async function checkWebappConnection() {
  */
 async function sendHeartbeatToServer() {
   try {
+    // Check if we're still in backoff period
+    if (ConsoleState.heartbeatBackoffUntil && Date.now() < ConsoleState.heartbeatBackoffUntil) {
+      const remainingMs = ConsoleState.heartbeatBackoffUntil - Date.now();
+      console.log(`[Console] Heartbeat skipped - in backoff for ${Math.ceil(remainingMs/1000)}s more`);
+      return;
+    }
+    
     const heartbeatUrl = `${ConsoleState.config.apiEndpoint}/training/console/heartbeat`;
     console.log('[Console] Sending heartbeat to:', heartbeatUrl);
     
@@ -1573,7 +1708,7 @@ async function sendHeartbeatToServer() {
     console.log('[Console] Heartbeat data:', JSON.stringify(heartbeatData));
     
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
+    const timeout = setTimeout(() => controller.abort(), 5000);
     
     const response = await fetch(heartbeatUrl, {
       method: 'POST',
@@ -1589,6 +1724,10 @@ async function sendHeartbeatToServer() {
     if (response.ok) {
       const data = await response.json();
       console.log('[Console] Heartbeat response data:', data);
+      // Reset backoff on success
+      ConsoleState.heartbeatFailCount = 0;
+      ConsoleState.heartbeatBackoffUntil = null;
+      
       if (data.success) {
         // Update UI to show fully connected (server received heartbeat)
         const webappStatus = document.getElementById('webapp-status');
@@ -1600,13 +1739,33 @@ async function sendHeartbeatToServer() {
         ConsoleState.webappConnected = true;
         ConsoleState.lastHeartbeat = Date.now();
       }
+    } else if (response.status === 429) {
+      // Rate limited - implement exponential backoff
+      ConsoleState.heartbeatFailCount++;
+      const backoffSeconds = Math.min(60, 30 * Math.pow(2, ConsoleState.heartbeatFailCount - 1)); // 30s, 60s, capped at 60s
+      ConsoleState.heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
+      console.warn(`[Console] Rate limited (429) - backing off for ${backoffSeconds}s`);
+      log(`Heartbeat rate limited - backing off ${backoffSeconds}s`, 'warning');
     } else {
       const errorText = await response.text();
       console.error('[Console] Heartbeat failed:', response.status, errorText);
+      // Increment fail count but use shorter backoff for non-429 errors
+      ConsoleState.heartbeatFailCount++;
+      if (ConsoleState.heartbeatFailCount >= 3) {
+        const backoffSeconds = 15;
+        ConsoleState.heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
+        console.warn(`[Console] Multiple failures - backing off for ${backoffSeconds}s`);
+      }
     }
   } catch (error) {
     // Log error but don't crash
     console.error('[Console] Heartbeat error:', error.message);
+    ConsoleState.heartbeatFailCount++;
+    // Backoff on network errors too
+    if (ConsoleState.heartbeatFailCount >= 2) {
+      const backoffSeconds = 20;
+      ConsoleState.heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
+    }
   }
 }
 
@@ -1676,8 +1835,10 @@ function updateScriptConnectionUI(status) {
 }
 
 async function sendToWebapp(endpoint, data) {
+  console.log('[DEBUG SEND] sendToWebapp called:', endpoint, 'webappConnected:', ConsoleState.webappConnected);
   if (!ConsoleState.webappConnected) {
     log('Webapp not connected, queueing data locally', 'warning');
+    console.log('[DEBUG SEND] Webapp not connected, queueing locally');
     await saveLocalQueue(data);
     return { success: false, queued: true };
   }
@@ -1686,12 +1847,15 @@ async function sendToWebapp(endpoint, data) {
     // Get auth token
     const tokenResult = await chrome.storage.local.get('fmd_admin_token');
     const token = tokenResult.fmd_admin_token;
+    console.log('[DEBUG SEND] Token found:', !!token);
     
     if (!token) {
       log('No auth token - please login to webapp first', 'error');
+      console.log('[DEBUG SEND] No auth token!');
       return { success: false, error: 'Not authenticated' };
     }
     
+    console.log('[DEBUG SEND] Sending to:', `${ConsoleState.config.apiEndpoint}${endpoint}`);
     const response = await fetch(`${ConsoleState.config.apiEndpoint}${endpoint}`, {
       method: 'POST',
       headers: {
@@ -1701,15 +1865,20 @@ async function sendToWebapp(endpoint, data) {
       body: JSON.stringify(data)
     });
     
+    console.log('[DEBUG SEND] Response status:', response.status);
+    
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.log('[DEBUG SEND] Error response:', errorData);
       throw new Error(errorData.error || `HTTP ${response.status}`);
     }
     
     const result = await response.json();
+    console.log('[DEBUG SEND] Success result:', result);
     return { success: true, data: result };
     
   } catch (error) {
+    console.error('[DEBUG SEND] Error:', error);
     log(`Send to webapp failed: ${error.message}`, 'error');
     await saveLocalQueue(data);
     return { success: false, error: error.message, queued: true };
