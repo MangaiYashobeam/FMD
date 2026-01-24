@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ROOT CONSOLE</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div class="sidebar-container">
+    <!-- Resize Handle -->
+    <div class="resize-handle" id="resize-handle">
+      <div class="handle-grip"></div>
+      <div class="handle-grip"></div>
+      <div class="handle-grip"></div>
+    </div>
+    
+    <!-- Main Console -->
+    <div class="console-wrapper">
+      <!-- Header -->
+      <header class="console-header">
+        <div class="header-top">
+          <div class="system-badge">
+            <span class="badge-icon">◈</span>
+            <span class="badge-text">ROOT</span>
+          </div>
+          <div class="header-title">
+            <span class="title-main">SUPER ADMIN</span>
+            <span class="title-sub">CONSOLE v2.0</span>
+          </div>
+          <button class="collapse-btn" id="collapse-btn" title="Collapse">
+            <span class="collapse-icon">◀</span>
+          </button>
+        </div>
+        <div class="header-status">
+          <div class="status-indicator" id="status-indicator">
+            <span class="status-pulse"></span>
+            <span class="status-text" id="status-text">SYSTEM READY</span>
+          </div>
+          <div class="system-clock" id="system-clock">00:00:00</div>
+        </div>
+        <!-- Connection Status Bar -->
+        <div class="connection-bar">
+          <div class="connection-item" id="webapp-connection">
+            <span class="conn-icon">◇</span>
+            <span class="conn-label">IAI:</span>
+            <span class="conn-status seeking" id="webapp-status">SEEKING...</span>
+          </div>
+          <div class="connection-item" id="script-connection">
+            <span class="conn-icon">◇</span>
+            <span class="conn-label">SCRIPT:</span>
+            <span class="conn-status idle" id="script-status">IDLE</span>
+          </div>
+        </div>
+        <div class="header-scanline"></div>
+      </header>
+
+      <!-- Navigation Tabs -->
+      <nav class="console-nav">
+        <button class="nav-tab active" data-tab="record">
+          <span class="tab-icon">●</span>
+          <span class="tab-label">RECORD</span>
+        </button>
+        <button class="nav-tab" data-tab="sessions">
+          <span class="tab-icon">◉</span>
+          <span class="tab-label">SESSIONS</span>
+        </button>
+        <button class="nav-tab" data-tab="config">
+          <span class="tab-icon">⚙</span>
+          <span class="tab-label">CONFIG</span>
+        </button>
+        <button class="nav-tab" data-tab="logs">
+          <span class="tab-icon">▤</span>
+          <span class="tab-label">LOGS</span>
+        </button>
+      </nav>
+
+      <!-- Main Content Area -->
+      <main class="console-content">
+        <!-- RECORD TAB -->
+        <section class="tab-panel active" id="panel-record">
+          <!-- Mode Selector -->
+          <div class="control-group">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">RECORDING MODE</span>
+            </div>
+            <div class="mode-grid">
+              <button class="mode-card active" data-mode="training">
+                <div class="mode-icon">⬡</div>
+                <div class="mode-info">
+                  <span class="mode-name">TRAINING</span>
+                  <span class="mode-desc">Learn workflows</span>
+                </div>
+                <div class="mode-glow"></div>
+              </button>
+              <button class="mode-card" data-mode="macro">
+                <div class="mode-icon">⬢</div>
+                <div class="mode-info">
+                  <span class="mode-name">MACRO</span>
+                  <span class="mode-desc">Quick actions</span>
+                </div>
+                <div class="mode-glow"></div>
+              </button>
+              <button class="mode-card" data-mode="multi-tab">
+                <div class="mode-icon">⧉</div>
+                <div class="mode-info">
+                  <span class="mode-name">MULTI-TAB</span>
+                  <span class="mode-desc">Cross-tab ops</span>
+                </div>
+                <div class="mode-glow"></div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Recording Controls -->
+          <div class="control-group">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">CONTROLS</span>
+            </div>
+            <div class="record-controls">
+              <button class="action-btn primary" id="record-btn">
+                <div class="btn-inner">
+                  <span class="btn-icon" id="record-icon">●</span>
+                  <span class="btn-text" id="record-text">INITIATE RECORDING</span>
+                </div>
+                <div class="btn-glow"></div>
+                <div class="btn-scanline"></div>
+              </button>
+              
+              <div class="secondary-controls">
+                <button class="action-btn secondary" id="pause-btn" disabled>
+                  <span class="btn-icon">❚❚</span>
+                  <span class="btn-text">PAUSE</span>
+                </button>
+                <button class="action-btn secondary" id="mark-btn" disabled>
+                  <span class="btn-icon">◆</span>
+                  <span class="btn-text">MARK</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Stats -->
+          <div class="control-group" id="live-stats" style="display: none;">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">LIVE TELEMETRY</span>
+              <span class="live-indicator">● LIVE</span>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value" id="stat-events">0</div>
+                <div class="stat-label">EVENTS</div>
+                <div class="stat-bar"><div class="stat-fill" id="fill-events"></div></div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-clicks">0</div>
+                <div class="stat-label">CLICKS</div>
+                <div class="stat-bar"><div class="stat-fill" id="fill-clicks"></div></div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-inputs">0</div>
+                <div class="stat-label">INPUTS</div>
+                <div class="stat-bar"><div class="stat-fill" id="fill-inputs"></div></div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="stat-marks">0</div>
+                <div class="stat-label">MARKS</div>
+                <div class="stat-bar"><div class="stat-fill" id="fill-marks"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Tabs (Multi-tab mode) -->
+          <div class="control-group" id="active-tabs-section" style="display: none;">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">ACTIVE NODES</span>
+            </div>
+            <div class="tabs-list" id="active-tabs-list">
+              <!-- Dynamic tab items -->
+            </div>
+          </div>
+
+          <!-- Session Output -->
+          <div class="control-group" id="session-output" style="display: none;">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">SESSION DATA</span>
+            </div>
+            <div class="output-actions">
+              <button class="action-btn tertiary" id="copy-btn">
+                <span class="btn-icon">⧉</span>
+                <span class="btn-text">COPY</span>
+              </button>
+              <button class="action-btn tertiary" id="export-btn">
+                <span class="btn-icon">↓</span>
+                <span class="btn-text">EXPORT</span>
+              </button>
+              <button class="action-btn tertiary" id="upload-btn">
+                <span class="btn-icon">↑</span>
+                <span class="btn-text">UPLOAD</span>
+              </button>
+            </div>
+            <div class="output-preview" id="output-preview">
+              <pre id="session-json"></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- SESSIONS TAB -->
+        <section class="tab-panel" id="panel-sessions">
+          <div class="control-group">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">SAVED SESSIONS</span>
+            </div>
+            <div class="sessions-list" id="sessions-list">
+              <div class="empty-state">
+                <span class="empty-icon">◎</span>
+                <span class="empty-text">No sessions recorded</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CONFIG TAB -->
+        <section class="tab-panel" id="panel-config">
+          <div class="control-group">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">SYSTEM CONFIG</span>
+            </div>
+            <div class="config-options">
+              <label class="config-option">
+                <span class="option-label">Auto-mark inputs</span>
+                <input type="checkbox" id="config-automark" checked>
+                <span class="toggle-switch"></span>
+              </label>
+              <label class="config-option">
+                <span class="option-label">Capture scrolls</span>
+                <input type="checkbox" id="config-scrolls" checked>
+                <span class="toggle-switch"></span>
+              </label>
+              <label class="config-option">
+                <span class="option-label">Record hovers</span>
+                <input type="checkbox" id="config-hovers">
+                <span class="toggle-switch"></span>
+              </label>
+              <label class="config-option">
+                <span class="option-label">Stealth mode</span>
+                <input type="checkbox" id="config-stealth" checked>
+                <span class="toggle-switch"></span>
+              </label>
+              <div class="config-option number-config">
+                <span class="option-label">Max log lines</span>
+                <select id="config-log-lines" class="config-select">
+                  <option value="25">25</option>
+                  <option value="50" selected>50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                  <option value="500">500</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">API CONNECTION</span>
+            </div>
+            <div class="api-status">
+              <div class="api-indicator connected" id="api-indicator">
+                <span class="api-dot"></span>
+                <span class="api-text">CONNECTED</span>
+              </div>
+              <input type="text" class="api-input" id="api-endpoint" 
+                     placeholder="API Endpoint" value="https://dealersface.com/api">
+              <button class="action-btn tertiary" id="test-api-btn">
+                <span class="btn-icon">◈</span>
+                <span class="btn-text">TEST CONNECTION</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- LOGS TAB -->
+        <section class="tab-panel" id="panel-logs">
+          <div class="control-group full-height">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">SYSTEM LOGS</span>
+              <div class="logs-actions">
+                <button class="copy-logs-btn" id="copy-all-logs" title="Copy all logs (Ctrl+Shift+L)">COPY ALL</button>
+                <button class="clear-logs-btn" id="clear-logs">CLEAR</button>
+              </div>
+            </div>
+            <div class="logs-hint">
+              <span>💡 Click any log entry to copy it</span>
+            </div>
+            <div class="logs-container" id="logs-container">
+              <!-- Logs will be populated dynamically -->
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer class="console-footer">
+        <div class="footer-info">
+          <span class="version">v2.0.0</span>
+          <span class="separator">|</span>
+          <span class="connection" id="connection-status">● ONLINE</span>
+        </div>
+        <div class="footer-brand">
+          <span class="brand-text">FACEMYDEALER</span>
+          <span class="brand-icon">◈</span>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Minimized State -->
+    <div class="sidebar-minimized" id="sidebar-minimized" style="display: none;">
+      <button class="expand-btn" id="expand-btn">
+        <span class="expand-icon">▶</span>
+        <span class="expand-badge" id="expand-badge"></span>
+      </button>
+    </div>
+  </div>
+
+  <script src="sidebar.js"></script>
+</body>
+</html>

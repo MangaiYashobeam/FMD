@@ -13,7 +13,7 @@
  * - Inject training data to IAI extensions
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Play,
@@ -31,6 +31,10 @@ import {
   RefreshCw,
   Zap,
   Settings,
+  Radio,
+  WifiOff,
+  Wifi,
+  Activity,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 
@@ -597,7 +601,49 @@ export default function IAITrainingPanel() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<SessionDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [extensionStatus, setExtensionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [lastSessionCheck, setLastSessionCheck] = useState<Date | null>(null);
+  const [newSessionAlert, setNewSessionAlert] = useState(false);
   const queryClient = useQueryClient();
+
+  // Check for extension connection and new sessions
+  useEffect(() => {
+    const checkExtension = async () => {
+      try {
+        // Try to detect extension by checking for recent sessions
+        const response = await api.get('/api/training/sessions?limit=1');
+        if (response.data?.sessions?.length > 0) {
+          const latestSession = response.data.sessions[0];
+          const sessionDate = new Date(latestSession.createdAt);
+          
+          // If session was created in the last 5 minutes, extension is active
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+          if (sessionDate > fiveMinutesAgo) {
+            setExtensionStatus('connected');
+            
+            // Check if this is a NEW session we haven't seen
+            if (lastSessionCheck && sessionDate > lastSessionCheck) {
+              setNewSessionAlert(true);
+              queryClient.invalidateQueries({ queryKey: ['trainingSessions'] });
+              setTimeout(() => setNewSessionAlert(false), 5000);
+            }
+          } else {
+            setExtensionStatus('disconnected');
+          }
+          setLastSessionCheck(new Date());
+        }
+      } catch {
+        setExtensionStatus('disconnected');
+      }
+    };
+
+    // Initial check
+    checkExtension();
+
+    // Poll every 5 seconds for new sessions
+    const interval = setInterval(checkExtension, 5000);
+    return () => clearInterval(interval);
+  }, [lastSessionCheck, queryClient]);
 
   // Queries
   const {
@@ -680,7 +726,17 @@ export default function IAITrainingPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* New Session Alert */}
+      {newSessionAlert && (
+        <div className="fixed top-4 right-4 z-50 animate-pulse">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+            <Activity className="w-5 h-5" />
+            <span className="font-medium">New training session received from extension!</span>
+          </div>
+        </div>
+      )}
+
+      {/* Header with Extension Status */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Training System</h2>
@@ -688,13 +744,41 @@ export default function IAITrainingPanel() {
             Record, process, and inject training configurations for IAI automation
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-4">
+          {/* Extension Connection Status */}
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
+            extensionStatus === 'connected' 
+              ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+              : extensionStatus === 'connecting'
+              ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 animate-pulse'
+              : 'bg-slate-800 border-slate-700 text-slate-500'
+          }`}>
+            {extensionStatus === 'connected' ? (
+              <>
+                <Wifi className="w-4 h-4" />
+                <span className="text-sm font-medium">Extension Connected</span>
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              </>
+            ) : extensionStatus === 'connecting' ? (
+              <>
+                <Radio className="w-4 h-4" />
+                <span className="text-sm font-medium">Seeking Extension...</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4" />
+                <span className="text-sm font-medium">Extension Idle</span>
+              </>
+            )}
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Active Training Configurations */}

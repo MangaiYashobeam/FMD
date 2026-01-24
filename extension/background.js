@@ -99,6 +99,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   
+  // ============================================
+  // MULTI-TAB MANAGEMENT
+  // ============================================
+  
+  if (message.type === 'GET_ALL_FACEBOOK_TABS') {
+    getAllFacebookTabs()
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'SWITCH_TO_TAB') {
+    chrome.tabs.update(message.tabId, { active: true }, () => {
+      sendResponse({ success: true, tabId: message.tabId });
+    });
+    return true;
+  }
+  
+  if (message.type === 'OPEN_TAB') {
+    openNewTab(message.url, message.tabType)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'CLOSE_TAB') {
+    chrome.tabs.remove(message.tabId, () => {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+  
+  if (message.type === 'EXECUTE_IN_TAB') {
+    executeInSpecificTab(message.tabId, message.action, message.data)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'EXECUTE_MULTI_TAB_SEQUENCE') {
+    executeMultiTabSequence(message.sequence)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
   // Training Data Injection
   if (message.type === 'INJECT_TRAINING_DATA') {
     injectTrainingDataToTabs(message.trainingData)
@@ -163,6 +209,200 @@ async function injectTrainingDataToTabs(trainingData) {
     console.error('[Background] Training injection error:', error);
     throw error;
   }
+}
+
+// ============================================
+// MULTI-TAB MANAGEMENT FUNCTIONS
+// ============================================
+
+/**
+ * Get all Facebook tabs with their types
+ */
+async function getAllFacebookTabs() {
+  const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  
+  return {
+    tabs: tabs.map(tab => ({
+      id: tab.id,
+      url: tab.url,
+      title: tab.title,
+      active: tab.active,
+      type: detectTabType(tab.url),
+    })),
+    count: tabs.length,
+  };
+}
+
+/**
+ * Detect tab type from URL
+ */
+function detectTabType(url) {
+  if (!url) return 'unknown';
+  
+  const urlLower = url.toLowerCase();
+  
+  if (urlLower.includes('/marketplace/create')) return 'marketplace-create';
+  if (urlLower.includes('/marketplace/item')) return 'marketplace-item';
+  if (urlLower.includes('/marketplace')) return 'marketplace';
+  if (urlLower.includes('/messages')) return 'messages';
+  if (urlLower.includes('/groups')) return 'groups';
+  if (urlLower.includes('/profile')) return 'profile';
+  if (urlLower.includes('/notifications')) return 'notifications';
+  
+  return 'facebook-other';
+}
+
+/**
+ * Open a new tab with specified URL and type
+ */
+async function openNewTab(url, tabType) {
+  // Default URLs for tab types
+  const defaultUrls = {
+    'marketplace': 'https://www.facebook.com/marketplace',
+    'marketplace-create': 'https://www.facebook.com/marketplace/create/vehicle/',
+    'messages': 'https://www.facebook.com/messages/t/',
+    'groups': 'https://www.facebook.com/groups/',
+    'profile': 'https://www.facebook.com/me',
+  };
+  
+  const targetUrl = url || defaultUrls[tabType] || 'https://www.facebook.com/';
+  
+  const tab = await chrome.tabs.create({
+    url: targetUrl,
+    active: true,
+  });
+  
+  // Wait for page to load
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  return {
+    success: true,
+    tab: {
+      id: tab.id,
+      url: tab.url,
+      type: detectTabType(tab.url),
+    },
+  };
+}
+
+/**
+ * Execute action in a specific tab
+ */
+async function executeInSpecificTab(tabId, action, data) {
+  try {
+    // First, switch to the tab
+    await chrome.tabs.update(tabId, { active: true });
+    
+    // Wait a moment for tab to be active
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Send message to content script
+    const result = await chrome.tabs.sendMessage(tabId, {
+      type: action,
+      ...data,
+    });
+    
+    return { success: true, result };
+  } catch (error) {
+    console.error(`[Background] Execute in tab ${tabId} failed:`, error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Execute a sequence of actions across multiple tabs
+ * This is used for multi-tab training playback
+ */
+async function executeMultiTabSequence(sequence) {
+  const results = [];
+  const tabMap = new Map(); // Map old tabIds to new ones
+  
+  for (const step of sequence) {
+    try {
+      let tabId = step.tabId;
+      
+      // Handle tab creation
+      if (step.action === 'createTab') {
+        const newTab = await chrome.tabs.create({
+          url: step.url || 'https://www.facebook.com/',
+          active: true,
+        });
+        
+        // Map the recorded tabId to the new one
+        tabMap.set(step.originalTabId || step.tabId, newTab.id);
+        tabId = newTab.id;
+        
+        // Wait for page to load
+        await new Promise(resolve => setTimeout(resolve, step.delay || 3000));
+        
+        results.push({ step: step.stepIndex, action: 'createTab', tabId: newTab.id, success: true });
+        continue;
+      }
+      
+      // Handle tab switch
+      if (step.action === 'switchTab') {
+        const mappedTabId = tabMap.get(step.tabId) || step.tabId;
+        await chrome.tabs.update(mappedTabId, { active: true });
+        
+        await new Promise(resolve => setTimeout(resolve, step.delay || 500));
+        
+        results.push({ step: step.stepIndex, action: 'switchTab', tabId: mappedTabId, success: true });
+        continue;
+      }
+      
+      // Handle tab close
+      if (step.action === 'closeTab') {
+        const mappedTabId = tabMap.get(step.tabId) || step.tabId;
+        await chrome.tabs.remove(mappedTabId);
+        
+        results.push({ step: step.stepIndex, action: 'closeTab', tabId: mappedTabId, success: true });
+        continue;
+      }
+      
+      // Handle regular actions (click, type, etc.)
+      const mappedTabId = tabMap.get(step.tabId) || step.tabId;
+      
+      // Execute the action in the tab
+      const result = await chrome.tabs.sendMessage(mappedTabId, {
+        type: 'EXECUTE_TRAINING_STEP',
+        step: step,
+      });
+      
+      // Wait between steps
+      if (step.delay) {
+        await new Promise(resolve => setTimeout(resolve, step.delay));
+      }
+      
+      results.push({ 
+        step: step.stepIndex, 
+        action: step.action, 
+        tabId: mappedTabId, 
+        success: result?.success || true,
+        result: result,
+      });
+      
+    } catch (error) {
+      console.error(`[Background] Step ${step.stepIndex} failed:`, error);
+      results.push({ 
+        step: step.stepIndex, 
+        action: step.action, 
+        success: false, 
+        error: error.message,
+      });
+      
+      // Continue or break based on step config
+      if (!step.continueOnError) {
+        break;
+      }
+    }
+  }
+  
+  return {
+    success: results.every(r => r.success),
+    results: results,
+    completedSteps: results.filter(r => r.success).length,
+    totalSteps: sequence.length,
+  };
 }
 
 /**

@@ -1,5 +1,6 @@
 /**
  * FMD Training Recorder - Popup UI Controller
+ * With Multi-Tab Support
  */
 
 // ============================================
@@ -7,9 +8,11 @@
 // ============================================
 
 let isRecording = false;
+let isMultiTabMode = false;
 let currentMode = 'listing';
 let currentType = 'iai';
 let currentSessionData = null;
+let recordingTabs = [];  // Active recording tabs
 
 // ============================================
 // DOM ELEMENTS
@@ -43,16 +46,20 @@ const sessionsList = document.getElementById('sessions-list');
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('[Recorder Popup] Initializing...');
   
-  // Check authentication
-  const isAdmin = await checkAdminAuth();
+  // Always show main section first for usability
+  showMainSection();
   
-  if (isAdmin) {
-    showMainSection();
-    await loadRecordingStatus();
-    await loadRecentSessions();
-  } else {
-    showAuthSection();
+  // Try to check authentication in background
+  try {
+    const isAdmin = await checkAdminAuth();
+    console.log('[Recorder Popup] Admin check result:', isAdmin);
+  } catch (error) {
+    console.log('[Recorder Popup] Auth check skipped:', error.message);
   }
+  
+  // Load status regardless of auth
+  await loadRecordingStatus();
+  await loadRecentSessions();
   
   // Setup event listeners
   setupEventListeners();
@@ -122,25 +129,30 @@ async function loadRecordingStatus() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
     if (!tab || !tab.url?.includes('facebook.com')) {
-      statusText.textContent = 'Open Facebook to record';
-      recordBtn.disabled = true;
+      if (statusText) statusText.textContent = 'Open Facebook to record';
+      if (recordBtn) recordBtn.disabled = false; // Allow clicking to show instructions
       return;
     }
     
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATUS' });
-    
-    if (response.isRecording) {
-      isRecording = true;
-      updateRecordingUI(true);
-      eventCount.textContent = response.eventCount || 0;
-      markedCount.textContent = response.markedCount || 0;
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATUS' });
+      
+      if (response && response.isRecording) {
+        isRecording = true;
+        updateRecordingUI(true);
+        if (eventCount) eventCount.textContent = response.eventCount || 0;
+        if (markedCount) markedCount.textContent = response.markedCount || 0;
+      }
+    } catch (msgError) {
+      console.log('[Recorder Popup] Content script not ready:', msgError.message);
+      if (statusText) statusText.textContent = 'Ready - Navigate to Facebook';
     }
     
-    recordBtn.disabled = false;
+    if (recordBtn) recordBtn.disabled = false;
   } catch (error) {
     console.error('[Recorder Popup] Status check failed:', error);
-    statusText.textContent = 'Extension not loaded on this page';
-    recordBtn.disabled = true;
+    if (statusText) statusText.textContent = 'Ready to record';
+    if (recordBtn) recordBtn.disabled = false;
   }
 }
 
@@ -153,6 +165,12 @@ async function toggleRecording() {
   }
   
   try {
+    // Check if multi-tab mode is selected
+    if (currentMode === 'multi-tab') {
+      await toggleMultiTabRecording();
+      return;
+    }
+    
     if (isRecording) {
       // Stop recording
       const response = await chrome.tabs.sendMessage(tab.id, { type: 'STOP_RECORDING' });
@@ -166,6 +184,9 @@ async function toggleRecording() {
         viewSessionBtn.disabled = false;
         saveSessionBtn.disabled = false;
         copyCodeBtn.disabled = false;
+        
+        // Update tab display
+        updateTabDisplay(currentSessionData);
         
         console.log('[Recorder Popup] Session data:', currentSessionData);
       }
@@ -196,6 +217,237 @@ async function toggleRecording() {
     console.error('[Recorder Popup] Toggle recording failed:', error);
     alert('Failed to toggle recording: ' + error.message);
   }
+}
+
+/**
+ * Toggle multi-tab recording mode
+ */
+async function toggleMultiTabRecording() {
+  try {
+    if (isRecording) {
+      // Stop multi-tab recording
+      const response = await chrome.runtime.sendMessage({ type: 'STOP_MULTI_TAB_RECORDING' });
+      
+      if (response.success) {
+        isRecording = false;
+        isMultiTabMode = false;
+        currentSessionData = response.data;
+        recordingTabs = [];
+        
+        updateRecordingUI(false);
+        updateTabDisplay(currentSessionData);
+        
+        // Enable action buttons
+        viewSessionBtn.disabled = false;
+        saveSessionBtn.disabled = false;
+        copyCodeBtn.disabled = false;
+        
+        console.log('[Recorder Popup] Multi-tab session data:', currentSessionData);
+      }
+    } else {
+      // Start multi-tab recording
+      const response = await chrome.runtime.sendMessage({
+        type: 'START_MULTI_TAB_RECORDING',
+        options: {
+          mode: currentMode,
+          recordingType: currentType,
+        },
+      });
+      
+      if (response.success) {
+        isRecording = true;
+        isMultiTabMode = true;
+        recordingTabs = response.tabs || [];
+        
+        updateRecordingUI(true);
+        updateActiveTabsDisplay(recordingTabs);
+        
+        // Disable action buttons
+        viewSessionBtn.disabled = true;
+        saveSessionBtn.disabled = true;
+        copyCodeBtn.disabled = true;
+        
+        // Start polling for multi-tab status
+        startMultiTabPolling();
+        
+        console.log('[Recorder Popup] Multi-tab recording started:', recordingTabs.length, 'tabs');
+      }
+    }
+  } catch (error) {
+    console.error('[Recorder Popup] Multi-tab toggle failed:', error);
+    alert('Failed to toggle multi-tab recording: ' + error.message);
+  }
+}
+
+/**
+ * Poll for multi-tab recording status
+ */
+let multiTabPollInterval = null;
+
+function startMultiTabPolling() {
+  if (multiTabPollInterval) {
+    clearInterval(multiTabPollInterval);
+  }
+  
+  multiTabPollInterval = setInterval(async () => {
+    if (!isRecording || !isMultiTabMode) {
+      clearInterval(multiTabPollInterval);
+      return;
+    }
+    
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_MULTI_TAB_STATUS' });
+      
+      recordingTabs = response.tabs || [];
+      
+      // Update counts
+      let totalEvents = 0;
+      let totalMarked = 0;
+      
+      for (const tab of recordingTabs) {
+        totalEvents += tab.events?.length || 0;
+      }
+      
+      eventCount.textContent = totalEvents;
+      markedCount.textContent = response.tabSequence?.length || 0;
+      
+      // Update tab count display
+      const tabCountEl = document.getElementById('tab-count');
+      if (tabCountEl) {
+        tabCountEl.textContent = recordingTabs.length;
+      }
+      
+      updateActiveTabsDisplay(recordingTabs);
+    } catch (error) {
+      console.error('[Recorder Popup] Multi-tab polling failed:', error);
+    }
+  }, 1000);
+}
+
+/**
+ * Update display of active recording tabs
+ */
+function updateActiveTabsDisplay(tabs) {
+  let tabsContainer = document.getElementById('active-tabs');
+  
+  if (!tabsContainer) {
+    // Create tabs container if it doesn't exist
+    const statusCard = document.querySelector('.status-card');
+    if (statusCard) {
+      tabsContainer = document.createElement('div');
+      tabsContainer.id = 'active-tabs';
+      tabsContainer.className = 'active-tabs';
+      tabsContainer.innerHTML = '<h4>📑 Recording Tabs (<span id="tab-count">0</span>)</h4><div id="tabs-list"></div>';
+      statusCard.appendChild(tabsContainer);
+    }
+  }
+  
+  if (!tabsContainer) return;
+  
+  const tabsList = document.getElementById('tabs-list');
+  if (!tabsList) return;
+  
+  if (tabs.length === 0) {
+    tabsContainer.style.display = 'none';
+    return;
+  }
+  
+  tabsContainer.style.display = 'block';
+  document.getElementById('tab-count').textContent = tabs.length;
+  
+  tabsList.innerHTML = tabs.map((tab, index) => `
+    <div class="tab-item" data-tab-id="${tab.tabId}">
+      <span class="tab-icon">${getTabTypeIcon(tab.type)}</span>
+      <span class="tab-label">${tab.type || 'Tab ' + (index + 1)}</span>
+      <span class="tab-events">${tab.events?.length || 0} events</span>
+      <button class="tab-switch-btn" data-tab-id="${tab.tabId}" title="Switch to this tab">→</button>
+    </div>
+  `).join('');
+  
+  // Add click handlers for tab switching
+  tabsList.querySelectorAll('.tab-switch-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const tabId = parseInt(btn.dataset.tabId);
+      await chrome.runtime.sendMessage({ type: 'SWITCH_TO_TAB', tabId: tabId });
+    });
+  });
+}
+
+/**
+ * Get icon for tab type
+ */
+function getTabTypeIcon(type) {
+  const icons = {
+    'marketplace-create': '🏪',
+    'marketplace-item': '📦',
+    'marketplace': '🛒',
+    'messages': '💬',
+    'groups': '👥',
+    'profile': '👤',
+    'notifications': '🔔',
+    'facebook-other': '📱',
+    'unknown': '🌐',
+  };
+  return icons[type] || icons['unknown'];
+}
+
+/**
+ * Update display with tab-organized session data
+ */
+function updateTabDisplay(sessionData) {
+  if (!sessionData?.tabData) return;
+  
+  let tabDataContainer = document.getElementById('session-tabs');
+  
+  if (!tabDataContainer) {
+    // Create tab data container
+    const content = document.querySelector('.content');
+    if (content) {
+      tabDataContainer = document.createElement('div');
+      tabDataContainer.id = 'session-tabs';
+      tabDataContainer.className = 'session-tabs';
+      content.appendChild(tabDataContainer);
+    }
+  }
+  
+  if (!tabDataContainer) return;
+  
+  const tabSummary = sessionData.tabData.tabSummary || {};
+  const tabCount = Object.keys(tabSummary).length;
+  
+  if (tabCount <= 1) {
+    tabDataContainer.style.display = 'none';
+    return;
+  }
+  
+  tabDataContainer.style.display = 'block';
+  tabDataContainer.innerHTML = `
+    <h3>📊 Tab Summary (${tabCount} tabs)</h3>
+    <div class="tab-summary-list">
+      ${Object.entries(tabSummary).map(([tabId, summary]) => `
+        <div class="tab-summary-item">
+          <span class="tab-type-icon">${getTabTypeIcon(summary.tabType)}</span>
+          <div class="tab-summary-info">
+            <div class="tab-type">${summary.tabType}</div>
+            <div class="tab-stats">
+              ${summary.eventCount} events • 
+              ${summary.clicks} clicks • 
+              ${summary.typing} typing
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="tab-sequence">
+      <h4>Tab Switch Sequence:</h4>
+      <div class="sequence-timeline">
+        ${(sessionData.tabData.tabSequence || []).slice(0, 10).map(seq => `
+          <span class="sequence-item ${seq.action}">${seq.action === 'activated' ? '→' : seq.action === 'created' ? '+' : '×'} ${getTabTypeIcon(seq.tabType || 'unknown')}</span>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function updateRecordingUI(recording) {

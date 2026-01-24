@@ -1,10 +1,12 @@
 /**
  * FMD Training Recorder - Background Service Worker
+ * SUPER ADMIN ROOT CONSOLE v2.0
  * 
  * Handles:
  * - Recording session management
  * - API communication with backend
  * - Training data storage and retrieval
+ * - Side panel management
  */
 
 // ============================================
@@ -16,6 +18,23 @@ const CONFIG = {
   // API_URL: 'http://localhost:5000/api',
   AUTH_TOKEN_KEY: 'fmd_admin_token',
 };
+
+// ============================================
+// SIDE PANEL INITIALIZATION
+// ============================================
+
+// Enable side panel when extension is clicked
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.error('[Recorder] Side panel error:', error));
+
+// Set default side panel path
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.sidePanel.setOptions({
+    path: 'sidebar.html',
+    enabled: true
+  });
+  console.log('[Recorder] Super Admin Console installed');
+});
 
 // ============================================
 // STATE
@@ -132,6 +151,17 @@ async function handleMessage(message, sender) {
       if (liveEvents.length > 500) {
         liveEvents = liveEvents.slice(-500);
       }
+      
+      // Forward event counts to sidebar
+      if (message.counts) {
+        try {
+          chrome.runtime.sendMessage({
+            type: 'EVENT_RECORDED',
+            counts: message.counts
+          }).catch(() => {}); // Ignore if sidebar not open
+        } catch (e) {}
+      }
+      
       return { received: true };
       
     case 'SAVE_SESSION':
@@ -180,6 +210,161 @@ async function handleMessage(message, sender) {
       } catch (error) {
         return { isAdmin: false, error: error.message };
       }
+    
+    // MULTI-TAB RECORDING COMMANDS
+    case 'START_MULTI_TAB_RECORDING':
+      return await startMultiTabRecording(message.options || {});
+      
+    case 'STOP_MULTI_TAB_RECORDING':
+      const multiTabData = await stopMultiTabRecording();
+      return { success: true, data: multiTabData };
+      
+    case 'GET_MULTI_TAB_STATUS':
+      return {
+        isRecording: TabManager.isRecording,
+        sessionId: TabManager.sessionId,
+        tabCount: TabManager.recordingTabs.size,
+        tabs: Array.from(TabManager.recordingTabs.entries()).map(([id, info]) => ({
+          tabId: id,
+          ...info,
+        })),
+        tabSequence: TabManager.tabSequence,
+      };
+      
+    case 'GET_RECORDING_TABS':
+      return {
+        tabs: Array.from(TabManager.recordingTabs.entries()).map(([id, info]) => ({
+          tabId: id,
+          type: info.type,
+          url: info.url,
+          title: info.title,
+          index: info.index,
+        })),
+      };
+      
+    case 'SWITCH_TO_TAB':
+      // Switch to a specific tab
+      if (message.tabId) {
+        await chrome.tabs.update(message.tabId, { active: true });
+        return { success: true, tabId: message.tabId };
+      }
+      return { success: false, error: 'No tabId provided' };
+      
+    case 'OPEN_NEW_TAB':
+      // Open a new tab and start recording
+      const newTab = await chrome.tabs.create({
+        url: message.url || 'https://www.facebook.com/marketplace',
+        active: message.active !== false,
+      });
+      return { success: true, tabId: newTab.id, url: newTab.url };
+    
+    // ========================================
+    // SIDEBAR -> CONTENT SCRIPT RELAY HANDLERS
+    // ========================================
+    
+    case 'PING_TAB':
+      // Relay PING to content script
+      try {
+        const pingResult = await chrome.tabs.sendMessage(message.tabId, { type: 'PING' });
+        return { success: true, pong: pingResult?.pong };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'START_RECORDING_TAB':
+      // Start recording on a specific tab
+      try {
+        const startResult = await chrome.tabs.sendMessage(message.tabId, {
+          type: 'START_RECORDING',
+          mode: message.mode || 'training',
+          config: message.config || {}
+        });
+        return startResult;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'STOP_RECORDING_TAB':
+      // Stop recording on a specific tab
+      try {
+        const stopResult = await chrome.tabs.sendMessage(message.tabId, { type: 'STOP_RECORDING' });
+        return stopResult;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'PAUSE_RECORDING_TAB':
+      // Pause recording on a specific tab
+      try {
+        const pauseResult = await chrome.tabs.sendMessage(message.tabId, { type: 'PAUSE_RECORDING' });
+        return pauseResult;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'RESUME_RECORDING_TAB':
+      // Resume recording on a specific tab
+      try {
+        const resumeResult = await chrome.tabs.sendMessage(message.tabId, { type: 'RESUME_RECORDING' });
+        return resumeResult;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'ADD_MARKER_TAB':
+      // Add marker on a specific tab
+      try {
+        const markerResult = await chrome.tabs.sendMessage(message.tabId, {
+          type: 'ADD_MARKER',
+          label: message.label
+        });
+        return markerResult;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'GET_RECORDING_STATUS_TAB':
+      // Get recording status from a specific tab
+      try {
+        const statusResult = await chrome.tabs.sendMessage(message.tabId, { type: 'GET_RECORDING_STATUS' });
+        return statusResult;
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'INJECT_CONTENT_SCRIPT':
+      // Inject content script into a tab
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: message.tabId },
+          files: ['recorder.js']
+        });
+        await chrome.scripting.insertCSS({
+          target: { tabId: message.tabId },
+          files: ['recorder.css']
+        });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'GET_ACTIVE_TAB':
+      // Get the currently active tab
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        return { success: true, tab };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    
+    case 'GET_FACEBOOK_TABS':
+      // Get all Facebook tabs
+      try {
+        const fbTabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+        return { success: true, tabs: fbTabs };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
       
     default:
       return { success: false, error: 'Unknown message type' };
@@ -218,6 +403,330 @@ async function injectTrainingData(trainingData) {
     return { success: false, error: error.message };
   }
 }
+
+// ============================================
+// MULTI-TAB MANAGEMENT
+// ============================================
+
+// Track recording state across tabs
+const TabManager = {
+  isRecording: false,
+  sessionId: null,
+  recordingTabs: new Map(), // tabId -> { index, type, url, events }
+  tabSequence: [],          // Order of tab switches
+  allEvents: [],            // All events from all tabs (merged)
+};
+
+/**
+ * Start recording across all Facebook tabs
+ */
+async function startMultiTabRecording(options = {}) {
+  const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  
+  TabManager.isRecording = true;
+  TabManager.sessionId = `session_${Date.now()}`;
+  TabManager.recordingTabs.clear();
+  TabManager.tabSequence = [];
+  TabManager.allEvents = [];
+  
+  let tabIndex = 0;
+  for (const tab of tabs) {
+    try {
+      // Set tab info in content script
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'SET_TAB_INFO',
+        tabId: tab.id,
+        tabIndex: tabIndex,
+      });
+      
+      // Start recording
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'START_RECORDING',
+        options: options,
+      });
+      
+      TabManager.recordingTabs.set(tab.id, {
+        index: tabIndex,
+        type: detectTabTypeFromUrl(tab.url),
+        url: tab.url,
+        title: tab.title,
+        events: [],
+      });
+      
+      tabIndex++;
+    } catch (error) {
+      console.error(`[Recorder BG] Failed to start recording in tab ${tab.id}:`, error);
+    }
+  }
+  
+  console.log(`[Recorder BG] Multi-tab recording started: ${TabManager.recordingTabs.size} tabs`);
+  
+  return {
+    success: true,
+    sessionId: TabManager.sessionId,
+    tabCount: TabManager.recordingTabs.size,
+    tabs: Array.from(TabManager.recordingTabs.entries()).map(([id, info]) => ({
+      tabId: id,
+      ...info,
+    })),
+  };
+}
+
+/**
+ * Stop recording across all tabs and compile data
+ */
+async function stopMultiTabRecording() {
+  const allTabData = {};
+  
+  for (const [tabId, tabInfo] of TabManager.recordingTabs) {
+    try {
+      const result = await chrome.tabs.sendMessage(tabId, {
+        type: 'STOP_RECORDING',
+      });
+      
+      if (result.success && result.data) {
+        allTabData[tabId] = {
+          ...tabInfo,
+          sessionData: result.data,
+        };
+      }
+    } catch (error) {
+      console.error(`[Recorder BG] Failed to stop recording in tab ${tabId}:`, error);
+    }
+  }
+  
+  // Compile multi-tab session
+  const multiTabSession = compileMultiTabSession(allTabData);
+  
+  TabManager.isRecording = false;
+  TabManager.recordingTabs.clear();
+  
+  return multiTabSession;
+}
+
+/**
+ * Compile data from multiple tabs into a unified session
+ */
+function compileMultiTabSession(allTabData) {
+  const session = {
+    sessionId: TabManager.sessionId,
+    isMultiTab: true,
+    startTime: null,
+    endTime: Date.now(),
+    duration: 0,
+    
+    // Tab data
+    tabs: {},
+    tabSequence: TabManager.tabSequence,
+    tabCount: Object.keys(allTabData).length,
+    
+    // Merged events (sorted by timestamp)
+    allEvents: [],
+    totalEvents: 0,
+    
+    // Merged marked elements
+    allMarkedElements: [],
+    
+    // Per-tab summaries
+    tabSummaries: {},
+  };
+  
+  // Merge data from all tabs
+  for (const [tabId, tabData] of Object.entries(allTabData)) {
+    const sessionData = tabData.sessionData;
+    
+    if (sessionData) {
+      // Store tab-specific data
+      session.tabs[tabId] = {
+        tabId: tabId,
+        type: tabData.type,
+        url: tabData.url,
+        title: tabData.title,
+        events: sessionData.events || [],
+        markedElements: sessionData.markedElements || [],
+        patterns: sessionData.patterns,
+        automationCode: sessionData.automationCode,
+      };
+      
+      // Merge events
+      if (sessionData.events) {
+        session.allEvents.push(...sessionData.events);
+      }
+      
+      // Merge marked elements
+      if (sessionData.markedElements) {
+        session.allMarkedElements.push(...sessionData.markedElements.map(m => ({
+          ...m,
+          tabId: tabId,
+          tabType: tabData.type,
+        })));
+      }
+      
+      // Track timing
+      if (!session.startTime || sessionData.startTime < session.startTime) {
+        session.startTime = sessionData.startTime;
+      }
+      
+      // Tab summary
+      session.tabSummaries[tabId] = {
+        type: tabData.type,
+        url: tabData.url,
+        eventCount: sessionData.events?.length || 0,
+        markedCount: sessionData.markedElements?.length || 0,
+        duration: sessionData.duration,
+      };
+    }
+  }
+  
+  // Sort all events by timestamp
+  session.allEvents.sort((a, b) => a.timestamp - b.timestamp);
+  session.totalEvents = session.allEvents.length;
+  session.duration = session.endTime - (session.startTime || session.endTime);
+  
+  return session;
+}
+
+/**
+ * Detect tab type from URL
+ */
+function detectTabTypeFromUrl(url) {
+  if (!url) return 'unknown';
+  
+  const urlLower = url.toLowerCase();
+  
+  if (urlLower.includes('/marketplace/create')) return 'marketplace-create';
+  if (urlLower.includes('/marketplace/item')) return 'marketplace-item';
+  if (urlLower.includes('/marketplace')) return 'marketplace';
+  if (urlLower.includes('/messages')) return 'messages';
+  if (urlLower.includes('/groups')) return 'groups';
+  if (urlLower.includes('/profile')) return 'profile';
+  
+  return 'facebook-other';
+}
+
+// ============================================
+// TAB EVENT LISTENERS
+// ============================================
+
+// Track tab activation
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  if (!TabManager.isRecording) return;
+  
+  const tab = await chrome.tabs.get(activeInfo.tabId);
+  if (!tab.url?.includes('facebook.com')) return;
+  
+  // Notify the tab it was activated
+  try {
+    await chrome.tabs.sendMessage(activeInfo.tabId, {
+      type: 'TAB_ACTIVATED',
+      tabId: activeInfo.tabId,
+    });
+    
+    TabManager.tabSequence.push({
+      action: 'activated',
+      tabId: activeInfo.tabId,
+      url: tab.url,
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    // Tab might not have content script yet
+  }
+});
+
+// Track new tab creation
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (!TabManager.isRecording) return;
+  
+  // Wait for URL to be set
+  setTimeout(async () => {
+    const updatedTab = await chrome.tabs.get(tab.id).catch(() => null);
+    if (!updatedTab?.url?.includes('facebook.com')) return;
+    
+    // Inject content script and start recording
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['recorder.js'],
+      });
+      
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'SET_TAB_INFO',
+        tabId: tab.id,
+        tabIndex: TabManager.recordingTabs.size,
+      });
+      
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'START_RECORDING',
+        options: { continueSession: true },
+      });
+      
+      TabManager.recordingTabs.set(tab.id, {
+        index: TabManager.recordingTabs.size,
+        type: detectTabTypeFromUrl(updatedTab.url),
+        url: updatedTab.url,
+        title: updatedTab.title,
+        events: [],
+      });
+      
+      // Notify existing tabs
+      for (const [existingTabId] of TabManager.recordingTabs) {
+        if (existingTabId !== tab.id) {
+          chrome.tabs.sendMessage(existingTabId, {
+            type: 'TAB_CREATED',
+            newTabId: tab.id,
+            openerTabId: tab.openerTabId,
+            url: updatedTab.url,
+          }).catch(() => {});
+        }
+      }
+      
+      TabManager.tabSequence.push({
+        action: 'created',
+        tabId: tab.id,
+        url: updatedTab.url,
+        openerTabId: tab.openerTabId,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      console.error('[Recorder BG] Failed to start recording in new tab:', error);
+    }
+  }, 1000);
+});
+
+// Track tab close
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  if (!TabManager.isRecording) return;
+  
+  if (TabManager.recordingTabs.has(tabId)) {
+    TabManager.recordingTabs.delete(tabId);
+    
+    TabManager.tabSequence.push({
+      action: 'closed',
+      tabId: tabId,
+      timestamp: Date.now(),
+    });
+    
+    // Notify remaining tabs
+    for (const [existingTabId] of TabManager.recordingTabs) {
+      chrome.tabs.sendMessage(existingTabId, {
+        type: 'TAB_CLOSED',
+        tabId: tabId,
+      }).catch(() => {});
+    }
+  }
+});
+
+// Track tab URL changes
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!TabManager.isRecording) return;
+  if (!changeInfo.url) return;
+  
+  if (TabManager.recordingTabs.has(tabId)) {
+    const tabInfo = TabManager.recordingTabs.get(tabId);
+    tabInfo.url = changeInfo.url;
+    tabInfo.type = detectTabTypeFromUrl(changeInfo.url);
+  }
+});
 
 // ============================================
 // EXTENSION LIFECYCLE

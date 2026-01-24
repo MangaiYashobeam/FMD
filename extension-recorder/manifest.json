@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "FMD Training Recorder - Super Admin",
-  "version": "1.0.0",
-  "description": "Records DOM interactions for IAI/Soldier training - Super Admin Only",
+  "version": "2.0.0",
+  "description": "Records DOM interactions for IAI/Soldier training - Super Admin Console",
   "permissions": [
     "activeTab",
     "storage",
     "tabs",
     "scripting",
-    "clipboardWrite"
+    "clipboardWrite",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://www.facebook.com/*",
@@ -20,6 +21,9 @@
   "background": {
     "service_worker": "background.js",
     "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidebar.html"
   },
   "content_scripts": [
     {
@@ -35,8 +39,8 @@
     }
   ],
   "action": {
-    "default_popup": "popup.html",
-    "default_icon": "icons/icon.svg"
+    "default_icon": "icons/icon.svg",
+    "default_title": "Open Training Console"
   },
   "icons": {
     "16": "icons/icon.svg",
@@ -45,7 +49,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["recorder.js"],
+      "resources": ["recorder.js", "sidebar.html", "sidebar.css", "sidebar.js"],
       "matches": ["https://*.facebook.com/*"]
     }
   ]

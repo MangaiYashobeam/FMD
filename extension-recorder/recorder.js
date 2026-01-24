@@ -26,14 +26,31 @@
     startTime: null,
     events: [],
     markedElements: [], // Ctrl+Click marked elements
-    currentMode: 'listing', // 'listing' | 'messages' | 'navigation'
+    currentMode: 'listing', // 'listing' | 'messages' | 'navigation' | 'multi-tab'
+    
+    // TAB TRACKING - New multi-tab support
+    tabInfo: {
+      tabId: null,        // Will be set by background script
+      tabIndex: 0,        // Order in the recording session
+      tabType: 'unknown', // 'marketplace' | 'messages' | 'groups' | 'profile' | 'other'
+      tabUrl: window.location.href,
+      tabTitle: document.title,
+    },
+    
+    // Events organized by tab
+    eventsByTab: {},      // { tabId: [...events] }
+    tabSequence: [],      // Order of tab switches: [{tabId, timestamp, action}]
+    activeTabId: null,    // Current active tab being recorded
+    
     metadata: {
       url: window.location.href,
       userAgent: navigator.userAgent,
       screenWidth: window.innerWidth,
       screenHeight: window.innerHeight,
-      recordingType: 'iai' // 'iai' | 'soldier'
-    }
+      recordingType: 'iai', // 'iai' | 'soldier'
+      isMultiTab: false,    // Flag for multi-tab session
+    },
+    isPaused: false,  // Pause state
   };
 
   // ============================================
@@ -48,7 +65,22 @@
     DEBOUNCE_MOUSE: 50,
     CAPTURE_SCREENSHOTS: false,
     LOG_TO_CONSOLE: true,
+    autoMark: true,
+    captureScrolls: true,
+    recordHovers: false,
+    stealthMode: true,
   };
+  
+  /**
+   * Apply configuration from sidebar
+   */
+  function applyConfig(config) {
+    if (config.autoMark !== undefined) CONFIG.autoMark = config.autoMark;
+    if (config.captureScrolls !== undefined) CONFIG.captureScrolls = config.captureScrolls;
+    if (config.recordHovers !== undefined) CONFIG.recordHovers = config.recordHovers;
+    if (config.stealthMode !== undefined) CONFIG.stealthMode = config.stealthMode;
+    log('Config applied:', CONFIG);
+  }
 
   // ============================================
   // UTILITY FUNCTIONS
@@ -283,6 +315,11 @@
   
   function recordEvent(type, data) {
     if (!RecorderState.isRecording) return;
+    if (RecorderState.isPaused) return;
+    
+    // Check config for specific event types
+    if (type === 'scroll' && !CONFIG.captureScrolls) return;
+    if (type === 'hover' && !CONFIG.recordHovers) return;
     
     const event = {
       id: generateId(),
@@ -290,10 +327,27 @@
       timestamp: getTimestamp(),
       relativeTime: getRelativeTime(),
       url: window.location.href,
+      
+      // TAB TRACKING - Include tab info with every event
+      tabInfo: {
+        tabId: RecorderState.tabInfo.tabId,
+        tabIndex: RecorderState.tabInfo.tabIndex,
+        tabType: RecorderState.tabInfo.tabType,
+        tabUrl: window.location.href,
+        tabTitle: document.title,
+      },
+      
       ...data
     };
     
     RecorderState.events.push(event);
+    
+    // Also organize by tab
+    const tabId = RecorderState.tabInfo.tabId || 'default';
+    if (!RecorderState.eventsByTab[tabId]) {
+      RecorderState.eventsByTab[tabId] = [];
+    }
+    RecorderState.eventsByTab[tabId].push(event);
     
     // Limit events to prevent memory issues
     if (RecorderState.events.length > CONFIG.MAX_EVENTS) {
@@ -305,7 +359,13 @@
     // Send to background for live preview
     chrome.runtime.sendMessage({
       type: 'RECORDER_EVENT',
-      event: event
+      event: event,
+      counts: {
+        events: RecorderState.events.length,
+        clicks: RecorderState.events.filter(e => e.type === 'click').length,
+        inputs: RecorderState.events.filter(e => e.type === 'typing' || e.type === 'input').length,
+        marks: RecorderState.markedElements.length,
+      }
     }).catch(() => {});
   }
 
@@ -811,18 +871,39 @@
   }
 
   function compileSessionData() {
+    // Compile tab summary
+    const tabSummary = compileTabSummary();
+    
     return {
       sessionId: RecorderState.sessionId,
       startTime: RecorderState.startTime,
       endTime: Date.now(),
       duration: getRelativeTime(),
-      metadata: RecorderState.metadata,
+      metadata: {
+        ...RecorderState.metadata,
+        isMultiTab: Object.keys(RecorderState.eventsByTab).length > 1,
+      },
       mode: RecorderState.currentMode,
       recordingType: RecorderState.metadata.recordingType,
       
-      // All events
+      // All events (flat list with tab info embedded)
       events: RecorderState.events,
       totalEvents: RecorderState.events.length,
+      
+      // TAB-ORGANIZED DATA
+      tabData: {
+        // Events organized by tab
+        eventsByTab: RecorderState.eventsByTab,
+        
+        // Tab switching sequence
+        tabSequence: RecorderState.tabSequence,
+        
+        // Summary of each tab
+        tabSummary: tabSummary,
+        
+        // Total tabs used
+        tabCount: Object.keys(RecorderState.eventsByTab).length,
+      },
       
       // Marked elements (Ctrl+Click)
       markedElements: RecorderState.markedElements,
@@ -839,9 +920,67 @@
       // Typing patterns
       typingPatterns: extractTypingPatterns(),
       
-      // Generated automation code
+      // Generated automation code (now tab-aware)
       automationCode: generateAutomationCode(),
     };
+  }
+  
+  /**
+   * Compile summary for each tab
+   */
+  function compileTabSummary() {
+    const summary = {};
+    
+    for (const [tabId, events] of Object.entries(RecorderState.eventsByTab)) {
+      const firstEvent = events[0];
+      const lastEvent = events[events.length - 1];
+      
+      // Determine tab type from URL
+      const tabUrl = firstEvent?.tabInfo?.tabUrl || '';
+      const tabType = detectTabType(tabUrl);
+      
+      summary[tabId] = {
+        tabId: tabId,
+        tabType: tabType,
+        tabUrl: firstEvent?.tabInfo?.tabUrl,
+        tabTitle: firstEvent?.tabInfo?.tabTitle,
+        eventCount: events.length,
+        firstEventTime: firstEvent?.timestamp,
+        lastEventTime: lastEvent?.timestamp,
+        duration: lastEvent?.relativeTime - firstEvent?.relativeTime,
+        
+        // Event breakdown
+        clicks: events.filter(e => e.type === 'click').length,
+        typing: events.filter(e => e.type === 'typing').length,
+        scrolls: events.filter(e => e.type === 'scroll').length,
+        navigations: events.filter(e => e.type === 'navigation').length,
+        
+        // Marked elements in this tab
+        markedCount: events.filter(e => e.isMarked).length,
+      };
+    }
+    
+    return summary;
+  }
+  
+  /**
+   * Detect tab type from URL
+   */
+  function detectTabType(url) {
+    if (!url) return 'unknown';
+    
+    const urlLower = url.toLowerCase();
+    
+    if (urlLower.includes('/marketplace/create')) return 'marketplace-create';
+    if (urlLower.includes('/marketplace/item')) return 'marketplace-item';
+    if (urlLower.includes('/marketplace')) return 'marketplace';
+    if (urlLower.includes('/messages')) return 'messages';
+    if (urlLower.includes('/groups')) return 'groups';
+    if (urlLower.includes('/profile')) return 'profile';
+    if (urlLower.includes('/notifications')) return 'notifications';
+    if (urlLower.includes('/settings')) return 'settings';
+    
+    return 'facebook-other';
   }
 
   // ============================================
@@ -1107,7 +1246,19 @@
     log('Message received:', message.type);
     
     switch (message.type) {
+      // PING - Used to check if content script is loaded
+      case 'PING':
+        sendResponse({ pong: true, isRecording: RecorderState.isRecording });
+        break;
+        
       case 'START_RECORDING':
+        // Apply config if provided
+        if (message.config) {
+          applyConfig(message.config);
+        }
+        if (message.mode) {
+          RecorderState.currentMode = message.mode;
+        }
         startRecording(message.options || {});
         sendResponse({ success: true, sessionId: RecorderState.sessionId });
         break;
@@ -1115,6 +1266,48 @@
       case 'STOP_RECORDING':
         const data = stopRecording();
         sendResponse({ success: true, data });
+        break;
+      
+      case 'PAUSE_RECORDING':
+        RecorderState.isPaused = true;
+        log('Recording paused');
+        sendResponse({ success: true });
+        break;
+        
+      case 'RESUME_RECORDING':
+        RecorderState.isPaused = false;
+        log('Recording resumed');
+        sendResponse({ success: true });
+        break;
+      
+      case 'ADD_MARKER':
+        if (RecorderState.isRecording) {
+          recordEvent('marker', {
+            type: 'user-marker',
+            timestamp: message.timestamp || getTimestamp(),
+            note: message.note || 'User marked point',
+          });
+          sendResponse({ success: true, markerCount: RecorderState.events.filter(e => e.type === 'marker').length });
+        } else {
+          sendResponse({ success: false, error: 'Not recording' });
+        }
+        break;
+      
+      case 'GET_RECORDING_STATUS':
+        const counts = {
+          events: RecorderState.events.length,
+          clicks: RecorderState.events.filter(e => e.type === 'click').length,
+          inputs: RecorderState.events.filter(e => e.type === 'typing' || e.type === 'input').length,
+          marks: RecorderState.markedElements.length,
+        };
+        sendResponse({
+          isRecording: RecorderState.isRecording,
+          isPaused: RecorderState.isPaused || false,
+          sessionId: RecorderState.sessionId,
+          counts,
+          mode: RecorderState.currentMode,
+          tabInfo: RecorderState.tabInfo,
+        });
         break;
         
       case 'GET_STATUS':
@@ -1124,6 +1317,8 @@
           eventCount: RecorderState.events.length,
           markedCount: RecorderState.markedElements.length,
           mode: RecorderState.currentMode,
+          tabInfo: RecorderState.tabInfo,
+          tabCount: Object.keys(RecorderState.eventsByTab).length,
         });
         break;
         
@@ -1131,6 +1326,92 @@
         sendResponse({
           events: RecorderState.events.slice(-100),
           markedElements: RecorderState.markedElements,
+          eventsByTab: RecorderState.eventsByTab,
+          tabSequence: RecorderState.tabSequence,
+        });
+        break;
+      
+      // TAB MANAGEMENT MESSAGES
+      case 'SET_TAB_INFO':
+        // Background script tells us our tab ID
+        RecorderState.tabInfo.tabId = message.tabId;
+        RecorderState.tabInfo.tabIndex = message.tabIndex || 0;
+        RecorderState.tabInfo.tabType = detectTabType(window.location.href);
+        RecorderState.activeTabId = message.tabId;
+        log('Tab info set:', RecorderState.tabInfo);
+        sendResponse({ success: true, tabInfo: RecorderState.tabInfo });
+        break;
+        
+      case 'TAB_ACTIVATED':
+        // Record that this tab was switched to
+        if (RecorderState.isRecording) {
+          recordEvent('tabSwitch', {
+            action: 'activated',
+            fromTabId: RecorderState.activeTabId,
+            toTabId: message.tabId,
+            tabType: detectTabType(window.location.href),
+          });
+          RecorderState.activeTabId = message.tabId;
+          RecorderState.tabSequence.push({
+            tabId: message.tabId,
+            timestamp: getTimestamp(),
+            relativeTime: getRelativeTime(),
+            action: 'activated',
+            url: window.location.href,
+            tabType: detectTabType(window.location.href),
+          });
+        }
+        sendResponse({ success: true });
+        break;
+        
+      case 'TAB_CREATED':
+        // Record new tab creation
+        if (RecorderState.isRecording) {
+          recordEvent('tabSwitch', {
+            action: 'created',
+            newTabId: message.newTabId,
+            openerTabId: message.openerTabId,
+            url: message.url,
+            tabType: detectTabType(message.url),
+          });
+          RecorderState.tabSequence.push({
+            tabId: message.newTabId,
+            timestamp: getTimestamp(),
+            relativeTime: getRelativeTime(),
+            action: 'created',
+            url: message.url,
+            openerTabId: message.openerTabId,
+            tabType: detectTabType(message.url),
+          });
+        }
+        sendResponse({ success: true });
+        break;
+        
+      case 'TAB_CLOSED':
+        // Record tab close
+        if (RecorderState.isRecording) {
+          recordEvent('tabSwitch', {
+            action: 'closed',
+            closedTabId: message.tabId,
+          });
+          RecorderState.tabSequence.push({
+            tabId: message.tabId,
+            timestamp: getTimestamp(),
+            relativeTime: getRelativeTime(),
+            action: 'closed',
+          });
+        }
+        sendResponse({ success: true });
+        break;
+        
+      case 'GET_TAB_DATA':
+        // Return tab-organized recording data
+        sendResponse({
+          success: true,
+          eventsByTab: RecorderState.eventsByTab,
+          tabSequence: RecorderState.tabSequence,
+          tabSummary: compileTabSummary(),
+          tabCount: Object.keys(RecorderState.eventsByTab).length,
         });
         break;
         
@@ -1145,6 +1426,7 @@
               timestamp: getTimestamp(),
               relativeTime: getRelativeTime(),
               markedAs: message.fieldType,
+              tabId: RecorderState.tabInfo.tabId,
             });
             showMarkedFeedback(element, message.fieldType);
             sendResponse({ success: true });

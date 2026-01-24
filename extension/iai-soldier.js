@@ -2095,8 +2095,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ 
             success: true, 
             active: window.iaiSoldier?.isActive || false,
-            page: detectCurrentPage()
+            page: detectCurrentPage(),
+            url: window.location.href,
+            tabType: detectPageTabType(),
           });
+          break;
+        
+        // ============================================
+        // TRAINING STEP EXECUTION
+        // ============================================
+        
+        case 'EXECUTE_TRAINING_STEP':
+          const stepResult = await executeTrainingStep(message.step);
+          sendResponse(stepResult);
+          break;
+          
+        case 'GET_TAB_TYPE':
+          sendResponse({
+            success: true,
+            tabType: detectPageTabType(),
+            url: window.location.href,
+          });
+          break;
+          
+        case 'EXECUTE_CLICK':
+          const clickResult = await executeRecordedClick(message);
+          sendResponse(clickResult);
+          break;
+          
+        case 'EXECUTE_TYPE':
+          const typeResult = await executeRecordedType(message);
+          sendResponse(typeResult);
+          break;
+          
+        case 'EXECUTE_SCROLL':
+          const scrollResult = await executeRecordedScroll(message);
+          sendResponse(scrollResult);
           break;
           
         default:
@@ -2111,6 +2145,298 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   return true; // Keep message channel open for async response
 });
+
+/**
+ * Detect page tab type
+ */
+function detectPageTabType() {
+  const url = window.location.href.toLowerCase();
+  
+  if (url.includes('/marketplace/create')) return 'marketplace-create';
+  if (url.includes('/marketplace/item')) return 'marketplace-item';
+  if (url.includes('/marketplace')) return 'marketplace';
+  if (url.includes('/messages')) return 'messages';
+  if (url.includes('/groups')) return 'groups';
+  if (url.includes('/profile')) return 'profile';
+  
+  return 'facebook-other';
+}
+
+/**
+ * Execute a training step (from recorded session)
+ */
+async function executeTrainingStep(step) {
+  const stealth = new IAIStealth();
+  
+  try {
+    console.log(`[IAI Training] Executing step: ${step.action || step.type}`, step);
+    
+    switch (step.action || step.type) {
+      case 'click':
+        return await executeRecordedClick(step);
+        
+      case 'type':
+      case 'typing':
+        return await executeRecordedType(step);
+        
+      case 'scroll':
+        return await executeRecordedScroll(step);
+        
+      case 'focus':
+        return await executeRecordedFocus(step);
+        
+      case 'select':
+        return await executeRecordedSelect(step);
+        
+      case 'wait':
+        await stealth.delay(step.duration || 1000, (step.duration || 1000) + 500);
+        return { success: true, action: 'wait' };
+        
+      case 'navigate':
+        window.location.href = step.url;
+        return { success: true, action: 'navigate', url: step.url };
+        
+      default:
+        console.warn(`[IAI Training] Unknown action type: ${step.action || step.type}`);
+        return { success: false, error: `Unknown action: ${step.action || step.type}` };
+    }
+  } catch (error) {
+    console.error('[IAI Training] Step execution error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Execute a recorded click action
+ */
+async function executeRecordedClick(step) {
+  const stealth = new IAIStealth();
+  const element = findElementByRecordedData(step.element || step);
+  
+  if (!element) {
+    return { success: false, error: 'Element not found', selectors: step.element?.selectors };
+  }
+  
+  // Scroll element into view
+  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await stealth.delay(200, 400);
+  
+  // Execute click with human-like behavior
+  await stealth.click(element);
+  
+  return { success: true, action: 'click', element: element.tagName };
+}
+
+/**
+ * Execute a recorded type action
+ */
+async function executeRecordedType(step) {
+  const stealth = new IAIStealth();
+  const element = findElementByRecordedData(step.element || step);
+  
+  if (!element) {
+    return { success: false, error: 'Element not found' };
+  }
+  
+  // Focus the element
+  element.focus();
+  await stealth.delay(100, 200);
+  
+  // Get the text to type (use value from training data or placeholder)
+  const text = step.value || step.text || step.exampleValue || '';
+  
+  if (!text) {
+    return { success: false, error: 'No text to type' };
+  }
+  
+  // Type with human-like delays
+  await stealth.typeWithHumanBehavior(element, text);
+  
+  return { success: true, action: 'type', length: text.length };
+}
+
+/**
+ * Execute a recorded scroll action
+ */
+async function executeRecordedScroll(step) {
+  const stealth = new IAIStealth();
+  
+  const scrollTo = step.scrollPosition || step.position || {};
+  
+  window.scrollTo({
+    top: scrollTo.scrollTop || scrollTo.y || 0,
+    left: scrollTo.scrollLeft || scrollTo.x || 0,
+    behavior: 'smooth',
+  });
+  
+  await stealth.delay(300, 500);
+  
+  return { success: true, action: 'scroll', position: scrollTo };
+}
+
+/**
+ * Execute a recorded focus action
+ */
+async function executeRecordedFocus(step) {
+  const element = findElementByRecordedData(step.element || step);
+  
+  if (!element) {
+    return { success: false, error: 'Element not found' };
+  }
+  
+  element.focus();
+  
+  return { success: true, action: 'focus' };
+}
+
+/**
+ * Execute a recorded select action (dropdown)
+ */
+async function executeRecordedSelect(step) {
+  const stealth = new IAIStealth();
+  
+  // If fieldType is specified, use the enhanced dropdown selection
+  if (step.fieldType) {
+    const value = step.value || step.selectedValue;
+    const success = await selectFacebookDropdownEnhancedV2(step.fieldType, value, stealth);
+    return { success, action: 'select', fieldType: step.fieldType };
+  }
+  
+  // Otherwise try to find and click the dropdown then the option
+  const dropdown = findElementByRecordedData(step.element || step.dropdown);
+  
+  if (!dropdown) {
+    return { success: false, error: 'Dropdown not found' };
+  }
+  
+  await stealth.click(dropdown);
+  await stealth.delay(500, 800);
+  
+  // Find and click the option
+  const optionText = step.value || step.optionText;
+  const option = findElementByText(optionText, ['span', 'div', '[role="option"]']);
+  
+  if (option) {
+    await stealth.click(option);
+    return { success: true, action: 'select', value: optionText };
+  }
+  
+  return { success: false, error: 'Option not found' };
+}
+
+/**
+ * Find element using recorded selector data
+ * Tries multiple strategies from the recorded selectors
+ */
+function findElementByRecordedData(elementData) {
+  if (!elementData) return null;
+  
+  // Strategy 1: Try selectors array
+  const selectors = elementData.selectors;
+  if (selectors) {
+    const selectorList = Array.isArray(selectors) ? selectors : [selectors];
+    
+    for (const selector of selectorList) {
+      try {
+        const element = document.querySelector(selector);
+        if (element && isVisible(element)) {
+          return element;
+        }
+      } catch (e) {
+        // Invalid selector, try next
+      }
+    }
+  }
+  
+  // Strategy 2: Try by aria-label
+  if (elementData.ariaLabel) {
+    const element = document.querySelector(`[aria-label="${CSS.escape(elementData.ariaLabel)}"]`);
+    if (element && isVisible(element)) {
+      return element;
+    }
+  }
+  
+  // Strategy 3: Try by role
+  if (elementData.role) {
+    const elements = document.querySelectorAll(`[role="${elementData.role}"]`);
+    for (const el of elements) {
+      if (isVisible(el) && elementMatchesText(el, elementData.textContent)) {
+        return el;
+      }
+    }
+  }
+  
+  // Strategy 4: Try by text content
+  if (elementData.textContent) {
+    const element = findElementByText(elementData.textContent, ['button', 'span', 'div', 'label', 'a']);
+    if (element) {
+      return element;
+    }
+  }
+  
+  // Strategy 5: Try by data-testid
+  if (elementData.dataAttributes?.['data-testid']) {
+    const element = document.querySelector(`[data-testid="${elementData.dataAttributes['data-testid']}"]`);
+    if (element && isVisible(element)) {
+      return element;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if element matches expected text
+ */
+function elementMatchesText(element, text) {
+  if (!text || !element) return true; // If no text to match, consider it a match
+  
+  const elementText = (element.textContent || element.innerText || '').trim().toLowerCase();
+  const searchText = text.trim().toLowerCase();
+  
+  return elementText.includes(searchText) || searchText.includes(elementText);
+}
+
+/**
+ * Find element by text content
+ */
+function findElementByText(text, tagNames = ['span', 'div', 'button', 'label']) {
+  if (!text) return null;
+  
+  const searchText = text.trim().toLowerCase();
+  
+  for (const tagName of tagNames) {
+    const elements = document.querySelectorAll(tagName);
+    for (const el of elements) {
+      const elText = (el.textContent || el.innerText || '').trim().toLowerCase();
+      if (elText === searchText || elText.includes(searchText)) {
+        if (isVisible(el)) {
+          return el;
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if element is visible
+ */
+function isVisible(element) {
+  if (!element) return false;
+  
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  
+  return (
+    style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    style.opacity !== '0' &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
+}
 
 /**
  * Enhanced vehicle listing fill with ALL competitor patterns:
