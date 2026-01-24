@@ -452,6 +452,10 @@ app.use('/api', (req, res, next) => {
     '/auth/health',
     '/auth/debug-login',
     '/auth/extension-login', // Extension login redirect
+    // Super Admin impersonation endpoints (uses JWT auth, not CSRF)
+    '/auth/impersonate',
+    '/auth/impersonation',
+    '/auth/end-impersonation',
     // AI Center endpoints (uses auth token)
     '/ai-center/chat',
     '/ai-center/models',
@@ -472,6 +476,8 @@ app.use('/api', (req, res, next) => {
     '/leads',
     // Accounts management
     '/accounts',
+    // Admin routes (Super Admin authenticated via JWT)
+    '/admin/',
     // IAI Admin routes (prototype browser testing)
     '/admin/iai',
     // AI Center routes (AI memory, chat)

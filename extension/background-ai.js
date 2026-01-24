@@ -1292,7 +1292,7 @@ async function recordPosting(vehicleId, platform, status) {
  * Uses the same auth layer as the user's session
  */
 async function sendAIChatMessage(content, context = {}) {
-  const { authToken, authState } = await chrome.storage.local.get(['authToken', 'authState']);
+  const { authToken, authState, accountId: storedAccountId } = await chrome.storage.local.get(['authToken', 'authState', 'accountId']);
   
   const token = authToken || authState?.accessToken;
   
@@ -1309,13 +1309,23 @@ async function sendAIChatMessage(content, context = {}) {
     
     // Get current tab context
     let tabContext = { ...context };
+    let activeFacebookTabs = [];
+    let activeMarketplaceTabs = [];
+    
     try {
+      // Get current active tab
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (activeTab) {
         tabContext.url = activeTab.url;
         tabContext.title = activeTab.title;
         tabContext.pageType = detectPageType(activeTab.url);
       }
+      
+      // Get all tabs to understand user's full context
+      const allTabs = await chrome.tabs.query({});
+      activeFacebookTabs = allTabs.filter(t => t.url?.includes('facebook.com'));
+      activeMarketplaceTabs = allTabs.filter(t => t.url?.includes('/marketplace'));
+      
     } catch (e) {
       // Tab context is optional
     }
@@ -1329,7 +1339,12 @@ async function sendAIChatMessage(content, context = {}) {
       body: JSON.stringify({
         message: content,
         context: {
-          accountId: authState?.accountId || authState?.dealerAccountId,
+          accountId: storedAccountId || authState?.accountId || authState?.dealerAccountId,
+          source: 'extension', // Explicitly identify source
+          extensionVersion: chrome.runtime.getManifest().version,
+          activeFacebookTabs: activeFacebookTabs.length,
+          activeMarketplaceTabs: activeMarketplaceTabs.length,
+          isSoldierActive: isPolling, // Is IAI Soldier active
           ...tabContext,
         },
       }),

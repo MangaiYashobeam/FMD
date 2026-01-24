@@ -963,8 +963,19 @@ Analyze this error and provide a solution specific to the Dealers Face system.`;
     }
     
     // Build comprehensive system prompt with company awareness
-    const systemPrompt = `You are Nexus, the AI assistant integrated into the Dealers Face Chrome extension.
+    // Detect if user is communicating from extension or web dashboard
+    const isFromExtension = context?.source === 'extension';
+    const extensionContext = isFromExtension ? `
+🔌 CONNECTION SOURCE: Chrome Extension (v${context?.extensionVersion || 'unknown'})
+- Active Facebook Tabs: ${context?.activeFacebookTabs || 0}
+- Active Marketplace Tabs: ${context?.activeMarketplaceTabs || 0}
+- IAI Soldier: ${context?.isSoldierActive ? '✅ Active' : '❌ Inactive'}
+` : `
+🔌 CONNECTION SOURCE: Web Dashboard (dealersface.com)
+`;
 
+    const systemPrompt = `You are Nexus, the AI assistant integrated into the Dealers Face Chrome extension.
+${extensionContext}
 🏢 COMPANY: Dealers Face (dealersface.com)
 Dealers Face is a Facebook Marketplace automation platform for car dealerships.
 The platform helps dealers post vehicles, manage leads, and automate Facebook interactions.
