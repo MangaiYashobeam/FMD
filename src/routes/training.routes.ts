@@ -31,7 +31,9 @@ router.use(requireSuperAdmin);
  */
 router.get('/sessions', async (req: AuthRequest, res: Response) => {
   try {
-    const { type, mode, limit = 50 } = req.query;
+    const type = req.query.type as string | undefined;
+    const mode = req.query.mode as string | undefined;
+    const limit = Number(req.query.limit) || 50;
     
     const where: any = {};
     if (type) where.recordingType = type;
@@ -40,7 +42,7 @@ router.get('/sessions', async (req: AuthRequest, res: Response) => {
     const sessions = await prisma.trainingSession.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: Number(limit),
+      take: limit,
       select: {
         id: true,
         sessionId: true,
@@ -67,12 +69,12 @@ router.get('/sessions', async (req: AuthRequest, res: Response) => {
  */
 router.get('/sessions/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     
     const session = await prisma.trainingSession.findFirst({
       where: {
         OR: [
-          { id: id },
+          { id },
           { sessionId: id },
         ],
       },
@@ -254,7 +256,7 @@ router.post('/sessions', async (req: AuthRequest, res: Response) => {
  */
 router.delete('/sessions/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     
     // Delete related records first
     await prisma.trainingEvent.deleteMany({ where: { sessionId: id } });
@@ -281,7 +283,7 @@ router.delete('/sessions/:id', async (req: AuthRequest, res: Response) => {
  */
 router.post('/sessions/:id/process', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     
     const session = await prisma.trainingSession.findUnique({
       where: { id },
@@ -321,7 +323,7 @@ router.post('/sessions/:id/process', async (req: AuthRequest, res: Response) => 
  */
 router.post('/sessions/:id/activate', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { target } = req.body; // 'iai' | 'soldier' | 'both'
     
     // Deactivate other sessions of the same type
@@ -474,7 +476,7 @@ router.get('/field-mappings', async (req: AuthRequest, res: Response) => {
  */
 router.put('/field-mappings/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const updates = req.body;
     
     const mapping = await prisma.trainingFieldMapping.update({
