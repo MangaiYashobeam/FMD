@@ -441,7 +441,7 @@ app.use('/api', (req, res, next) => {
     '/facebook/deauthorize',
     '/facebook/data-deletion',
     '/auth/facebook/callback',
-    '/extension/sync', // Extension uses API keys
+    '/extension/', // All extension endpoints (Chrome extension uses JWT, not CSRF)
     // Public auth endpoints (no CSRF token available yet)
     '/auth/login',
     '/auth/register',

@@ -661,6 +661,62 @@ async function refreshTokenIfNeeded() {
   }
 }
 
+/**
+ * Refresh access token (force refresh)
+ * Called when we get a 401 from API
+ */
+async function refreshAccessToken() {
+  try {
+    const { authState: savedAuth, refreshToken } = await chrome.storage.local.get(['authState', 'refreshToken']);
+    
+    if (!refreshToken) {
+      console.log('No refresh token available');
+      return false;
+    }
+    
+    const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/auth/refresh-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+    
+    if (!response.ok) {
+      console.error('Token refresh failed:', response.status);
+      return false;
+    }
+    
+    const data = await response.json();
+    
+    if (data.success && data.data?.accessToken) {
+      // Update authState with new token
+      const newAuthState = {
+        ...savedAuth,
+        accessToken: data.data.accessToken,
+        tokenExpiry: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+      };
+      
+      await chrome.storage.local.set({ 
+        authState: newAuthState,
+        authToken: data.data.accessToken,
+        refreshToken: data.data.refreshToken || refreshToken,
+      });
+      
+      // Update in-memory state
+      authState = newAuthState;
+      
+      console.log('✅ Token refreshed successfully');
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    return false;
+  }
+}
+
 // ============================================
 // Task Management
 // ============================================
