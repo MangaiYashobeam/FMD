@@ -530,17 +530,36 @@ async function handleMessageAsync(message) {
     case 'IAI_FILL_LISTING':
       console.log('🚗 IAI_FILL_LISTING: Filling vehicle form', message.vehicle);
       const fillResult = await fillMarketplaceVehicleForm(message.vehicle);
-      return { success: true, ...fillResult };
+      // Report actual success based on critical fields
+      if (!fillResult.success) {
+        console.error('❌ IAI_FILL_LISTING failed:', fillResult.errors, fillResult.failedFields);
+        reportErrorToBackground({
+          type: 'IAI_FILL_LISTING_FAILED',
+          message: `Form fill failed: ${fillResult.failedFields.join(', ')}`,
+          details: fillResult
+        });
+      }
+      return fillResult;
       
     case 'IAI_UPLOAD_IMAGES':
       console.log('📷 IAI_UPLOAD_IMAGES: Uploading', message.images?.length, 'images');
       const uploadResult = await uploadImagesFromUrls(message.images);
-      return { success: true, ...uploadResult };
+      return { success: uploadResult.uploaded > 0 || !message.images?.length, ...uploadResult };
       
     case 'IAI_PUBLISH_LISTING':
       console.log('🚀 IAI_PUBLISH_LISTING: Publishing listing');
+      // Check if form is ready before publishing
+      const formState = analyzeFormState();
+      if (formState.requiredMissing && formState.requiredMissing.length > 0) {
+        console.warn('⚠️ Cannot publish - required fields missing:', formState.requiredMissing);
+        return { 
+          success: false, 
+          error: 'Required fields not filled',
+          missingFields: formState.requiredMissing
+        };
+      }
       const publishResult = await clickPublishButton();
-      return { success: true, ...publishResult };
+      return { success: publishResult.clicked, ...publishResult };
     
     case 'FILL_MARKETPLACE_FORM':
       console.log('📝 FILL_MARKETPLACE_FORM: Legacy handler');
@@ -653,11 +672,12 @@ function analyzeFormState() {
 
 // ============================================
 // MARKETPLACE FORM FILLING (Production Version)
+// Based on actual Facebook Marketplace DOM (Jan 2026)
 // ============================================
 
 /**
  * Fill Facebook Marketplace vehicle listing form
- * Based on current Facebook DOM structure (Jan 2026)
+ * CRITICAL: Must follow Facebook's specific form flow
  */
 async function fillMarketplaceVehicleForm(vehicle) {
   console.log('🚗 Starting form fill for:', vehicle.year, vehicle.make, vehicle.model);
@@ -665,116 +685,500 @@ async function fillMarketplaceVehicleForm(vehicle) {
   const filledFields = [];
   const failedFields = [];
   const errors = [];
+  const steps = [];
   
   // Wait for form to be ready
   await waitForFormReady();
+  await randomDelay(500, 800);
   
-  // === TITLE ===
-  const title = vehicle.title || `${vehicle.year} ${vehicle.make} ${vehicle.model} ${vehicle.trim || ''}`.trim();
-  if (await fillInputField(['[aria-label*="Title" i]', 'input[placeholder*="title" i]', '[name="title"]'], title)) {
-    filledFields.push('title');
+  // === STEP 1: VEHICLE TYPE (REQUIRED FIRST) ===
+  // Facebook requires vehicle type selection before other fields appear
+  console.log('📋 Step 1: Selecting vehicle type...');
+  const vehicleType = getVehicleType(vehicle);
+  if (await selectFacebookDropdown('Vehicle type', vehicleType)) {
+    filledFields.push('vehicleType');
+    steps.push({ field: 'vehicleType', success: true });
+    await randomDelay(800, 1200); // Wait for form to update
   } else {
-    failedFields.push('title');
-    errors.push('Could not find or fill title field');
+    failedFields.push('vehicleType');
+    errors.push('Could not select vehicle type - form may not load correctly');
+    steps.push({ field: 'vehicleType', success: false });
   }
   
-  // === PRICE ===
-  const price = String(vehicle.price || '').replace(/[^0-9]/g, '');
-  if (price && await fillInputField(['[aria-label*="Price" i]', 'input[placeholder*="price" i]', '[name="price"]'], price)) {
-    filledFields.push('price');
-  } else if (price) {
-    failedFields.push('price');
-    errors.push('Could not find or fill price field');
-  }
-  
-  // === YEAR (Dropdown) ===
+  // === STEP 2: YEAR (Dropdown) ===
+  console.log('📋 Step 2: Selecting year...');
   if (vehicle.year) {
-    if (await selectDropdownOption(['[aria-label*="Year" i]'], String(vehicle.year))) {
+    if (await selectFacebookDropdown('Year', String(vehicle.year))) {
       filledFields.push('year');
+      steps.push({ field: 'year', success: true });
+      await randomDelay(600, 1000);
     } else {
       failedFields.push('year');
+      steps.push({ field: 'year', success: false });
     }
   }
   
-  // === MAKE (Dropdown) ===
+  // === STEP 3: MAKE (Dropdown or Input) ===
+  console.log('📋 Step 3: Entering make...');
   if (vehicle.make) {
-    if (await selectDropdownOption(['[aria-label*="Make" i]'], vehicle.make)) {
+    // Try dropdown first, then input
+    if (await selectFacebookDropdown('Make', vehicle.make) || 
+        await fillFacebookInput('Make', vehicle.make)) {
       filledFields.push('make');
+      steps.push({ field: 'make', success: true });
+      await randomDelay(600, 1000);
     } else {
       failedFields.push('make');
+      steps.push({ field: 'make', success: false });
     }
   }
   
-  // === MODEL (Dropdown) ===
+  // === STEP 4: MODEL (Dropdown or Input) ===
+  console.log('📋 Step 4: Entering model...');
   if (vehicle.model) {
-    if (await selectDropdownOption(['[aria-label*="Model" i]'], vehicle.model)) {
+    if (await selectFacebookDropdown('Model', vehicle.model) ||
+        await fillFacebookInput('Model', vehicle.model)) {
       filledFields.push('model');
+      steps.push({ field: 'model', success: true });
+      await randomDelay(600, 1000);
     } else {
       failedFields.push('model');
+      steps.push({ field: 'model', success: false });
     }
   }
   
-  // === MILEAGE ===
+  // === STEP 5: TRIM (Optional) ===
+  if (vehicle.trim) {
+    console.log('📋 Step 5: Entering trim...');
+    if (await fillFacebookInput('Trim', vehicle.trim)) {
+      filledFields.push('trim');
+      steps.push({ field: 'trim', success: true });
+    }
+    await randomDelay(300, 500);
+  }
+  
+  // === STEP 6: PRICE ===
+  console.log('📋 Step 6: Entering price...');
+  const price = String(vehicle.price || '').replace(/[^0-9]/g, '');
+  if (price) {
+    if (await fillFacebookInput('Price', price)) {
+      filledFields.push('price');
+      steps.push({ field: 'price', success: true });
+    } else {
+      failedFields.push('price');
+      errors.push('Could not fill price field');
+      steps.push({ field: 'price', success: false });
+    }
+    await randomDelay(300, 500);
+  }
+  
+  // === STEP 7: MILEAGE ===
+  console.log('📋 Step 7: Entering mileage...');
   if (vehicle.mileage) {
-    if (await fillInputField(['[aria-label*="mileage" i]', '[aria-label*="odometer" i]'], String(vehicle.mileage))) {
+    const mileage = String(vehicle.mileage).replace(/[^0-9]/g, '');
+    if (await fillFacebookInput('Mileage', mileage) ||
+        await fillFacebookInput('Vehicle mileage', mileage)) {
       filledFields.push('mileage');
+      steps.push({ field: 'mileage', success: true });
     } else {
       failedFields.push('mileage');
+      steps.push({ field: 'mileage', success: false });
     }
+    await randomDelay(300, 500);
   }
   
-  // === BODY STYLE ===
+  // === STEP 8: BODY STYLE (Optional) ===
   if (vehicle.bodyStyle || vehicle.bodyType) {
-    if (await selectDropdownOption(['[aria-label*="Body style" i]', '[aria-label*="Body type" i]'], vehicle.bodyStyle || vehicle.bodyType)) {
+    console.log('📋 Step 8: Selecting body style...');
+    const bodyStyle = vehicle.bodyStyle || vehicle.bodyType;
+    if (await selectFacebookDropdown('Body style', bodyStyle)) {
       filledFields.push('bodyStyle');
+      steps.push({ field: 'bodyStyle', success: true });
     }
+    await randomDelay(300, 500);
   }
   
-  // === EXTERIOR COLOR ===
+  // === STEP 9: EXTERIOR COLOR (Optional) ===
   if (vehicle.exteriorColor || vehicle.color) {
-    if (await selectDropdownOption(['[aria-label*="Exterior color" i]', '[aria-label*="Color" i]'], vehicle.exteriorColor || vehicle.color)) {
+    console.log('📋 Step 9: Selecting exterior color...');
+    const color = vehicle.exteriorColor || vehicle.color;
+    if (await selectFacebookDropdown('Exterior color', color)) {
       filledFields.push('exteriorColor');
+      steps.push({ field: 'exteriorColor', success: true });
     }
+    await randomDelay(300, 500);
   }
   
-  // === TRANSMISSION ===
+  // === STEP 10: TRANSMISSION (Optional) ===
   if (vehicle.transmission) {
-    if (await selectDropdownOption(['[aria-label*="Transmission" i]'], vehicle.transmission)) {
+    console.log('📋 Step 10: Selecting transmission...');
+    if (await selectFacebookDropdown('Transmission', vehicle.transmission)) {
       filledFields.push('transmission');
+      steps.push({ field: 'transmission', success: true });
     }
+    await randomDelay(300, 500);
   }
   
-  // === FUEL TYPE ===
+  // === STEP 11: FUEL TYPE (Optional) ===
   if (vehicle.fuelType) {
-    if (await selectDropdownOption(['[aria-label*="Fuel type" i]', '[aria-label*="Fuel" i]'], vehicle.fuelType)) {
+    console.log('📋 Step 11: Selecting fuel type...');
+    if (await selectFacebookDropdown('Fuel type', vehicle.fuelType)) {
       filledFields.push('fuelType');
+      steps.push({ field: 'fuelType', success: true });
     }
+    await randomDelay(300, 500);
   }
   
-  // === CONDITION ===
+  // === STEP 12: CONDITION (Optional) ===
   if (vehicle.condition) {
-    if (await selectDropdownOption(['[aria-label*="Condition" i]'], vehicle.condition)) {
+    console.log('📋 Step 12: Selecting condition...');
+    if (await selectFacebookDropdown('Condition', vehicle.condition)) {
       filledFields.push('condition');
+      steps.push({ field: 'condition', success: true });
     }
+    await randomDelay(300, 500);
   }
   
-  // === DESCRIPTION ===
+  // === STEP 13: DESCRIPTION (Last) ===
+  console.log('📋 Step 13: Entering description...');
   const description = vehicle.description || generateVehicleDescription(vehicle);
-  if (await fillTextareaField(['[aria-label*="Description" i]', 'textarea', '[role="textbox"][aria-multiline="true"]'], description)) {
+  if (await fillFacebookTextarea(description)) {
     filledFields.push('description');
+    steps.push({ field: 'description', success: true });
   } else {
     failedFields.push('description');
-    errors.push('Could not find or fill description field');
+    errors.push('Could not fill description field');
+    steps.push({ field: 'description', success: false });
   }
   
+  // === RESULT ANALYSIS ===
+  const criticalFields = ['vehicleType', 'year', 'make', 'model', 'price'];
+  const criticalFailed = failedFields.filter(f => criticalFields.includes(f));
+  const isSuccess = criticalFailed.length === 0 && filledFields.length >= 3;
+  
   console.log(`📝 Form fill complete: ${filledFields.length} filled, ${failedFields.length} failed`);
+  console.log(`📝 Critical fields failed: ${criticalFailed.join(', ') || 'none'}`);
+  
+  // Report errors to background if critical failures
+  if (criticalFailed.length > 0) {
+    reportErrorToBackground({
+      type: 'FORM_FILL_CRITICAL_FAILURE',
+      message: `Critical fields failed: ${criticalFailed.join(', ')}`,
+      details: { steps, filledFields, failedFields, errors }
+    });
+  }
   
   return {
     filledFields,
     failedFields,
     errors,
-    success: filledFields.length > 0
+    steps,
+    success: isSuccess
   };
+}
+
+/**
+ * Determine vehicle type from vehicle data
+ */
+function getVehicleType(vehicle) {
+  const bodyType = (vehicle.bodyType || vehicle.bodyStyle || '').toLowerCase();
+  
+  if (bodyType.includes('motorcycle') || bodyType.includes('bike')) {
+    return 'Motorcycle';
+  }
+  if (bodyType.includes('rv') || bodyType.includes('camper') || bodyType.includes('motorhome')) {
+    return 'RV/Camper';
+  }
+  if (bodyType.includes('trailer')) {
+    return 'Trailer';
+  }
+  if (bodyType.includes('boat')) {
+    return 'Boat';
+  }
+  if (bodyType.includes('commercial') || bodyType.includes('industrial')) {
+    return 'Commercial/Industrial';
+  }
+  if (bodyType.includes('powersport') || bodyType.includes('atv') || bodyType.includes('utv')) {
+    return 'Powersport';
+  }
+  
+  // Default to Car/Truck for most vehicles
+  return 'Car/Truck';
+}
+
+/**
+ * Select a Facebook dropdown by finding the labeled element and clicking options
+ */
+async function selectFacebookDropdown(labelText, value) {
+  console.log(`🔽 Selecting dropdown "${labelText}" = "${value}"`);
+  
+  try {
+    // Strategy 1: Find label text and click the adjacent dropdown
+    const dropdownButton = await findDropdownByLabel(labelText);
+    
+    if (!dropdownButton) {
+      console.warn(`❌ Dropdown "${labelText}" not found`);
+      return false;
+    }
+    
+    // Scroll into view and click
+    dropdownButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await randomDelay(300, 500);
+    
+    // Click to open dropdown
+    await clickHumanlike(dropdownButton);
+    await randomDelay(600, 1000);
+    
+    // Wait for dropdown options to appear
+    const optionFound = await waitForAndSelectOption(value);
+    
+    if (optionFound) {
+      console.log(`✅ Selected "${value}" for "${labelText}"`);
+      return true;
+    } else {
+      // Close dropdown if option not found
+      document.body.click();
+      await randomDelay(200, 300);
+      console.warn(`❌ Option "${value}" not found for "${labelText}"`);
+      return false;
+    }
+  } catch (e) {
+    console.error(`❌ Error selecting dropdown "${labelText}":`, e);
+    return false;
+  }
+}
+
+/**
+ * Find dropdown button by its label text
+ */
+async function findDropdownByLabel(labelText) {
+  const lowerLabel = labelText.toLowerCase();
+  
+  // Strategy 1: Find by aria-label
+  const byAriaLabel = document.querySelector(`[aria-label*="${labelText}" i][role="combobox"], [aria-label*="${labelText}" i][aria-haspopup]`);
+  if (byAriaLabel && isVisible(byAriaLabel)) return byAriaLabel;
+  
+  // Strategy 2: Find label span/div and get the clickable parent
+  const allElements = document.querySelectorAll('span, div, label');
+  for (const el of allElements) {
+    if (el.textContent.trim().toLowerCase() === lowerLabel ||
+        el.textContent.trim().toLowerCase().includes(lowerLabel)) {
+      // Look for a clickable parent with dropdown indicators
+      let parent = el.parentElement;
+      for (let i = 0; i < 5 && parent; i++) {
+        // Check if this parent has dropdown characteristics
+        if (parent.querySelector('[data-visualcompletion="ignore-dynamic"]') ||
+            parent.getAttribute('aria-haspopup') ||
+            parent.getAttribute('aria-expanded') !== null ||
+            parent.querySelector('svg') // Dropdown arrow icon
+        ) {
+          // Find the clickable element
+          const clickable = parent.querySelector('[role="button"], [role="combobox"], [tabindex="0"]') || parent;
+          if (isVisible(clickable)) {
+            return clickable;
+          }
+        }
+        parent = parent.parentElement;
+      }
+    }
+  }
+  
+  // Strategy 3: Find all dropdown-like elements and match by nearby text
+  const dropdowns = document.querySelectorAll('[aria-haspopup="listbox"], [aria-haspopup="menu"], [role="combobox"], [aria-expanded]');
+  for (const dropdown of dropdowns) {
+    const container = dropdown.closest('[data-visualcompletion="ignore-dynamic"]') || dropdown.parentElement?.parentElement;
+    if (container && container.textContent.toLowerCase().includes(lowerLabel)) {
+      if (isVisible(dropdown)) return dropdown;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Wait for dropdown options to appear and select the matching one
+ */
+async function waitForAndSelectOption(value) {
+  const searchValue = String(value).toLowerCase().trim();
+  
+  // Wait up to 3 seconds for options to appear
+  for (let attempt = 0; attempt < 15; attempt++) {
+    await randomDelay(150, 250);
+    
+    // Look for options in various Facebook dropdown patterns
+    const optionSelectors = [
+      '[role="option"]',
+      '[role="menuitem"]',
+      '[role="listbox"] [role="option"]',
+      '[data-visualcompletion="ignore-dynamic"] div[tabindex="-1"]',
+      '[aria-hidden="false"] div[role="option"]'
+    ];
+    
+    for (const selector of optionSelectors) {
+      const options = document.querySelectorAll(selector);
+      
+      for (const option of options) {
+        if (!isVisible(option)) continue;
+        
+        const optionText = option.textContent?.trim().toLowerCase();
+        
+        // Exact match or contains
+        if (optionText === searchValue || 
+            optionText?.includes(searchValue) ||
+            searchValue.includes(optionText)) {
+          // Found the option - click it
+          await clickHumanlike(option);
+          await randomDelay(300, 500);
+          return true;
+        }
+      }
+    }
+    
+    // Also check for plain divs that look like options
+    const allDivs = document.querySelectorAll('div[tabindex="-1"], div[tabindex="0"], span[tabindex="-1"]');
+    for (const div of allDivs) {
+      if (!isVisible(div)) continue;
+      
+      const text = div.textContent?.trim().toLowerCase();
+      if (text === searchValue || text?.includes(searchValue)) {
+        // Check if this looks like an option (in a dropdown context)
+        const parent = div.closest('[role="listbox"], [role="menu"], [aria-expanded="true"]');
+        if (parent || div.closest('[data-visualcompletion="ignore-dynamic"]')) {
+          await clickHumanlike(div);
+          await randomDelay(300, 500);
+          return true;
+        }
+      }
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Fill a Facebook input field by label
+ */
+async function fillFacebookInput(labelText, value) {
+  console.log(`📝 Filling input "${labelText}" = "${value}"`);
+  
+  try {
+    // Find input by aria-label or nearby label text
+    let input = document.querySelector(`input[aria-label*="${labelText}" i]`);
+    
+    if (!input) {
+      // Find by placeholder
+      input = document.querySelector(`input[placeholder*="${labelText}" i]`);
+    }
+    
+    if (!input) {
+      // Find label and then input
+      const labels = document.querySelectorAll('label, span, div');
+      for (const label of labels) {
+        if (label.textContent.toLowerCase().includes(labelText.toLowerCase())) {
+          const container = label.closest('div[data-visualcompletion]') || label.parentElement;
+          if (container) {
+            input = container.querySelector('input:not([type="hidden"]):not([type="checkbox"])');
+            if (input && isVisible(input)) break;
+          }
+        }
+      }
+    }
+    
+    if (!input || !isVisible(input)) {
+      console.warn(`❌ Input "${labelText}" not found`);
+      return false;
+    }
+    
+    // Fill the input
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await randomDelay(200, 400);
+    
+    input.focus();
+    await randomDelay(100, 200);
+    
+    // Clear existing value
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // Type the value
+    await typeHumanlike(input, value);
+    
+    input.blur();
+    await randomDelay(100, 200);
+    
+    console.log(`✅ Filled input "${labelText}"`);
+    return true;
+  } catch (e) {
+    console.error(`❌ Error filling input "${labelText}":`, e);
+    return false;
+  }
+}
+
+/**
+ * Fill the description textarea
+ */
+async function fillFacebookTextarea(description) {
+  console.log('📝 Filling description textarea...');
+  
+  try {
+    // Find textarea or contenteditable
+    let textarea = document.querySelector('textarea[aria-label*="Description" i]');
+    
+    if (!textarea) {
+      textarea = document.querySelector('textarea');
+    }
+    
+    if (!textarea) {
+      // Try contenteditable
+      textarea = document.querySelector('[contenteditable="true"][aria-label*="Description" i]');
+    }
+    
+    if (!textarea) {
+      // Find by placeholder or role
+      textarea = document.querySelector('[role="textbox"][aria-multiline="true"]');
+    }
+    
+    if (!textarea) {
+      // Last resort - any visible textarea
+      const textareas = document.querySelectorAll('textarea, [contenteditable="true"]');
+      for (const ta of textareas) {
+        if (isVisible(ta)) {
+          textarea = ta;
+          break;
+        }
+      }
+    }
+    
+    if (!textarea) {
+      console.warn('❌ Description textarea not found');
+      return false;
+    }
+    
+    textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await randomDelay(300, 500);
+    
+    textarea.focus();
+    await randomDelay(100, 200);
+    
+    // Handle contenteditable vs textarea
+    if (textarea.isContentEditable) {
+      textarea.innerHTML = '';
+      textarea.textContent = description;
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: description }));
+    } else {
+      textarea.value = '';
+      await typeHumanlike(textarea, description);
+    }
+    
+    textarea.blur();
+    await randomDelay(100, 200);
+    
+    console.log('✅ Filled description');
+    return true;
+  } catch (e) {
+    console.error('❌ Error filling description:', e);
+    return false;
+  }
 }
 
 /**
@@ -988,45 +1392,62 @@ async function uploadImagesFromUrls(imageUrls) {
 
 /**
  * Click the publish/post button
+ * IMPORTANT: Only clicks actual Publish/Post button, NOT "Next"
  */
 async function clickPublishButton() {
   console.log('🚀 Looking for publish button...');
   
   await randomDelay(500, 1000);
   
-  // Common publish button patterns
-  const publishPatterns = [
-    { selector: '[aria-label*="Publish" i]', priority: 1 },
-    { selector: '[aria-label*="Post" i]', priority: 1 },
-    { selector: '[aria-label*="Next" i]', priority: 2 },
-    { selector: '[aria-label*="Submit" i]', priority: 2 },
-    { selector: 'div[role="button"]', textMatch: /^(publish|post|next|submit|list)$/i, priority: 1 },
-    { selector: 'button[type="submit"]', priority: 3 }
-  ];
+  // First, look for actual publish/post buttons (high priority)
+  const publishButtonTexts = ['publish', 'post', 'list item', 'list vehicle', 'submit'];
   
-  for (const pattern of publishPatterns.sort((a, b) => a.priority - b.priority)) {
-    const elements = document.querySelectorAll(pattern.selector);
+  // Search all buttons
+  const allButtons = document.querySelectorAll('div[role="button"], button, [aria-label], [tabindex="0"]');
+  let bestButton = null;
+  let bestPriority = 999;
+  
+  for (const el of allButtons) {
+    if (!isVisible(el)) continue;
     
-    for (const el of elements) {
-      if (!isVisible(el)) continue;
-      
-      const text = el.textContent?.trim().toLowerCase();
-      
-      // If pattern has text match, check it
-      if (pattern.textMatch && !pattern.textMatch.test(text)) continue;
-      
-      // Skip if it's a generic button without publish-related text
-      if (!pattern.textMatch && !/(publish|post|next|submit|list)/i.test(text)) continue;
-      
-      try {
-        console.log(`🚀 Found button: "${el.textContent?.trim()}" - clicking`);
-        await clickHumanlike(el);
-        await randomDelay(2000, 3000);
-        return { clicked: true, buttonText: el.textContent?.trim() };
-      } catch (e) {
-        console.warn('Failed to click button:', e);
+    const text = el.textContent?.trim().toLowerCase() || '';
+    const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+    
+    // Check for publish/post buttons (priority 1)
+    for (const publishText of publishButtonTexts) {
+      if (text === publishText || ariaLabel.includes(publishText)) {
+        if (bestPriority > 1) {
+          bestButton = el;
+          bestPriority = 1;
+        }
+        break;
       }
     }
+    
+    // "Next" button is only used as last resort (priority 3)
+    if (text === 'next' && bestPriority > 3) {
+      bestButton = el;
+      bestPriority = 3;
+    }
+  }
+  
+  if (bestButton) {
+    const buttonText = bestButton.textContent?.trim();
+    
+    // Warn if we're clicking Next instead of Publish
+    if (buttonText?.toLowerCase() === 'next') {
+      console.warn('⚠️ Only found "Next" button - form may need more steps');
+      return { 
+        clicked: false, 
+        error: 'Only found Next button - form incomplete',
+        suggestion: 'Fill all required fields first'
+      };
+    }
+    
+    console.log(`🚀 Found publish button: "${buttonText}" - clicking`);
+    await clickHumanlike(bestButton);
+    await randomDelay(2000, 3000);
+    return { clicked: true, buttonText };
   }
   
   console.warn('🚀 Could not find publish button');

@@ -1633,18 +1633,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       switch (message.type) {
         case 'IAI_FILL_LISTING':
-          const fillResult = await fillVehicleListing(message.vehicle);
-          sendResponse({ success: true, result: fillResult });
+          const fillResult = await fillVehicleListingEnhanced(message.vehicle);
+          sendResponse(fillResult);
           break;
           
         case 'IAI_UPLOAD_IMAGES':
           const uploadResult = await uploadVehicleImages(message.images);
-          sendResponse({ success: true, result: uploadResult });
+          sendResponse({ success: uploadResult.uploaded > 0, result: uploadResult });
           break;
           
         case 'IAI_PUBLISH_LISTING':
           const publishResult = await publishListing();
-          sendResponse({ success: true, result: publishResult });
+          sendResponse({ success: publishResult.clicked, result: publishResult });
           break;
           
         case 'IAI_GET_STATUS':
@@ -1669,7 +1669,394 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Fill vehicle listing form on Facebook Marketplace
+ * Enhanced vehicle listing fill with proper Facebook dropdown handling
+ */
+async function fillVehicleListingEnhanced(vehicle) {
+  console.log('🚗 IAI Filling vehicle listing (Enhanced):', vehicle);
+  
+  const stealth = new IAIStealth();
+  const filledFields = [];
+  const failedFields = [];
+  const errors = [];
+  const steps = [];
+  
+  // Wait for page to be ready
+  await stealth.delay(1000, 1500);
+  
+  // === STEP 1: VEHICLE TYPE (MUST BE FIRST) ===
+  console.log('📋 Step 1: Selecting vehicle type...');
+  const vehicleType = getVehicleTypeFromData(vehicle);
+  if (await selectFacebookDropdownEnhanced('Vehicle type', vehicleType, stealth)) {
+    filledFields.push('vehicleType');
+    steps.push({ field: 'vehicleType', success: true });
+    await stealth.delay(800, 1200);
+  } else {
+    failedFields.push('vehicleType');
+    errors.push('Could not select vehicle type');
+    steps.push({ field: 'vehicleType', success: false });
+  }
+  
+  // === STEP 2: YEAR ===
+  console.log('📋 Step 2: Selecting year...');
+  if (vehicle.year) {
+    if (await selectFacebookDropdownEnhanced('Year', String(vehicle.year), stealth)) {
+      filledFields.push('year');
+      steps.push({ field: 'year', success: true });
+      await stealth.delay(600, 1000);
+    } else {
+      failedFields.push('year');
+      steps.push({ field: 'year', success: false });
+    }
+  }
+  
+  // === STEP 3: MAKE ===
+  console.log('📋 Step 3: Entering make...');
+  if (vehicle.make) {
+    if (await selectFacebookDropdownEnhanced('Make', vehicle.make, stealth) ||
+        await fillFacebookInputEnhanced('Make', vehicle.make, stealth)) {
+      filledFields.push('make');
+      steps.push({ field: 'make', success: true });
+      await stealth.delay(600, 1000);
+    } else {
+      failedFields.push('make');
+      steps.push({ field: 'make', success: false });
+    }
+  }
+  
+  // === STEP 4: MODEL ===
+  console.log('📋 Step 4: Entering model...');
+  if (vehicle.model) {
+    if (await selectFacebookDropdownEnhanced('Model', vehicle.model, stealth) ||
+        await fillFacebookInputEnhanced('Model', vehicle.model, stealth)) {
+      filledFields.push('model');
+      steps.push({ field: 'model', success: true });
+      await stealth.delay(600, 1000);
+    } else {
+      failedFields.push('model');
+      steps.push({ field: 'model', success: false });
+    }
+  }
+  
+  // === STEP 5: PRICE ===
+  console.log('📋 Step 5: Entering price...');
+  const price = String(vehicle.price || '').replace(/[^0-9]/g, '');
+  if (price) {
+    if (await fillFacebookInputEnhanced('Price', price, stealth)) {
+      filledFields.push('price');
+      steps.push({ field: 'price', success: true });
+    } else {
+      failedFields.push('price');
+      errors.push('Could not fill price');
+      steps.push({ field: 'price', success: false });
+    }
+    await stealth.delay(300, 500);
+  }
+  
+  // === STEP 6: MILEAGE ===
+  console.log('📋 Step 6: Entering mileage...');
+  if (vehicle.mileage) {
+    const mileage = String(vehicle.mileage).replace(/[^0-9]/g, '');
+    if (await fillFacebookInputEnhanced('Mileage', mileage, stealth) ||
+        await fillFacebookInputEnhanced('Vehicle mileage', mileage, stealth)) {
+      filledFields.push('mileage');
+      steps.push({ field: 'mileage', success: true });
+    } else {
+      failedFields.push('mileage');
+      steps.push({ field: 'mileage', success: false });
+    }
+    await stealth.delay(300, 500);
+  }
+  
+  // === STEP 7: DESCRIPTION ===
+  console.log('📋 Step 7: Entering description...');
+  const description = vehicle.description || generateVehicleDescriptionIAI(vehicle);
+  if (await fillDescriptionEnhanced(description, stealth)) {
+    filledFields.push('description');
+    steps.push({ field: 'description', success: true });
+    console.log('✅ Filled description:', description.substring(0, 50) + '...');
+  } else {
+    failedFields.push('description');
+    errors.push('Could not fill description');
+    steps.push({ field: 'description', success: false });
+  }
+  
+  // === OPTIONAL FIELDS ===
+  if (vehicle.transmission) {
+    if (await selectFacebookDropdownEnhanced('Transmission', vehicle.transmission, stealth)) {
+      filledFields.push('transmission');
+    }
+    await stealth.delay(300, 500);
+  }
+  
+  if (vehicle.fuelType) {
+    if (await selectFacebookDropdownEnhanced('Fuel type', vehicle.fuelType, stealth)) {
+      filledFields.push('fuelType');
+    }
+    await stealth.delay(300, 500);
+  }
+  
+  if (vehicle.exteriorColor || vehicle.color) {
+    const color = vehicle.exteriorColor || vehicle.color;
+    if (await selectFacebookDropdownEnhanced('Exterior color', color, stealth)) {
+      filledFields.push('exteriorColor');
+    }
+    await stealth.delay(300, 500);
+  }
+  
+  // === RESULT ANALYSIS ===
+  const criticalFields = ['vehicleType', 'year', 'make', 'model', 'price'];
+  const criticalFailed = failedFields.filter(f => criticalFields.includes(f));
+  const isSuccess = criticalFailed.length <= 1 && filledFields.length >= 3;
+  
+  console.log(`📝 Form fill complete: ${filledFields.length} filled, ${failedFields.length} failed`);
+  console.log(`📝 Critical fields failed: ${criticalFailed.join(', ') || 'none'}`);
+  console.log('✅ Form filling complete. Steps:', steps);
+  
+  return { 
+    success: isSuccess, 
+    filledFields, 
+    failedFields, 
+    errors, 
+    steps 
+  };
+}
+
+/**
+ * Get vehicle type from data
+ */
+function getVehicleTypeFromData(vehicle) {
+  const bodyType = (vehicle.bodyType || vehicle.bodyStyle || '').toLowerCase();
+  if (bodyType.includes('motorcycle')) return 'Motorcycle';
+  if (bodyType.includes('rv') || bodyType.includes('camper')) return 'RV/Camper';
+  if (bodyType.includes('trailer')) return 'Trailer';
+  if (bodyType.includes('boat')) return 'Boat';
+  if (bodyType.includes('powersport') || bodyType.includes('atv')) return 'Powersport';
+  return 'Car/Truck';
+}
+
+/**
+ * Select a Facebook dropdown - enhanced version
+ */
+async function selectFacebookDropdownEnhanced(labelText, value, stealth) {
+  console.log(`🔽 Selecting dropdown "${labelText}" = "${value}"`);
+  
+  try {
+    // Find the dropdown by looking for the label text
+    const lowerLabel = labelText.toLowerCase();
+    let dropdownButton = null;
+    
+    // Strategy 1: Find by aria-label containing the label text
+    dropdownButton = document.querySelector(`[aria-label*="${labelText}" i][role="combobox"], [aria-label*="${labelText}" i][aria-haspopup]`);
+    
+    // Strategy 2: Find label text and look for adjacent dropdown
+    if (!dropdownButton) {
+      const allElements = document.querySelectorAll('span, div, label');
+      for (const el of allElements) {
+        const text = el.textContent?.trim().toLowerCase();
+        if (text === lowerLabel || text?.includes(lowerLabel)) {
+          // Look upward for a clickable container
+          let parent = el.parentElement;
+          for (let i = 0; i < 6 && parent; i++) {
+            if (parent.getAttribute('aria-haspopup') || 
+                parent.getAttribute('aria-expanded') !== null ||
+                parent.querySelector('[aria-haspopup]') ||
+                parent.querySelector('svg')) {
+              const clickable = parent.querySelector('[role="button"], [tabindex="0"]') || parent;
+              if (isVisible(clickable)) {
+                dropdownButton = clickable;
+                break;
+              }
+            }
+            parent = parent.parentElement;
+          }
+          if (dropdownButton) break;
+        }
+      }
+    }
+    
+    if (!dropdownButton || !isVisible(dropdownButton)) {
+      console.warn(`❌ Dropdown "${labelText}" not found`);
+      return false;
+    }
+    
+    // Click to open dropdown
+    dropdownButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await stealth.delay(300, 500);
+    await stealth.click(dropdownButton);
+    await stealth.delay(600, 1000);
+    
+    // Wait for options and select
+    const searchValue = value.toLowerCase().trim();
+    
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await stealth.delay(150, 250);
+      
+      // Look for options
+      const options = document.querySelectorAll('[role="option"], [role="menuitem"], [role="listbox"] [role="option"]');
+      
+      for (const option of options) {
+        if (!isVisible(option)) continue;
+        const optionText = option.textContent?.trim().toLowerCase();
+        
+        if (optionText === searchValue || optionText?.includes(searchValue) || searchValue.includes(optionText)) {
+          await stealth.click(option);
+          await stealth.delay(300, 500);
+          console.log(`✅ Selected "${value}" for "${labelText}"`);
+          return true;
+        }
+      }
+      
+      // Also check for plain divs
+      const allDivs = document.querySelectorAll('div[tabindex="-1"], span[tabindex="-1"]');
+      for (const div of allDivs) {
+        if (!isVisible(div)) continue;
+        const text = div.textContent?.trim().toLowerCase();
+        if (text === searchValue || text?.includes(searchValue)) {
+          const parent = div.closest('[role="listbox"], [role="menu"], [aria-expanded="true"], [data-visualcompletion="ignore-dynamic"]');
+          if (parent) {
+            await stealth.click(div);
+            await stealth.delay(300, 500);
+            console.log(`✅ Selected "${value}" for "${labelText}"`);
+            return true;
+          }
+        }
+      }
+    }
+    
+    // Close dropdown if option not found
+    document.body.click();
+    await stealth.delay(200, 300);
+    console.warn(`❌ Option "${value}" not found for "${labelText}"`);
+    return false;
+  } catch (e) {
+    console.error(`❌ Error selecting dropdown "${labelText}":`, e);
+    return false;
+  }
+}
+
+/**
+ * Fill a Facebook input field - enhanced version
+ */
+async function fillFacebookInputEnhanced(labelText, value, stealth) {
+  console.log(`📝 Filling input "${labelText}" = "${value}"`);
+  
+  try {
+    let input = document.querySelector(`input[aria-label*="${labelText}" i]`);
+    
+    if (!input) {
+      input = document.querySelector(`input[placeholder*="${labelText}" i]`);
+    }
+    
+    if (!input) {
+      // Find by nearby label
+      const labels = document.querySelectorAll('label, span, div');
+      for (const label of labels) {
+        if (label.textContent.toLowerCase().includes(labelText.toLowerCase())) {
+          const container = label.closest('div[data-visualcompletion]') || label.parentElement;
+          if (container) {
+            input = container.querySelector('input:not([type="hidden"]):not([type="checkbox"])');
+            if (input && isVisible(input)) break;
+          }
+        }
+      }
+    }
+    
+    if (!input || !isVisible(input)) {
+      console.warn(`❌ Input "${labelText}" not found`);
+      return false;
+    }
+    
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await stealth.delay(200, 400);
+    
+    await stealth.click(input);
+    await stealth.delay(100, 200);
+    
+    // Clear and type
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await stealth.type(input, value);
+    
+    input.blur();
+    await stealth.delay(100, 200);
+    
+    console.log(`✅ Filled input "${labelText}"`);
+    return true;
+  } catch (e) {
+    console.error(`❌ Error filling input "${labelText}":`, e);
+    return false;
+  }
+}
+
+/**
+ * Fill description textarea - enhanced version
+ */
+async function fillDescriptionEnhanced(description, stealth) {
+  try {
+    let textarea = document.querySelector('textarea[aria-label*="Description" i]');
+    if (!textarea) textarea = document.querySelector('textarea');
+    if (!textarea) textarea = document.querySelector('[contenteditable="true"][aria-label*="Description" i]');
+    if (!textarea) textarea = document.querySelector('[role="textbox"][aria-multiline="true"]');
+    
+    if (!textarea) {
+      const textareas = document.querySelectorAll('textarea, [contenteditable="true"]');
+      for (const ta of textareas) {
+        if (isVisible(ta)) {
+          textarea = ta;
+          break;
+        }
+      }
+    }
+    
+    if (!textarea) {
+      console.warn('❌ Description textarea not found');
+      return false;
+    }
+    
+    textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await stealth.delay(300, 500);
+    
+    await stealth.click(textarea);
+    await stealth.delay(100, 200);
+    
+    if (textarea.isContentEditable) {
+      textarea.innerHTML = '';
+      textarea.textContent = description;
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: description }));
+    } else {
+      textarea.value = '';
+      await stealth.type(textarea, description);
+    }
+    
+    textarea.blur();
+    return true;
+  } catch (e) {
+    console.error('❌ Error filling description:', e);
+    return false;
+  }
+}
+
+/**
+ * Generate vehicle description
+ */
+function generateVehicleDescriptionIAI(vehicle) {
+  const parts = [];
+  parts.push(`🚗 ${vehicle.year} ${vehicle.make} ${vehicle.model}${vehicle.trim ? ` ${vehicle.trim}` : ''}`);
+  parts.push('');
+  if (vehicle.mileage) parts.push(`📍 Mileage: ${Number(vehicle.mileage).toLocaleString()} miles`);
+  if (vehicle.exteriorColor || vehicle.color) parts.push(`🎨 Color: ${vehicle.exteriorColor || vehicle.color}`);
+  if (vehicle.transmission) parts.push(`⚙️ Transmission: ${vehicle.transmission}`);
+  if (vehicle.fuelType) parts.push(`⛽ Fuel: ${vehicle.fuelType}`);
+  parts.push('');
+  parts.push('✅ Financing Available');
+  parts.push('✅ Trade-ins Welcome');
+  parts.push('');
+  parts.push('📞 Contact us for more information!');
+  return parts.join('\n');
+}
+
+/**
+ * Fill vehicle listing form on Facebook Marketplace (Legacy)
  */
 async function fillVehicleListing(vehicle) {
   console.log('🚗 IAI Filling vehicle listing:', vehicle);
@@ -1920,45 +2307,66 @@ async function uploadVehicleImages(imageUrls) {
 
 /**
  * Click the publish/post button
+ * IMPORTANT: Only clicks actual Publish/Post, NOT "Next" button
  */
 async function publishListing() {
   console.log('📤 IAI Publishing listing...');
   
   const stealth = new IAIStealth();
   
-  // Look for publish/post button
-  const publishSelectors = [
-    'button[aria-label*="Publish" i]',
-    'button[aria-label*="Post" i]',
-    '[role="button"][aria-label*="Publish" i]',
-    '[role="button"][aria-label*="Post" i]',
-    () => findByText(['Publish', 'Post', 'Publicar', 'Submit']),
-  ];
+  // Priority 1: Look for actual publish/post buttons
+  const publishButtonTexts = ['publish', 'post', 'list item', 'list vehicle', 'submit'];
   
-  for (const selector of publishSelectors) {
-    try {
-      let button = null;
-      
-      if (typeof selector === 'function') {
-        button = selector();
-      } else {
-        button = document.querySelector(selector);
+  const allButtons = document.querySelectorAll('div[role="button"], button, [aria-label], [tabindex="0"]');
+  let bestButton = null;
+  let bestPriority = 999;
+  
+  for (const el of allButtons) {
+    if (!isVisible(el) || el.disabled) continue;
+    
+    const text = el.textContent?.trim().toLowerCase() || '';
+    const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+    
+    // Check for publish/post buttons (priority 1)
+    for (const publishText of publishButtonTexts) {
+      if (text === publishText || ariaLabel.includes(publishText)) {
+        if (bestPriority > 1) {
+          bestButton = el;
+          bestPriority = 1;
+        }
+        break;
       }
-      
-      if (button && isVisible(button) && !button.disabled) {
-        await stealth.click(button);
-        await stealth.delay(2000, 3000);
-        
-        console.log('✅ Publish button clicked');
-        return { success: true };
-      }
-    } catch (e) {
-      console.debug('Publish selector failed:', e);
+    }
+    
+    // "Next" is NOT clicked - form is incomplete if only Next is visible
+  }
+  
+  if (bestButton) {
+    const buttonText = bestButton.textContent?.trim();
+    console.log(`📤 Found publish button: "${buttonText}" - clicking`);
+    await stealth.click(bestButton);
+    await stealth.delay(2000, 3000);
+    console.log('✅ Publish button clicked');
+    return { success: true, clicked: true, buttonText };
+  }
+  
+  // Check if "Next" is visible - means form is incomplete
+  for (const el of allButtons) {
+    if (!isVisible(el)) continue;
+    const text = el.textContent?.trim().toLowerCase();
+    if (text === 'next') {
+      console.warn('⚠️ Only "Next" button found - form incomplete');
+      return { 
+        success: false, 
+        clicked: false,
+        error: 'Form incomplete - only Next button found',
+        suggestion: 'Fill all required fields before publishing'
+      };
     }
   }
   
   console.warn('⚠️ Publish button not found');
-  return { success: false, error: 'Publish button not found' };
+  return { success: false, clicked: false, error: 'Publish button not found' };
 }
 
 /**
