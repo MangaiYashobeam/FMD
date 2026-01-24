@@ -1021,12 +1021,147 @@ async function handleMessage(message, sender) {
       }
     
     case 'AI_CHAT':
-      // Send message to AI assistant (same layer as user)
+      // Send message to AI assistant with enhanced context
       return await sendAIChatMessage(message.content, message.context);
+    
+    case 'CONTENT_SCRIPT_ERROR':
+      // Handle errors from content scripts - log and potentially notify AI/user
+      console.error('📛 Content script error received:', message.error);
+      await handleContentScriptError(message.error);
+      return { success: true, received: true };
+    
+    case 'GET_SUPER_ADMIN_DIAGNOSTICS':
+      // Super admin only - get detailed system diagnostics
+      return await getSuperAdminDiagnostics();
+    
+    case 'REPORT_POSTING_ERROR':
+      // Report posting error to server for AI analysis
+      return await reportPostingError(message.error, message.vehicleId, message.context);
       
     default:
       throw new Error(`Unknown message type: ${message.type}`);
   }
+}
+
+// ============================================
+// Error Tracking & Diagnostics
+// ============================================
+
+// Error history for diagnostics
+let errorHistory = [];
+const MAX_ERROR_HISTORY = 50;
+
+/**
+ * Handle content script errors - log, track, and potentially report to server
+ */
+async function handleContentScriptError(errorData) {
+  // Add to history
+  errorHistory.unshift({
+    ...errorData,
+    receivedAt: new Date().toISOString()
+  });
+  
+  // Trim history
+  if (errorHistory.length > MAX_ERROR_HISTORY) {
+    errorHistory = errorHistory.slice(0, MAX_ERROR_HISTORY);
+  }
+  
+  // Store in local storage for persistence
+  await chrome.storage.local.set({ errorHistory: errorHistory.slice(0, 10) });
+  
+  // Report to server if authenticated
+  try {
+    const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+    if (authToken) {
+      await fetch(`${CONFIG.API_URL}/extension/error-report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          accountId,
+          error: errorData,
+          extensionVersion: chrome.runtime.getManifest().version,
+          userAgent: navigator.userAgent
+        }),
+      }).catch(e => console.warn('Failed to report error to server:', e));
+    }
+  } catch (e) {
+    console.warn('Error reporting failed:', e);
+  }
+}
+
+/**
+ * Report posting error with full context
+ */
+async function reportPostingError(error, vehicleId, context) {
+  const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+  
+  const report = {
+    accountId,
+    vehicleId,
+    error: typeof error === 'string' ? error : error.message,
+    stack: error.stack,
+    context,
+    timestamp: new Date().toISOString(),
+    extensionVersion: chrome.runtime.getManifest().version
+  };
+  
+  try {
+    if (authToken) {
+      await fetch(`${CONFIG.API_URL}/extension/posting-error`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(report),
+      });
+    }
+    return { success: true, reported: true };
+  } catch (e) {
+    console.error('Failed to report posting error:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Get super admin diagnostics - comprehensive system state
+ */
+async function getSuperAdminDiagnostics() {
+  const storage = await chrome.storage.local.get(null);
+  const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+  
+  return {
+    success: true,
+    diagnostics: {
+      timestamp: new Date().toISOString(),
+      extensionVersion: chrome.runtime.getManifest().version,
+      authState: {
+        isAuthenticated: authState?.isAuthenticated,
+        hasToken: !!storage.authToken,
+        accountId: storage.accountId,
+        userId: authState?.userId
+      },
+      iaiSoldier: {
+        isPolling,
+        soldierName: iaiSoldierName,
+        pollInterval: CONFIG.IAI_POLL_INTERVAL
+      },
+      facebookTabs: tabs.map(t => ({
+        id: t.id,
+        url: t.url,
+        active: t.active
+      })),
+      errorHistory: errorHistory.slice(0, 10),
+      storageKeys: Object.keys(storage),
+      config: {
+        apiUrl: CONFIG.API_URL,
+        facebookAppId: CONFIG.FACEBOOK_APP_ID ? '***configured***' : 'not configured'
+      }
+    }
+  };
 }
 
 /**
@@ -1298,9 +1433,11 @@ async function recordPosting(vehicleId, platform, status) {
  * Send AI Chat Message
  * Connects to the server's AI endpoint for user assistance
  * Uses the same auth layer as the user's session
+ * Enhanced with super admin detection and comprehensive diagnostics
  */
 async function sendAIChatMessage(content, context = {}) {
-  const { authToken, authState, accountId: storedAccountId } = await chrome.storage.local.get(['authToken', 'authState', 'accountId']);
+  const storage = await chrome.storage.local.get(['authToken', 'authState', 'accountId', 'errorHistory', 'userRole']);
+  const { authToken, authState, accountId: storedAccountId, userRole } = storage;
   
   const token = authToken || authState?.accessToken;
   
@@ -1319,6 +1456,7 @@ async function sendAIChatMessage(content, context = {}) {
     let tabContext = { ...context };
     let activeFacebookTabs = [];
     let activeMarketplaceTabs = [];
+    let currentTabState = null;
     
     try {
       // Get current active tab
@@ -1327,6 +1465,15 @@ async function sendAIChatMessage(content, context = {}) {
         tabContext.url = activeTab.url;
         tabContext.title = activeTab.title;
         tabContext.pageType = detectPageType(activeTab.url);
+        
+        // Get detailed page state from content script if on Facebook
+        if (activeTab.url?.includes('facebook.com')) {
+          try {
+            currentTabState = await chrome.tabs.sendMessage(activeTab.id, { type: 'GET_PAGE_STATE' });
+          } catch (e) {
+            // Content script might not be ready
+          }
+        }
       }
       
       // Get all tabs to understand user's full context
@@ -1338,6 +1485,39 @@ async function sendAIChatMessage(content, context = {}) {
       // Tab context is optional
     }
     
+    // Build enhanced context with diagnostics for super admin
+    const enhancedContext = {
+      accountId: storedAccountId || authState?.accountId || authState?.dealerAccountId,
+      source: 'extension',
+      extensionVersion: chrome.runtime.getManifest().version,
+      activeFacebookTabs: activeFacebookTabs.length,
+      activeMarketplaceTabs: activeMarketplaceTabs.length,
+      isSoldierActive: isPolling,
+      soldierName: iaiSoldierName,
+      ...tabContext,
+      
+      // Include page state if available
+      pageState: currentTabState?.data || currentTabState,
+      
+      // Include recent errors for AI to diagnose
+      recentErrors: errorHistory.slice(0, 3).map(e => ({
+        message: e.message,
+        messageType: e.messageType,
+        timestamp: e.timestamp
+      })),
+      
+      // System health indicators
+      systemHealth: {
+        authValid: !!token,
+        hasAccountId: !!storedAccountId,
+        soldierPolling: isPolling,
+        facebookTabsOpen: activeFacebookTabs.length,
+        lastErrorAge: errorHistory[0] ? 
+          Math.round((Date.now() - new Date(errorHistory[0].timestamp)) / 1000) + 's ago' : 
+          'no recent errors'
+      }
+    };
+    
     const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/extension/ai-chat`, {
       method: 'POST',
       headers: {
@@ -1346,15 +1526,7 @@ async function sendAIChatMessage(content, context = {}) {
       },
       body: JSON.stringify({
         message: content,
-        context: {
-          accountId: storedAccountId || authState?.accountId || authState?.dealerAccountId,
-          source: 'extension', // Explicitly identify source
-          extensionVersion: chrome.runtime.getManifest().version,
-          activeFacebookTabs: activeFacebookTabs.length,
-          activeMarketplaceTabs: activeMarketplaceTabs.length,
-          isSoldierActive: isPolling, // Is IAI Soldier active
-          ...tabContext,
-        },
+        context: enhancedContext,
       }),
     });
     

@@ -1036,12 +1036,30 @@ router.post('/ai-chat', authenticate, async (req: AuthRequest, res: Response) =>
     
     // Detect errors from context
     let errorContext = '';
-    if (context?.error || context?.errorMessage) {
-      const error = context.error || context.errorMessage;
-      errorContext = `
-🚨 DETECTED ERROR: ${error}
-Analyze this error and provide a solution specific to the Dealers Face system.`;
+    if (context?.error || context?.errorMessage || context?.recentErrors?.length > 0) {
+      const primaryError = context.error || context.errorMessage;
+      const recentCtxErrors = context.recentErrors || [];
+      
+      errorContext = primaryError ? `
+🚨 DETECTED ERROR: ${primaryError}
+Analyze this error and provide a solution specific to the Dealers Face system.` : '';
+      
+      if (recentCtxErrors.length > 0) {
+        errorContext += `
+🔍 RECENT EXTENSION ERRORS:
+${recentCtxErrors.map((e: any) => `- ${e.messageType || 'unknown'}: ${e.message} (${e.timestamp})`).join('\n')}`;
+      }
     }
+    
+    // System health from extension
+    const systemHealth = context?.systemHealth || {};
+    const healthReport = `
+🏥 SYSTEM HEALTH:
+- Auth Valid: ${systemHealth.authValid ? '✅' : '❌'}
+- Account ID Set: ${systemHealth.hasAccountId ? '✅' : '❌'}
+- IAI Soldier: ${systemHealth.soldierPolling ? '✅ Active' : '❌ Inactive'}
+- Facebook Tabs: ${systemHealth.facebookTabsOpen || 0}
+- Last Error: ${systemHealth.lastErrorAge || 'no recent errors'}`;
     
     // Build comprehensive system prompt with company awareness
     // Detect if user is communicating from extension or web dashboard
@@ -1050,10 +1068,32 @@ Analyze this error and provide a solution specific to the Dealers Face system.`;
 🔌 CONNECTION SOURCE: Chrome Extension (v${context?.extensionVersion || 'unknown'})
 - Active Facebook Tabs: ${context?.activeFacebookTabs || 0}
 - Active Marketplace Tabs: ${context?.activeMarketplaceTabs || 0}
-- IAI Soldier: ${context?.isSoldierActive ? '✅ Active' : '❌ Inactive'}
+- IAI Soldier: ${context?.isSoldierActive ? `✅ Active (${context?.soldierName || 'IAI-Soldier'})` : '❌ Inactive'}
+- Page State: ${context?.pageState?.isCreateListing ? 'Creating Listing' : context?.pageState?.isMarketplace ? 'Marketplace' : 'Other'}
+${healthReport}
 ` : `
 🔌 CONNECTION SOURCE: Web Dashboard (dealersface.com)
 `;
+
+    // Super Admin enhanced context
+    const superAdminContext = isSuperAdmin ? `
+🔐 SUPER ADMIN MODE ACTIVE
+You have enhanced diagnostic capabilities:
+- Access to full error history and system logs
+- Ability to diagnose cross-user issues
+- Can access deployment and infrastructure status
+- Should proactively identify system-wide issues
+
+When helping a super admin:
+1. Provide detailed technical diagnostics
+2. Include error stack traces when relevant
+3. Suggest infrastructure-level solutions
+4. Reference specific code files if helpful (extension/content-ai.js, background-ai.js, etc.)
+5. Monitor for patterns that might indicate system-wide issues
+
+RECENT SYSTEM ERRORS (Last 24h):
+${recentErrors.length > 0 ? recentErrors.map((e: any) => `- ${e.action}: ${JSON.stringify(e.metadata || {}).slice(0, 150)}`).join('\n') : 'No system errors logged'}
+` : '';
 
     const systemPrompt = `You are Nexus, the AI assistant integrated into the Dealers Face Chrome extension.
 ${extensionContext}
@@ -1066,8 +1106,9 @@ The platform helps dealers post vehicles, manage leads, and automate Facebook in
 - Email: ${user?.email}
 - Role: ${userRole}${isSuperAdmin ? ' (Super Admin - Full System Access)' : ''}
 - Account: ${user?.accountUsers[0]?.account?.dealershipName || 'No dealership linked'}
+- Account ID: ${accountId || 'not set'}
 - Account Status: ${user?.accountUsers[0]?.account?.subscriptionStatus || 'Unknown'}
-
+${superAdminContext}
 📊 DEALERSHIP STATS:
 - Total Vehicles: ${accountStats?.vehicleCount || 0}
 - Total Leads: ${accountStats?.leadCount || 0}
@@ -1083,9 +1124,6 @@ ${recentLeads.map(l => `- ${l.firstName} ${l.lastName} - ${l.status} (${new Date
 🔧 Page Type: ${context?.pageType || 'Unknown'}
 ${errorContext}
 
-⚠️ RECENT ERRORS (Last 24h):
-${recentErrors.length > 0 ? recentErrors.map((e: any) => `- ${e.action}: ${JSON.stringify(e.metadata || {}).slice(0, 100)}`).join('\n') : 'No recent errors'}
-
 📋 YOUR RESPONSIBILITIES:
 1. Recognize what the user is trying to do and assist proactively
 2. When you detect an error, explain what it means and provide Dealers Face-specific solutions
@@ -1093,16 +1131,27 @@ ${recentErrors.length > 0 ? recentErrors.map((e: any) => `- ${e.action}: ${JSON.
 4. Provide information about their inventory and leads when asked
 5. Troubleshoot extension issues with specific solutions
 6. Remember context from the conversation
+${isSuperAdmin ? '7. Provide enhanced technical diagnostics for super admin requests' : ''}
 
 💡 DEALERS FACE SPECIFIC SOLUTIONS:
 - "Extension offline" → Check if logged into dealersface.com, reload extension
-- "Vehicles not loading" → Verify account has vehicles, check API connection
+- "Vehicles not loading" → Verify account has vehicles, check API connection at /api/vehicles
 - "Posting failed" → Check Facebook session, verify vehicle data is complete
+- "Unknown message type" → Content script needs reload, or message handler missing
+- "Form not filling" → Wait for Facebook page to fully load, check selectors in content-ai.js
 - "AUTH_REQUIRED error" → Token expired, re-login at dealersface.com
 - "403 Forbidden" → Check user permissions and role
+- "CSRF token" → Add route to CSRF skip list if needed
+
+🔧 EXTENSION ARCHITECTURE:
+- background-ai.js: Service worker, handles auth and API calls
+- content-ai.js: Runs on Facebook pages, fills forms, executes tasks
+- sidepanel-ai.js: User interface, vehicle selection, posting controls
+- iai-soldier.js: Automated task polling and execution
 
 Be concise, helpful, and proactive. If you see the user is stuck, offer specific help.
-Start responses with context awareness like "I see you're [action]..." when relevant.`;
+Start responses with context awareness like "I see you're [action]..." when relevant.
+${isSuperAdmin ? 'For super admin: Include technical details and code references when diagnosing issues.' : ''}`;
 
     // Use OpenAI/AI service to generate response
     const response = await generateAIResponse(message, systemPrompt, context);

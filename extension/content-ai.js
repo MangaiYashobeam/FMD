@@ -478,44 +478,598 @@ async function updateTaskStatus(taskId, status, result = null) {
 // ============================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('📨 Content-AI received message:', message.type);
+  
+  // Handle async messages
+  handleMessageAsync(message)
+    .then(result => {
+      console.log('✅ Message handled:', message.type, result);
+      sendResponse(result);
+    })
+    .catch(error => {
+      console.error('❌ Message handler error:', message.type, error);
+      // Report error to background for AI/Nova analysis
+      reportErrorToBackground(error, message.type);
+      sendResponse({ success: false, error: error.message });
+    });
+  
+  return true; // Keep channel open for async response
+});
+
+/**
+ * Handle all message types asynchronously
+ */
+async function handleMessageAsync(message) {
   switch (message.type) {
     case 'INIT':
       accountId = message.accountId;
       authToken = message.authToken;
       console.log('Content script initialized for account:', accountId);
-      sendResponse({ success: true });
-      break;
+      return { success: true };
       
     case 'EXECUTE_COMMAND':
-      executeCommand(message.command)
-        .then(result => sendResponse({ success: true, result }))
-        .catch(error => sendResponse({ success: false, error: error.message }));
-      return true; // Keep channel open for async response
+      const cmdResult = await executeCommand(message.command);
+      return { success: true, result: cmdResult };
       
     case 'SCRAPE_INBOX':
-      sendResponse({ success: true, data: scrapeInbox() });
-      break;
+      return { success: true, data: scrapeInbox() };
       
     case 'SCRAPE_CONVERSATION':
-      sendResponse({ success: true, data: scrapeConversation() });
-      break;
+      return { success: true, data: scrapeConversation() };
       
     case 'GET_PAGE_STATE':
-      sendResponse({
+      return {
         success: true,
-        data: {
-          url: window.location.href,
-          title: document.title,
-          isMarketplace: window.location.href.includes('marketplace'),
-          isInbox: window.location.href.includes('inbox'),
-        },
-      });
-      break;
+        data: getDetailedPageState()
+      };
+    
+    // =============================================
+    // IAI SIDEPANEL POSTING HANDLERS
+    // =============================================
+    
+    case 'IAI_FILL_LISTING':
+      console.log('🚗 IAI_FILL_LISTING: Filling vehicle form', message.vehicle);
+      const fillResult = await fillMarketplaceVehicleForm(message.vehicle);
+      return { success: true, ...fillResult };
       
+    case 'IAI_UPLOAD_IMAGES':
+      console.log('📷 IAI_UPLOAD_IMAGES: Uploading', message.images?.length, 'images');
+      const uploadResult = await uploadImagesFromUrls(message.images);
+      return { success: true, ...uploadResult };
+      
+    case 'IAI_PUBLISH_LISTING':
+      console.log('🚀 IAI_PUBLISH_LISTING: Publishing listing');
+      const publishResult = await clickPublishButton();
+      return { success: true, ...publishResult };
+    
+    case 'FILL_MARKETPLACE_FORM':
+      console.log('📝 FILL_MARKETPLACE_FORM: Legacy handler');
+      const legacyResult = await fillMarketplaceVehicleForm(message.vehicle);
+      return { success: true, ...legacyResult };
+    
+    case 'CHECK_FACEBOOK_LOGIN':
+      return { success: true, isLoggedIn: checkFacebookLogin() };
+    
+    case 'GET_FORM_STATUS':
+      return { success: true, data: analyzeFormState() };
+    
     default:
-      sendResponse({ success: false, error: 'Unknown message type' });
+      console.warn('⚠️ Unhandled message type:', message.type);
+      // Instead of failing, try to be helpful
+      return { 
+        success: false, 
+        error: `Unhandled message type: ${message.type}`,
+        availableTypes: [
+          'INIT', 'EXECUTE_COMMAND', 'SCRAPE_INBOX', 'SCRAPE_CONVERSATION',
+          'GET_PAGE_STATE', 'IAI_FILL_LISTING', 'IAI_UPLOAD_IMAGES', 
+          'IAI_PUBLISH_LISTING', 'FILL_MARKETPLACE_FORM', 'CHECK_FACEBOOK_LOGIN'
+        ]
+      };
   }
-});
+}
+
+/**
+ * Report errors to background script for AI/Nova analysis
+ */
+async function reportErrorToBackground(error, messageType) {
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'CONTENT_SCRIPT_ERROR',
+      error: {
+        message: error.message || String(error),
+        stack: error.stack,
+        messageType,
+        url: window.location.href,
+        timestamp: new Date().toISOString(),
+        pageState: getDetailedPageState(),
+        formState: analyzeFormState()
+      }
+    });
+  } catch (e) {
+    console.error('Failed to report error to background:', e);
+  }
+}
+
+/**
+ * Get detailed page state for diagnostics
+ */
+function getDetailedPageState() {
+  const url = window.location.href;
+  return {
+    url,
+    title: document.title,
+    isMarketplace: url.includes('marketplace'),
+    isCreateListing: url.includes('/marketplace/create'),
+    isVehicleListing: url.includes('/create/vehicle'),
+    isInbox: url.includes('inbox'),
+    isLoggedIn: checkFacebookLogin(),
+    bodyClasses: document.body.className,
+    hasForm: !!document.querySelector('form'),
+    formElements: document.querySelectorAll('input, select, textarea, [contenteditable]').length,
+    visibleButtons: document.querySelectorAll('div[role="button"], button').length,
+    timestamp: new Date().toISOString()
+  };
+}
+
+/**
+ * Check if user is logged into Facebook
+ */
+function checkFacebookLogin() {
+  const indicators = [
+    '[role="navigation"]',
+    '[aria-label*="profile" i]',
+    '[aria-label*="Account" i]',
+    '[aria-label*="Messenger" i]',
+    '[data-testid="royal_email"]'
+  ];
+  return indicators.some(sel => document.querySelector(sel));
+}
+
+/**
+ * Analyze form state for debugging
+ */
+function analyzeFormState() {
+  const inputs = document.querySelectorAll('input:not([type="hidden"]), select, textarea, [contenteditable="true"]');
+  const fields = [];
+  
+  inputs.forEach((el, idx) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      fields.push({
+        index: idx,
+        tag: el.tagName,
+        type: el.type || el.getAttribute('role'),
+        ariaLabel: el.getAttribute('aria-label'),
+        placeholder: el.placeholder,
+        name: el.name,
+        value: el.value?.substring(0, 50),
+        visible: rect.width > 0 && rect.height > 0
+      });
+    }
+  });
+  
+  return { fields, count: fields.length };
+}
+
+// ============================================
+// MARKETPLACE FORM FILLING (Production Version)
+// ============================================
+
+/**
+ * Fill Facebook Marketplace vehicle listing form
+ * Based on current Facebook DOM structure (Jan 2026)
+ */
+async function fillMarketplaceVehicleForm(vehicle) {
+  console.log('🚗 Starting form fill for:', vehicle.year, vehicle.make, vehicle.model);
+  
+  const filledFields = [];
+  const failedFields = [];
+  const errors = [];
+  
+  // Wait for form to be ready
+  await waitForFormReady();
+  
+  // === TITLE ===
+  const title = vehicle.title || `${vehicle.year} ${vehicle.make} ${vehicle.model} ${vehicle.trim || ''}`.trim();
+  if (await fillInputField(['[aria-label*="Title" i]', 'input[placeholder*="title" i]', '[name="title"]'], title)) {
+    filledFields.push('title');
+  } else {
+    failedFields.push('title');
+    errors.push('Could not find or fill title field');
+  }
+  
+  // === PRICE ===
+  const price = String(vehicle.price || '').replace(/[^0-9]/g, '');
+  if (price && await fillInputField(['[aria-label*="Price" i]', 'input[placeholder*="price" i]', '[name="price"]'], price)) {
+    filledFields.push('price');
+  } else if (price) {
+    failedFields.push('price');
+    errors.push('Could not find or fill price field');
+  }
+  
+  // === YEAR (Dropdown) ===
+  if (vehicle.year) {
+    if (await selectDropdownOption(['[aria-label*="Year" i]'], String(vehicle.year))) {
+      filledFields.push('year');
+    } else {
+      failedFields.push('year');
+    }
+  }
+  
+  // === MAKE (Dropdown) ===
+  if (vehicle.make) {
+    if (await selectDropdownOption(['[aria-label*="Make" i]'], vehicle.make)) {
+      filledFields.push('make');
+    } else {
+      failedFields.push('make');
+    }
+  }
+  
+  // === MODEL (Dropdown) ===
+  if (vehicle.model) {
+    if (await selectDropdownOption(['[aria-label*="Model" i]'], vehicle.model)) {
+      filledFields.push('model');
+    } else {
+      failedFields.push('model');
+    }
+  }
+  
+  // === MILEAGE ===
+  if (vehicle.mileage) {
+    if (await fillInputField(['[aria-label*="mileage" i]', '[aria-label*="odometer" i]'], String(vehicle.mileage))) {
+      filledFields.push('mileage');
+    } else {
+      failedFields.push('mileage');
+    }
+  }
+  
+  // === BODY STYLE ===
+  if (vehicle.bodyStyle || vehicle.bodyType) {
+    if (await selectDropdownOption(['[aria-label*="Body style" i]', '[aria-label*="Body type" i]'], vehicle.bodyStyle || vehicle.bodyType)) {
+      filledFields.push('bodyStyle');
+    }
+  }
+  
+  // === EXTERIOR COLOR ===
+  if (vehicle.exteriorColor || vehicle.color) {
+    if (await selectDropdownOption(['[aria-label*="Exterior color" i]', '[aria-label*="Color" i]'], vehicle.exteriorColor || vehicle.color)) {
+      filledFields.push('exteriorColor');
+    }
+  }
+  
+  // === TRANSMISSION ===
+  if (vehicle.transmission) {
+    if (await selectDropdownOption(['[aria-label*="Transmission" i]'], vehicle.transmission)) {
+      filledFields.push('transmission');
+    }
+  }
+  
+  // === FUEL TYPE ===
+  if (vehicle.fuelType) {
+    if (await selectDropdownOption(['[aria-label*="Fuel type" i]', '[aria-label*="Fuel" i]'], vehicle.fuelType)) {
+      filledFields.push('fuelType');
+    }
+  }
+  
+  // === CONDITION ===
+  if (vehicle.condition) {
+    if (await selectDropdownOption(['[aria-label*="Condition" i]'], vehicle.condition)) {
+      filledFields.push('condition');
+    }
+  }
+  
+  // === DESCRIPTION ===
+  const description = vehicle.description || generateVehicleDescription(vehicle);
+  if (await fillTextareaField(['[aria-label*="Description" i]', 'textarea', '[role="textbox"][aria-multiline="true"]'], description)) {
+    filledFields.push('description');
+  } else {
+    failedFields.push('description');
+    errors.push('Could not find or fill description field');
+  }
+  
+  console.log(`📝 Form fill complete: ${filledFields.length} filled, ${failedFields.length} failed`);
+  
+  return {
+    filledFields,
+    failedFields,
+    errors,
+    success: filledFields.length > 0
+  };
+}
+
+/**
+ * Wait for form to be ready
+ */
+async function waitForFormReady() {
+  let attempts = 0;
+  while (attempts < 20) {
+    const hasInputs = document.querySelector('input, [contenteditable], textarea');
+    if (hasInputs) return true;
+    await randomDelay(250, 500);
+    attempts++;
+  }
+  return false;
+}
+
+/**
+ * Fill an input field with human-like typing
+ */
+async function fillInputField(selectors, value) {
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    if (element && isVisible(element)) {
+      try {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await randomDelay(200, 400);
+        
+        element.focus();
+        await randomDelay(100, 200);
+        
+        // Clear existing value
+        if (element.value) {
+          element.value = '';
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        
+        // Type value
+        await typeHumanlike(element, value);
+        
+        // Blur to trigger validation
+        element.blur();
+        await randomDelay(100, 200);
+        
+        console.log(`✅ Filled field: ${selector} with "${value.substring(0, 30)}..."`);
+        return true;
+      } catch (e) {
+        console.warn(`Failed to fill ${selector}:`, e);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Fill a textarea/contenteditable field
+ */
+async function fillTextareaField(selectors, value) {
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    if (element && isVisible(element)) {
+      try {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await randomDelay(200, 400);
+        
+        element.focus();
+        await randomDelay(100, 200);
+        
+        // For contenteditable divs
+        if (element.isContentEditable) {
+          element.innerHTML = '';
+          // Set text directly for contenteditables
+          element.textContent = value;
+          element.dispatchEvent(new InputEvent('input', { bubbles: true, data: value }));
+        } else {
+          element.value = '';
+          await typeHumanlike(element, value);
+        }
+        
+        element.blur();
+        await randomDelay(100, 200);
+        
+        console.log(`✅ Filled textarea: ${selector}`);
+        return true;
+      } catch (e) {
+        console.warn(`Failed to fill textarea ${selector}:`, e);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Select dropdown option
+ */
+async function selectDropdownOption(selectors, value) {
+  for (const selector of selectors) {
+    // Find the dropdown button
+    const allElements = document.querySelectorAll(`${selector}, [aria-haspopup="listbox"]`);
+    
+    for (const element of allElements) {
+      if (!isVisible(element)) continue;
+      
+      try {
+        // Click to open dropdown
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await randomDelay(200, 400);
+        await clickHumanlike(element);
+        await randomDelay(500, 800);
+        
+        // Look for option in the dropdown
+        const options = document.querySelectorAll('[role="option"], [role="menuitem"], [role="listbox"] div, [data-visualcompletion="ignore-dynamic"] div');
+        
+        for (const option of options) {
+          const optionText = option.textContent?.trim().toLowerCase();
+          const searchValue = String(value).toLowerCase();
+          
+          if (optionText === searchValue || optionText?.includes(searchValue)) {
+            await clickHumanlike(option);
+            await randomDelay(300, 500);
+            console.log(`✅ Selected dropdown option: ${value}`);
+            return true;
+          }
+        }
+        
+        // If not found, click elsewhere to close dropdown
+        document.body.click();
+        await randomDelay(200, 400);
+        
+      } catch (e) {
+        console.warn(`Failed to select ${value} from ${selector}:`, e);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Upload images from URLs
+ */
+async function uploadImagesFromUrls(imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) {
+    console.log('📷 No images to upload');
+    return { uploaded: 0 };
+  }
+  
+  console.log('📷 Attempting to upload', imageUrls.length, 'images');
+  
+  // Find file input
+  const fileInputSelectors = [
+    'input[type="file"][accept*="image"]',
+    'input[type="file"]'
+  ];
+  
+  let fileInput = null;
+  for (const selector of fileInputSelectors) {
+    fileInput = document.querySelector(selector);
+    if (fileInput) break;
+  }
+  
+  if (!fileInput) {
+    // Try clicking "Add photos" button first
+    const addPhotoButtons = document.querySelectorAll('div[role="button"], span');
+    for (const btn of addPhotoButtons) {
+      if (/add photo|upload|photos/i.test(btn.textContent)) {
+        await clickHumanlike(btn);
+        await randomDelay(800, 1200);
+        fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) break;
+      }
+    }
+  }
+  
+  if (!fileInput) {
+    console.warn('📷 Could not find file input');
+    return { uploaded: 0, error: 'File input not found' };
+  }
+  
+  try {
+    // Download images and create File objects
+    const files = await Promise.all(imageUrls.slice(0, 10).map(async (url, index) => {
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        return new File([blob], `vehicle_photo_${index + 1}.jpg`, { type: blob.type || 'image/jpeg' });
+      } catch (e) {
+        console.warn(`Failed to fetch image ${index}:`, e);
+        return null;
+      }
+    }));
+    
+    const validFiles = files.filter(f => f !== null);
+    
+    if (validFiles.length === 0) {
+      return { uploaded: 0, error: 'Failed to download images' };
+    }
+    
+    // Create DataTransfer and set files
+    const dataTransfer = new DataTransfer();
+    validFiles.forEach(file => dataTransfer.items.add(file));
+    fileInput.files = dataTransfer.files;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    console.log(`✅ Uploaded ${validFiles.length} photos`);
+    return { uploaded: validFiles.length };
+    
+  } catch (error) {
+    console.error('📷 Photo upload error:', error);
+    return { uploaded: 0, error: error.message };
+  }
+}
+
+/**
+ * Click the publish/post button
+ */
+async function clickPublishButton() {
+  console.log('🚀 Looking for publish button...');
+  
+  await randomDelay(500, 1000);
+  
+  // Common publish button patterns
+  const publishPatterns = [
+    { selector: '[aria-label*="Publish" i]', priority: 1 },
+    { selector: '[aria-label*="Post" i]', priority: 1 },
+    { selector: '[aria-label*="Next" i]', priority: 2 },
+    { selector: '[aria-label*="Submit" i]', priority: 2 },
+    { selector: 'div[role="button"]', textMatch: /^(publish|post|next|submit|list)$/i, priority: 1 },
+    { selector: 'button[type="submit"]', priority: 3 }
+  ];
+  
+  for (const pattern of publishPatterns.sort((a, b) => a.priority - b.priority)) {
+    const elements = document.querySelectorAll(pattern.selector);
+    
+    for (const el of elements) {
+      if (!isVisible(el)) continue;
+      
+      const text = el.textContent?.trim().toLowerCase();
+      
+      // If pattern has text match, check it
+      if (pattern.textMatch && !pattern.textMatch.test(text)) continue;
+      
+      // Skip if it's a generic button without publish-related text
+      if (!pattern.textMatch && !/(publish|post|next|submit|list)/i.test(text)) continue;
+      
+      try {
+        console.log(`🚀 Found button: "${el.textContent?.trim()}" - clicking`);
+        await clickHumanlike(el);
+        await randomDelay(2000, 3000);
+        return { clicked: true, buttonText: el.textContent?.trim() };
+      } catch (e) {
+        console.warn('Failed to click button:', e);
+      }
+    }
+  }
+  
+  console.warn('🚀 Could not find publish button');
+  return { clicked: false, error: 'Publish button not found' };
+}
+
+/**
+ * Generate vehicle description
+ */
+function generateVehicleDescription(vehicle) {
+  const parts = [];
+  
+  parts.push(`🚗 ${vehicle.year} ${vehicle.make} ${vehicle.model}${vehicle.trim ? ` ${vehicle.trim}` : ''}`);
+  parts.push('');
+  
+  if (vehicle.mileage) {
+    parts.push(`📍 Mileage: ${Number(vehicle.mileage).toLocaleString()} miles`);
+  }
+  
+  if (vehicle.exteriorColor || vehicle.color) {
+    parts.push(`🎨 Color: ${vehicle.exteriorColor || vehicle.color}`);
+  }
+  
+  if (vehicle.transmission) {
+    parts.push(`⚙️ Transmission: ${vehicle.transmission}`);
+  }
+  
+  if (vehicle.fuelType) {
+    parts.push(`⛽ Fuel: ${vehicle.fuelType}`);
+  }
+  
+  if (vehicle.vin) {
+    parts.push(`🔑 VIN: ...${vehicle.vin.slice(-6)}`);
+  }
+  
+  parts.push('');
+  parts.push('✅ Financing Available');
+  parts.push('✅ Trade-ins Welcome');
+  parts.push('');
+  parts.push('📞 Contact us for more information!');
+  
+  return parts.join('\n');
+}
 
 // ============================================
 // Initialize
