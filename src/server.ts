@@ -479,6 +479,9 @@ app.use('/api', (req, res, next) => {
     '/facebook/data-deletion',
     '/auth/facebook/callback',
     '/extension/', // All extension endpoints (Chrome extension uses JWT, not CSRF)
+    // Training console endpoints (extension uses JWT, not CSRF)
+    '/training/console/heartbeat',
+    '/training/console/status',
     // Public auth endpoints (no CSRF token available yet)
     '/auth/login',
     '/auth/register',
