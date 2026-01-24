@@ -1097,7 +1097,8 @@ async function getAccountInfo() {
  * Get vehicles from server inventory
  */
 async function getVehicles() {
-  const { authState, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+  const storage = await chrome.storage.local.get(['authState', 'authToken', 'accountId']);
+  const { authState, authToken, accountId: storedAccountId } = storage;
   
   // Use authToken (server JWT) for API calls, fallback to authState.accessToken
   const token = authToken || authState?.accessToken;
@@ -1109,18 +1110,33 @@ async function getVehicles() {
   
   try {
     // Use dealersface.com API to fetch vehicles
-    const accountId = authState?.dealerAccountId || authState?.accountId;
-    console.log('📦 Fetching vehicles for account:', accountId);
+    // Try multiple sources for accountId
+    const accountId = storedAccountId || authState?.dealerAccountId || authState?.accountId;
+    console.log('📦 Fetching vehicles for account:', accountId, 'token:', token?.substring(0, 20) + '...');
+    
+    if (!accountId) {
+      console.log('❌ No accountId available for getVehicles');
+      return { success: false, error: 'No account ID found. Please re-login.' };
+    }
     
     // Fetch all vehicles (no status filter, server handles pagination)
-    const response = await fetch(`${CONFIG.API_URL.replace('/api', '')}/api/vehicles?accountId=${accountId}&limit=100`, {
+    const url = `${CONFIG.API_URL.replace('/api', '')}/api/vehicles?accountId=${accountId}&limit=100`;
+    console.log('📦 Fetching from URL:', url);
+    
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
     
+    console.log('📦 Vehicle API response status:', response.status);
+    
     if (!response.ok) {
+      // Log the response body for debugging
+      const errorText = await response.text();
+      console.log('❌ Vehicle API error response:', errorText);
+      
       // Try to refresh token if unauthorized
       if (response.status === 401) {
         console.log('🔄 Token expired, refreshing...');
@@ -1133,11 +1149,11 @@ async function getVehicles() {
         console.log('❌ Token refresh failed, clearing auth');
         return { success: false, error: 'Session expired. Please login again.' };
       }
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
     
     const data = await response.json();
-    console.log('✅ Fetched vehicles:', data.data?.vehicles?.length || data.data?.length || 0);
+    console.log('✅ Fetched vehicles:', data.data?.vehicles?.length || data.data?.length || 0, 'from response:', JSON.stringify(data).substring(0, 200));
     return { 
       success: true, 
       data: data.data?.vehicles || data.data || data.vehicles || [] 
