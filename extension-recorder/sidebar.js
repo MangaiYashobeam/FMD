@@ -25,6 +25,7 @@ const ConsoleState = {
     recordHovers: false,
     stealthMode: true,
     apiEndpoint: 'https://dealersface.com/api',
+    healthEndpoint: 'https://dealersface.com/health',
     maxLogLines: 50
   },
   // Connection state
@@ -1319,7 +1320,7 @@ async function testApiConnection() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     
-    const response = await fetch(`${ConsoleState.config.apiEndpoint}/health`, {
+    const response = await fetch(ConsoleState.config.healthEndpoint, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal
@@ -1385,7 +1386,7 @@ async function checkWebappConnection() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     
-    const response = await fetch(`${ConsoleState.config.apiEndpoint}/health`, {
+    const response = await fetch(ConsoleState.config.healthEndpoint, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal
