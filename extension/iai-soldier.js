@@ -99,6 +99,160 @@ const IAI_CONFIG = {
 };
 
 // ============================================
+// TRAINING INJECTION SYSTEM
+// ============================================
+
+/**
+ * Training data storage - can be dynamically updated
+ * This is populated from the Training Recorder extension
+ */
+let IAI_TRAINING = {
+  _loaded: false,
+  _version: null,
+  _sessionId: null,
+  
+  // Field selectors learned from training
+  FIELD_SELECTORS: {},
+  
+  // Step sequence for automation
+  STEPS: [],
+  
+  // Timing configuration
+  TIMING: {
+    averageDelay: 500,
+    recommendedDelay: 400,
+  },
+};
+
+/**
+ * Load training data from storage or API
+ */
+async function loadTrainingData() {
+  try {
+    // First try local storage
+    const stored = await chrome.storage?.local?.get('iaiTraining');
+    if (stored?.iaiTraining) {
+      IAI_TRAINING = { ...IAI_TRAINING, ...stored.iaiTraining, _loaded: true };
+      console.log('[IAI] ✅ Training data loaded from storage');
+      console.log('[IAI] Training version:', IAI_TRAINING._version);
+      console.log('[IAI] Training session:', IAI_TRAINING._sessionId);
+      return true;
+    }
+    
+    // Then try API
+    const apiUrl = window.location.hostname === 'localhost' 
+      ? IAI_CONFIG.API.LOCAL 
+      : IAI_CONFIG.API.PRODUCTION;
+    
+    const token = await getAuthToken();
+    if (token) {
+      const response = await fetch(`${apiUrl}/training/inject/iai`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.code) {
+          IAI_TRAINING = { ...IAI_TRAINING, ...data.code, _loaded: true };
+          // Cache for future use
+          await chrome.storage?.local?.set({ iaiTraining: data.code });
+          console.log('[IAI] ✅ Training data loaded from API');
+          return true;
+        }
+      }
+    }
+    
+    console.log('[IAI] ⚠️ No training data available - using defaults');
+    return false;
+  } catch (e) {
+    console.debug('[IAI] Training data load error:', e.message);
+    return false;
+  }
+}
+
+/**
+ * Inject new training data at runtime
+ * Called from extension popup or background script
+ */
+function injectTrainingData(trainingData) {
+  if (!trainingData) return false;
+  
+  try {
+    IAI_TRAINING = { ...IAI_TRAINING, ...trainingData, _loaded: true };
+    console.log('[IAI] 🎯 New training data injected');
+    console.log('[IAI] Fields:', Object.keys(IAI_TRAINING.FIELD_SELECTORS || {}).join(', '));
+    
+    // Save to storage
+    chrome.storage?.local?.set({ iaiTraining: trainingData }).catch(() => {});
+    return true;
+  } catch (e) {
+    console.error('[IAI] Training injection failed:', e);
+    return false;
+  }
+}
+
+/**
+ * Get selector for a field from training data
+ * Falls back to hardcoded selectors if training not available
+ */
+function getTrainedSelector(fieldType) {
+  if (IAI_TRAINING._loaded && IAI_TRAINING.FIELD_SELECTORS?.[fieldType]) {
+    const selector = IAI_TRAINING.FIELD_SELECTORS[fieldType];
+    return {
+      primary: selector.primary,
+      fallbacks: selector.fallbacks || [],
+      ariaLabel: selector.ariaLabel,
+      role: selector.role,
+      isDropdown: selector.isDropdown,
+      isInput: selector.isInput,
+    };
+  }
+  return null;
+}
+
+/**
+ * Find element using trained selector
+ */
+function findWithTrainedSelector(fieldType) {
+  const selector = getTrainedSelector(fieldType);
+  if (!selector) return null;
+  
+  // Try primary selector
+  if (selector.primary) {
+    try {
+      const el = document.querySelector(selector.primary);
+      if (el) return el;
+    } catch (e) { /* invalid selector */ }
+  }
+  
+  // Try aria-label
+  if (selector.ariaLabel) {
+    const el = document.querySelector(`[aria-label="${selector.ariaLabel}"]`) ||
+               document.querySelector(`[aria-label*="${selector.ariaLabel}"]`);
+    if (el) return el;
+  }
+  
+  // Try fallback selectors
+  for (const fallback of (selector.fallbacks || [])) {
+    try {
+      const el = document.querySelector(fallback);
+      if (el) return el;
+    } catch (e) { /* invalid selector */ }
+  }
+  
+  return null;
+}
+
+// Expose training injection to window for external control
+if (typeof window !== 'undefined') {
+  window.__IAI_INJECT_TRAINING__ = injectTrainingData;
+  window.__IAI_TRAINING__ = IAI_TRAINING;
+}
+
+// Load training data on initialization
+loadTrainingData().catch(console.debug);
+
+// ============================================
 // CORE HELPER FUNCTIONS (Competitor-Proven)
 // ============================================
 

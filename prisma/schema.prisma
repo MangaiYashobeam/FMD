@@ -52,6 +52,7 @@ model User {
   sentInvitations     TeamInvitation[]     @relation("InvitedBy")
   fbmPostLogs         FBMPostLog[]
   iaiSoldiers         IAISoldier[]
+  trainingSessions    TrainingSession[]
 
   @@map("users")
 }
@@ -3016,4 +3017,169 @@ model IAIPerformanceSnapshot {
   @@index([soldierId])
   @@index([snapshotAt])
   @@map("iai_performance_snapshots")
+}
+
+// ============================================
+// IAI Training System
+// ============================================
+
+model TrainingSession {
+  id        String @id @default(uuid())
+  sessionId String @unique @map("session_id") // Client-generated session ID
+
+  // Recording Configuration
+  mode          String @default("listing") @map("mode") // listing, messages, navigation, full
+  recordingType String @default("iai") @map("recording_type") // iai, soldier
+
+  // Session Data
+  duration              Int      @default(0) @map("duration") // Duration in ms
+  totalEvents           Int      @default(0) @map("total_events")
+  markedElementsCount   Int      @default(0) @map("marked_elements_count")
+  metadata              Json?    @map("metadata")
+
+  // Processed Data
+  clickSequence         Json?    @map("click_sequence") // Array of click events in order
+  typingPatterns        Json?    @map("typing_patterns") // Typing patterns detected
+  automationCode        Json?    @map("automation_code") // Generated automation code
+
+  // Status
+  status     String    @default("RECORDED") @map("status") // RECORDED, PROCESSED, ACTIVE, ARCHIVED
+  isActive   Boolean   @default(false) @map("is_active")
+  processedAt DateTime? @map("processed_at")
+
+  // Relations
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Child Relations
+  events         TrainingEvent[]
+  markedElements TrainingMarkedElement[]
+  fieldMappings  TrainingFieldMapping[]
+  patterns       TrainingPattern[]
+
+  @@index([mode])
+  @@index([recordingType])
+  @@index([status])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("training_sessions")
+}
+
+model TrainingEvent {
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+  eventId   String @map("event_id") // Client-generated event ID
+
+  // Event Details
+  type         String   @map("type") // click, input, scroll, focus, mutation, keydown
+  timestamp    DateTime @map("timestamp")
+  relativeTime Int      @default(0) @map("relative_time") // ms from session start
+  url          String?  @map("url")
+
+  // Element Information
+  fieldType   String?  @map("field_type") // vehicleType, year, make, model, etc.
+  isMarked    Boolean  @default(false) @map("is_marked")
+  elementData Json?    @map("element_data") // Full element info
+
+  // Position & Modifiers
+  mousePosition Json?   @map("mouse_position") // x, y coordinates
+  modifiers     Json?   @map("modifiers") // ctrl, shift, alt, meta
+
+  // Additional Data
+  additionalData Json? @map("additional_data")
+
+  // Relations
+  session TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([type])
+  @@index([timestamp])
+  @@index([fieldType])
+  @@index([isMarked])
+  @@map("training_events")
+}
+
+model TrainingMarkedElement {
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+
+  // Field Information
+  fieldType String @map("field_type") // vehicleType, year, make, model, etc.
+  order     Int    @default(0) @map("order") // Order in the sequence
+
+  // Element Data
+  elementData Json     @map("element_data") // Full element info
+  selectors   String[] @default([]) @map("selectors") // CSS selectors
+  ariaLabel   String?  @map("aria_label")
+  role        String?  @map("role")
+
+  // Type Flags
+  isDropdown Boolean @default(false) @map("is_dropdown")
+  isInput    Boolean @default(false) @map("is_input")
+  isButton   Boolean @default(false) @map("is_button")
+
+  // Timing
+  timestamp    DateTime @map("timestamp")
+  relativeTime Int      @default(0) @map("relative_time")
+
+  // Relations
+  session TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([fieldType])
+  @@index([order])
+  @@map("training_marked_elements")
+}
+
+model TrainingFieldMapping {
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+
+  // Field Definition
+  fieldType         String   @map("field_type") // vehicleType, year, make, model, etc.
+  primarySelector   String   @map("primary_selector")
+  fallbackSelectors String[] @default([]) @map("fallback_selectors")
+
+  // Element Hints
+  ariaLabel     String?  @map("aria_label")
+  role          String?  @map("role")
+  placeholder   String?  @map("placeholder")
+  parentContext String[] @default([]) @map("parent_context") // Parent selectors for context
+
+  // Type Flags
+  isDropdown Boolean @default(false) @map("is_dropdown")
+  isInput    Boolean @default(false) @map("is_input")
+
+  // Relations
+  session TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, fieldType])
+  @@index([sessionId])
+  @@index([fieldType])
+  @@map("training_field_mappings")
+}
+
+model TrainingPattern {
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+
+  // Pattern Information
+  patternType    String   @map("pattern_type") // dropdowns, inputs, buttons, navigation, fileUploads, timing
+  fieldType      String?  @map("field_type")
+  selectors      String[] @default([]) @map("selectors")
+  ariaLabel      String?  @map("aria_label")
+  text           String?  @map("text")
+  timestamp      Int?     @map("timestamp")
+  additionalData Json?    @map("additional_data")
+
+  // Relations
+  session TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([patternType])
+  @@map("training_patterns")
 }

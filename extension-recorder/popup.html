@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FMD Training Recorder</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 400px;
+      min-height: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+      color: #e0e0e0;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+    
+    .header .subtitle {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    
+    .admin-badge {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 10px;
+      margin-top: 8px;
+      display: inline-block;
+    }
+    
+    .content {
+      padding: 20px;
+    }
+    
+    .status-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .status-card h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin-bottom: 12px;
+    }
+    
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #666;
+    }
+    
+    .status-dot.recording {
+      background: #ef4444;
+      animation: pulse 1s infinite;
+    }
+    
+    .status-dot.ready {
+      background: #22c55e;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+    
+    .stat {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #60a5fa;
+    }
+    
+    .stat-label {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+    }
+    
+    .mode-selector {
+      margin-bottom: 16px;
+    }
+    
+    .mode-selector label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+    
+    .mode-buttons {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    
+    .mode-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid transparent;
+      border-radius: 8px;
+      padding: 12px;
+      color: #e0e0e0;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 12px;
+    }
+    
+    .mode-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .mode-btn.active {
+      border-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.1);
+    }
+    
+    .mode-btn .icon {
+      font-size: 20px;
+      display: block;
+      margin-bottom: 4px;
+    }
+    
+    .record-btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .record-btn.start {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: white;
+    }
+    
+    .record-btn.start:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    }
+    
+    .record-btn.stop {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+    }
+    
+    .record-btn.stop:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+    
+    .record-btn:disabled {
+      background: #666;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 8px;
+    }
+    
+    .action-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(255, 255, 255, 0.1);
+      color: #e0e0e0;
+    }
+    
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .recent-sessions {
+      margin-top: 16px;
+    }
+    
+    .recent-sessions h3 {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 12px;
+    }
+    
+    .session-item {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .session-item:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .session-item .session-id {
+      font-size: 11px;
+      color: #60a5fa;
+      font-family: monospace;
+    }
+    
+    .session-item .session-meta {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+    }
+    
+    .auth-required {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    
+    .auth-required h2 {
+      color: #ef4444;
+      margin-bottom: 12px;
+    }
+    
+    .auth-required p {
+      color: #888;
+      font-size: 14px;
+    }
+    
+    .token-input {
+      margin-top: 16px;
+    }
+    
+    .token-input input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+    
+    .token-input input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    
+    .token-input button {
+      width: 100%;
+      margin-top: 8px;
+      padding: 12px;
+      background: #3b82f6;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    
+    .instructions {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+    }
+    
+    .instructions h4 {
+      font-size: 12px;
+      color: #60a5fa;
+      margin-bottom: 8px;
+    }
+    
+    .instructions ul {
+      font-size: 11px;
+      color: #888;
+      padding-left: 16px;
+    }
+    
+    .instructions li {
+      margin-bottom: 4px;
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎬 FMD Training Recorder</h1>
+    <div class="subtitle">DOM Interaction Tracker</div>
+    <div class="admin-badge">🔒 SUPER ADMIN ONLY</div>
+  </div>
+  
+  <div id="auth-section" class="content auth-required hidden">
+    <h2>🔐 Authentication Required</h2>
+    <p>This tool is for Super Admin users only.</p>
+    <div class="token-input">
+      <input type="password" id="auth-token" placeholder="Enter admin token...">
+      <button id="auth-btn">Authenticate</button>
+    </div>
+  </div>
+  
+  <div id="main-section" class="content hidden">
+    <div class="status-card">
+      <h3>Recording Status</h3>
+      <div class="status-indicator">
+        <div id="status-dot" class="status-dot ready"></div>
+        <span id="status-text">Ready to record</span>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div id="event-count" class="stat-value">0</div>
+          <div class="stat-label">Events</div>
+        </div>
+        <div class="stat">
+          <div id="marked-count" class="stat-value">0</div>
+          <div class="stat-label">Marked Fields</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="mode-selector">
+      <label>Recording Mode</label>
+      <div class="mode-buttons">
+        <button class="mode-btn active" data-mode="listing" data-type="iai">
+          <span class="icon">📝</span>
+          IAI Listing
+        </button>
+        <button class="mode-btn" data-mode="messages" data-type="soldier">
+          <span class="icon">💬</span>
+          Soldier Messages
+        </button>
+        <button class="mode-btn" data-mode="navigation" data-type="soldier">
+          <span class="icon">🧭</span>
+          Soldier Navigation
+        </button>
+        <button class="mode-btn" data-mode="full" data-type="iai">
+          <span class="icon">🎯</span>
+          Full Flow
+        </button>
+      </div>
+    </div>
+    
+    <button id="record-btn" class="record-btn start">
+      <span>⏺️</span>
+      <span id="record-btn-text">Start Recording</span>
+    </button>
+    
+    <div class="actions">
+      <button id="view-session-btn" class="action-btn" disabled>📊 View Data</button>
+      <button id="save-session-btn" class="action-btn" disabled>💾 Save Session</button>
+      <button id="copy-code-btn" class="action-btn" disabled>📋 Copy Code</button>
+    </div>
+    
+    <div class="instructions">
+      <h4>📖 How to Record</h4>
+      <ul>
+        <li><strong>Click</strong> to record element interactions</li>
+        <li><strong>Ctrl+Click</strong> to mark as important field</li>
+        <li>Recording captures: clicks, typing, scrolls, uploads</li>
+        <li>Generated code can be injected into IAI/Soldier</li>
+      </ul>
+    </div>
+    
+    <div id="recent-sessions" class="recent-sessions hidden">
+      <h3>Recent Sessions</h3>
+      <div id="sessions-list"></div>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

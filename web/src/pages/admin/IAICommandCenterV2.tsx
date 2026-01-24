@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import IAIPrototypePanel from './IAIPrototypePanel';
+import IAITrainingPanel from './IAITrainingPanel';
 
 // ============================================
 // Types
@@ -475,7 +476,7 @@ function SystemDashboard({ systemInfo }: { systemInfo: SystemInfo | undefined })
 
 export default function IAICommandCenterV2() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'soldiers' | 'system' | 'prototype'>('soldiers');
+  const [activeTab, setActiveTab] = useState<'soldiers' | 'system' | 'prototype' | 'training'>('soldiers');
   const queryClient = useQueryClient();
 
   const {
@@ -652,6 +653,17 @@ export default function IAICommandCenterV2() {
               System
             </button>
             <button
+              onClick={() => setActiveTab('training')}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
+                activeTab === 'training'
+                  ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              <Eye className="w-4 h-4 inline mr-2" />
+              Training
+            </button>
+            <button
               onClick={() => setActiveTab('prototype')}
               className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
                 activeTab === 'prototype'
@@ -756,6 +768,8 @@ export default function IAICommandCenterV2() {
           </>
         ) : activeTab === 'system' ? (
           <SystemDashboard systemInfo={systemInfo} />
+        ) : activeTab === 'training' ? (
+          <IAITrainingPanel />
         ) : (
           <IAIPrototypePanel />
         )}

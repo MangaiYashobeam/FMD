@@ -586,6 +586,9 @@ app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes')
 app.use('/api/admin/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier tracking (admin)
 app.use('/api/extension/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier registration/heartbeat
 
+// IAI Training System (Super Admin only)
+app.use('/api/training', ring5AuthBarrier, require('./routes/training.routes').default); // Training recording & injection
+
 // AI Center Routes (requires super admin)
 app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes').default); // AI Center (requires admin)
 

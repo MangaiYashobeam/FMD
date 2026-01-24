@@ -98,7 +98,131 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((error) => sendResponse({ error: error.message }));
     return true;
   }
+  
+  // Training Data Injection
+  if (message.type === 'INJECT_TRAINING_DATA') {
+    injectTrainingDataToTabs(message.trainingData)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'LOAD_TRAINING_DATA') {
+    loadAndInjectTrainingData()
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'GET_TRAINING_STATUS') {
+    getTrainingStatus()
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
 });
+
+// ============================================
+// TRAINING DATA INJECTION
+// ============================================
+
+/**
+ * Inject training data to all Facebook tabs with IAI Soldier
+ */
+async function injectTrainingDataToTabs(trainingData) {
+  try {
+    // Save to storage first
+    await chrome.storage.local.set({ iaiTraining: trainingData });
+    console.log('[Background] Training data saved to storage');
+    
+    // Find all Facebook tabs
+    const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+    
+    let injectedCount = 0;
+    for (const tab of tabs) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (data) => {
+            if (typeof window.__IAI_INJECT_TRAINING__ === 'function') {
+              window.__IAI_INJECT_TRAINING__(data);
+              console.log('[IAI] Training data injected into tab');
+            }
+          },
+          args: [trainingData]
+        });
+        injectedCount++;
+      } catch (e) {
+        console.debug('[Background] Failed to inject to tab:', tab.id, e.message);
+      }
+    }
+    
+    console.log(`[Background] Training data injected to ${injectedCount}/${tabs.length} tabs`);
+    return { success: true, injectedCount, totalTabs: tabs.length };
+  } catch (error) {
+    console.error('[Background] Training injection error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Load training data from API and inject to all tabs
+ */
+async function loadAndInjectTrainingData() {
+  try {
+    const result = await chrome.storage.local.get(['authToken']);
+    if (!result.authToken) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/training/inject/iai`, {
+      headers: { 'Authorization': `Bearer ${result.authToken}` }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      return { success: false, error: error.error || 'Failed to load training data' };
+    }
+    
+    const data = await response.json();
+    if (!data.success || !data.code) {
+      return { success: false, error: 'No active training configuration' };
+    }
+    
+    // Inject to all tabs
+    const injectionResult = await injectTrainingDataToTabs(data.code);
+    return {
+      success: true,
+      sessionId: data.code._sessionId,
+      version: data.code._trainingVersion,
+      ...injectionResult
+    };
+  } catch (error) {
+    console.error('[Background] Load training data error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get current training status
+ */
+async function getTrainingStatus() {
+  try {
+    const result = await chrome.storage.local.get(['iaiTraining']);
+    if (result.iaiTraining) {
+      return {
+        loaded: true,
+        sessionId: result.iaiTraining._sessionId,
+        version: result.iaiTraining._trainingVersion || result.iaiTraining._version,
+        fields: Object.keys(result.iaiTraining.FIELD_SELECTORS || {}),
+        stepsCount: (result.iaiTraining.STEPS || []).length,
+      };
+    }
+    return { loaded: false };
+  } catch (error) {
+    return { loaded: false, error: error.message };
+  }
+}
 
 // Token Refresh Function
 async function refreshAuthToken() {

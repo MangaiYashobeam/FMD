@@ -1,0 +1,213 @@
+/* FMD Training Recorder Styles */
+
+/* Recording Indicator */
+#fmd-recording-indicator {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.fmd-rec-pulse {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+.fmd-rec-text {
+  font-weight: bold;
+}
+
+.fmd-rec-mode {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.fmd-rec-events {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.fmd-rec-hint {
+  font-size: 11px;
+  opacity: 0.8;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  padding-left: 12px;
+  margin-left: 4px;
+}
+
+/* Marked Element Feedback */
+.fmd-recorder-marked {
+  position: fixed;
+  background: #22c55e;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 2147483647;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* Element Hover Highlight (when Ctrl is pressed) */
+.fmd-highlight-pending {
+  outline: 3px dashed #3b82f6 !important;
+  outline-offset: 2px !important;
+}
+
+/* Marked Elements List Overlay */
+#fmd-marked-list {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 16px;
+  border-radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  z-index: 2147483646;
+  max-width: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+#fmd-marked-list h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #22c55e;
+}
+
+#fmd-marked-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#fmd-marked-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#fmd-marked-list li:last-child {
+  border-bottom: none;
+}
+
+#fmd-marked-list .field-type {
+  font-weight: bold;
+  color: #60a5fa;
+}
+
+#fmd-marked-list .field-order {
+  background: #3b82f6;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* Timeline View (Optional Debug) */
+#fmd-timeline {
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  width: 300px;
+  max-height: 300px;
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 11px;
+  z-index: 2147483645;
+  overflow-y: auto;
+  display: none;
+}
+
+#fmd-timeline.visible {
+  display: block;
+}
+
+#fmd-timeline .event {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#fmd-timeline .event-click {
+  color: #60a5fa;
+}
+
+#fmd-timeline .event-type {
+  color: #22c55e;
+}
+
+#fmd-timeline .event-input {
+  color: #fbbf24;
+}
+
+#fmd-timeline .event-scroll {
+  color: #a78bfa;
+}
