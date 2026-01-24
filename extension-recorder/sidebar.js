@@ -1472,11 +1472,19 @@ function startConnectionMonitoring() {
   }, 10000); // Every 10 seconds
   
   // Start heartbeat interval - sends to server every 5 seconds
+  // IMPORTANT: Always send heartbeat regardless of webappConnected state
+  // The heartbeat IS what establishes connection, not the other way around
   heartbeatInterval = setInterval(async () => {
-    if (ConsoleState.webappConnected) {
+    console.log('[Console] Heartbeat tick - sending heartbeat...');
+    try {
       await sendHeartbeatToServer();
+    } catch (e) {
+      console.error('[Console] Heartbeat interval error:', e);
     }
   }, 5000);
+  
+  // Also send initial heartbeat immediately
+  sendHeartbeatToServer().catch(e => console.error('[Console] Initial heartbeat error:', e));
   
   log('Connection monitoring started', 'info');
 }
@@ -1541,6 +1549,7 @@ async function checkWebappConnection() {
 async function sendHeartbeatToServer() {
   try {
     const heartbeatUrl = `${ConsoleState.config.apiEndpoint}/training/console/heartbeat`;
+    console.log('[Console] Sending heartbeat to:', heartbeatUrl);
     
     // Get browser ID from chrome.runtime
     let browserId = null;
@@ -1561,6 +1570,8 @@ async function sendHeartbeatToServer() {
       mode: ConsoleState.currentMode,
     };
     
+    console.log('[Console] Heartbeat data:', JSON.stringify(heartbeatData));
+    
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
     
@@ -1573,8 +1584,11 @@ async function sendHeartbeatToServer() {
     
     clearTimeout(timeout);
     
+    console.log('[Console] Heartbeat response status:', response.status);
+    
     if (response.ok) {
       const data = await response.json();
+      console.log('[Console] Heartbeat response data:', data);
       if (data.success) {
         // Update UI to show fully connected (server received heartbeat)
         const webappStatus = document.getElementById('webapp-status');
@@ -1582,11 +1596,17 @@ async function sendHeartbeatToServer() {
           webappStatus.className = 'conn-status connected';
           webappStatus.textContent = 'SYNCED';
         }
+        // Mark connection as established
+        ConsoleState.webappConnected = true;
+        ConsoleState.lastHeartbeat = Date.now();
       }
+    } else {
+      const errorText = await response.text();
+      console.error('[Console] Heartbeat failed:', response.status, errorText);
     }
   } catch (error) {
-    // Silent fail - heartbeat is secondary to health check
-    console.log('[Console] Heartbeat send failed (non-critical):', error.message);
+    // Log error but don't crash
+    console.error('[Console] Heartbeat error:', error.message);
   }
 }
 
