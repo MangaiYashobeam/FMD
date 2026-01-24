@@ -991,6 +991,9 @@ ${recentLeads.map(l => `- ${l.firstName} ${l.lastName} - ${l.status} (${new Date
 🔧 Page Type: ${context?.pageType || 'Unknown'}
 ${errorContext}
 
+⚠️ RECENT ERRORS (Last 24h):
+${recentErrors.length > 0 ? recentErrors.map((e: any) => `- ${e.action}: ${JSON.stringify(e.metadata || {}).slice(0, 100)}`).join('\n') : 'No recent errors'}
+
 📋 YOUR RESPONSIBILITIES:
 1. Recognize what the user is trying to do and assist proactively
 2. When you detect an error, explain what it means and provide Dealers Face-specific solutions
