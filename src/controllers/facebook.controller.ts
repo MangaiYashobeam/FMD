@@ -984,6 +984,13 @@ export class FacebookController {
           accountId,
           hasSession: response.data.has_session,
           checkedAt: response.data.checked_at,
+          savedAt: response.data.saved_at,
+          ageDays: response.data.age_days,
+          expiresAt: response.data.expires_at,
+          cookieCount: response.data.cookie_count,
+          hasRequiredCookies: response.data.has_required_cookies,
+          facebookUserId: response.data.facebook_user_id,
+          cookieDetails: response.data.cookie_details || [],
         },
         message: response.data.has_session 
           ? 'Session found and can be used for automation'

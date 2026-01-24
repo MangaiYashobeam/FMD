@@ -547,15 +547,30 @@ async def list_sessions():
 
 @app.get("/api/sessions/{account_id}", dependencies=[Depends(verify_api_key)])
 async def get_session_status(account_id: str):
-    """Check if a session exists and is valid"""
+    """Check if a session exists and return detailed info"""
     session_manager = app.state.session_manager
     
-    is_valid = await session_manager.is_session_valid(account_id)
+    # Try to load the full session to get metadata
+    session_info = await session_manager.get_session_info(account_id)
+    
+    if not session_info:
+        return {
+            'account_id': account_id,
+            'has_session': False,
+            'checked_at': datetime.utcnow().isoformat()
+        }
     
     return {
         'account_id': account_id,
-        'has_session': is_valid,
-        'checked_at': datetime.utcnow().isoformat()
+        'has_session': True,
+        'checked_at': datetime.utcnow().isoformat(),
+        'saved_at': session_info.get('saved_at'),
+        'age_days': session_info.get('age_days', 0),
+        'expires_at': session_info.get('expires_at'),
+        'cookie_count': session_info.get('cookie_count', 0),
+        'has_required_cookies': session_info.get('has_required_cookies', False),
+        'facebook_user_id': session_info.get('facebook_user_id'),
+        'cookie_details': session_info.get('cookie_details', [])
     }
 
 

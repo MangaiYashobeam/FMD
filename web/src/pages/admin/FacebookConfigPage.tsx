@@ -26,8 +26,35 @@ import {
   EyeOff,
   Cookie,
   Upload,
+  Calendar,
+  Database,
+  Lock,
+  Unlock,
+  Info,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+
+// Session status interface
+interface SessionStatus {
+  accountId: string;
+  hasSession: boolean;
+  checkedAt: string;
+  savedAt?: string;
+  ageDays?: number;
+  expiresAt?: string;
+  cookieCount?: number;
+  hasRequiredCookies?: boolean;
+  facebookUserId?: string;
+  cookieDetails?: Array<{
+    name: string;
+    domain: string;
+    expires?: number;
+    expires_at?: string;
+    is_expired?: boolean;
+    httpOnly: boolean;
+    secure: boolean;
+  }>;
+}
 
 interface FacebookConfig {
   appId: string;
@@ -100,6 +127,7 @@ export default function FacebookConfigPage() {
   const [sessionAccountId, setSessionAccountId] = useState('');
   const [sessionCookiesJson, setSessionCookiesJson] = useState('');
   const [sessionImporting, setSessionImporting] = useState(false);
+  const [lastImportResult, setLastImportResult] = useState<{success: boolean; message: string; timestamp: Date} | null>(null);
 
   // Fetch Facebook configuration
   const { data: configData, isLoading: configLoading, refetch: refetchConfig } = useQuery({
@@ -112,6 +140,18 @@ export default function FacebookConfigPage() {
         accounts: ConnectedAccount[];
       };
     },
+  });
+
+  // Fetch session status for selected account
+  const { data: sessionStatus, isLoading: sessionStatusLoading, refetch: refetchSessionStatus } = useQuery({
+    queryKey: ['admin', 'facebook', 'session', sessionAccountId],
+    queryFn: async () => {
+      if (!sessionAccountId) return null;
+      const res = await adminApi.getFacebookSessionStatus(sessionAccountId);
+      return res.data.data as SessionStatus;
+    },
+    enabled: !!sessionAccountId && activeTab === 'sessions',
+    refetchInterval: false, // Don't auto-refetch to prevent notification clearing
   });
 
   // Fetch all Facebook profiles
@@ -646,185 +686,379 @@ export default function FacebookConfigPage() {
 
       {/* Worker Sessions Tab */}
       {activeTab === 'sessions' && (
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Import Session Card */}
-          <Card className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Upload className="h-5 w-5 text-orange-500" />
-              <h2 className="text-lg font-semibold">Import Browser Session</h2>
+        <div className="space-y-6">
+          {/* Import Result Banner - Persistent */}
+          {lastImportResult && (
+            <div className={cn(
+              "px-4 py-3 rounded-lg flex items-center justify-between",
+              lastImportResult.success 
+                ? "bg-green-50 border border-green-200 text-green-800" 
+                : "bg-red-50 border border-red-200 text-red-800"
+            )}>
+              <div className="flex items-center gap-2">
+                {lastImportResult.success ? (
+                  <CheckCircle className="h-5 w-5" />
+                ) : (
+                  <AlertCircle className="h-5 w-5" />
+                )}
+                <span>{lastImportResult.message}</span>
+                <span className="text-xs opacity-70">
+                  ({new Date(lastImportResult.timestamp).toLocaleTimeString()})
+                </span>
+              </div>
+              <button 
+                onClick={() => setLastImportResult(null)}
+                className="text-sm hover:underline"
+              >
+                Dismiss
+              </button>
             </div>
-            <p className="text-sm text-gray-500 mb-4">
-              Import Facebook session cookies from a browser to enable automated posting without manual login.
-            </p>
-            
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-              <h4 className="font-medium text-amber-800 mb-2">How to export cookies:</h4>
-              <ol className="text-sm text-amber-700 list-decimal list-inside space-y-1">
-                <li>Login to Facebook in Chrome normally</li>
-                <li>Open Developer Tools (F12) → Application → Cookies</li>
-                <li>Select "https://www.facebook.com"</li>
-                <li>Right-click → Export all cookies as JSON</li>
-                <li>Or use "EditThisCookie" extension to export</li>
-              </ol>
-            </div>
+          )}
 
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!sessionAccountId || !sessionCookiesJson) {
-                setErrorMessage('Please select an account and paste cookies JSON');
-                setTimeout(() => setErrorMessage(null), 5000);
-                return;
-              }
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Import Session Card */}
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Upload className="h-5 w-5 text-orange-500" />
+                <h2 className="text-lg font-semibold">Import Browser Session</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Import Facebook session cookies from a browser to enable automated posting without manual login.
+              </p>
               
-              try {
-                setSessionImporting(true);
-                setErrorMessage(null);
-                setSuccessMessage(null);
-                
-                // Parse cookies JSON
-                let cookies;
-                try {
-                  cookies = JSON.parse(sessionCookiesJson);
-                  if (!Array.isArray(cookies)) {
-                    throw new Error('Cookies must be an array');
-                  }
-                  if (cookies.length === 0) {
-                    throw new Error('Cookies array is empty');
-                  }
-                  // Validate cookie structure
-                  const hasRequiredCookies = cookies.some((c: any) => 
-                    c.name === 'c_user' || c.name === 'xs'
-                  );
-                  if (!hasRequiredCookies) {
-                    console.warn('Warning: Missing critical Facebook cookies (c_user, xs)');
-                  }
-                } catch (parseErr: any) {
-                  setErrorMessage(`Invalid JSON format: ${parseErr.message}`);
-                  setTimeout(() => setErrorMessage(null), 5000);
-                  setSessionImporting(false);
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <h4 className="font-medium text-amber-800 mb-2">How to export cookies:</h4>
+                <ol className="text-sm text-amber-700 list-decimal list-inside space-y-1">
+                  <li>Login to Facebook in Chrome normally</li>
+                  <li>Open Developer Tools (F12) → Application → Cookies</li>
+                  <li>Select "https://www.facebook.com"</li>
+                  <li>Right-click → Export all cookies as JSON</li>
+                  <li>Or use "EditThisCookie" extension to export</li>
+                </ol>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!sessionAccountId || !sessionCookiesJson) {
+                  setLastImportResult({
+                    success: false,
+                    message: 'Please select an account and paste cookies JSON',
+                    timestamp: new Date()
+                  });
                   return;
                 }
                 
-                console.log(`[Session Import] Importing ${cookies.length} cookies for account ${sessionAccountId}`);
-                
-                // Call API to import
-                const response = await adminApi.importFacebookSession({
-                  accountId: sessionAccountId,
-                  cookies,
-                });
-                
-                console.log('[Session Import] Response:', response.data);
-                
-                if (response.data.success) {
-                  setSuccessMessage(`✅ Session imported successfully! ${cookies.length} cookies saved for automation.`);
-                  setSessionCookiesJson('');
-                  queryClient.invalidateQueries({ queryKey: ['admin', 'facebook'] });
-                  setTimeout(() => setSuccessMessage(null), 8000);
-                } else {
-                  setErrorMessage(response.data.message || 'Import failed - server returned unsuccessful response');
-                  setTimeout(() => setErrorMessage(null), 5000);
+                try {
+                  setSessionImporting(true);
+                  setLastImportResult(null);
+                  
+                  // Parse cookies JSON
+                  let cookies;
+                  try {
+                    cookies = JSON.parse(sessionCookiesJson);
+                    if (!Array.isArray(cookies)) {
+                      throw new Error('Cookies must be an array');
+                    }
+                    if (cookies.length === 0) {
+                      throw new Error('Cookies array is empty');
+                    }
+                    // Validate cookie structure
+                    const hasRequiredCookies = cookies.some((c: any) => 
+                      c.name === 'c_user' || c.name === 'xs'
+                    );
+                    if (!hasRequiredCookies) {
+                      console.warn('Warning: Missing critical Facebook cookies (c_user, xs)');
+                    }
+                  } catch (parseErr: any) {
+                    setLastImportResult({
+                      success: false,
+                      message: `Invalid JSON format: ${parseErr.message}`,
+                      timestamp: new Date()
+                    });
+                    setSessionImporting(false);
+                    return;
+                  }
+                  
+                  console.log(`[Session Import] Importing ${cookies.length} cookies for account ${sessionAccountId}`);
+                  
+                  // Call API to import
+                  const response = await adminApi.importFacebookSession({
+                    accountId: sessionAccountId,
+                    cookies,
+                  });
+                  
+                  console.log('[Session Import] Response:', response.data);
+                  
+                  if (response.data.success) {
+                    setLastImportResult({
+                      success: true,
+                      message: `Session imported successfully! ${cookies.length} cookies saved for automation.`,
+                      timestamp: new Date()
+                    });
+                    setSessionCookiesJson('');
+                    // Refetch session status after import
+                    setTimeout(() => refetchSessionStatus(), 500);
+                  } else {
+                    setLastImportResult({
+                      success: false,
+                      message: response.data.message || 'Import failed - server returned unsuccessful response',
+                      timestamp: new Date()
+                    });
+                  }
+                } catch (err: any) {
+                  console.error('[Session Import] Error:', err);
+                  const errorMsg = err.response?.data?.message 
+                    || err.response?.data?.error 
+                    || err.message 
+                    || 'Failed to import session';
+                  const statusCode = err.response?.status;
+                  setLastImportResult({
+                    success: false,
+                    message: `Import failed${statusCode ? ` (${statusCode})` : ''}: ${errorMsg}`,
+                    timestamp: new Date()
+                  });
+                } finally {
+                  setSessionImporting(false);
                 }
-              } catch (err: any) {
-                console.error('[Session Import] Error:', err);
-                const errorMsg = err.response?.data?.message 
-                  || err.response?.data?.error 
-                  || err.message 
-                  || 'Failed to import session';
-                const statusCode = err.response?.status;
-                setErrorMessage(`❌ Import failed${statusCode ? ` (${statusCode})` : ''}: ${errorMsg}`);
-                setTimeout(() => setErrorMessage(null), 8000);
-              } finally {
-                setSessionImporting(false);
-              }
-            }} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Account ID</label>
-                <select
-                  value={sessionAccountId}
-                  onChange={(e) => setSessionAccountId(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Select account...</option>
-                  {configData?.accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Cookies JSON</label>
-                <textarea
-                  value={sessionCookiesJson}
-                  onChange={(e) => setSessionCookiesJson(e.target.value)}
-                  placeholder='[{"name": "c_user", "value": "...", "domain": ".facebook.com"}, ...]'
-                  rows={8}
-                  className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
-                  required
-                />
-                <p className="text-xs text-gray-500">
-                  Paste the exported cookies JSON array. Required cookies: c_user, xs, datr
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={sessionImporting || !sessionAccountId || !sessionCookiesJson}
-                className="w-full"
-              >
-                {sessionImporting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Import Session Cookies
-              </Button>
-            </form>
-          </Card>
-
-          {/* Session Info Card */}
-          <Card className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Shield className="h-5 w-5 text-green-500" />
-              <h2 className="text-lg font-semibold">About Worker Sessions</h2>
-            </div>
-            
-            <div className="space-y-4 text-sm">
-              <p className="text-gray-600">
-                Worker sessions allow our Python automation workers to post to Facebook Marketplace
-                on behalf of your accounts without requiring the Chrome extension.
-              </p>
-              
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-800 mb-2">Required Cookies:</h4>
-                <ul className="text-blue-700 space-y-1">
-                  <li><code className="bg-blue-100 px-1 rounded">c_user</code> - Your Facebook user ID</li>
-                  <li><code className="bg-blue-100 px-1 rounded">xs</code> - Session token</li>
-                  <li><code className="bg-blue-100 px-1 rounded">datr</code> - Browser fingerprint</li>
-                  <li><code className="bg-blue-100 px-1 rounded">fr</code> - Facebook tracking (optional)</li>
-                </ul>
-              </div>
-              
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <h4 className="font-medium text-purple-800 mb-2">Security Notes:</h4>
-                <ul className="text-purple-700 space-y-1 list-disc list-inside">
-                  <li>Cookies are encrypted with AES-256 at rest</li>
-                  <li>Sessions expire after 30 days or when Facebook invalidates them</li>
-                  <li>Worker uses stealth browser to avoid detection</li>
-                  <li>Sessions are isolated per account</li>
-                </ul>
-              </div>
-              
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h4 className="font-medium text-gray-800 mb-2">Automation Status:</h4>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-                  <span className="text-gray-700">Python Workers: 2 active</span>
+              }} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Account</label>
+                  <select
+                    value={sessionAccountId}
+                    onChange={(e) => setSessionAccountId(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    required
+                  >
+                    <option value="">Select account...</option>
+                    {configData?.accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Workers will automatically pick up and process posting tasks.
-                </p>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cookies JSON</label>
+                  <textarea
+                    value={sessionCookiesJson}
+                    onChange={(e) => setSessionCookiesJson(e.target.value)}
+                    placeholder='[{"name": "c_user", "value": "...", "domain": ".facebook.com"}, ...]'
+                    rows={6}
+                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+                    required
+                  />
+                  <p className="text-xs text-gray-500">
+                    Paste the exported cookies JSON array. Required cookies: c_user, xs, datr
+                  </p>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={sessionImporting || !sessionAccountId || !sessionCookiesJson}
+                  className="w-full"
+                >
+                  {sessionImporting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Import Session Cookies
+                </Button>
+              </form>
+            </Card>
+
+            {/* Session Status Card */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Database className="h-5 w-5 text-blue-500" />
+                  <h2 className="text-lg font-semibold">Session Status</h2>
+                </div>
+                {sessionAccountId && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => refetchSessionStatus()}
+                    disabled={sessionStatusLoading}
+                  >
+                    {sessionStatusLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
               </div>
-            </div>
-          </Card>
+
+              {!sessionAccountId ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Database className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Select an account to view session status</p>
+                </div>
+              ) : sessionStatusLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                </div>
+              ) : sessionStatus?.hasSession ? (
+                <div className="space-y-4">
+                  {/* Status Badge */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+                    <span className="font-medium text-green-700">Session Active</span>
+                    {sessionStatus.hasRequiredCookies && (
+                      <Badge variant="success" className="text-xs">All Required Cookies</Badge>
+                    )}
+                  </div>
+
+                  {/* Session Details Grid */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs mb-1">Facebook User ID</div>
+                      <div className="font-mono font-medium">{sessionStatus.facebookUserId || 'N/A'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs mb-1">Cookies Stored</div>
+                      <div className="font-medium">{sessionStatus.cookieCount || 0} cookies</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs mb-1 flex items-center gap-1">
+                        <Calendar className="h-3 w-3" /> Imported
+                      </div>
+                      <div className="font-medium">
+                        {sessionStatus.savedAt 
+                          ? new Date(sessionStatus.savedAt).toLocaleDateString() 
+                          : 'Unknown'}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {sessionStatus.ageDays !== undefined && `${sessionStatus.ageDays} days ago`}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-gray-500 text-xs mb-1 flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> Expires
+                      </div>
+                      <div className="font-medium">
+                        {sessionStatus.expiresAt 
+                          ? new Date(sessionStatus.expiresAt).toLocaleDateString() 
+                          : 'Unknown'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cookie Details (Super Admin) */}
+                  {sessionStatus.cookieDetails && sessionStatus.cookieDetails.length > 0 && (
+                    <div className="border-t pt-4 mt-4">
+                      <h4 className="font-medium text-sm mb-2 flex items-center gap-1">
+                        <Info className="h-4 w-4" /> Cookie Details (Admin Only)
+                      </h4>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-100">
+                            <tr>
+                              <th className="px-2 py-1 text-left">Cookie</th>
+                              <th className="px-2 py-1 text-left">Domain</th>
+                              <th className="px-2 py-1 text-left">Expires</th>
+                              <th className="px-2 py-1 text-center">Secure</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sessionStatus.cookieDetails.map((cookie, idx) => (
+                              <tr key={idx} className={cn(
+                                "border-b border-gray-100",
+                                cookie.is_expired && "bg-red-50"
+                              )}>
+                                <td className="px-2 py-1 font-mono">
+                                  {cookie.name}
+                                  {cookie.name === 'c_user' && <Badge className="ml-1 text-xs" variant="default">ID</Badge>}
+                                  {cookie.name === 'xs' && <Badge className="ml-1 text-xs" variant="default">Auth</Badge>}
+                                </td>
+                                <td className="px-2 py-1 text-gray-500">{cookie.domain}</td>
+                                <td className="px-2 py-1">
+                                  {cookie.expires_at ? (
+                                    <span className={cookie.is_expired ? 'text-red-600' : ''}>
+                                      {new Date(cookie.expires_at).toLocaleDateString()}
+                                      {cookie.is_expired && ' (Expired!)'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">Session</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1 text-center">
+                                  {cookie.secure ? (
+                                    <Lock className="h-3 w-3 text-green-600 inline" />
+                                  ) : (
+                                    <Unlock className="h-3 w-3 text-gray-400 inline" />
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <XCircle className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p className="text-gray-600 font-medium">No Session Found</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Import cookies to enable automation for this account
+                  </p>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Info Cards */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Shield className="h-5 w-5 text-green-500" />
+                <h2 className="text-lg font-semibold">Security Information</h2>
+              </div>
+              
+              <div className="space-y-4 text-sm">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h4 className="font-medium text-purple-800 mb-2">Encryption & Storage:</h4>
+                  <ul className="text-purple-700 space-y-1 list-disc list-inside">
+                    <li>Cookies are encrypted with AES-256 at rest</li>
+                    <li>PBKDF2 key derivation with 100k iterations</li>
+                    <li>Sessions expire after 30 days automatically</li>
+                    <li>Worker uses stealth browser to avoid detection</li>
+                    <li>Sessions are isolated per account</li>
+                  </ul>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Activity className="h-5 w-5 text-blue-500" />
+                <h2 className="text-lg font-semibold">Required Cookies</h2>
+              </div>
+              
+              <div className="space-y-4 text-sm">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <ul className="text-blue-700 space-y-2">
+                    <li className="flex items-center gap-2">
+                      <code className="bg-blue-100 px-2 py-0.5 rounded font-mono">c_user</code>
+                      <span>Your Facebook user ID</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <code className="bg-blue-100 px-2 py-0.5 rounded font-mono">xs</code>
+                      <span>Session authentication token</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <code className="bg-blue-100 px-2 py-0.5 rounded font-mono">datr</code>
+                      <span>Browser fingerprint</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <code className="bg-blue-100 px-2 py-0.5 rounded font-mono">fr</code>
+                      <span className="text-blue-500">(Optional) Facebook tracking</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </Card>
+          </div>
         </div>
       )}
 

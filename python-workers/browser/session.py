@@ -323,6 +323,105 @@ class SessionManager:
         session = await self.load_session(account_id)
         return session is not None
 
+    async def get_session_info(self, account_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed session info without loading full storage state
+        Returns metadata about the session for admin display
+        """
+        path = self._get_session_path(account_id)
+        
+        if not os.path.exists(path):
+            return None
+        
+        try:
+            # Read file
+            async with aiofiles.open(path, 'rb') as f:
+                file_data = await f.read()
+            
+            if len(file_data) < 80:
+                return None
+            
+            # Extract components
+            salt = file_data[:16]
+            stored_hash = file_data[16:80].decode()
+            encrypted = file_data[80:]
+            
+            # Decrypt
+            cipher = self._create_cipher(salt)
+            try:
+                decrypted = cipher.decrypt(encrypted)
+            except InvalidToken:
+                return None
+            
+            # Verify integrity
+            computed_hash = self._compute_integrity_hash(decrypted)
+            if computed_hash != stored_hash:
+                return None
+            
+            session_data = json.loads(decrypted.decode())
+            storage_state = session_data.get('storage_state', {})
+            cookies = storage_state.get('cookies', [])
+            
+            # Calculate age and expiry
+            saved_at = datetime.fromisoformat(session_data['saved_at'])
+            age = datetime.utcnow() - saved_at
+            max_age_days = 30
+            expires_at = saved_at + timedelta(days=max_age_days)
+            
+            # Get Facebook user ID from c_user cookie
+            facebook_user_id = None
+            for cookie in cookies:
+                if cookie.get('name') == 'c_user':
+                    facebook_user_id = cookie.get('value')
+                    break
+            
+            # Check for required cookies
+            required = ['c_user', 'xs', 'datr']
+            cookie_names = {c.get('name') for c in cookies}
+            has_required = all(name in cookie_names for name in required)
+            
+            # Build cookie details for super admin
+            cookie_details = []
+            for cookie in cookies:
+                name = cookie.get('name', '')
+                # Only include important Facebook cookies
+                if name in ['c_user', 'xs', 'datr', 'fr', 'sb', 'wd', 'presence']:
+                    detail = {
+                        'name': name,
+                        'domain': cookie.get('domain', ''),
+                        'expires': cookie.get('expires'),
+                        'httpOnly': cookie.get('httpOnly', False),
+                        'secure': cookie.get('secure', False),
+                    }
+                    # Convert expires to ISO string if it's a timestamp
+                    if detail['expires'] and isinstance(detail['expires'], (int, float)):
+                        try:
+                            exp_dt = datetime.fromtimestamp(detail['expires'])
+                            detail['expires_at'] = exp_dt.isoformat()
+                            detail['is_expired'] = exp_dt < datetime.utcnow()
+                        except Exception:
+                            detail['expires_at'] = None
+                            detail['is_expired'] = False
+                    cookie_details.append(detail)
+            
+            return {
+                'account_id': account_id,
+                'saved_at': session_data['saved_at'],
+                'age_days': age.days,
+                'expires_at': expires_at.isoformat(),
+                'cookie_count': len(cookies),
+                'has_required_cookies': has_required,
+                'facebook_user_id': facebook_user_id,
+                'cookie_details': cookie_details,
+                'version': session_data.get('version', 1)
+            }
+            
+        except Exception as e:
+            logger.error("Failed to get session info",
+                        account_id=account_id,
+                        error=str(e))
+            return None
+
 
 class FacebookSessionValidator:
     """
