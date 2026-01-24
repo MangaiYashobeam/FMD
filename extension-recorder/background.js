@@ -1,6 +1,6 @@
 /**
  * FMD Training Recorder - Background Service Worker
- * SUPER ADMIN ROOT CONSOLE v2.1
+ * SUPER ADMIN ROOT CONSOLE v2.1.1
  * 
  * Handles:
  * - Recording session management
@@ -9,6 +9,12 @@
  * - Side panel management
  * - Keepalive mechanism for service worker
  */
+
+// IMMEDIATE STARTUP LOG - This should appear in Service Worker console
+console.log('[Recorder BG] ========================================');
+console.log('[Recorder BG] Background service worker LOADING...');
+console.log('[Recorder BG] Timestamp:', new Date().toISOString());
+console.log('[Recorder BG] ========================================');
 
 // ============================================
 // CONFIGURATION

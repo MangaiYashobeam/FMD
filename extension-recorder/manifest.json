@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FMD Training Recorder - Super Admin",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Records DOM interactions for IAI/Soldier training - Super Admin Console",
   "permissions": [
     "activeTab",
@@ -19,8 +19,7 @@
     "http://localhost:*/*"
   ],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "side_panel": {
     "default_path": "sidebar.html"
