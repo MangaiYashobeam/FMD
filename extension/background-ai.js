@@ -153,6 +153,18 @@ async function registerIAISoldier() {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Registration failed:', response.status, errorText);
+      
+      // Try to refresh token if unauthorized
+      if (response.status === 401) {
+        console.log('🔄 Token expired, attempting refresh...');
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          // Retry registration with new token
+          console.log('🔄 Retrying registration with new token...');
+          return await registerIAISoldier();
+        }
+      }
+      
       throw new Error(`Registration failed: ${response.status}`);
     }
     
