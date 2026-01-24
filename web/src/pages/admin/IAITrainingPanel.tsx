@@ -618,9 +618,12 @@ export default function IAITrainingPanel() {
     const checkExtension = async () => {
       try {
         // Check the ROOT console heartbeat status endpoint
+        console.log('[IAI Training] Checking extension status...');
         const statusResponse = await api.get('/api/training/console/status');
+        console.log('[IAI Training] Status response:', statusResponse.data);
         
         if (statusResponse.data?.success && statusResponse.data?.connected) {
+          console.log('[IAI Training] Extension connected!', statusResponse.data);
           setExtensionStatus('connected');
           setExtensionInfo({
             browserId: statusResponse.data.browserId,
@@ -630,6 +633,7 @@ export default function IAITrainingPanel() {
             lastHeartbeat: statusResponse.data.lastHeartbeat,
           });
         } else {
+          console.log('[IAI Training] Extension not connected via heartbeat, checking sessions...');
           // Fallback: check if there are recent sessions
           const sessionResponse = await api.get('/api/training/sessions?limit=1');
           if (sessionResponse.data?.sessions?.length > 0) {
@@ -652,10 +656,12 @@ export default function IAITrainingPanel() {
               return;
             }
           }
+          console.log('[IAI Training] Extension disconnected');
           setExtensionStatus('disconnected');
           setExtensionInfo(null);
         }
-      } catch {
+      } catch (error) {
+        console.error('[IAI Training] Error checking extension:', error);
         setExtensionStatus('disconnected');
         setExtensionInfo(null);
       }

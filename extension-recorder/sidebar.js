@@ -1471,6 +1471,13 @@ function startConnectionMonitoring() {
     }
   }, 10000); // Every 10 seconds
   
+  // Start heartbeat interval - sends to server every 5 seconds
+  heartbeatInterval = setInterval(async () => {
+    if (ConsoleState.webappConnected) {
+      await sendHeartbeatToServer();
+    }
+  }, 5000);
+  
   log('Connection monitoring started', 'info');
 }
 
