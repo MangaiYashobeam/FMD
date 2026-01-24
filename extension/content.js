@@ -54,6 +54,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   
+  // IAI Sidepanel: Fill vehicle listing form
+  if (message.type === 'IAI_FILL_LISTING') {
+    console.log('🚗 IAI_FILL_LISTING received with vehicle:', message.vehicle);
+    smartFillMarketplaceForm(message.vehicle)
+      .then(result => {
+        console.log('✅ IAI_FILL_LISTING completed:', result);
+        sendResponse({ success: true, result });
+      })
+      .catch(error => {
+        console.error('❌ IAI_FILL_LISTING failed:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+  
+  // IAI Sidepanel: Upload vehicle images
+  if (message.type === 'IAI_UPLOAD_IMAGES') {
+    console.log('📷 IAI_UPLOAD_IMAGES received with', message.images?.length, 'images');
+    uploadPhotosFromUrls(message.images)
+      .then(result => {
+        console.log('✅ IAI_UPLOAD_IMAGES completed:', result);
+        sendResponse({ success: true, result });
+      })
+      .catch(error => {
+        console.error('❌ IAI_UPLOAD_IMAGES failed:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+  
+  // IAI Sidepanel: Publish the listing
+  if (message.type === 'IAI_PUBLISH_LISTING') {
+    console.log('🚀 IAI_PUBLISH_LISTING received');
+    clickPublishButton()
+      .then(result => {
+        console.log('✅ IAI_PUBLISH_LISTING completed:', result);
+        sendResponse({ success: true, result });
+      })
+      .catch(error => {
+        console.error('❌ IAI_PUBLISH_LISTING failed:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+  
   if (message.type === 'CHECK_FACEBOOK_LOGIN') {
     const isLoggedIn = checkFacebookLogin();
     sendResponse({ isLoggedIn });
@@ -992,6 +1037,145 @@ async function uploadPhotos(photos) {
   // Notify user that photos need manual selection for now
   // (Full auto-upload requires more complex handling)
   return true;
+}
+
+/**
+ * Upload photos from URL array (called from sidepanel IAI)
+ */
+async function uploadPhotosFromUrls(imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) {
+    console.log('📷 No images to upload');
+    return { uploaded: 0 };
+  }
+  
+  console.log('📷 Attempting to upload', imageUrls.length, 'images from URLs');
+  logNavigationEvent('upload_photos_urls', { count: imageUrls.length });
+  
+  // Find the photo upload input
+  const uploadSelectors = [
+    'input[type="file"][accept*="image"]',
+    '[aria-label*="photo" i] input[type="file"]',
+    '[data-testid*="photo"] input[type="file"]',
+    'input[type="file"]',
+  ];
+  
+  let fileInput = null;
+  for (const selector of uploadSelectors) {
+    fileInput = document.querySelector(selector);
+    if (fileInput) break;
+  }
+  
+  if (!fileInput) {
+    // Try to click "Add photos" button first
+    const addPhotoButtons = await findClickableElements(['Add photos', 'Add photo', 'Upload', 'Photos']);
+    if (addPhotoButtons.length > 0) {
+      await smartClick(addPhotoButtons[0]);
+      await sleep(currentSpeed.action);
+      
+      // Try to find file input again
+      for (const selector of uploadSelectors) {
+        fileInput = document.querySelector(selector);
+        if (fileInput) break;
+      }
+    }
+  }
+  
+  if (!fileInput) {
+    console.warn('📷 Could not find photo upload input');
+    return { uploaded: 0, error: 'No file input found' };
+  }
+  
+  // Download images and create File objects
+  try {
+    const files = await Promise.all(imageUrls.slice(0, 10).map(async (url, index) => {
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const filename = `vehicle_photo_${index + 1}.jpg`;
+        return new File([blob], filename, { type: blob.type || 'image/jpeg' });
+      } catch (e) {
+        console.warn(`Failed to fetch image ${index}:`, e);
+        return null;
+      }
+    }));
+    
+    const validFiles = files.filter(f => f !== null);
+    
+    if (validFiles.length === 0) {
+      console.warn('📷 No images could be downloaded');
+      return { uploaded: 0, error: 'Failed to download images' };
+    }
+    
+    // Create a DataTransfer to simulate file selection
+    const dataTransfer = new DataTransfer();
+    validFiles.forEach(file => dataTransfer.items.add(file));
+    fileInput.files = dataTransfer.files;
+    
+    // Dispatch change event
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    console.log(`✅ Uploaded ${validFiles.length} photos`);
+    return { uploaded: validFiles.length };
+  } catch (error) {
+    console.error('📷 Photo upload error:', error);
+    return { uploaded: 0, error: error.message };
+  }
+}
+
+/**
+ * Click the publish/post button
+ */
+async function clickPublishButton() {
+  console.log('🚀 Looking for publish button...');
+  logNavigationEvent('click_publish', {});
+  
+  // Wait a moment for any pending operations
+  await sleep(1000);
+  
+  // Common publish button selectors
+  const publishSelectors = [
+    '[aria-label*="Publish" i]',
+    '[aria-label*="Post" i]',
+    '[aria-label*="Submit" i]',
+    'div[role="button"]:has-text("Publish")',
+    'div[role="button"]:has-text("Post")',
+    'div[role="button"]:has-text("Submit")',
+    'button[type="submit"]',
+  ];
+  
+  // First try direct selector matches
+  for (const selector of publishSelectors) {
+    try {
+      const btn = document.querySelector(selector);
+      if (btn && btn.offsetParent !== null) {
+        console.log('🚀 Found publish button via selector:', selector);
+        await smartClick(btn);
+        await sleep(2000);
+        return { clicked: true, method: 'selector' };
+      }
+    } catch (e) {
+      // Selector might be invalid, continue
+    }
+  }
+  
+  // Search by text content
+  const publishTexts = ['Publish', 'Post', 'Submit', 'Next', 'List'];
+  const buttons = await findClickableElements(publishTexts);
+  
+  if (buttons.length > 0) {
+    // Prefer buttons with "Publish" or "Post" text
+    const priorityBtn = buttons.find(btn => 
+      /publish|post/i.test(btn.textContent)
+    ) || buttons[0];
+    
+    console.log('🚀 Found publish button via text search:', priorityBtn.textContent?.trim());
+    await smartClick(priorityBtn);
+    await sleep(2000);
+    return { clicked: true, method: 'text-search' };
+  }
+  
+  console.warn('🚀 Could not find publish button');
+  return { clicked: false, error: 'Publish button not found' };
 }
 
 // Generate vehicle description

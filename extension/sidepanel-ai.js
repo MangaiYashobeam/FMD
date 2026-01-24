@@ -897,6 +897,10 @@ async function postVehicle(vehicle, useAI) {
   });
   
   await waitForTabLoad(tab.id);
+  
+  // Give the page extra time to fully render
+  await sleep(3000);
+  
   setProgressStep('navigate', 'completed');
   
   // Fill form
@@ -912,26 +916,56 @@ async function postVehicle(vehicle, useAI) {
         type: 'GENERATE_DESCRIPTION',
         vehicle: vehicle
       });
-      if (aiResponse.success && aiResponse.description) {
+      if (aiResponse.success && aiResponse.data?.description) {
+        description = aiResponse.data.description;
+      } else if (aiResponse.description) {
         description = aiResponse.description;
       }
     } catch (e) {
-      console.warn('AI description failed, using original:', e);
+      console.warn('AI description failed, using generated one:', e);
+      // Generate a basic description if AI fails
+      description = `${vehicle.year} ${vehicle.make} ${vehicle.model}${vehicle.trim ? ` ${vehicle.trim}` : ''}\n\n` +
+        `Mileage: ${vehicle.mileage?.toLocaleString() || 'N/A'} miles\n` +
+        `Price: $${vehicle.price?.toLocaleString() || 'Call for price'}\n\n` +
+        `Contact us for more information!`;
     }
   }
   
   const vehicleData = {
     ...vehicle,
-    description: description
+    description: description || `${vehicle.year} ${vehicle.make} ${vehicle.model} - Contact for details`
   };
   
   // Send to content script to fill the form
-  await sendToTab(tab.id, {
-    type: 'IAI_FILL_LISTING',
-    vehicle: vehicleData
-  });
+  console.log('📝 Sending IAI_FILL_LISTING to tab', tab.id);
+  let fillResult;
+  try {
+    fillResult = await sendToTab(tab.id, {
+      type: 'IAI_FILL_LISTING',
+      vehicle: vehicleData
+    });
+    console.log('📝 Fill result:', fillResult);
+  } catch (e) {
+    console.error('📝 Fill error:', e);
+    throw new Error(`Failed to fill form: ${e.message}`);
+  }
   
+  if (!fillResult || fillResult.success === false) {
+    throw new Error(fillResult?.error || 'Form filling failed - content script did not respond');
+  }
+  
+  // Wait for form to process
   await sleep(2000);
+  
+  // Check if any fields were filled
+  const filledFields = fillResult.result?.filledFields || fillResult.filledFields || [];
+  console.log('📝 Filled fields:', filledFields);
+  
+  if (filledFields.length === 0) {
+    console.warn('⚠️ No fields were filled! Form might not be ready.');
+    // Don't throw error, but log warning - Facebook's form might need more time
+  }
+  
   setProgressStep('form', 'completed');
   
   // Upload images
@@ -940,10 +974,27 @@ async function postVehicle(vehicle, useAI) {
   
   if (vehicle.images?.length > 0 || vehicle.imageUrl) {
     const images = vehicle.images?.map(i => i.url) || [vehicle.imageUrl];
-    await sendToTab(tab.id, {
-      type: 'IAI_UPLOAD_IMAGES',
-      images: images.filter(Boolean)
-    });
+    const validImages = images.filter(Boolean);
+    
+    if (validImages.length > 0) {
+      console.log('📷 Sending IAI_UPLOAD_IMAGES with', validImages.length, 'images');
+      try {
+        const uploadResult = await sendToTab(tab.id, {
+          type: 'IAI_UPLOAD_IMAGES',
+          images: validImages
+        });
+        console.log('📷 Upload result:', uploadResult);
+        
+        if (uploadResult?.result?.uploaded > 0 || uploadResult?.uploaded > 0) {
+          console.log('✅ Images uploaded successfully');
+        } else {
+          console.warn('⚠️ No images were uploaded');
+        }
+      } catch (e) {
+        console.warn('📷 Image upload error (continuing):', e);
+        // Don't fail the whole posting for image issues
+      }
+    }
     await sleep(3000);
   }
   
@@ -953,7 +1004,24 @@ async function postVehicle(vehicle, useAI) {
   setProgressStep('publish', 'active');
   updateProgressStatus('Publishing listing...', 85);
   
-  await sendToTab(tab.id, { type: 'IAI_PUBLISH_LISTING' });
+  console.log('🚀 Sending IAI_PUBLISH_LISTING');
+  let publishResult;
+  try {
+    publishResult = await sendToTab(tab.id, { type: 'IAI_PUBLISH_LISTING' });
+    console.log('🚀 Publish result:', publishResult);
+  } catch (e) {
+    console.error('🚀 Publish error:', e);
+    throw new Error(`Failed to publish: ${e.message}`);
+  }
+  
+  if (!publishResult || publishResult.success === false) {
+    throw new Error(publishResult?.error || 'Publish button not clicked');
+  }
+  
+  if (!publishResult.result?.clicked && !publishResult.clicked) {
+    throw new Error('Could not find or click publish button');
+  }
+  
   await sleep(3000);
   
   setProgressStep('publish', 'completed');
