@@ -53,6 +53,87 @@ function cleanOldTasks() {
 }
 
 // ============================================
+// Extension Account Info
+// ============================================
+
+/**
+ * GET /api/extension/account
+ * Get the authenticated user's account info for the extension
+ */
+router.get('/account', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    
+    // Get user with their accounts
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        accountUsers: {
+          include: {
+            account: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    
+    // Get primary account (first one)
+    const primaryAccountUser = user.accountUsers[0];
+    
+    if (!primaryAccountUser) {
+      res.status(404).json({ error: 'No account found for user' });
+      return;
+    }
+    
+    const accountId = primaryAccountUser.accountId;
+    
+    // Get stats for this account
+    const [vehicleCount, leadCount, pendingTasks, recentPosts] = await Promise.all([
+      prisma.vehicle.count({ where: { accountId } }),
+      prisma.lead.count({ where: { accountId } }),
+      prisma.extensionTask.count({ 
+        where: { 
+          accountId, 
+          status: 'pending' 
+        } 
+      }),
+      prisma.facebookPost.count({
+        where: {
+          vehicle: { accountId },
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        id: accountId,
+        name: primaryAccountUser.account.name || primaryAccountUser.account.dealershipName,
+        email: user.email,
+        role: primaryAccountUser.role,
+        subscriptionStatus: primaryAccountUser.account.subscriptionStatus,
+        stats: {
+          listings: vehicleCount,
+          leads: leadCount,
+          pendingTasks,
+          responses: recentPosts,
+          unreadMessages: 0, // TODO: Implement unread message count
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Extension account info error:', error);
+    res.status(500).json({ error: 'Failed to get account info' });
+  }
+});
+
+// ============================================
 // Extension Status & Heartbeat
 // ============================================
 

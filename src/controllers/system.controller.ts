@@ -1056,8 +1056,9 @@ export const updateExtensionConfig = async (req: Request, res: Response, next: N
     // Update extension ID if provided
     if (extensionId !== undefined) {
       const sanitizedExtId = sanitizeInput(extensionId);
-      if (sanitizedExtId && (sanitizedExtId.length < 20 || sanitizedExtId.length > 40)) {
-        throw new AppError('Invalid Chrome Extension ID format', 400);
+      // Chrome extension IDs are 32 lowercase letters
+      if (sanitizedExtId && !/^[a-z]{32}$/.test(sanitizedExtId)) {
+        throw new AppError('Invalid Chrome Extension ID format. Must be 32 lowercase letters.', 400);
       }
       updatedIntegrations.chromeExtensionId = sanitizedExtId || '';
     }

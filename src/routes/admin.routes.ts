@@ -366,9 +366,22 @@ router.get('/extension/config', asyncHandler(systemController.getExtensionConfig
 router.put(
   '/extension/config',
   validate([
-    body('extensionId').optional().trim().isLength({ min: 20, max: 40 }).withMessage('Invalid Extension ID format'),
-    body('facebookAppId').optional().trim().isLength({ min: 10, max: 20 }).withMessage('Invalid App ID format'),
-    body('facebookAppSecret').optional().trim().isLength({ min: 20, max: 64 }).withMessage('Invalid App Secret format'),
+    body('extensionId').optional({ values: 'falsy' }).trim().custom((value) => {
+      // Allow empty string or valid Chrome extension ID (32 lowercase letters)
+      if (!value || value === '') return true;
+      if (!/^[a-z]{32}$/.test(value)) {
+        throw new Error('Chrome Extension ID must be 32 lowercase letters');
+      }
+      return true;
+    }),
+    body('facebookAppId').optional({ values: 'falsy' }).trim().custom((value) => {
+      if (!value || value === '') return true;
+      if (!/^\d{10,20}$/.test(value)) {
+        throw new Error('Facebook App ID must be 10-20 digits');
+      }
+      return true;
+    }),
+    body('facebookAppSecret').optional({ values: 'falsy' }).trim().isLength({ min: 20, max: 64 }).withMessage('Invalid App Secret format'),
   ]),
   asyncHandler(systemController.updateExtensionConfig)
 );
