@@ -36,6 +36,7 @@ import {
   Loader2,
   History,
   Plus,
+  Trash2,
 } from 'lucide-react';
 import { AI_TRAINING_CONFIG, type AIRole, type AIRoleConfig } from '../../config/ai-training';
 import { parseAIResponse, type ParsedAIResponse } from '../../utils/ai-response-parser';
@@ -165,6 +166,23 @@ export default function FloatingAIChat({
       setShowSessions(false);
     } catch (error) {
       console.error('Failed to load session:', error);
+    }
+  };
+
+  const deleteSession = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent loading the session when clicking delete
+    if (!confirm('Delete this conversation? This cannot be undone.')) return;
+    
+    try {
+      await api.delete(`/api/ai/sessions/${sessionId}`);
+      // If we're deleting the current session, clear the chat
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+        setMessages([]);
+      }
+      await loadSessions();
+    } catch (error) {
+      console.error('Failed to delete session:', error);
     }
   };
 
@@ -597,18 +615,29 @@ export default function FloatingAIChat({
                         <p className="text-gray-500 text-xs text-center py-2">No previous conversations</p>
                       ) : (
                         sessions.map((session) => (
-                          <button
+                          <div
                             key={session.id}
                             onClick={() => loadSession(session.id)}
-                            className={`w-full text-left p-2 rounded-lg hover:bg-gray-700/50 transition text-xs ${
+                            className={`group relative w-full text-left p-2 rounded-lg hover:bg-gray-700/50 transition text-xs cursor-pointer ${
                               currentSessionId === session.id ? 'bg-purple-600/20 border border-purple-500/30' : ''
                             }`}
                           >
-                            <div className="font-medium text-white truncate">{session.title}</div>
-                            <div className="text-gray-500 text-[10px]">
-                              {session.messageCount} messages • {new Date(session.lastMessageAt).toLocaleDateString()}
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-white truncate">{session.title}</div>
+                                <div className="text-gray-500 text-[10px]">
+                                  {session.messageCount} messages • {new Date(session.lastMessageAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <button
+                                onClick={(e) => deleteSession(session.id, e)}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all"
+                                title="Delete conversation"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                          </button>
+                          </div>
                         ))
                       )}
                     </div>

@@ -19,6 +19,10 @@ import {
   Calendar,
   DollarSign,
   X,
+  Mail,
+  User,
+  Lock,
+  Loader2,
 } from 'lucide-react';
 import { adminApi } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -65,6 +69,15 @@ export default function AccountsPage() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'analytics'>('overview');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    dealershipName: '',
+    ownerEmail: '',
+    ownerFirstName: '',
+    ownerLastName: '',
+  });
   const limit = 10;
   
   const { impersonateUser } = useAuth();
@@ -126,6 +139,36 @@ export default function AccountsPage() {
     }
   };
 
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!createForm.name || !createForm.ownerEmail) {
+      toast.error('Account name and owner email are required');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      await adminApi.createAccount({
+        name: createForm.name,
+        dealershipName: createForm.dealershipName || createForm.name,
+        ownerEmail: createForm.ownerEmail,
+        ownerFirstName: createForm.ownerFirstName || 'Account',
+        ownerLastName: createForm.ownerLastName || 'Owner',
+      });
+      
+      toast.success(`Account "${createForm.name}" created successfully! A welcome email has been sent.`);
+      setShowCreateModal(false);
+      setCreateForm({ name: '', dealershipName: '', ownerEmail: '', ownerFirstName: '', ownerLastName: '' });
+      loadAccounts();
+    } catch (error: any) {
+      console.error('Failed to create account:', error);
+      toast.error(error.response?.data?.message || 'Failed to create account');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / limit);
 
   const statusBadge = (account: Account) => {
@@ -173,7 +216,7 @@ export default function AccountsPage() {
           <p className="text-gray-500 mt-1">Manage all dealership accounts</p>
         </div>
         <button
-          onClick={() => alert('Create account modal coming soon')}
+          onClick={() => setShowCreateModal(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -639,6 +682,167 @@ export default function AccountsPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Account Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Create New Account</h2>
+                  <p className="text-blue-100 text-sm">Set up a new dealership account</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleCreateAccount} className="p-6 space-y-5">
+              {/* Account Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Account Name *
+                </label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    placeholder="e.g., ABC Motors"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Dealership Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Dealership Name
+                </label>
+                <div className="relative">
+                  <Car className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={createForm.dealershipName}
+                    onChange={(e) => setCreateForm({ ...createForm, dealershipName: e.target.value })}
+                    placeholder="e.g., ABC Motors Dealership"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <hr className="border-gray-100" />
+
+              {/* Owner Info Section */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Account Owner Details
+                </h3>
+
+                {/* Owner Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Owner Email *
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="email"
+                      value={createForm.ownerEmail}
+                      onChange={(e) => setCreateForm({ ...createForm, ownerEmail: e.target.value })}
+                      placeholder="owner@dealership.com"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Name Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={createForm.ownerFirstName}
+                      onChange={(e) => setCreateForm({ ...createForm, ownerFirstName: e.target.value })}
+                      placeholder="John"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={createForm.ownerLastName}
+                      onChange={(e) => setCreateForm({ ...createForm, ownerLastName: e.target.value })}
+                      placeholder="Doe"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Info Box */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900">Secure Account Creation</p>
+                    <p className="text-blue-700 mt-1">
+                      A temporary password will be generated and logged. The owner will receive an email to set up their account with a 14-day trial.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 px-4 py-3 border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Create Account
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

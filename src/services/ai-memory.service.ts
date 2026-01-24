@@ -9,10 +9,23 @@
  * 
  * Memory flows DOWN: Higher levels inform lower levels
  * Lower levels can't write to higher levels without permission
+ * 
+ * Memory Duration Configuration:
+ * - SUPER_ADMIN: Unlimited memory (never expires)
+ * - ADMIN/USER: 3 months memory retention
+ * - GLOBAL: Never expires
  */
 
 import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
+
+// Memory Duration Config (in milliseconds)
+export const MEMORY_DURATION = {
+  SUPER_ADMIN: null, // Unlimited - never expires
+  ADMIN: 90 * 24 * 60 * 60 * 1000, // 3 months
+  USER: 90 * 24 * 60 * 60 * 1000,  // 3 months
+  GLOBAL: null, // Never expires
+};
 
 // Memory Scopes (hierarchy order)
 export enum MemoryScope {
@@ -237,6 +250,10 @@ class AIMemoryService {
 
   /**
    * Create a new memory
+   * Applies automatic expiration based on user role:
+   * - SUPER_ADMIN: Unlimited (no expiration)
+   * - ADMIN/USER: 3 months
+   * - GLOBAL scope: Never expires
    */
   async createMemory(
     context: MemoryContext,
@@ -247,6 +264,18 @@ class AIMemoryService {
 
     // Validate scope permissions
     this.validateScopePermission(userRole, scope);
+
+    // Calculate expiration based on role and scope
+    let calculatedExpiry = expiresAt;
+    if (!calculatedExpiry && scope !== MemoryScope.GLOBAL) {
+      // Apply role-based expiration
+      const durationKey = userRole.toUpperCase() as keyof typeof MEMORY_DURATION;
+      const duration = MEMORY_DURATION[durationKey] || MEMORY_DURATION.USER;
+      if (duration !== null) {
+        calculatedExpiry = new Date(Date.now() + duration);
+      }
+      // If duration is null (super_admin), no expiration is set
+    }
 
     const memory = await prisma.aIUserMemory.create({
       data: {
@@ -259,13 +288,13 @@ class AIMemoryService {
         value,
         summary,
         importance,
-        expiresAt,
+        expiresAt: calculatedExpiry,
         sourceMessageId,
         source: sourceMessageId ? 'conversation' : 'manual',
       },
     });
 
-    logger.info(`Memory created: ${scope}/${category}/${key} by user ${userId}`);
+    logger.info(`Memory created: ${scope}/${category}/${key} by user ${userId}, expires: ${calculatedExpiry || 'never'}`);
     return memory as MemoryEntry;
   }
 

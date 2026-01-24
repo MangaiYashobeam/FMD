@@ -863,11 +863,15 @@ router.post('/posting', authenticate, async (req: AuthRequest, res: Response) =>
 /**
  * POST /api/extension/ai-chat
  * Get AI assistance for the extension user
- * Layer-based: User context → Account context → System
+ * Enhanced with:
+ * - Full company context (inventory, leads, messages)
+ * - User action recognition
+ * - Error detection and solutions
+ * - Memory-based conversation persistence
  */
 router.post('/ai-chat', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { message, context } = req.body;
+    const { message, context, userAction } = req.body;
     
     if (!message) {
       res.status(400).json({ error: 'Message is required' });
@@ -877,46 +881,138 @@ router.post('/ai-chat', authenticate, async (req: AuthRequest, res: Response) =>
     const userId = req.user!.id;
     const accountId = context?.accountId;
     
-    // Get user info for personalization
+    // Get comprehensive user info
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { firstName: true, lastName: true },
+      include: {
+        accountUsers: {
+          include: {
+            account: {
+              select: {
+                id: true,
+                name: true,
+                dealershipName: true,
+                subscriptionStatus: true,
+              },
+            },
+          },
+        },
+      },
     });
     
-    // Get account info if provided
-    let accountInfo = null;
+    // Get user's role
+    const userRole = user?.accountUsers[0]?.role || 'USER';
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
+    
+    // Get account stats if provided
+    let accountStats = null;
+    let recentVehicles: any[] = [];
+    let recentLeads: any[] = [];
+    let recentErrors: any[] = [];
+    
     if (accountId) {
-      accountInfo = await prisma.account.findUnique({
-        where: { id: accountId },
-        select: { dealershipName: true },
-      });
+      // Fetch real data from the account
+      const [vehicleCount, leadCount, vehicles, leads, errors] = await Promise.all([
+        prisma.vehicle.count({ where: { accountId } }),
+        prisma.lead.count({ where: { accountId } }),
+        prisma.vehicle.findMany({
+          where: { accountId },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, year: true, make: true, model: true, status: true, price: true },
+        }),
+        prisma.lead.findMany({
+          where: { accountId },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, firstName: true, lastName: true, status: true, createdAt: true },
+        }),
+        prisma.auditLog.findMany({
+          where: {
+            userId,
+            action: { in: ['EXTENSION_ERROR', 'ERROR'] },
+            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        }),
+      ]);
+      
+      accountStats = { vehicleCount, leadCount };
+      recentVehicles = vehicles;
+      recentLeads = leads;
+      recentErrors = errors;
     }
     
-    // Build context-aware system prompt
-    const systemPrompt = `You are Nexus, an AI assistant for the Dealers Face Chrome extension.
-You help users post vehicles to Facebook Marketplace.
+    // Detect user action from context
+    let detectedAction = userAction || 'unknown';
+    if (context?.url) {
+      if (context.url.includes('/marketplace/create')) detectedAction = 'creating_listing';
+      else if (context.url.includes('/marketplace/item')) detectedAction = 'viewing_listing';
+      else if (context.url.includes('/marketplace')) detectedAction = 'browsing_marketplace';
+      else if (context.url.includes('facebook.com/messages')) detectedAction = 'messaging';
+    }
+    
+    // Detect errors from context
+    let errorContext = '';
+    if (context?.error || context?.errorMessage) {
+      const error = context.error || context.errorMessage;
+      errorContext = `
+🚨 DETECTED ERROR: ${error}
+Analyze this error and provide a solution specific to the Dealers Face system.`;
+    }
+    
+    // Build comprehensive system prompt with company awareness
+    const systemPrompt = `You are Nexus, the AI assistant integrated into the Dealers Face Chrome extension.
 
-User: ${user?.firstName || 'User'} ${user?.lastName || ''}
-Dealership: ${accountInfo?.dealershipName || 'Unknown'}
+🏢 COMPANY: Dealers Face (dealersface.com)
+Dealers Face is a Facebook Marketplace automation platform for car dealerships.
+The platform helps dealers post vehicles, manage leads, and automate Facebook interactions.
 
-Current Page: ${context?.url || 'Unknown'}
-Page Type: ${context?.pageType || 'Unknown'}
+👤 CURRENT USER:
+- Name: ${user?.firstName || 'User'} ${user?.lastName || ''}
+- Email: ${user?.email}
+- Role: ${userRole}${isSuperAdmin ? ' (Super Admin - Full System Access)' : ''}
+- Account: ${user?.accountUsers[0]?.account?.dealershipName || 'No dealership linked'}
+- Account Status: ${user?.accountUsers[0]?.account?.subscriptionStatus || 'Unknown'}
 
-Your role:
-1. Help users navigate Facebook Marketplace
-2. Troubleshoot posting issues
-3. Explain form fields and requirements
-4. Provide step-by-step guidance
-5. Detect and explain errors
+📊 DEALERSHIP STATS:
+- Total Vehicles: ${accountStats?.vehicleCount || 0}
+- Total Leads: ${accountStats?.leadCount || 0}
 
-Be concise, helpful, and friendly. Use emojis sparingly to be clear.
-If you detect an error or issue, explain what it means and how to fix it.`;
+🚗 RECENT INVENTORY (Last 5):
+${recentVehicles.map(v => `- ${v.year} ${v.make} ${v.model} ($${v.price || 'N/A'}) - ${v.status}`).join('\n') || 'No vehicles found'}
+
+👥 RECENT LEADS (Last 5):
+${recentLeads.map(l => `- ${l.firstName} ${l.lastName} - ${l.status} (${new Date(l.createdAt).toLocaleDateString()})`).join('\n') || 'No leads found'}
+
+🎯 CURRENT USER ACTION: ${detectedAction}
+📍 Current Page: ${context?.url || 'Unknown'}
+🔧 Page Type: ${context?.pageType || 'Unknown'}
+${errorContext}
+
+📋 YOUR RESPONSIBILITIES:
+1. Recognize what the user is trying to do and assist proactively
+2. When you detect an error, explain what it means and provide Dealers Face-specific solutions
+3. Help users navigate Facebook Marketplace posting
+4. Provide information about their inventory and leads when asked
+5. Troubleshoot extension issues with specific solutions
+6. Remember context from the conversation
+
+💡 DEALERS FACE SPECIFIC SOLUTIONS:
+- "Extension offline" → Check if logged into dealersface.com, reload extension
+- "Vehicles not loading" → Verify account has vehicles, check API connection
+- "Posting failed" → Check Facebook session, verify vehicle data is complete
+- "AUTH_REQUIRED error" → Token expired, re-login at dealersface.com
+- "403 Forbidden" → Check user permissions and role
+
+Be concise, helpful, and proactive. If you see the user is stuck, offer specific help.
+Start responses with context awareness like "I see you're [action]..." when relevant.`;
 
     // Use OpenAI/AI service to generate response
-    // For now, provide rule-based responses
     const response = await generateAIResponse(message, systemPrompt, context);
     
-    // Log AI interaction for learning
+    // Log AI interaction with full context for learning
     await prisma.auditLog.create({
       data: {
         userId,
@@ -926,7 +1022,9 @@ If you detect an error or issue, explain what it means and how to fix it.`;
         metadata: {
           message,
           context,
+          userAction: detectedAction,
           response,
+          accountStats,
         },
       },
     });
