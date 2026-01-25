@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Eye, EyeOff, Loader2, Check } from 'lucide-react';
 import { DealersFaceIcon } from '../components/ui/Logo';
@@ -7,6 +7,18 @@ import { DealersFaceIcon } from '../components/ui/Logo';
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
+  const [searchParams] = useSearchParams();
+  
+  // Extract UTM parameters from URL on component mount
+  const [utmData] = useState(() => ({
+    utmSource: searchParams.get('utm_source') || undefined,
+    utmMedium: searchParams.get('utm_medium') || undefined,
+    utmCampaign: searchParams.get('utm_campaign') || undefined,
+    utmTerm: searchParams.get('utm_term') || undefined,
+    utmContent: searchParams.get('utm_content') || undefined,
+    referralCode: searchParams.get('ref') || searchParams.get('referral') || undefined,
+  }));
+  
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -60,6 +72,8 @@ export default function RegisterPage() {
         email: formData.email,
         password: formData.password,
         accountName: formData.accountName || undefined,
+        // Include UTM tracking data
+        ...utmData,
       });
       navigate('/app/dashboard');
     } catch (err: any) {

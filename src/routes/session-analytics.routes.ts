@@ -750,4 +750,184 @@ router.post('/bots', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
+// ============================================
+// UTM Source Analytics
+// ============================================
+
+/**
+ * Get UTM source analytics for user signups
+ */
+router.get('/utm/analytics', async (_req: AuthRequest, res: Response) => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Get UTM source distribution
+    const bySource = await prisma.user.groupBy({
+      by: ['utmSource'],
+      _count: true,
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        utmSource: { not: null },
+      },
+      orderBy: { _count: { utmSource: 'desc' } },
+    });
+    
+    // Get UTM medium distribution
+    const byMedium = await prisma.user.groupBy({
+      by: ['utmMedium'],
+      _count: true,
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        utmMedium: { not: null },
+      },
+      orderBy: { _count: { utmMedium: 'desc' } },
+    });
+    
+    // Get UTM campaign distribution
+    const byCampaign = await prisma.user.groupBy({
+      by: ['utmCampaign'],
+      _count: true,
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        utmCampaign: { not: null },
+      },
+      orderBy: { _count: { utmCampaign: 'desc' } },
+    });
+    
+    // Get signups by country
+    const byCountry = await prisma.user.groupBy({
+      by: ['signupCountry'],
+      _count: true,
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        signupCountry: { not: null },
+      },
+      orderBy: { _count: { signupCountry: 'desc' } },
+      take: 10,
+    });
+    
+    // Get total signups with UTM data
+    const [totalWithUtm, totalNoUtm] = await Promise.all([
+      prisma.user.count({
+        where: {
+          createdAt: { gte: thirtyDaysAgo },
+          OR: [
+            { utmSource: { not: null } },
+            { utmMedium: { not: null } },
+            { utmCampaign: { not: null } },
+          ],
+        },
+      }),
+      prisma.user.count({
+        where: {
+          createdAt: { gte: thirtyDaysAgo },
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+        },
+      }),
+    ]);
+    
+    // Get referral code analytics
+    const byReferral = await prisma.user.groupBy({
+      by: ['referralCode'],
+      _count: true,
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        referralCode: { not: null },
+      },
+      orderBy: { _count: { referralCode: 'desc' } },
+      take: 10,
+    });
+    
+    // Get recent signups with source data
+    const recentSignups = await prisma.user.findMany({
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        OR: [
+          { utmSource: { not: null } },
+          { referralCode: { not: null } },
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        utmSource: true,
+        utmMedium: true,
+        utmCampaign: true,
+        referralCode: true,
+        signupCountry: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        overview: {
+          totalWithUtm,
+          totalNoUtm,
+          trackingRate: totalWithUtm + totalNoUtm > 0 
+            ? Math.round((totalWithUtm / (totalWithUtm + totalNoUtm)) * 100) 
+            : 0,
+        },
+        bySource: bySource.map(s => ({ source: s.utmSource, count: s._count })),
+        byMedium: byMedium.map(m => ({ medium: m.utmMedium, count: m._count })),
+        byCampaign: byCampaign.map(c => ({ campaign: c.utmCampaign, count: c._count })),
+        byCountry: byCountry.map(c => ({ country: c.signupCountry, count: c._count })),
+        byReferral: byReferral.map(r => ({ code: r.referralCode, count: r._count })),
+        recentSignups,
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to get UTM analytics:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch UTM analytics' });
+  }
+});
+
+/**
+ * Get user source details
+ */
+router.get('/utm/user/:userId', async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        utmSource: true,
+        utmMedium: true,
+        utmCampaign: true,
+        utmTerm: true,
+        utmContent: true,
+        referralCode: true,
+        signupIp: true,
+        signupCountry: true,
+        createdAt: true,
+      },
+    });
+    
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    
+    res.json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    logger.error('Failed to get user source:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch user source' });
+  }
+});
+
 export default router;

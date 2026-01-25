@@ -55,7 +55,11 @@ import { iipcCheck } from '@/middleware/iipc';
 import iipcRoutes from '@/routes/iipc.routes';
 import postingRoutes from '@/routes/posting.routes';
 import { autoPostService } from '@/services/autopost.service';
-import sessionTracker from '@/middleware/session-tracker';
+import sessionTracker, { 
+  trackUserSession, 
+  trackSessionActivity, 
+  trackVisitorSession 
+} from '@/middleware/session-tracker';
 import { ipIntelligenceService } from '@/services/ip-intelligence.service';
 
 // Validate security configuration on startup
@@ -154,6 +158,10 @@ app.use(async (req, res, next) => {
     next();
   }
 });
+
+// Visitor Session Tracking - Create VisitorSession records for anonymous users
+// This enables full session analytics for non-authenticated visitors
+app.use(trackVisitorSession);
 
 // API-specific Intelliceil protection (blocks malicious traffic)
 app.use('/api', intelliceilMiddleware);
@@ -570,6 +578,23 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);                                              // Auth routes (public)
 app.use('/api/auth/2fa', ring5AuthBarrier, require('./routes/two-factor.routes').default); // 2FA routes (requires auth)
 
+// ============================================
+// Session Tracking Middleware (After Auth)
+// ============================================
+// Track authenticated user sessions and activity
+// This creates UserSession records in the database for analytics
+app.use('/api', (req, res, next) => {
+  // Only track after authentication has been verified
+  // This runs after auth middleware processes the request
+  if ((req as any).user) {
+    trackUserSession(req as any, res, () => {
+      trackSessionActivity(req as any, res, next);
+    });
+  } else {
+    next();
+  }
+});
+
 // Facebook OAuth callback must be public (browser redirect)
 // IMPORTANT: This specific route MUST be before the general /api/facebook routes
 app.get('/api/facebook/callback', (req, res, next) => {
@@ -642,6 +667,9 @@ app.use('/api/training', ring5AuthBarrier, trainingRoutes.default); // Training 
 
 // AI Center Routes (requires super admin)
 app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes').default); // AI Center (requires admin)
+
+// AI Model Registry & Agent Management (requires admin)
+app.use('/api/ai-models', ring5AuthBarrier, require('./routes/ai-models.routes').default); // AI model selection & agent management
 
 // AI Chat Routes - Nova's Backend (requires auth, handles own file uploads)
 app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default); // AI Chat with memory system

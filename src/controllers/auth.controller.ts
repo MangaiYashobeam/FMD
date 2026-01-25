@@ -22,7 +22,20 @@ export class AuthController {
       throw new AppError('Validation failed', 400);
     }
 
-    const { email, password, firstName, lastName, accountName } = req.body;
+    const { 
+      email, 
+      password, 
+      firstName, 
+      lastName, 
+      accountName,
+      // UTM Tracking parameters
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmTerm,
+      utmContent,
+      referralCode
+    } = req.body;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -36,15 +49,34 @@ export class AuthController {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Get signup IP and geo data
+    const signupIp = getClientIP(req);
+    let signupCountry: string | undefined;
+    try {
+      const ipAnalysis = await ipIntelligenceService.analyzeIP(signupIp, req.headers['user-agent'] || '');
+      signupCountry = ipAnalysis.geo.country || undefined;
+    } catch {
+      // Non-critical, continue without country
+    }
+
     // Create user and account in transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Create user
+      // Create user with UTM tracking
       const user = await tx.user.create({
         data: {
           email: email.toLowerCase(),
           passwordHash,
           firstName,
           lastName,
+          // UTM Source Tracking
+          utmSource: utmSource || null,
+          utmMedium: utmMedium || null,
+          utmCampaign: utmCampaign || null,
+          utmTerm: utmTerm || null,
+          utmContent: utmContent || null,
+          referralCode: referralCode || null,
+          signupIp,
+          signupCountry: signupCountry || null,
         },
       });
 

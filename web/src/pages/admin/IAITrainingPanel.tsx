@@ -13,7 +13,7 @@
  * - Inject training data to IAI extensions
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Play,
@@ -35,6 +35,9 @@ import {
   WifiOff,
   Wifi,
   Activity,
+  Terminal,
+  Heart,
+  AlertCircle,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 
@@ -102,6 +105,15 @@ interface SessionDetail {
   patterns: any[];
 }
 
+interface HealthLogEntry {
+  id: string;
+  timestamp: Date;
+  type: 'heartbeat' | 'recording' | 'error' | 'info' | 'connection';
+  source: 'extension' | 'backend' | 'system';
+  message: string;
+  data?: any;
+}
+
 // ============================================
 // API Functions
 // ============================================
@@ -134,6 +146,14 @@ async function activateSession(id: string, target: 'iai' | 'soldier' | 'both') {
 
 async function fetchActiveTraining() {
   const response = await api.get('/api/training/active');
+  return response.data;
+}
+
+async function sendHealthPing() {
+  const response = await api.post('/api/training/console/health-ping', {
+    source: 'iai-panel',
+    timestamp: Date.now(),
+  });
   return response.data;
 }
 
@@ -593,6 +613,131 @@ function ActiveTrainingCard({ config, type }: { config: any; type: 'iai' | 'sold
 }
 
 // ============================================
+// Health Log Panel Component
+// ============================================
+
+function HealthLogPanel({ 
+  logs, 
+  isConnected, 
+  onSendPing,
+  onClear 
+}: { 
+  logs: HealthLogEntry[];
+  isConnected: boolean;
+  onSendPing: () => void;
+  onClear: () => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const logContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new logs arrive
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  const getLogIcon = (type: HealthLogEntry['type']) => {
+    switch (type) {
+      case 'heartbeat':
+        return <Heart className="w-3 h-3 text-green-400" />;
+      case 'recording':
+        return <Radio className="w-3 h-3 text-red-400" />;
+      case 'error':
+        return <AlertCircle className="w-3 h-3 text-red-500" />;
+      case 'connection':
+        return <Wifi className="w-3 h-3 text-blue-400" />;
+      default:
+        return <Activity className="w-3 h-3 text-slate-400" />;
+    }
+  };
+
+  const getLogColor = (type: HealthLogEntry['type']) => {
+    switch (type) {
+      case 'heartbeat':
+        return 'text-green-400';
+      case 'recording':
+        return 'text-red-400';
+      case 'error':
+        return 'text-red-500';
+      case 'connection':
+        return 'text-blue-400';
+      default:
+        return 'text-slate-400';
+    }
+  };
+
+  return (
+    <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+      {/* Header */}
+      <div 
+        className="flex items-center justify-between px-4 py-3 bg-slate-800 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-3">
+          <Terminal className="w-5 h-5 text-green-400" />
+          <h3 className="text-white font-medium">Extension Health Log</h3>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+            isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+          }`}>
+            {isConnected ? 'LIVE' : 'OFFLINE'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); onSendPing(); }}
+            className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+          >
+            Send Ping
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onClear(); }}
+            className="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+          >
+            Clear
+          </button>
+          <span className="text-slate-500 text-sm">{logs.length} entries</span>
+        </div>
+      </div>
+
+      {/* Log Content */}
+      {expanded && (
+        <div 
+          ref={logContainerRef}
+          className="h-48 overflow-y-auto font-mono text-xs p-3 space-y-1 bg-black/30"
+        >
+          {logs.length === 0 ? (
+            <div className="text-slate-500 text-center py-8">
+              No health logs yet. Waiting for extension connection...
+            </div>
+          ) : (
+            logs.map((log) => (
+              <div key={log.id} className="flex items-start gap-2 hover:bg-slate-800/50 px-2 py-1 rounded">
+                <span className="text-slate-600 whitespace-nowrap">
+                  {new Date(log.timestamp).toLocaleTimeString()}
+                </span>
+                {getLogIcon(log.type)}
+                <span className={`uppercase text-xs font-bold w-12 ${getLogColor(log.type)}`}>
+                  [{log.source.substring(0, 3).toUpperCase()}]
+                </span>
+                <span className={`flex-1 ${getLogColor(log.type)}`}>
+                  {log.message}
+                </span>
+                {log.data && (
+                  <span className="text-slate-600 truncate max-w-[200px]" title={JSON.stringify(log.data)}>
+                    {JSON.stringify(log.data)}
+                  </span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // Main Component
 // ============================================
 
@@ -611,7 +756,47 @@ export default function IAITrainingPanel() {
   } | null>(null);
   const [lastSessionCheck, setLastSessionCheck] = useState<Date | null>(null);
   const [newSessionAlert, setNewSessionAlert] = useState(false);
+  
+  // Health log state
+  const [healthLogs, setHealthLogs] = useState<HealthLogEntry[]>([]);
+  const healthLogIdRef = useRef(0);
+  
   const queryClient = useQueryClient();
+
+  // Add a health log entry
+  const addHealthLog = useCallback((
+    type: HealthLogEntry['type'],
+    source: HealthLogEntry['source'],
+    message: string,
+    data?: any
+  ) => {
+    const newLog: HealthLogEntry = {
+      id: `log_${healthLogIdRef.current++}`,
+      timestamp: new Date(),
+      type,
+      source,
+      message,
+      data,
+    };
+    setHealthLogs(prev => [...prev.slice(-99), newLog]); // Keep last 100 logs
+  }, []);
+
+  // Clear health logs
+  const clearHealthLogs = useCallback(() => {
+    setHealthLogs([]);
+    addHealthLog('info', 'system', 'Logs cleared');
+  }, [addHealthLog]);
+
+  // Send health ping
+  const sendHealthPingAction = useCallback(async () => {
+    addHealthLog('info', 'system', 'Sending health ping to extension...');
+    try {
+      const response = await sendHealthPing();
+      addHealthLog('heartbeat', 'backend', 'Health ping sent', response);
+    } catch (error: any) {
+      addHealthLog('error', 'system', `Ping failed: ${error.message}`);
+    }
+  }, [addHealthLog]);
 
   // Check for extension connection via heartbeat endpoint
   useEffect(() => {
@@ -624,6 +809,13 @@ export default function IAITrainingPanel() {
         
         if (statusResponse.data?.success && statusResponse.data?.connected) {
           console.log('[IAI Training] Extension connected!', statusResponse.data);
+          
+          // Log the heartbeat
+          addHealthLog('heartbeat', 'extension', 'Heartbeat received', {
+            browserId: statusResponse.data.browserId,
+            recording: statusResponse.data.recordingActive,
+          });
+          
           setExtensionStatus('connected');
           setExtensionInfo({
             browserId: statusResponse.data.browserId,
@@ -829,6 +1021,14 @@ export default function IAITrainingPanel() {
           <ActiveTrainingCard config={activeConfig.soldier} type="soldier" />
         </div>
       </div>
+
+      {/* Health Log Panel */}
+      <HealthLogPanel 
+        logs={healthLogs}
+        isConnected={extensionStatus === 'connected'}
+        onSendPing={sendHealthPingAction}
+        onClear={clearHealthLogs}
+      />
 
       {/* Sessions List */}
       <div className="space-y-4">

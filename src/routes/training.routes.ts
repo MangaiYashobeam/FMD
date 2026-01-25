@@ -59,6 +59,14 @@ router.post('/console/heartbeat', async (req, res) => {
   try {
     const { browserId, version, currentTab, recordingActive } = req.body;
     
+    console.log('[DEBUG TRAINING] Heartbeat received:', {
+      browserId,
+      version,
+      currentTab,
+      recordingActive,
+      timestamp: new Date().toISOString()
+    });
+    
     rootConsoleState.connected = true;
     rootConsoleState.lastHeartbeat = new Date();
     rootConsoleState.browserId = browserId || null;
@@ -107,6 +115,120 @@ router.get('/console/status', async (_req, res) => {
   } catch (error) {
     console.error('[ROOT Console] Status check error:', error);
     res.status(500).json({ success: false, error: 'Status check failed' });
+  }
+});
+
+// ============================================
+// HEALTH LOGGING SYSTEM
+// ============================================
+
+interface HealthLogEntry {
+  id: string;
+  timestamp: Date;
+  type: 'heartbeat' | 'recording' | 'error' | 'info' | 'connection';
+  source: 'extension' | 'backend' | 'system';
+  message: string;
+  data?: any;
+}
+
+// In-memory health log store (circular buffer)
+const healthLogs: HealthLogEntry[] = [];
+const MAX_HEALTH_LOGS = 200;
+let healthLogId = 0;
+
+function addHealthLog(
+  type: HealthLogEntry['type'],
+  source: HealthLogEntry['source'],
+  message: string,
+  data?: any
+): HealthLogEntry {
+  const entry: HealthLogEntry = {
+    id: `hlog_${healthLogId++}`,
+    timestamp: new Date(),
+    type,
+    source,
+    message,
+    data,
+  };
+  
+  healthLogs.push(entry);
+  
+  // Keep only last MAX_HEALTH_LOGS entries
+  if (healthLogs.length > MAX_HEALTH_LOGS) {
+    healthLogs.shift();
+  }
+  
+  console.log(`[Health Log] [${type.toUpperCase()}] [${source}] ${message}`, data || '');
+  
+  return entry;
+}
+
+/**
+ * GET /training/console/health-logs - Get health logs
+ * Called by IAI Training Panel to display health log panel
+ */
+router.get('/console/health-logs', async (_req, res) => {
+  try {
+    res.json({
+      success: true,
+      logs: healthLogs.slice(-100), // Return last 100 logs
+      totalCount: healthLogs.length,
+    });
+  } catch (error) {
+    console.error('[Health Logs] Error fetching logs:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch health logs' });
+  }
+});
+
+/**
+ * POST /training/console/health-ping - Send health ping from IAI Panel
+ * Creates a round-trip ping to verify connection
+ */
+router.post('/console/health-ping', async (req, res) => {
+  try {
+    const { source, timestamp } = req.body;
+    
+    addHealthLog('heartbeat', 'backend', 'Health ping received from IAI Panel', {
+      source,
+      clientTimestamp: timestamp,
+      serverTimestamp: Date.now(),
+      latency: timestamp ? Date.now() - timestamp : null,
+    });
+    
+    res.json({
+      success: true,
+      pong: true,
+      serverTimestamp: Date.now(),
+      extensionConnected: isRootConsoleConnected(),
+    });
+  } catch (error) {
+    console.error('[Health Ping] Error:', error);
+    res.status(500).json({ success: false, error: 'Health ping failed' });
+  }
+});
+
+/**
+ * POST /training/console/log - Add a log entry from extension
+ * Called by the extension to log events
+ */
+router.post('/console/log', async (req, res) => {
+  try {
+    const { type, source, message, data } = req.body;
+    
+    const entry = addHealthLog(
+      type || 'info',
+      source || 'extension',
+      message || 'No message',
+      data
+    );
+    
+    res.json({
+      success: true,
+      logId: entry.id,
+    });
+  } catch (error) {
+    console.error('[Console Log] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to add log' });
   }
 });
 
@@ -200,6 +322,10 @@ router.get('/sessions/:id', async (req: AuthRequest, res: Response) => {
  */
 router.post('/sessions', async (req: AuthRequest, res: Response) => {
   try {
+    console.log('[DEBUG TRAINING] POST /sessions received');
+    console.log('[DEBUG TRAINING] Request body keys:', Object.keys(req.body));
+    console.log('[DEBUG TRAINING] User:', req.user?.email, req.user?.id);
+    
     const {
       sessionId,
       mode,
@@ -214,6 +340,15 @@ router.post('/sessions', async (req: AuthRequest, res: Response) => {
       typingPatterns,
       automationCode,
     } = req.body;
+    
+    console.log('[DEBUG TRAINING] Session data:', {
+      sessionId,
+      mode,
+      recordingType,
+      duration,
+      eventsCount: events?.length || 0,
+      markedElementsCount: markedElements?.length || 0
+    });
     
     // Create the session
     const session = await prisma.trainingSession.create({

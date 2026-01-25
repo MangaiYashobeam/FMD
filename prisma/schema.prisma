@@ -27,6 +27,16 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   lastLoginAt   DateTime? @map("last_login_at")
 
+  // UTM Source Tracking - Capture how users discovered us
+  utmSource     String?   @map("utm_source")   // e.g., google, facebook, referral
+  utmMedium     String?   @map("utm_medium")   // e.g., cpc, social, email
+  utmCampaign   String?   @map("utm_campaign") // e.g., spring_sale, launch
+  utmTerm       String?   @map("utm_term")     // Search keyword
+  utmContent    String?   @map("utm_content")  // Ad variant identifier
+  referralCode  String?   @map("referral_code") // Referral tracking
+  signupIp      String?   @map("signup_ip")    // IP at registration
+  signupCountry String?   @map("signup_country") // Country at registration
+
   // IntelliCeil Session Tracking
   lastActiveAt      DateTime? @map("last_active_at")
   loginCount        Int       @default(0) @map("login_count")
