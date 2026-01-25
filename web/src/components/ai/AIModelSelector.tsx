@@ -20,11 +20,10 @@ import {
   Activity,
   Clock,
   Settings2,
-  Shield,
   Loader2,
 } from 'lucide-react';
-import api from '@/lib/api';
-import { toast } from 'sonner';
+import { api } from '../../lib/api';
+import { useToast } from '../../contexts/ToastContext';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -67,19 +66,6 @@ interface AIProvider {
 // ============================================
 // ICON MAPPING
 // ============================================
-
-const getAgentIcon = (icon: string, className?: string) => {
-  switch (icon) {
-    case '🌟':
-      return <Sparkles className={className} />;
-    case '🎖️':
-      return <Shield className={className} />;
-    case '🧠':
-      return <Brain className={className} />;
-    default:
-      return <Bot className={className} />;
-  }
-};
 
 const getProviderIcon = (provider: string, className?: string) => {
   switch (provider) {
@@ -212,6 +198,7 @@ export const AIModelSelector: React.FC<AIModelSelectorProps> = ({
   onClose,
   onModelChange,
 }) => {
+  const toast = useToast();
   const [agents, setAgents] = useState<AIAgent[]>([]);
   const [models, setModels] = useState<AIModel[]>([]);
   const [providers, setProviders] = useState<AIProvider[]>([]);
