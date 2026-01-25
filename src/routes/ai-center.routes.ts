@@ -29,17 +29,126 @@ router.use(requireSuperAdmin);
 
 router.get('/dashboard/:accountId', aiCenterController.getDashboard);
 
-// Simple dashboard for super admin (no account ID required)
+// Simple dashboard for super admin (no account ID required) - REAL DATA QUERIES
 router.get('/dashboard', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const prisma = (await import('@/config/database')).default;
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Run all queries in parallel for performance
+  const [
+    // Tasks
+    tasksTotal,
+    tasksByStatus,
+    tasksOverdue,
+    tasksCompletedToday,
+    // Threats
+    threatsTotal,
+    threatsLast24h,
+    threatsBySeverity,
+    threatsByStatus,
+    // Memory
+    memoryTotal,
+    memoryByType,
+    // Patterns
+    patternsTotal,
+    patternsActive,
+    topPatterns,
+    // Error Monitoring
+    errorTicketsTotal,
+    errorTicketsByStatus,
+    interventionsTotal,
+    interventionsLast24h,
+    // Providers
+    providersData,
+  ] = await Promise.all([
+    // Task queries
+    prisma.aITask.count(),
+    prisma.aITask.groupBy({ by: ['status'], _count: true }),
+    prisma.aITask.count({ where: { dueAt: { lt: now }, status: { notIn: ['completed', 'cancelled'] } } }),
+    prisma.aITask.count({ where: { status: 'completed', completedAt: { gte: startOfToday } } }),
+    // Threat queries
+    prisma.aIThreat.count(),
+    prisma.aIThreat.count({ where: { detectedAt: { gte: yesterday } } }),
+    prisma.aIThreat.groupBy({ by: ['severity'], _count: true }),
+    prisma.aIThreat.groupBy({ by: ['status'], _count: true }),
+    // Memory queries
+    prisma.aIMemory.count(),
+    prisma.aIMemory.groupBy({ by: ['memoryType'], _count: true, _avg: { importance: true } }),
+    // Pattern queries
+    prisma.aILearningPattern.count(),
+    prisma.aILearningPattern.count({ where: { isActive: true } }),
+    prisma.aILearningPattern.findMany({ where: { isActive: true }, orderBy: { successRate: 'desc' }, take: 5 }),
+    // Error Monitoring queries
+    prisma.errorTicket.count(),
+    prisma.errorTicket.groupBy({ by: ['status'], _count: true }),
+    prisma.aIIntervention.count(),
+    prisma.aIIntervention.count({ where: { createdAt: { gte: yesterday } } }),
+    // Provider queries
+    prisma.aIProvider.findMany({ select: { id: true, name: true, isActive: true, healthStatus: true, defaultModel: true } }),
+  ]);
+
+  // Format the data
+  const taskStatusMap: Record<string, number> = {};
+  tasksByStatus.forEach(t => { taskStatusMap[t.status] = t._count; });
+
+  const threatSeverityMap: Record<string, number> = {};
+  threatsBySeverity.forEach(t => { threatSeverityMap[t.severity] = t._count; });
+
+  const threatStatusMap: Record<string, number> = {};
+  threatsByStatus.forEach(t => { threatStatusMap[t.status] = t._count; });
+
+  const memoryTypeMap: Record<string, { count: number; avgImportance: number | null }> = {};
+  memoryByType.forEach(m => { memoryTypeMap[m.memoryType] = { count: m._count, avgImportance: m._avg?.importance ?? null }; });
+
+  const errorStatusMap: Record<string, number> = {};
+  errorTicketsByStatus.forEach(e => { errorStatusMap[e.status] = e._count; });
+
+  // Calculate estimated usage (from traces if available, otherwise estimate from interventions)
+  const estimatedCalls = interventionsTotal + tasksTotal;
+  const estimatedTokens = estimatedCalls * 2000; // Rough estimate
+  const estimatedCost = (estimatedTokens / 1000000) * 3; // Rough estimate at $3/1M tokens
+
   res.json({
     success: true,
     data: {
-      tasks: { total: 0, byStatus: {}, overdue: 0, completedToday: 0 },
-      threats: { total: 0, last24Hours: 0, bySeverity: {}, byStatus: {} },
-      patterns: { totalPatterns: 0, activePatterns: 0, avgSuccessRate: 0, topPerformers: [] },
-      memory: { total: 0, byType: {} },
-      usage: { totalCalls: 0, totalTokens: 0, totalCost: 0, byProvider: {} },
-      providers: [],
+      tasks: { 
+        total: tasksTotal, 
+        byStatus: taskStatusMap, 
+        overdue: tasksOverdue, 
+        completedToday: tasksCompletedToday 
+      },
+      threats: { 
+        total: threatsTotal, 
+        last24Hours: threatsLast24h, 
+        bySeverity: threatSeverityMap, 
+        byStatus: threatStatusMap 
+      },
+      patterns: { 
+        totalPatterns: patternsTotal, 
+        activePatterns: patternsActive, 
+        avgSuccessRate: topPatterns.length > 0 ? topPatterns.reduce((sum, p) => sum + (p.successRate || 0), 0) / topPatterns.length : 0,
+        topPerformers: topPatterns.map(p => ({ id: p.id, name: `${p.patternType} - ${p.category}`, successRate: p.successRate || 0 }))
+      },
+      memory: { 
+        total: memoryTotal, 
+        byType: memoryTypeMap 
+      },
+      usage: { 
+        totalCalls: estimatedCalls, 
+        totalTokens: estimatedTokens, 
+        totalCost: Number(estimatedCost.toFixed(2)), 
+        byProvider: {} 
+      },
+      providers: providersData,
+      // Additional error monitoring stats
+      errorMonitoring: {
+        ticketsTotal: errorTicketsTotal,
+        ticketsByStatus: errorStatusMap,
+        interventionsTotal,
+        interventionsLast24h,
+      },
     },
   });
 }));

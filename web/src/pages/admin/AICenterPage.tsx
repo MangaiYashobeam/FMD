@@ -117,7 +117,7 @@ export default function AICenterPage() {
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      // Try to fetch real data from API
+      // Fetch REAL data from API - no fallbacks
       const dashboardStats = await aiCenterService.dashboard.getStats();
       setStats(dashboardStats as any);
 
@@ -139,55 +139,44 @@ export default function AICenterPage() {
       setProviders(defaultProviders);
       setSelectedProvider('anthropic');
       
-      // Fallback to sample data for demonstration
+      // EMPTY state - NO FAKE DATA
+      // Shows real zeros so user knows there's no activity yet
       setStats({
         tasks: {
-          total: 156,
-          byStatus: { pending: 23, running: 8, completed: 120, failed: 5 },
-          overdue: 3,
-          completedToday: 15,
+          total: 0,
+          byStatus: {},
+          overdue: 0,
+          completedToday: 0,
         },
         threats: {
-          total: 47,
-          last24Hours: 3,
-          bySeverity: { low: 12, medium: 20, high: 10, critical: 5 },
-          byStatus: { detected: 15, confirmed: 10, escalated: 7, resolved: 12, false_positive: 3 },
+          total: 0,
+          last24Hours: 0,
+          bySeverity: {},
+          byStatus: {},
         },
         patterns: {
-          totalPatterns: 28,
-          activePatterns: 25,
-          avgSuccessRate: 0.85,
-          topPerformers: [
-            { id: '1', name: 'Warm Greeting', successRate: 0.92 },
-            { id: '2', name: 'Price Justification', successRate: 0.88 },
-            { id: '3', name: 'Availability Check', successRate: 0.85 },
-          ],
+          totalPatterns: 0,
+          activePatterns: 0,
+          avgSuccessRate: 0,
+          topPerformers: [],
         },
         memory: {
-          total: 2345,
-          byType: {
-            conversation: { count: 525, avgImportance: 0.7 },
-            fact: { count: 450, avgImportance: 0.8 },
-            preference: { count: 340, avgImportance: 0.75 },
-            pattern: { count: 125, avgImportance: 0.9 },
-            learned: { count: 905, avgImportance: 0.65 },
-          },
+          total: 0,
+          byType: {},
         },
         usage: {
-          totalCalls: 15420,
-          totalTokens: 2456000,
-          totalCost: 48.92,
-          byProvider: {
-            deepseek: { calls: 8500, tokens: 1500000, cost: 15.00 },
-            openai: { calls: 4200, tokens: 700000, cost: 21.00 },
-            anthropic: { calls: 2720, tokens: 256000, cost: 12.92 },
-          },
+          totalCalls: 0,
+          totalTokens: 0,
+          totalCost: 0,
+          byProvider: {},
         },
-        providers: [
-          { id: 'anthropic', name: 'Anthropic Claude', isActive: true, healthStatus: 'healthy', defaultModel: 'claude-3-sonnet' },
-          { id: 'openai', name: 'OpenAI GPT-4', isActive: true, healthStatus: 'healthy', defaultModel: 'gpt-4-turbo' },
-          { id: 'deepseek', name: 'DeepSeek', isActive: false, healthStatus: 'unknown', defaultModel: 'deepseek-chat' },
-        ],
+        providers: defaultProviders.map(p => ({ 
+          id: p.id, 
+          name: p.name, 
+          isActive: p.isActive, 
+          healthStatus: p.healthStatus, 
+          defaultModel: p.defaultModel 
+        })),
       });
     }
     setLoading(false);
@@ -1458,12 +1447,8 @@ function TrainingTab() {
       setSessions(data);
     } catch (error) {
       console.error('Failed to load training sessions:', error);
-      // Sample data fallback
-      setSessions([
-        { id: '1', name: 'FBM Specialist', type: 'fine-tuning', status: 'completed', progress: 100, datasetSize: 1500, createdAt: new Date().toISOString() },
-        { id: '2', name: 'Customer Service', type: 'reinforcement', status: 'running', progress: 78, datasetSize: 2000, createdAt: new Date().toISOString() },
-        { id: '3', name: 'Inventory Expert', type: 'few-shot', status: 'pending', progress: 0, datasetSize: 500, createdAt: new Date().toISOString() },
-      ]);
+      // EMPTY state - no fake data
+      setSessions([]);
     }
     setLoading(false);
   }, []);
@@ -1656,16 +1641,12 @@ function ThreatsTab() {
       setRules(rulesData);
     } catch (error) {
       console.error('Failed to load threats:', error);
-      // Fallback sample data
-      setThreats([
-        { id: '1', type: 'scam', severity: 'critical', status: 'escalated', title: 'Overpayment scam attempt', description: 'User offered $500 extra...', detectedAt: new Date().toISOString() },
-        { id: '2', type: 'harassment', severity: 'high', status: 'detected', title: 'Aggressive language', description: 'Multiple abusive messages...', detectedAt: new Date().toISOString() },
-        { id: '3', type: 'phishing', severity: 'medium', status: 'resolved', title: 'Suspicious link shared', description: 'External link to fake site...', detectedAt: new Date().toISOString() },
-      ]);
+      // EMPTY state - no fake data
+      setThreats([]);
       setStats({
-        total: 47,
-        bySeverity: { low: 12, medium: 20, high: 10, critical: 5 },
-        byStatus: { detected: 15, confirmed: 10, escalated: 7, resolved: 12, false_positive: 3 },
+        total: 0,
+        bySeverity: {},
+        byStatus: {},
       });
     }
     setLoading(false);
@@ -1886,16 +1867,12 @@ function PatternsTab() {
       setStats(statsData);
     } catch (error) {
       console.error('Failed to load patterns:', error);
-      // Fallback sample data
-      setPatterns([
-        { id: '1', name: 'Warm Greeting', description: 'Friendly opening message', pattern: 'Hello! Thanks for reaching out...', category: 'response_template', isActive: true, successRate: 0.92, usageCount: 156, triggerConditions: [], actions: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: '2', name: 'Price Justification', description: 'Explain vehicle value', pattern: 'The price reflects...', category: 'negotiation_tactic', isActive: true, successRate: 0.88, usageCount: 89, triggerConditions: [], actions: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-        { id: '3', name: 'Availability Check', description: 'Confirm vehicle availability', pattern: 'Great news! This vehicle is still available...', category: 'response_template', isActive: true, successRate: 0.85, usageCount: 234, triggerConditions: [], actions: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-      ]);
+      // EMPTY state - no fake data
+      setPatterns([]);
       setStats({
-        totalPatterns: 28,
-        activePatterns: 25,
-        avgSuccessRate: 0.85,
+        totalPatterns: 0,
+        activePatterns: 0,
+        avgSuccessRate: 0,
         topPerformers: [],
       });
     }
@@ -2060,17 +2037,13 @@ function TasksTab() {
       setStats(statsData);
     } catch (error) {
       console.error('Failed to load tasks:', error);
-      // Fallback sample data
-      setTasks([
-        { id: '1', title: 'Respond to inquiry #1234', type: 'respond_to_message', status: 'pending', priority: 'high', createdAt: new Date().toISOString() },
-        { id: '2', title: 'Follow up with John D.', type: 'follow_up', status: 'running', priority: 'medium', createdAt: new Date().toISOString() },
-        { id: '3', title: 'Generate weekly report', type: 'generate_report', status: 'completed', priority: 'low', createdAt: new Date().toISOString() },
-      ]);
+      // EMPTY state - no fake data
+      setTasks([]);
       setStats({
-        total: 156,
-        byStatus: { pending: 23, running: 8, completed: 120, failed: 5 },
-        completedToday: 15,
-        overdue: 3,
+        total: 0,
+        byStatus: {},
+        completedToday: 0,
+        overdue: 0,
       });
     }
     setLoading(false);
