@@ -575,6 +575,66 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Detailed health check for admin dashboard
+app.get('/api/health', async (_req, res) => {
+  const startTime = Date.now();
+  
+  // Check database connection
+  let dbStatus = 'ok';
+  let dbResponseTime = 0;
+  try {
+    const dbStart = Date.now();
+    const prisma = (await import('./services/prisma')).default;
+    await prisma.$queryRaw`SELECT 1`;
+    dbResponseTime = Date.now() - dbStart;
+  } catch (error) {
+    dbStatus = 'down';
+    console.error('Health check - DB error:', error);
+  }
+  
+  // Check Intelliceil security service
+  let securityStatus = 'ok';
+  try {
+    const { intelliceilService } = await import('./services/intelliceil.service');
+    const status = intelliceilService.getStatus();
+    if (!status.config.enabled) {
+      securityStatus = 'degraded';
+    }
+  } catch (error) {
+    securityStatus = 'down';
+  }
+  
+  // WebSocket status (always running if server is up)
+  const wsStatus = 'ok';
+  
+  const apiResponseTime = Date.now() - startTime;
+  
+  res.json({
+    success: true,
+    data: {
+      status: dbStatus === 'down' ? 'down' : 'ok',
+      services: {
+        api: { 
+          status: 'ok', 
+          responseTime: apiResponseTime 
+        },
+        database: { 
+          status: dbStatus, 
+          responseTime: dbResponseTime 
+        },
+        websocket: { 
+          status: wsStatus 
+        },
+        security: { 
+          status: securityStatus 
+        },
+      },
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    },
+  });
+});
+
 // ============================================
 // API Routes (Protected by 7-Ring Security Gateway)
 // ============================================

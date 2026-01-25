@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Popup, CircleMarker, useMap } from 'react-leaflet';
-import { Ban, ExternalLink } from 'lucide-react';
+import { Ban, ExternalLink, FileText, X, ArrowRight, ArrowLeft, Clock, Code } from 'lucide-react';
 
 // Fix for default marker icons in webpack/vite
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -29,11 +29,26 @@ interface GeoLocation {
   lastSeen: string;
 }
 
+interface RequestLogEntry {
+  id: string;
+  timestamp: string;
+  method: string;
+  path: string;
+  status: number;
+  responseTime: number;
+  userAgent?: string;
+  referer?: string;
+  requestSize?: number;
+  responseSize?: number;
+}
+
 interface TrafficMapProps {
   geoLocations: GeoLocation[];
   onBlockIP: (ip: string) => void;
   selectedIP: string | null;
   onSelectIP: (ip: string | null) => void;
+  onViewRequestLogs?: (ip: string) => void;
+  requestLogs?: Map<string, RequestLogEntry[]>;
 }
 
 // Component to auto-fit bounds ONLY on initial load
@@ -55,8 +70,9 @@ function FitBoundsOnce({ locations }: { locations: GeoLocation[] }) {
   return null;
 }
 
-export default function TrafficMap({ geoLocations, onBlockIP, selectedIP, onSelectIP }: TrafficMapProps) {
+export default function TrafficMap({ geoLocations, onBlockIP, selectedIP, onSelectIP, onViewRequestLogs, requestLogs }: TrafficMapProps) {
   const mapRef = useRef<L.Map | null>(null);
+  const [showingLogsFor, setShowingLogsFor] = useState<string | null>(null);
 
   return (
     <div className="relative h-[500px] rounded-xl overflow-hidden border border-gray-200">
@@ -155,6 +171,19 @@ export default function TrafficMap({ geoLocations, onBlockIP, selectedIP, onSele
                     <ExternalLink className="w-3 h-3" />
                     Lookup
                   </a>
+                  <button
+                    onClick={(e) => { 
+                      e.stopPropagation();
+                      setShowingLogsFor(loc.ip);
+                      if (onViewRequestLogs) {
+                        onViewRequestLogs(loc.ip);
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200 transition-colors"
+                  >
+                    <FileText className="w-3 h-3" />
+                    Logs
+                  </button>
                 </div>
               </div>
             </Popup>
@@ -193,6 +222,108 @@ export default function TrafficMap({ geoLocations, onBlockIP, selectedIP, onSele
           </div>
         </div>
       </div>
+
+      {/* Request Logs Modal */}
+      {showingLogsFor && (
+        <div className="absolute inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Request Logs</h3>
+                  <p className="text-sm text-gray-500 font-mono">{showingLogsFor}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowingLogsFor(null)}
+                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Logs Content */}
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {requestLogs?.get(showingLogsFor)?.length ? (
+                <div className="space-y-3">
+                  {requestLogs.get(showingLogsFor)!.map((log, idx) => (
+                    <div 
+                      key={log.id || idx}
+                      className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 text-xs font-mono rounded ${
+                            log.method === 'GET' ? 'bg-green-100 text-green-700' :
+                            log.method === 'POST' ? 'bg-blue-100 text-blue-700' :
+                            log.method === 'PUT' ? 'bg-amber-100 text-amber-700' :
+                            log.method === 'DELETE' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {log.method}
+                          </span>
+                          <span className="font-mono text-sm text-gray-800 truncate max-w-[300px]">
+                            {log.path}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                          log.status >= 200 && log.status < 300 ? 'bg-green-100 text-green-700' :
+                          log.status >= 300 && log.status < 400 ? 'bg-blue-100 text-blue-700' :
+                          log.status >= 400 && log.status < 500 ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {log.status}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Code className="w-3 h-3" />
+                          <span>{log.responseTime}ms</span>
+                        </div>
+                        {log.requestSize && (
+                          <div className="flex items-center gap-1">
+                            <ArrowRight className="w-3 h-3" />
+                            <span>{(log.requestSize / 1024).toFixed(1)}KB req</span>
+                          </div>
+                        )}
+                        {log.responseSize && (
+                          <div className="flex items-center gap-1">
+                            <ArrowLeft className="w-3 h-3" />
+                            <span>{(log.responseSize / 1024).toFixed(1)}KB res</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {log.userAgent && (
+                        <p className="mt-2 text-xs text-gray-400 truncate">
+                          UA: {log.userAgent}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No request logs available for this IP</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Logs are collected in real-time during active monitoring
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

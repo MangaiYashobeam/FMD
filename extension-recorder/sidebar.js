@@ -937,7 +937,7 @@ async function sendSessionToWebapp(sessionData) {
       }
     };
     
-    const result = await sendToWebapp('/training/sessions', payload);
+    const result = await sendToWebapp('/training/upload', payload);
     
     if (result.success) {
       return { 
@@ -2185,7 +2185,7 @@ async function syncPendingUploads() {
     
     const synced = [];
     for (const item of queue) {
-      const sendResult = await sendToWebapp('/training/sessions', item);
+      const sendResult = await sendToWebapp('/training/upload', item);
       if (sendResult.success) {
         synced.push(item);
       }

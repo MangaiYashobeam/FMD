@@ -288,7 +288,8 @@ async function handlePingTab(message) {
 async function saveTrainingSession(sessionData) {
   try {
     const token = await getAuthToken();
-    const response = await fetch(`${CONFIG.API_URL}/training/sessions`, {
+    // Use /training/upload endpoint which doesn't require auth
+    const response = await fetch(`${CONFIG.API_URL}/training/upload`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

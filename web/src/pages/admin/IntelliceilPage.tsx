@@ -87,6 +87,7 @@ interface IntelliceilConfig {
   trustedDomains: string[];
   blockedIPs: string[];
   autoMitigate: boolean;
+  strictMitigation: boolean;
   notifyOnAttack: boolean;
   notifyEmail: string;
   maxRequestsPerIP: number;
@@ -112,6 +113,12 @@ interface SecurityMetrics {
   tokenFingerprintCacheSize: number;
 }
 
+interface BlockedIPEntry {
+  ip: string;
+  reason: string;
+  blockedAt: string | null;
+}
+
 interface IntelliceilStatus {
   config: IntelliceilConfig;
   baseline: Baseline;
@@ -126,6 +133,8 @@ interface IntelliceilStatus {
   topEndpoints: { endpoint: string; count: number }[];
   topCountries: CountryCount[];
   securityMetrics: SecurityMetrics;
+  blockedIPsList?: BlockedIPEntry[];
+  runtimeBlockedCount?: number;
 }
 
 type ThreatLevelKey = 'NORMAL' | 'ELEVATED' | 'ATTACK' | 'CRITICAL';
@@ -908,20 +917,33 @@ export default function IntelliceilPage() {
             </button>
           </div>
           <div className="space-y-2">
-            {intelliceil.config.blockedIPs.length === 0 ? (
+            {(!intelliceil.blockedIPsList || intelliceil.blockedIPsList.length === 0) ? (
               <p className="text-gray-500 text-sm">No blocked IPs</p>
             ) : (
-              intelliceil.config.blockedIPs.map((ip: string) => (
-                <div key={ip} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                  <span className="font-mono text-sm">{ip}</span>
+              intelliceil.blockedIPsList.map((entry: BlockedIPEntry, idx: number) => (
+                <div key={`${entry.ip}-${idx}`} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                  <div className="flex flex-col">
+                    <span className="font-mono text-sm">{entry.ip}</span>
+                    <span className="text-xs text-gray-500">{entry.reason}</span>
+                    {entry.blockedAt && (
+                      <span className="text-xs text-gray-400">
+                        Blocked: {new Date(entry.blockedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                   <button
-                    onClick={() => unblockIPMutation.mutate(ip)}
+                    onClick={() => unblockIPMutation.mutate(entry.ip)}
                     className="text-red-600 hover:text-red-800 text-sm"
                   >
                     Unblock
                   </button>
                 </div>
               ))
+            )}
+            {intelliceil.runtimeBlockedCount && intelliceil.runtimeBlockedCount > 0 && (
+              <p className="text-xs text-amber-600 mt-2">
+                ⚡ {intelliceil.runtimeBlockedCount} IP(s) auto-blocked during mitigation
+              </p>
             )}
           </div>
         </div>

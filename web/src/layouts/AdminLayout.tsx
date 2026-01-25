@@ -28,6 +28,7 @@ import ImpersonationBanner from '../components/ImpersonationBanner';
 import FloatingAIChat from '../components/ai/FloatingAIChat';
 import { FacebookConnectionStatus } from '../components/FacebookConnectionStatus';
 import { ExtensionStatus } from '../components/ExtensionStatus';
+import { HealthStatus } from '../components/HealthStatus';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -97,24 +98,28 @@ export default function AdminLayout() {
 
           {/* Navigation */}
           <div className="mt-6 flex-grow flex flex-col">
-            <nav className="flex-1 px-2 space-y-1">
+            <nav className="flex-1 px-2 space-y-0.5">
               {navigation.map((item) => {
                 const isActive =
                   location.pathname === item.href ||
-                  (item.href !== '/admin' && location.pathname.startsWith(item.href));
+                  (item.href !== '/admin' && location.pathname.startsWith(item.href + '/'));
                 const Icon = item.icon;
                 return (
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(item.href);
+                    }}
+                    className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer select-none ${
                       isActive
                         ? 'bg-blue-600 text-white'
                         : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
                     <Icon
-                      className={`mr-3 flex-shrink-0 h-5 w-5 ${
+                      className={`mr-3 flex-shrink-0 h-5 w-5 pointer-events-none ${
                         isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'
                       }`}
                     />
@@ -127,6 +132,11 @@ export default function AdminLayout() {
 
           {/* User Section */}
           <div className="flex-shrink-0 border-t border-slate-700">
+            {/* Health Status */}
+            <div className="px-4 py-3 border-b border-slate-700">
+              <HealthStatus variant="compact" className="text-slate-300" />
+            </div>
+            
             {/* Extension Status */}
             <div className="px-4 py-3 border-b border-slate-700">
               <ExtensionStatus variant="compact" className="text-slate-300" />

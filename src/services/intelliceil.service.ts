@@ -83,6 +83,7 @@ export interface IntelliceilConfig {
   maxRequestsPerIP: number;
   windowSeconds: number;
   autoMitigate: boolean;
+  strictMitigation: boolean; // When true, blocks ALL non-whitelisted traffic during mitigation
   notifyOnAttack: boolean;
   notifyEmail: string;
   // Enterprise Security Settings
@@ -208,60 +209,238 @@ const TRUSTED_IP_RANGES = [
 // Enterprise Security Patterns
 // ============================================
 
-// SQL Injection Detection Patterns
+// SQL Injection Detection Patterns (Comprehensive)
 const SQL_INJECTION_PATTERNS = [
+  // Classic patterns
   /(\%27)|(\')|(\-\-)|(\%23)|(#)/i,
   /((\%3D)|(=))[^\n]*((\%27)|(\')|(\-\-)|(\%3B)|(;))/i,
   /\w*((\%27)|(\'))((\%6F)|o|(\%4F))((\%72)|r|(\%52))/i,
   /((\%27)|(\'))union/i,
+  
+  // Command execution
   /exec(\s|\+)+(s|x)p\w+/i,
+  /xp_cmdshell/i,
+  /sp_executesql/i,
+  /sp_makewebtask/i,
+  /xp_reg\w+/i,
+  
+  // DDL/DML operations
   /UNION(\s+)SELECT/i,
+  /UNION\s+ALL\s+SELECT/i,
   /INSERT(\s+)INTO/i,
   /DELETE(\s+)FROM/i,
-  /DROP(\s+)TABLE/i,
+  /DROP(\s+)(TABLE|DATABASE|INDEX|VIEW)/i,
   /UPDATE(\s+)\w+(\s+)SET/i,
   /SELECT(\s+).*(\s+)FROM/i,
   /TRUNCATE(\s+)TABLE/i,
-  /ALTER(\s+)TABLE/i,
-  /CREATE(\s+)(TABLE|DATABASE|INDEX)/i,
+  /ALTER(\s+)(TABLE|DATABASE)/i,
+  /CREATE(\s+)(TABLE|DATABASE|INDEX|VIEW|PROCEDURE|FUNCTION)/i,
+  /GRANT\s+\w+/i,
+  /REVOKE\s+\w+/i,
+  /MERGE\s+INTO/i,
+  /REPLACE\s+INTO/i,
+  
+  // Boolean logic bypass
   /\bOR\b.*=.*\bOR\b/i,
   /\bAND\b.*=.*\bAND\b/i,
   /1\s*=\s*1/i,
   /1\s*=\s*'1'/i,
   /''\s*OR\s*''/i,
+  /'\s*OR\s*'x'\s*=\s*'x/i,
+  /'\s*OR\s*1\s*=\s*1/i,
+  /'\s*AND\s*1\s*=\s*0/i,
+  /'\s*OR\s*''='/i,
+  /admin'\s*--/i,
+  /'\s*OR\s*'\d+'\s*=\s*'\d+/i,
+  /'\s*;\s*--/i,
+  
+  // Comment injection
   /;\s*--/i,
   /\/\*.*\*\//i,
+  /--\s*$/i,
+  /#\s*$/i,
+  /\/\*!\d+/i,
+  
+  // Time-based blind injection
   /WAITFOR(\s+)DELAY/i,
   /BENCHMARK\s*\(/i,
   /SLEEP\s*\(/i,
+  /pg_sleep/i,
+  /DBMS_LOCK\.SLEEP/i,
+  
+  // Information schema probing
+  /INFORMATION_SCHEMA/i,
+  /SCHEMA_NAME/i,
+  /TABLE_NAME/i,
+  /COLUMN_NAME/i,
+  /sys\.tables/i,
+  /sys\.columns/i,
+  /mysql\.user/i,
+  /pg_catalog/i,
+  
+  // Stacked queries
+  /;\s*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE)/i,
+  
+  // XPATH injection
+  /extractvalue\s*\(/i,
+  /updatexml\s*\(/i,
+  /xmltype\s*\(/i,
+  
+  // Subquery injection
+  /\(\s*SELECT\s+/i,
+  
+  // Out-of-band
+  /INTO\s+(OUT|DUMP)FILE/i,
+  /LOAD_FILE\s*\(/i,
+  /UTL_HTTP/i,
+  /UTL_INADDR/i,
+  
+  // NoSQL injection patterns
+  /\$where\s*:/i,
+  /\$gt\s*:/i,
+  /\$lt\s*:/i,
+  /\$ne\s*:/i,
+  /\$regex\s*:/i,
+  /\$or\s*:\s*\[/i,
+  /\$and\s*:\s*\[/i,
+  /\{\s*"\$/i,
+  
+  // Hex encoding bypass
+  /0x[0-9a-fA-F]{8,}/i,
+  /CHAR\s*\(\s*\d+/i,
+  /CHR\s*\(\s*\d+/i,
+  /CONCAT\s*\(/i,
+  /CONCAT_WS\s*\(/i,
+  
+  // Database-specific
+  /@@version/i,
+  /@@datadir/i,
+  /VERSION\s*\(\s*\)/i,
+  /DATABASE\s*\(\s*\)/i,
+  /USER\s*\(\s*\)/i,
+  /CURRENT_USER/i,
+  /SESSION_USER/i,
+  /SYSTEM_USER/i,
 ];
 
-// XSS Attack Detection Patterns
+// XSS Attack Detection Patterns (Comprehensive)
 const XSS_PATTERNS = [
+  // Script tags
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+  /<script[^>]*>/gi,
+  /<\/script>/gi,
+  
+  // Protocol handlers
   /javascript\s*:/gi,
-  /on\w+\s*=/gi,
-  /<iframe/gi,
-  /<object/gi,
-  /<embed/gi,
-  /<link/gi,
-  /<meta/gi,
+  /vbscript\s*:/gi,
+  /livescript\s*:/gi,
+  /mocha\s*:/gi,
+  
+  // Event handlers (comprehensive list)
+  /on(abort|activate|afterprint|afterupdate|beforeactivate|beforecopy|beforecut|beforedeactivate|beforeeditfocus|beforepaste|beforeprint|beforeunload|beforeupdate|blur|bounce|cellchange|change|click|contextmenu|controlselect|copy|cut|dataavailable|datasetchanged|datasetcomplete|dblclick|deactivate|drag|dragend|dragenter|dragleave|dragover|dragstart|drop|error|errorupdate|filterchange|finish|focus|focusin|focusout|hashchange|help|input|keydown|keypress|keyup|layoutcomplete|load|losecapture|message|mousedown|mouseenter|mouseleave|mousemove|mouseout|mouseover|mouseup|mousewheel|move|moveend|movestart|offline|online|pagehide|pageshow|paste|popstate|progress|propertychange|readystatechange|reset|resize|resizeend|resizestart|rowenter|rowexit|rowsdelete|rowsinserted|scroll|search|select|selectionchange|selectstart|start|stop|storage|submit|timeout|touchcancel|touchend|touchmove|touchstart|unload|wheel)\s*=/gi,
+  
+  // HTML injection tags
+  /<iframe[^>]*>/gi,
+  /<object[^>]*>/gi,
+  /<embed[^>]*>/gi,
+  /<link[^>]*>/gi,
+  /<meta[^>]*>/gi,
+  /<style[^>]*>/gi,
+  /<img[^>]*onerror/gi,
+  /<img[^>]*onload/gi,
+  /<svg[^>]*onload/gi,
+  /<body[^>]*onload/gi,
+  /<video[^>]*>/gi,
+  /<audio[^>]*>/gi,
+  /<source[^>]*>/gi,
+  /<marquee[^>]*>/gi,
+  /<bgsound[^>]*>/gi,
+  /<base[^>]*>/gi,
+  /<applet[^>]*>/gi,
+  /<form[^>]*>/gi,
+  /<input[^>]*>/gi,
+  /<button[^>]*>/gi,
+  /<keygen[^>]*>/gi,
+  /<textarea[^>]*>/gi,
+  /<select[^>]*>/gi,
+  /<details[^>]*>/gi,
+  /<isindex[^>]*>/gi,
+  
+  // DOM manipulation
   /eval\s*\(/gi,
-  /document\.(cookie|location|write|domain)/gi,
-  /window\.(location|open)/gi,
+  /document\.(cookie|location|write|writeln|domain|URL|referrer)/gi,
+  /window\.(location|open|name|status)/gi,
   /innerHTML\s*=/gi,
   /outerHTML\s*=/gi,
   /\.appendChild\s*\(/gi,
   /\.insertAdjacentHTML\s*\(/gi,
+  /\.insertBefore\s*\(/gi,
+  /\.replaceChild\s*\(/gi,
+  /\.createContextualFragment\s*\(/gi,
+  /\.write\s*\(/gi,
+  /\.writeln\s*\(/gi,
+  /\.open\s*\(\s*['"]text\/html/gi,
+  
+  // String manipulation for payload
   /fromCharCode/gi,
   /String\.fromCharCode/gi,
+  /String\.raw/gi,
+  /atob\s*\(/gi,
+  /btoa\s*\(/gi,
+  /decodeURI\s*\(/gi,
+  /decodeURIComponent\s*\(/gi,
+  /unescape\s*\(/gi,
+  
+  // Encoded payloads
   /%3C\s*script/gi,
   /&#x3C;script/gi,
   /&#60;script/gi,
+  /\\x3c\s*script/gi,
+  /\\u003c\s*script/gi,
+  
+  // Data URI
   /data:\s*text\/html/gi,
-  /vbscript\s*:/gi,
+  /data:\s*image\/svg\+xml/gi,
+  /data:\s*application\/x-www-form-urlencoded/gi,
+  
+  // CSS injection
   /expression\s*\(/gi,
   /@import/gi,
+  /behavior\s*:/gi,
+  /-moz-binding/gi,
+  /binding\s*:/gi,
+  
+  // Angular/Vue/React specific
+  /\{\{.*\}\}/gi,
+  /\[innerHTML\]/gi,
+  /v-html\s*=/gi,
+  /dangerouslySetInnerHTML/gi,
+  /ng-bind-html/gi,
+  
+  // Prototype pollution
+  /__proto__/gi,
+  /constructor\s*\[/gi,
+  /prototype\s*\[/gi,
+  
+  // Template literals
+  /\$\{[^}]*\}/gi,
+  
+  // SVG specific XSS
+  /<svg[^>]*>.*<animate[^>]*>/gi,
+  /<svg[^>]*>.*<set[^>]*>/gi,
+  /<svg[^>]*>.*<handler[^>]*>/gi,
+  /xlink:href\s*=\s*["']javascript/gi,
+  
+  // Fetch/XMLHttpRequest data exfiltration
+  /new\s+XMLHttpRequest/gi,
+  /fetch\s*\(/gi,
+  /\.send\s*\(/gi,
+  
+  // Top/parent/self access
+  /top\.location/gi,
+  /parent\.location/gi,
+  /self\.location/gi,
+  /frames\[/gi,
 ];
 
 // Bot User Agent Patterns
@@ -331,6 +510,9 @@ class IntelliceilService extends EventEmitter {
   private baselineInterval: NodeJS.Timeout | null = null;
   private registeredDMSDomains: Set<string> = new Set();
   
+  // Runtime blocked IPs (blocked during mitigation, not persisted)
+  private runtimeBlockedIPs: Map<string, { blockedAt: Date; reason: string }> = new Map();
+  
   // Enterprise Security Private Members
   private ipReputationCache: Map<string, IPReputationResult> = new Map();
   private tokenFingerprintCache: Map<string, TokenFingerprint> = new Map();
@@ -361,6 +543,7 @@ class IntelliceilService extends EventEmitter {
       maxRequestsPerIP: 100,
       windowSeconds: 60,
       autoMitigate: true,
+      strictMitigation: true, // When true, blocks ALL non-whitelisted traffic during mitigation
       notifyOnAttack: true,
       notifyEmail: 'admin@dealersface.com',
       // Enterprise Security Defaults
@@ -608,12 +791,21 @@ class IntelliceilService extends EventEmitter {
     const rps = this.currentSnapshot.requestsPerSecond;
     const baselineRps = this.baseline.avgRequestsPerSecond;
     
-    // Calculate percentage above baseline
-    const percentageAbove = baselineRps > 0 
-      ? ((rps - baselineRps) / baselineRps) * 100 
-      : 0;
-
-    this.threatLevel.percentage = Math.max(0, percentageAbove);
+    // Calculate percentage above baseline (with safeguards against very small baseline)
+    let percentageAbove = 0;
+    if (baselineRps >= 1) {
+      // Normal calculation when baseline is meaningful
+      percentageAbove = ((rps - baselineRps) / baselineRps) * 100;
+    } else if (baselineRps > 0 && baselineRps < 1) {
+      // For very small baseline, treat it as 1 to avoid huge percentages
+      percentageAbove = ((rps - 1) / 1) * 100;
+    } else {
+      // If baseline is 0 or negative, just use rps as percentage
+      percentageAbove = rps > 0 ? Math.min(rps * 10, 999) : 0;
+    }
+    
+    // Cap the percentage to prevent absurdly large numbers
+    this.threatLevel.percentage = Math.max(0, Math.min(percentageAbove, 9999));
 
     // Determine threat level
     const previousLevel = this.threatLevel.level;
@@ -667,7 +859,9 @@ class IntelliceilService extends EventEmitter {
 
   private deactivateMitigation(): void {
     this.threatLevel.mitigationActive = false;
-    logger.info('🛡️ Intelliceil mitigation deactivated - Traffic normalized');
+    // Clear runtime blocked IPs when mitigation is deactivated
+    this.runtimeBlockedIPs.clear();
+    logger.info('🛡️ Intelliceil mitigation deactivated - Traffic normalized, runtime blocks cleared');
     this.emit('mitigation-deactivated');
   }
 
@@ -690,9 +884,14 @@ class IntelliceilService extends EventEmitter {
   // ============================================
 
   private shouldAllowRequest(ip: string, source: string, country?: string): { allowed: boolean; reason?: string } {
-    // Always check blocked IPs first
+    // Always check manually blocked IPs first
     if (this.config.blockedIPs.includes(ip)) {
-      return { allowed: false, reason: 'IP is blocked' };
+      return { allowed: false, reason: 'IP is manually blocked' };
+    }
+    
+    // Check runtime blocked IPs (blocked during mitigation)
+    if (this.runtimeBlockedIPs.has(ip)) {
+      return { allowed: false, reason: 'IP blocked during mitigation' };
     }
 
     // Check blocked countries
@@ -726,12 +925,22 @@ class IntelliceilService extends EventEmitter {
     // Check IP request rate
     const ipData = this.ipRequestCounts.get(ip);
     if (ipData && ipData.count > this.config.maxRequestsPerIP) {
+      // Block this IP for rate limit violation
+      this.runtimeBlockedIPs.set(ip, { blockedAt: new Date(), reason: 'Rate limit exceeded' });
       return { allowed: false, reason: 'Rate limit exceeded during mitigation' };
     }
 
-    // Check if request pattern is normal
+    // STRICT MITIGATION MODE: Block ALL non-whitelisted traffic
+    if (this.config.strictMitigation) {
+      // Block this IP during strict mitigation
+      this.runtimeBlockedIPs.set(ip, { blockedAt: new Date(), reason: 'Not whitelisted during strict mitigation' });
+      return { allowed: false, reason: 'Not whitelisted during strict mitigation' };
+    }
+
+    // SOFT MITIGATION: Check if request pattern is normal
     const isNormalPattern = this.isNormalRequestPattern(ip, source);
     if (!isNormalPattern) {
+      this.runtimeBlockedIPs.set(ip, { blockedAt: new Date(), reason: 'Abnormal traffic pattern' });
       return { allowed: false, reason: 'Abnormal traffic pattern during mitigation' };
     }
 
@@ -926,6 +1135,8 @@ class IntelliceilService extends EventEmitter {
       ipReputationCacheSize: number;
       tokenFingerprintCacheSize: number;
     };
+    blockedIPsList: { ip: string; reason: string; blockedAt: string | null }[];
+    runtimeBlockedCount: number;
   } {
     // Get current RPS from last snapshot in history
     const lastSnapshot = this.trafficHistory[this.trafficHistory.length - 1];
@@ -973,6 +1184,16 @@ class IntelliceilService extends EventEmitter {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
+    // Combine manually blocked IPs with runtime blocked IPs for display
+    const allBlockedIPs = [
+      ...this.config.blockedIPs.map(ip => ({ ip, reason: 'Manually blocked', blockedAt: null })),
+      ...Array.from(this.runtimeBlockedIPs.entries()).map(([ip, data]) => ({
+        ip,
+        reason: data.reason,
+        blockedAt: data.blockedAt.toISOString(),
+      })),
+    ];
+
     return {
       config: this.getConfig(),
       baseline: { ...this.baseline },
@@ -987,7 +1208,26 @@ class IntelliceilService extends EventEmitter {
       topEndpoints,
       topCountries,
       securityMetrics: this.getSecurityMetrics(),
+      blockedIPsList: allBlockedIPs, // Full list of blocked IPs with reasons
+      runtimeBlockedCount: this.runtimeBlockedIPs.size,
     };
+  }
+
+  // Get blocked IPs list
+  getBlockedIPsList(): { ip: string; reason: string; blockedAt: string | null }[] {
+    return [
+      ...this.config.blockedIPs.map(ip => ({ ip, reason: 'Manually blocked', blockedAt: null })),
+      ...Array.from(this.runtimeBlockedIPs.entries()).map(([ip, data]) => ({
+        ip,
+        reason: data.reason,
+        blockedAt: data.blockedAt.toISOString(),
+      })),
+    ];
+  }
+
+  // Clear runtime blocked IPs (when mitigation is deactivated)
+  clearRuntimeBlockedIPs(): void {
+    this.runtimeBlockedIPs.clear();
   }
 
   // Manual controls
@@ -996,11 +1236,15 @@ class IntelliceilService extends EventEmitter {
       this.config.blockedIPs.push(ip);
       this.updateConfig({ blockedIPs: this.config.blockedIPs });
     }
+    // Also remove from runtime if it was there
+    this.runtimeBlockedIPs.delete(ip);
   }
 
   manualUnblock(ip: string): void {
     this.config.blockedIPs = this.config.blockedIPs.filter(i => i !== ip);
     this.updateConfig({ blockedIPs: this.config.blockedIPs });
+    // Also remove from runtime blocked
+    this.runtimeBlockedIPs.delete(ip);
   }
 
   manualActivateMitigation(): void {

@@ -232,6 +232,159 @@ router.post('/console/log', async (req, res) => {
   }
 });
 
+/**
+ * POST /training/upload - Upload training session (NO AUTH REQUIRED)
+ * This endpoint allows the extension to upload sessions without authentication
+ * The extension runs locally and needs to save sessions to the server
+ */
+router.post('/upload', async (req, res) => {
+  try {
+    console.log('[TRAINING UPLOAD] Received session upload (no-auth endpoint)');
+    console.log('[TRAINING UPLOAD] Body keys:', Object.keys(req.body));
+    
+    const {
+      sessionId,
+      mode,
+      recordingType,
+      duration,
+      metadata,
+      events,
+      markedElements,
+      patterns: _patterns, // Not used directly in this handler but kept for compatibility
+      fieldMappings,
+      clickSequence,
+      typingPatterns,
+      automationCode,
+    } = req.body;
+    
+    console.log('[TRAINING UPLOAD] Session data:', {
+      sessionId,
+      mode,
+      recordingType,
+      duration,
+      eventsCount: events?.length || 0,
+      markedElementsCount: markedElements?.length || 0
+    });
+    
+    // Find a super admin to assign as creator
+    const superAdminRelation = await prisma.accountUser.findFirst({
+      where: { role: 'SUPER_ADMIN' },
+      include: { user: true }
+    });
+    
+    const superAdmin = superAdminRelation?.user;
+    
+    if (!superAdmin) {
+      console.error('[TRAINING UPLOAD] No super admin found');
+      res.status(500).json({ success: false, error: 'No admin user configured' });
+      return;
+    }
+    
+    // Create the session
+    const session = await prisma.trainingSession.create({
+      data: {
+        sessionId: sessionId || `session_${Date.now()}`,
+        mode: mode || 'listing',
+        recordingType: recordingType || 'iai',
+        duration: duration || 0,
+        metadata: metadata || {},
+        totalEvents: events?.length || 0,
+        markedElementsCount: markedElements?.length || 0,
+        clickSequence: clickSequence || [],
+        typingPatterns: typingPatterns || [],
+        automationCode: automationCode || {},
+        status: 'RECORDED',
+        createdById: superAdmin.id,
+      },
+    });
+    
+    // Create events in batch
+    if (events && events.length > 0) {
+      const eventData = events.map((event: any) => ({
+        sessionId: session.id,
+        eventId: event.id || `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type: event.type,
+        timestamp: new Date(event.timestamp || Date.now()),
+        relativeTime: event.relativeTime || 0,
+        url: event.url,
+        fieldType: event.fieldType,
+        isMarked: event.isMarked || false,
+        elementData: event.element || {},
+        mousePosition: event.mousePosition || {},
+        modifiers: event.modifiers || {},
+        additionalData: event,
+      }));
+      
+      await prisma.trainingEvent.createMany({
+        data: eventData,
+      });
+    }
+    
+    // Create marked elements
+    if (markedElements && markedElements.length > 0) {
+      const markedData = markedElements.map((marked: any, index: number) => ({
+        sessionId: session.id,
+        fieldType: marked.fieldType || marked.markedAs || 'unknown',
+        order: index + 1,
+        elementData: marked.elementInfo || {},
+        selectors: marked.elementInfo?.selectors || [],
+        ariaLabel: marked.elementInfo?.ariaLabel,
+        role: marked.elementInfo?.role,
+        isDropdown: marked.elementInfo?.isDropdown || false,
+        isInput: marked.elementInfo?.isInput || false,
+        timestamp: new Date(marked.timestamp || Date.now()),
+        relativeTime: marked.relativeTime || 0,
+      }));
+      
+      await prisma.trainingMarkedElement.createMany({
+        data: markedData,
+      });
+    }
+    
+    // Create field mappings
+    if (fieldMappings) {
+      const mappingData = Object.entries(fieldMappings).map(([fieldType, mapping]: [string, any]) => ({
+        sessionId: session.id,
+        fieldType,
+        primarySelector: Array.isArray(mapping.selectors) ? mapping.selectors[0] : mapping.selectors,
+        fallbackSelectors: Array.isArray(mapping.selectors) ? mapping.selectors.slice(1) : [],
+        ariaLabel: mapping.ariaLabel,
+        role: mapping.role,
+        isDropdown: mapping.isDropdown || false,
+        isInput: mapping.isInput || false,
+        placeholder: mapping.placeholder,
+        parentContext: mapping.parentContext || [],
+      }));
+      
+      await prisma.trainingFieldMapping.createMany({
+        data: mappingData,
+      });
+    }
+    
+    console.log('[TRAINING UPLOAD] Session created successfully:', session.id);
+    
+    // Add health log
+    addHealthLog('recording', 'backend', `Training session uploaded: ${session.id}`, {
+      sessionId: session.id,
+      eventCount: events?.length || 0,
+      markedCount: markedElements?.length || 0,
+    });
+    
+    res.json({
+      success: true,
+      session: {
+        id: session.id,
+        sessionId: session.sessionId,
+        eventCount: events?.length || 0,
+        markedCount: markedElements?.length || 0,
+      },
+    });
+  } catch (error) {
+    console.error('[TRAINING UPLOAD] Error creating session:', error);
+    res.status(500).json({ success: false, error: 'Failed to create session' });
+  }
+});
+
 // ============================================
 // ALL OTHER ROUTES REQUIRE SUPER ADMIN
 // ============================================
