@@ -584,7 +584,7 @@ app.get('/api/health', async (_req, res) => {
   let dbResponseTime = 0;
   try {
     const dbStart = Date.now();
-    const prisma = (await import('./services/prisma')).default;
+    const { default: prisma } = await import('@/config/database');
     await prisma.$queryRaw`SELECT 1`;
     dbResponseTime = Date.now() - dbStart;
   } catch (error) {
