@@ -3857,3 +3857,143 @@ model TaskLock {
   @@index([expiresAt])
   @@map("task_locks")
 }
+
+// ============================================
+// AI MODEL ORCHESTRATION
+// ============================================
+
+// AI Session Notes - Internal context for seamless agent handoffs
+// Auto-destroyed after 1 week
+model AISessionNote {
+  id        String   @id @default(uuid())
+  sessionId String   @map("session_id")
+  accountId String   @map("account_id")
+  userId    String   @map("user_id")
+  agentId   String   @map("agent_id")
+  modelId   String   @map("model_id")
+  noteType  String   @map("note_type") // context, handoff, summary, preference, error
+  content   String   @db.Text
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at") // Auto-cleanup after 1 week
+
+  @@index([sessionId])
+  @@index([accountId])
+  @@index([expiresAt])
+  @@map("ai_session_notes")
+}
+
+// AI Task Assignments - Hierarchical model assignments
+model AITaskAssignment {
+  id              String   @id @default(uuid())
+  taskType        String   @map("task_type") // screenshot_analysis, customer_service, etc
+  primaryModel    String   @map("primary_model")
+  fallbackModel   String   @map("fallback_model")
+  allowedModels   String[] @map("allowed_models")
+  assignedBy      String   @map("assigned_by") // system, super_admin, admin, etc
+  assignmentLevel String   @map("assignment_level") // global, company, team, user
+  priority        Int      @default(50)
+  conditions      Json     @default("{}")
+  accountId       String?  @map("account_id") // null for global
+  teamId          String?  @map("team_id")
+  userId          String?  @map("user_id")
+  createdById     String   @map("created_by_id")
+  expiresAt       DateTime? @map("expires_at")
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([taskType, assignmentLevel, accountId, teamId, userId])
+  @@index([taskType])
+  @@index([assignmentLevel])
+  @@index([accountId])
+  @@map("ai_task_assignments")
+}
+
+// AI Model Usage Analytics
+model AIModelUsage {
+  id           String   @id @default(uuid())
+  modelId      String   @map("model_id")
+  agentId      String   @map("agent_id")
+  accountId    String?  @map("account_id")
+  userId       String?  @map("user_id")
+  sessionId    String?  @map("session_id")
+  taskType     String?  @map("task_type")
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  latencyMs    Int      @default(0) @map("latency_ms")
+  success      Boolean  @default(true)
+  errorMessage String?  @map("error_message")
+  routingRule  String?  @map("routing_rule") // Which rule routed this request
+  wasHandoff   Boolean  @default(false) @map("was_handoff")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([modelId])
+  @@index([agentId])
+  @@index([accountId])
+  @@index([createdAt])
+  @@map("ai_model_usage")
+}
+
+// AI Routing Rules - Admin-configurable routing
+model AIRoutingRule {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  priority     Int      @default(50)
+  conditions   Json     @default("[]") // Array of routing conditions
+  targetModel  String   @map("target_model")
+  fallbackModel String  @map("fallback_model")
+  accountId    String?  @map("account_id") // null for global
+  enabled      Boolean  @default(true)
+  createdById  String   @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([priority])
+  @@index([accountId])
+  @@index([enabled])
+  @@map("ai_routing_rules")
+}
+
+// AI Agent Handoff Log
+model AIHandoffLog {
+  id             String   @id @default(uuid())
+  sessionId      String   @map("session_id")
+  accountId      String?  @map("account_id")
+  userId         String?  @map("user_id")
+  fromAgent      String   @map("from_agent")
+  fromModel      String   @map("from_model")
+  toAgent        String   @map("to_agent")
+  toModel        String   @map("to_model")
+  reason         String
+  contextSummary String?  @map("context_summary") @db.Text
+  seamless       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([sessionId])
+  @@index([accountId])
+  @@index([createdAt])
+  @@map("ai_handoff_logs")
+}
+
+// Company AI Preferences - Super admin configurable
+model CompanyAIPreferences {
+  id                  String   @id @default(uuid())
+  accountId           String   @unique @map("account_id")
+  defaultModel        String?  @map("default_model")
+  allowedModels       String[] @map("allowed_models")
+  blockedModels       String[] @map("blocked_models")
+  maxTokensPerRequest Int?     @map("max_tokens_per_request")
+  maxRequestsPerDay   Int?     @map("max_requests_per_day")
+  costBudgetDaily     Decimal? @map("cost_budget_daily") @db.Decimal(10, 2)
+  costBudgetMonthly   Decimal? @map("cost_budget_monthly") @db.Decimal(10, 2)
+  enableVision        Boolean  @default(true) @map("enable_vision")
+  enableCodeGen       Boolean  @default(true) @map("enable_code_gen")
+  enableAutomation    Boolean  @default(true) @map("enable_automation")
+  customInstructions  String?  @map("custom_instructions") @db.Text
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("company_ai_preferences")
+}

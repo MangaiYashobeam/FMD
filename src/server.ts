@@ -742,6 +742,9 @@ app.use('/api/ai-center', ring5AuthBarrier, require('./routes/ai-center.routes')
 // AI Model Registry & Agent Management (requires admin)
 app.use('/api/ai-models', ring5AuthBarrier, require('./routes/ai-models.routes').default); // AI model selection & agent management
 
+// AI Orchestrator - Copilot Models, Intelligent Routing, Task Assignments (requires auth)
+app.use('/api/ai-orchestrator', ring5AuthBarrier, require('./routes/ai-orchestrator.routes').default); // AI Orchestrator dashboard & management
+
 // AI Chat Routes - Nova's Backend (requires auth, handles own file uploads)
 app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default); // AI Chat with memory system
 

@@ -33,6 +33,7 @@ import { HealthStatus } from '../components/HealthStatus';
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'AI Center', href: '/admin/ai-center', icon: Brain },
+  { name: 'AI Orchestrator', href: '/admin/ai-orchestrator', icon: Layers },
   { name: 'IAI Command', href: '/admin/iai-command', icon: Zap },
   { name: 'Abstraction Center', href: '/admin/abstraction-center', icon: Layers },
   { name: 'API Dashboard', href: '/admin/api-dashboard', icon: Terminal },
@@ -62,7 +63,8 @@ export default function AdminLayout() {
   const isIAICommandPage = location.pathname === '/admin/iai-command';
   const isSessionAnalyticsPage = location.pathname === '/admin/session-analytics';
   const isAbstractionCenterPage = location.pathname === '/admin/abstraction-center';
-  const isDarkPage = isAICenterPage || isIAICommandPage || isSessionAnalyticsPage || isAbstractionCenterPage;
+  const isAIOrchestratorPage = location.pathname === '/admin/ai-orchestrator';
+  const isDarkPage = isAICenterPage || isIAICommandPage || isSessionAnalyticsPage || isAbstractionCenterPage || isAIOrchestratorPage;
 
   return (
     <div className={`flex h-screen ${isDarkPage ? 'bg-gray-900' : 'bg-gray-50'} ${impersonation.isImpersonating ? 'pt-10' : ''}`}>
