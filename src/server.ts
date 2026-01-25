@@ -911,6 +911,28 @@ const startServer = async () => {
       logger.info('Continuing without Nova monitoring integration...');
     }
 
+    // Initialize AI Orchestrator Services (Health, Cost, Rate Limiting)
+    try {
+      const { modelHealthService } = await import('@/services/model-health.service');
+      const { rateLimitService } = await import('@/services/rate-limit.service');
+      // Import cost tracking service for initialization (used by routes)
+      await import('@/services/cost-tracking.service');
+      
+      // Start health monitoring
+      modelHealthService.startMonitoring();
+      
+      // Load rate limits from DB
+      await rateLimitService.loadLimitsFromDB();
+      
+      // Load health status from DB
+      await modelHealthService.loadHealthFromDB();
+      
+      logger.info('✅ AI Orchestrator services initialized (Health Monitoring, Cost Tracking, Rate Limiting)');
+    } catch (error) {
+      logger.warn('⚠️  AI Orchestrator services initialization failed:', error);
+      logger.info('Continuing without AI orchestrator features...');
+    }
+
     // Auto-promote default super admin users from environment
     const DEFAULT_SUPER_ADMINS = process.env.DEFAULT_SUPER_ADMINS?.split(',').map(e => e.trim().toLowerCase()) || [];
     for (const email of DEFAULT_SUPER_ADMINS) {
@@ -981,6 +1003,11 @@ process.on('SIGTERM', async () => {
     const { errorMonitoringService } = await import('@/services/error-monitoring.service');
     errorMonitoringService.shutdown();
   } catch {}
+  // Shutdown AI health monitoring
+  try {
+    const { modelHealthService } = await import('@/services/model-health.service');
+    modelHealthService.stopMonitoring();
+  } catch {}
   await shutdownEmailQueue();
   process.exit(0);
 });
@@ -997,6 +1024,11 @@ process.on('SIGINT', async () => {
   try {
     const { errorMonitoringService } = await import('@/services/error-monitoring.service');
     errorMonitoringService.shutdown();
+  } catch {}
+  // Shutdown AI health monitoring
+  try {
+    const { modelHealthService } = await import('@/services/model-health.service');
+    modelHealthService.stopMonitoring();
   } catch {}
   await shutdownEmailQueue();
   process.exit(0);
