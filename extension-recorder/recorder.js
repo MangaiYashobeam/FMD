@@ -1332,10 +1332,59 @@
       console.log('[CONTENT DEBUG] Could not notify sidebar:', e.message);
     }
     
+    // Show Ctrl hint immediately when recording starts
+    showCtrlHint();
+    
     console.log('[CONTENT DEBUG] Recording started successfully:', RecorderState.sessionId);
     console.log('[CONTENT DEBUG] === EVENT LISTENERS ACTIVE ===');
     console.log('[CONTENT DEBUG] isRecording:', RecorderState.isRecording);
     log('Recording started', RecorderState.sessionId);
+  }
+  
+  /**
+   * Show a hint about Ctrl+key for field tagging
+   */
+  function showCtrlHint() {
+    let hint = document.getElementById('fmd-ctrl-hint');
+    if (hint) hint.remove();
+    
+    hint = document.createElement('div');
+    hint.id = 'fmd-ctrl-hint';
+    hint.innerHTML = `
+      <div class="fmd-ctrl-hint-inner">
+        <span class="fmd-ctrl-key">CTRL</span>
+        <span class="fmd-ctrl-text">Hold to tag fields</span>
+      </div>
+    `;
+    hint.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(139, 92, 246, 0.9) 100%);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      z-index: 2147483645;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
+      animation: fmdCtrlHintPulse 2s ease-in-out infinite, fmdCtrlHintFadeIn 0.3s ease-out;
+      pointer-events: none;
+    `;
+    
+    document.body.appendChild(hint);
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      if (hint && hint.parentNode) {
+        hint.style.animation = 'fmdCtrlHintFadeOut 0.3s ease-out forwards';
+        setTimeout(() => hint.remove(), 300);
+      }
+    }, 5000);
   }
   
   /**

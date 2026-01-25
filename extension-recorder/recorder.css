@@ -515,3 +515,57 @@
 .fmd-marking-cursor * {
   cursor: crosshair !important;
 }
+
+/* Ctrl hint animation */
+@keyframes fmdCtrlHintPulse {
+  0%, 100% { 
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
+    transform: translateX(-50%) scale(1);
+  }
+  50% { 
+    box-shadow: 0 4px 30px rgba(139, 92, 246, 0.7);
+    transform: translateX(-50%) scale(1.02);
+  }
+}
+
+@keyframes fmdCtrlHintFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes fmdCtrlHintFadeOut {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+}
+
+.fmd-ctrl-hint-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fmd-ctrl-key {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 12px;
+  letter-spacing: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.fmd-ctrl-text {
+  font-weight: 500;
+}

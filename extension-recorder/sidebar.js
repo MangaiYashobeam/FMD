@@ -897,12 +897,31 @@ async function stopRecording() {
 
 async function sendSessionToWebapp(sessionData) {
   try {
+    // Apply stealth mode filtering if enabled
+    let filteredEvents = sessionData.events || [];
+    if (ConsoleState.config.stealthMode) {
+      console.log('[DEBUG] Stealth mode enabled, filtering events...');
+      const originalCount = filteredEvents.length;
+      filteredEvents = filteredEvents.filter(evt => {
+        // Filter out Ctrl, Alt, Shift, Meta key presses (modifier keys)
+        if (evt.type === 'keydown' || evt.type === 'keyup') {
+          const key = evt.key?.toLowerCase() || '';
+          const isModifierKey = ['control', 'ctrl', 'alt', 'shift', 'meta'].includes(key);
+          if (isModifierKey) {
+            return false; // Remove modifier key events
+          }
+        }
+        return true;
+      });
+      console.log(`[DEBUG] Stealth filter: ${originalCount} -> ${filteredEvents.length} events`);
+    }
+    
     const payload = {
       sessionId: sessionData.sessionId || `session_${Date.now()}`,
       mode: sessionData.mode || ConsoleState.currentMode,
       recordingType: sessionData.recordingType || 'training',
       duration: sessionData.duration || 0,
-      events: sessionData.events || [],
+      events: filteredEvents,
       markedElements: sessionData.markedElements || [],
       clickSequence: sessionData.clickSequence || [],
       typingPatterns: sessionData.typingPatterns || [],
@@ -2062,9 +2081,15 @@ function updateScriptConnectionUI(status) {
 
 async function sendToWebapp(endpoint, data) {
   console.log('[DEBUG SEND] sendToWebapp called:', endpoint, 'webappConnected:', ConsoleState.webappConnected);
-  if (!ConsoleState.webappConnected) {
-    log('Webapp not connected, queueing data locally', 'warning');
-    console.log('[DEBUG SEND] Webapp not connected, queueing locally');
+  
+  // Check for token first - don't require webappConnected if we have a valid token
+  const tokenCheck = await chrome.storage.local.get('fmd_admin_token');
+  const hasToken = !!tokenCheck.fmd_admin_token;
+  console.log('[DEBUG SEND] hasToken:', hasToken);
+  
+  if (!hasToken && !ConsoleState.webappConnected) {
+    log('No auth token and webapp not connected, queueing data locally', 'warning');
+    console.log('[DEBUG SEND] No token and webapp not connected, queueing locally');
     await saveLocalQueue(data);
     return { success: false, queued: true };
   }
