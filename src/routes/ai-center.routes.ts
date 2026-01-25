@@ -16,6 +16,14 @@ import { aiMemoryService, MemoryScope, MemoryCategory } from '@/services/ai-memo
 import { logger } from '@/utils/logger';
 import { novaToolingService } from '@/services/nova-tooling.service';
 import { novaTerminalService } from '@/services/nova-terminal.service';
+// Import production AI Center services
+import {
+  aiMemoryService as aiMemoryServiceV2,
+  aiTaskService,
+  aiTrainingCenterService,
+  aiThreatDetectionService,
+  aiLearningPatternsService,
+} from '@/services/ai-center';
 
 const router = Router();
 
@@ -1263,27 +1271,59 @@ router.get('/memory', asyncHandler(async (req: AuthRequest, res: Response) => {
   });
 }));
 
-router.get('/memory/stats', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      total: 2345,
-      byType: {
-        conversation: { count: 525, avgImportance: 0.7 },
-        fact: { count: 450, avgImportance: 0.8 },
-        preference: { count: 340, avgImportance: 0.75 },
-        pattern: { count: 125, avgImportance: 0.9 },
-        learned: { count: 905, avgImportance: 0.65 },
+router.get('/memory/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0] || 'default';
+  
+  try {
+    const stats = await aiMemoryServiceV2.getStats(accountId);
+    
+    // Transform byType to include avgImportance
+    const byType: Record<string, { count: number; avgImportance: number }> = {};
+    for (const [type, count] of Object.entries(stats.byType)) {
+      byType[type] = { count, avgImportance: stats.avgImportance };
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        total: stats.totalMemories,
+        byType,
+        avgImportance: stats.avgImportance,
+        mostAccessed: stats.mostAccessed.slice(0, 5).map(m => ({
+          id: m.id,
+          key: m.key,
+          type: m.memoryType,
+          accessCount: (m as any).accessCount || 0,
+        })),
+        recentlyUpdated: stats.recentlyUpdated.slice(0, 5).map(m => ({
+          id: m.id,
+          key: m.key,
+          type: m.memoryType,
+        })),
       },
-    },
-  });
+    });
+  } catch (error: any) {
+    logger.error('[Memory] Failed to get stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
-router.post('/memory/clean', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: { cleaned: Math.floor(Math.random() * 50) },
-  });
+router.post('/memory/clean', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.body.accountId || req.user?.accountIds?.[0] || 'default';
+  
+  try {
+    const cleaned = await aiMemoryServiceV2.cleanupExpired(accountId);
+    
+    logger.info(`[Memory] Cleaned ${cleaned} expired memories for account ${accountId}`);
+    
+    res.json({
+      success: true,
+      data: { cleaned },
+    });
+  } catch (error: any) {
+    logger.error('[Memory] Failed to clean memories:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 // ============================================
@@ -1298,47 +1338,93 @@ router.get('/training/sessions/:sessionId/progress', aiCenterController.getTrain
 router.get('/training/sessions/account/:accountId', aiCenterController.getTrainingSessions);
 router.post('/training/sessions/:sessionId/examples', aiCenterController.addTrainingExample);
 
-// Simple training routes
-router.get('/training', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  const sessions = [
-    { id: '1', name: 'FBM Specialist', type: 'fine-tuning', status: 'completed', progress: 100, datasetSize: 1500, createdAt: new Date().toISOString(), metrics: { accuracy: 0.92 } },
-    { id: '2', name: 'Customer Service', type: 'reinforcement', status: 'running', progress: 78, datasetSize: 2000, createdAt: new Date().toISOString() },
-    { id: '3', name: 'Inventory Expert', type: 'few-shot', status: 'pending', progress: 0, datasetSize: 500, createdAt: new Date().toISOString() },
-  ];
+// Simple training routes - PRODUCTION wired to aiTrainingCenterService
+router.get('/training', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0] || 'default';
+  const status = req.query.status as string | undefined;
+  const trainingType = req.query.trainingType as string | undefined;
   
-  res.json({
-    success: true,
-    data: sessions,
-  });
+  try {
+    const sessions = await aiTrainingCenterService.getSessions(accountId, { status, trainingType });
+    
+    // Transform to expected API format
+    const formattedSessions = sessions.map((s: any) => ({
+      id: s.id,
+      name: s.name || `${s.trainingType} Training`,
+      type: s.trainingType,
+      status: s.status,
+      progress: s.progress || 0,
+      datasetSize: s.examplesCount || 0,
+      createdAt: s.createdAt?.toISOString() || new Date().toISOString(),
+      startedAt: s.startedAt?.toISOString(),
+      completedAt: s.completedAt?.toISOString(),
+      metrics: s.results || {},
+    }));
+    
+    res.json({
+      success: true,
+      data: formattedSessions,
+    });
+  } catch (error: any) {
+    logger.error('[Training] Failed to fetch sessions:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.post('/training', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { name, type, datasetSize } = req.body;
+  const { name, type, datasetSize, description, config } = req.body;
+  const accountId = req.body.accountId || req.user?.accountIds?.[0] || 'default';
+  const providerId = req.body.providerId || 'anthropic';
   
-  res.json({
-    success: true,
-    data: {
-      id: `training_${Date.now()}`,
-      name,
-      type,
-      status: 'pending',
-      progress: 0,
-      datasetSize: datasetSize || 0,
-      createdAt: new Date().toISOString(),
-    },
-  });
+  try {
+    const sessionId = await aiTrainingCenterService.createSession(providerId, accountId, {
+      name: name || `${type} Training Session`,
+      description: description || `Training session for ${type}`,
+      trainingType: type,
+      config: config || {},
+    });
+    
+    logger.info(`[Training] Created session ${sessionId} for account ${accountId}`);
+    
+    res.status(201).json({
+      success: true,
+      data: {
+        id: sessionId,
+        name,
+        type,
+        status: 'pending',
+        progress: 0,
+        datasetSize: datasetSize || 0,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error('[Training] Failed to create session:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.post('/training/:id/start', asyncHandler(async (req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      status: 'running',
-      progress: 0,
-      startedAt: new Date().toISOString(),
-    },
-  });
+  const sessionId = req.params.id as string;
+  
+  try {
+    await aiTrainingCenterService.startSession(sessionId);
+    
+    logger.info(`[Training] Started session ${sessionId}`);
+    
+    res.json({
+      success: true,
+      data: {
+        id: sessionId,
+        status: 'running',
+        progress: 0,
+        startedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error(`[Training] Failed to start session ${sessionId}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.post('/training/:id/cancel', asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -1361,59 +1447,173 @@ router.post('/threats/:threatId/escalate', aiCenterController.escalateThreat);
 router.get('/threats/patterns', aiCenterController.getThreatPatterns);
 router.post('/threats/patterns', aiCenterController.addThreatPattern);
 
-// Simple threat routes
-router.get('/threats', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  const threats = [
-    { id: '1', type: 'scam', severity: 'critical', status: 'escalated', title: 'Overpayment scam attempt', description: 'User offered $500 extra payment via check', detectedAt: new Date().toISOString() },
-    { id: '2', type: 'harassment', severity: 'high', status: 'detected', title: 'Aggressive language', description: 'Multiple abusive messages detected', detectedAt: new Date(Date.now() - 3600000).toISOString() },
-    { id: '3', type: 'phishing', severity: 'medium', status: 'resolved', title: 'Suspicious link shared', description: 'External link to fake payment site', detectedAt: new Date(Date.now() - 86400000).toISOString() },
-    { id: '4', type: 'spam', severity: 'low', status: 'false_positive', title: 'Promotional content', description: 'Mass message detected', detectedAt: new Date(Date.now() - 172800000).toISOString() },
-  ];
+// Simple threat routes - PRODUCTION wired to aiThreatDetectionService
+router.get('/threats', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0] || 'default';
+  const status = req.query.status as string | undefined;
+  const severity = req.query.severity as string | undefined;
+  const limit = Number(req.query.limit) || 50;
   
-  res.json({
-    success: true,
-    data: threats,
-  });
+  try {
+    const threats = await aiThreatDetectionService.getThreats(accountId, {
+      status: status as any,
+      severity: severity as any,
+      limit,
+    });
+    
+    // Transform to expected API format
+    const formattedThreats = threats.map((t: any) => ({
+      id: t.id,
+      type: t.threatType,
+      severity: t.severity,
+      status: t.status,
+      title: t.title || `${t.threatType} detected`,
+      description: t.description || t.evidence?.join(', ') || 'Threat detected by AI system',
+      detectedAt: t.detectedAt?.toISOString() || new Date().toISOString(),
+      conversationId: t.conversationId,
+      messageId: t.messageId,
+      confidence: t.confidence,
+    }));
+    
+    res.json({
+      success: true,
+      data: formattedThreats,
+    });
+  } catch (error: any) {
+    logger.error('[Threats] Failed to fetch threats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
-router.get('/threats/stats', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      total: 47,
-      last24Hours: 3,
-      bySeverity: { low: 12, medium: 20, high: 10, critical: 5 },
-      byStatus: { detected: 15, confirmed: 10, escalated: 7, resolved: 12, false_positive: 3 },
-    },
-  });
+router.get('/threats/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0] || 'default';
+  
+  try {
+    const stats = await aiThreatDetectionService.getThreatStats(accountId);
+    
+    res.json({
+      success: true,
+      data: {
+        total: stats.total,
+        last24Hours: stats.last24Hours,
+        last7Days: stats.last7Days,
+        bySeverity: stats.bySeverity,
+        byStatus: stats.byStatus,
+        byType: stats.byType,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[Threats] Failed to get stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.post('/threats', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { type, severity, title, description } = req.body;
+  const { type, severity, title, description, conversationId, messageId, message } = req.body;
+  const accountId = req.body.accountId || req.user?.accountIds?.[0] || 'default';
   
-  res.json({
-    success: true,
-    data: {
-      id: `threat_${Date.now()}`,
-      type,
-      severity,
-      status: 'detected',
-      title,
-      description,
-      detectedAt: new Date().toISOString(),
-    },
-  });
+  try {
+    // If a message is provided, analyze it for threats
+    if (message) {
+      const analysis = await aiThreatDetectionService.analyzeMessage(message, {
+        accountId,
+        conversationHistory: req.body.conversationHistory,
+      });
+      
+      if (analysis.isThreat) {
+        // Record the detected threat using proper 5-argument signature
+        const threatId = await aiThreatDetectionService.recordThreat(
+          accountId,
+          conversationId || 'manual',
+          messageId || null,
+          analysis,
+          message
+        );
+        
+        res.status(201).json({
+          success: true,
+          data: {
+            id: threatId,
+            type: analysis.threatType,
+            severity: analysis.severity,
+            status: 'detected',
+            title: `${analysis.threatType} detected`,
+            description: analysis.evidence.join('; '),
+            detectedAt: new Date().toISOString(),
+            suggestedResponse: analysis.suggestedResponse,
+          },
+        });
+        return;
+      }
+    }
+    
+    // Manual threat creation - create a synthetic analysis
+    const manualAnalysis = {
+      isThreat: true,
+      threatType: type,
+      severity: severity || 'medium',
+      confidence: 1.0,
+      matchedPatterns: ['manual_report'],
+      suggestedResponse: 'Manual report - under review',
+      shouldTerminate: false,
+      shouldEscalate: severity === 'critical',
+      evidence: [title, description].filter(Boolean),
+    } as any;
+    
+    const threatId = await aiThreatDetectionService.recordThreat(
+      accountId,
+      conversationId || 'manual',
+      messageId || null,
+      manualAnalysis,
+      title || 'Manual threat report'
+    );
+    
+    logger.info(`[Threats] Recorded threat ${threatId} for account ${accountId}`);
+    
+    res.status(201).json({
+      success: true,
+      data: {
+        id: threatId,
+        type,
+        severity: severity || 'medium',
+        status: 'detected',
+        title,
+        description,
+        detectedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error('[Threats] Failed to record threat:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.put('/threats/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      ...req.body,
-      updatedAt: new Date().toISOString(),
-    },
-  });
+  const threatId = req.params.id as string;
+  const { status, resolution } = req.body;
+  
+  try {
+    await aiThreatDetectionService.updateThreatStatus(
+      threatId,
+      status,
+      req.user?.id,
+      resolution
+    );
+    
+    logger.info(`[Threats] Updated threat ${threatId}`);
+    
+    res.json({
+      success: true,
+      data: {
+        id: threatId,
+        ...req.body,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error(`[Threats] Failed to update threat ${threatId}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.post('/threats/detect', asyncHandler(async (_req: AuthRequest, res: Response) => {
@@ -1427,48 +1627,108 @@ router.post('/threats/detect', asyncHandler(async (_req: AuthRequest, res: Respo
 // Threat Rules Routes
 // ============================================
 
-router.get('/threat-rules', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  const rules = [
-    { id: '1', name: 'Overpayment Detection', description: 'Detect overpayment scam attempts', type: 'scam', severity: 'critical', conditions: [], actions: ['block', 'alert'], isActive: true, matchCount: 23, createdAt: new Date().toISOString() },
-    { id: '2', name: 'Profanity Filter', description: 'Detect abusive language', type: 'harassment', severity: 'high', conditions: [], actions: ['warn', 'log'], isActive: true, matchCount: 156, createdAt: new Date().toISOString() },
-    { id: '3', name: 'External Link Scanner', description: 'Scan for suspicious URLs', type: 'phishing', severity: 'medium', conditions: [], actions: ['review', 'log'], isActive: true, matchCount: 45, createdAt: new Date().toISOString() },
-  ];
+router.get('/threat-rules', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0];
   
-  res.json({
-    success: true,
-    data: rules,
-  });
+  try {
+    const patterns = await aiThreatDetectionService.getPatterns(accountId);
+    
+    // Transform to rules format
+    const rules = patterns.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      type: p.threatType,
+      severity: p.severity,
+      patternType: p.patternType,
+      pattern: p.pattern,
+      isActive: p.isActive !== false,
+      conditions: [],
+      actions: p.severity === 'critical' ? ['block', 'alert'] : p.severity === 'high' ? ['warn', 'alert'] : ['log'],
+      matchCount: (p as any).matchCount || 0,
+      createdAt: (p as any).createdAt?.toISOString() || new Date().toISOString(),
+    }));
+    
+    res.json({
+      success: true,
+      data: rules,
+    });
+  } catch (error: any) {
+    logger.error('[Threat Rules] Failed to fetch patterns:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.post('/threat-rules', asyncHandler(async (req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      id: `rule_${Date.now()}`,
-      ...req.body,
-      matchCount: 0,
-      createdAt: new Date().toISOString(),
-    },
-  });
+  const { name, description, type, severity, patternType, pattern } = req.body;
+  const accountId = req.body.accountId || req.user?.accountIds?.[0] || 'default';
+  
+  try {
+    const patternId = await aiThreatDetectionService.addPattern(accountId, {
+      name,
+      description,
+      patternType: patternType || 'regex',
+      pattern: pattern || '',
+      threatType: type,
+      severity: severity || 'medium',
+    });
+    
+    logger.info(`[Threat Rules] Created pattern ${patternId} for account ${accountId}`);
+    
+    res.status(201).json({
+      success: true,
+      data: {
+        id: patternId,
+        ...req.body,
+        matchCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error('[Threat Rules] Failed to create pattern:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.put('/threat-rules/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      ...req.body,
-      updatedAt: new Date().toISOString(),
-    },
-  });
+  const patternId = req.params.id as string;
+  
+  try {
+    await aiThreatDetectionService.updatePattern(patternId, req.body);
+    
+    logger.info(`[Threat Rules] Updated pattern ${patternId}`);
+    
+    res.json({
+      success: true,
+      data: {
+        id: patternId,
+        ...req.body,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error(`[Threat Rules] Failed to update pattern ${patternId}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.delete('/threat-rules/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  void req.params.id;
-  res.json({
-    success: true,
-    message: 'Rule deleted',
-  });
+  const patternId = req.params.id as string;
+  
+  try {
+    // Deactivate the pattern by updating its isActive status
+    await aiThreatDetectionService.updatePattern(patternId, { isActive: false });
+    
+    logger.info(`[Threat Rules] Deactivated pattern ${patternId}`);
+    
+    res.json({
+      success: true,
+      message: 'Rule deleted',
+    });
+  } catch (error: any) {
+    logger.error(`[Threat Rules] Failed to delete pattern ${patternId}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 // ============================================
@@ -1483,39 +1743,78 @@ router.post('/patterns', aiCenterController.createPattern);
 router.get('/patterns/performance', aiCenterController.getPatternPerformanceReport);
 router.post('/patterns/:patternId/optimize', aiCenterController.optimizePattern);
 
-router.get('/patterns/stats', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      totalPatterns: 28,
-      activePatterns: 25,
-      avgSuccessRate: 0.85,
-      topPerformers: [
-        { id: '1', name: 'Warm Greeting', successRate: 0.92 },
-        { id: '2', name: 'Price Justification', successRate: 0.88 },
-        { id: '3', name: 'Availability Check', successRate: 0.85 },
-      ],
-    },
-  });
+router.get('/patterns/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0];
+  
+  try {
+    const report = await aiLearningPatternsService.getPerformanceReport(accountId);
+    
+    // Calculate active patterns (those with usage > 0)
+    const activePatterns = report.topPerformers.length + report.needsImprovement.length;
+    
+    res.json({
+      success: true,
+      data: {
+        totalPatterns: report.totalPatterns,
+        activePatterns,
+        avgSuccessRate: Object.values(report.byCategory).reduce((sum, cat) => sum + (cat as any).avgSuccessRate, 0) / Math.max(Object.keys(report.byCategory).length, 1),
+        topPerformers: report.topPerformers.map(p => ({
+          id: p.pattern.id || p.pattern.name,
+          name: p.pattern.name,
+          successRate: p.successRate,
+        })),
+        byCategory: report.byCategory,
+        needsImprovement: report.needsImprovement.map(p => ({
+          id: p.pattern.id || p.pattern.name,
+          name: p.pattern.name,
+          successRate: p.successRate,
+        })),
+      },
+    });
+  } catch (error: any) {
+    logger.error('[Patterns] Failed to get stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.put('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      ...req.body,
-      updatedAt: new Date().toISOString(),
-    },
-  });
+  const patternId = req.params.id as string;
+  
+  try {
+    await aiLearningPatternsService.updatePattern(patternId, req.body);
+    
+    logger.info(`[Patterns] Updated pattern ${patternId}`);
+    
+    res.json({
+      success: true,
+      data: {
+        id: patternId,
+        ...req.body,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error(`[Patterns] Failed to update pattern ${patternId}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.delete('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  void req.params.id;
-  res.json({
-    success: true,
-    message: 'Pattern deleted',
-  });
+  const patternId = req.params.id as string;
+  
+  try {
+    await aiLearningPatternsService.deletePattern(patternId);
+    
+    logger.info(`[Patterns] Deleted pattern ${patternId}`);
+    
+    res.json({
+      success: true,
+      message: 'Pattern deleted',
+    });
+  } catch (error: any) {
+    logger.error(`[Patterns] Failed to delete pattern ${patternId}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.post('/patterns/:id/record', asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -1541,42 +1840,99 @@ router.post('/tasks/:taskId/cancel', aiCenterController.cancelTask);
 router.get('/tasks/approvals/pending', aiCenterController.getPendingApprovals);
 router.get('/tasks/capabilities', aiCenterController.getTaskCapabilities);
 
-// Simple task routes
-router.get('/tasks', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  const tasks = [
-    { id: '1', title: 'Respond to inquiry #1234', type: 'respond_to_message', status: 'pending', priority: 'high', createdAt: new Date().toISOString() },
-    { id: '2', title: 'Follow up with John D.', type: 'follow_up', status: 'running', priority: 'medium', createdAt: new Date().toISOString() },
-    { id: '3', title: 'Generate weekly report', type: 'generate_report', status: 'completed', priority: 'low', createdAt: new Date(Date.now() - 86400000).toISOString(), completedAt: new Date().toISOString() },
-    { id: '4', title: 'Analyze competitor pricing', type: 'analyze_conversation', status: 'pending', priority: 'medium', createdAt: new Date().toISOString() },
-  ];
+// Simple task routes - PRODUCTION wired to aiTaskService
+router.get('/tasks', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0] || 'default';
+  const status = req.query.status as string | undefined;
+  const type = req.query.type as string | undefined;
+  const priority = req.query.priority as string | undefined;
+  const limit = Number(req.query.limit) || 50;
   
-  res.json({
-    success: true,
-    data: tasks,
-  });
+  try {
+    const tasks = await aiTaskService.getTasks(accountId, {
+      status: status as any,
+      type: type as any,
+      priority: priority as any,
+      limit,
+    });
+    
+    // Transform to expected API format
+    const formattedTasks = tasks.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      type: t.taskType,
+      status: t.status,
+      priority: ['low', 'low', 'low', 'low', 'medium', 'medium', 'high', 'high', 'high', 'urgent', 'urgent'][Math.min(t.priority, 10)] || 'medium',
+      description: t.description,
+      createdAt: t.createdAt?.toISOString() || new Date().toISOString(),
+      startedAt: t.startedAt?.toISOString(),
+      completedAt: t.completedAt?.toISOString(),
+      dueAt: t.dueAt?.toISOString(),
+      autonomyLevel: t.autonomyLevel,
+      retryCount: t.retryCount,
+    }));
+    
+    res.json({
+      success: true,
+      data: formattedTasks,
+    });
+  } catch (error: any) {
+    logger.error('[Tasks] Failed to fetch tasks:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
-router.get('/tasks/stats', asyncHandler(async (_req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      total: 156,
-      byStatus: { pending: 23, running: 8, completed: 120, failed: 5 },
-      completedToday: 15,
-      overdue: 3,
-    },
-  });
+router.get('/tasks/stats', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = req.query.accountId as string || req.user?.accountIds?.[0] || 'default';
+  
+  try {
+    const summary = await aiTaskService.getTaskSummary(accountId);
+    
+    res.json({
+      success: true,
+      data: {
+        total: summary.total,
+        byStatus: {
+          pending: summary.byStatus.pending || 0,
+          running: summary.byStatus.in_progress || 0,
+          completed: summary.byStatus.completed || 0,
+          failed: summary.byStatus.failed || 0,
+          cancelled: summary.byStatus.cancelled || 0,
+          waiting_approval: summary.byStatus.waiting_approval || 0,
+        },
+        byPriority: summary.byPriority,
+        byType: summary.byType,
+        completedToday: summary.completedToday,
+        overdue: summary.overdue,
+        avgCompletionTime: summary.avgCompletionTime,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[Tasks] Failed to get stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 router.put('/tasks/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      ...req.body,
-      updatedAt: new Date().toISOString(),
-    },
-  });
+  const taskId = req.params.id as string;
+  
+  try {
+    await aiTaskService.updateTask(taskId, req.body);
+    
+    logger.info(`[Tasks] Updated task ${taskId}`);
+    
+    res.json({
+      success: true,
+      data: {
+        id: taskId,
+        ...req.body,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error(`[Tasks] Failed to update task ${taskId}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 }));
 
 // ============================================
@@ -2536,3 +2892,5 @@ router.get('/nova/stats/project', asyncHandler(async (_req: AuthRequest, res: Re
 }));
 
 export default router;
+
+

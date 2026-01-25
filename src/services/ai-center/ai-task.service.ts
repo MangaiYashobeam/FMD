@@ -1020,6 +1020,32 @@ export class AITaskService {
   }
 
   /**
+   * Update task
+   */
+  async updateTask(taskId: string, updates: {
+    title?: string;
+    description?: string;
+    status?: TaskStatus;
+    priority?: TaskPriority;
+    dueAt?: Date;
+  }): Promise<void> {
+    const updateData: Prisma.AITaskUpdateInput = {};
+    
+    if (updates.title) updateData.title = updates.title;
+    if (updates.description) updateData.description = updates.description;
+    if (updates.status) updateData.status = updates.status;
+    if (updates.priority) updateData.priority = priorityToNumber(updates.priority);
+    if (updates.dueAt) updateData.dueAt = updates.dueAt;
+    
+    await prisma.aITask.update({
+      where: { id: taskId },
+      data: updateData,
+    });
+    
+    await this.logAudit(taskId, 'task_updated', updates);
+  }
+
+  /**
    * Get task capabilities
    */
   getTaskCapabilities(): Record<TaskType, typeof TASK_CAPABILITIES[TaskType]> {
