@@ -256,7 +256,6 @@ router.post('/providers/wake-up-all', asyncHandler(async (_req: AuthRequest, res
     deepseek: { envKey: 'DEEPSEEK_API_KEY', testEndpoint: 'https://api.deepseek.com/v1/models' },
     github: { envKey: 'GITHUB_COPILOT_TOKEN' },
     mistral: { envKey: 'MISTRAL_API_KEY', testEndpoint: 'https://api.mistral.ai/v1/models' },
-    xai: { envKey: 'XAI_API_KEY', testEndpoint: 'https://api.x.ai/v1/models' },
     perplexity: { envKey: 'PERPLEXITY_API_KEY', testEndpoint: 'https://api.perplexity.ai/chat/completions' },
     google: { envKey: 'GOOGLE_AI_KEY' },
     meta: { envKey: 'TOGETHER_API_KEY', testEndpoint: 'https://api.together.xyz/v1/models' },

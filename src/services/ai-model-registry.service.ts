@@ -16,7 +16,7 @@ import OpenAI from 'openai';
 // TYPE DEFINITIONS
 // ============================================
 
-export type AIProviderType = 'anthropic' | 'openai' | 'deepseek' | 'google' | 'meta' | 'github' | 'mistral' | 'xai' | 'perplexity' | 'cohere' | 'custom';
+export type AIProviderType = 'anthropic' | 'openai' | 'deepseek' | 'google' | 'meta' | 'github' | 'mistral' | 'perplexity' | 'cohere' | 'custom';
 
 export interface AIModel {
   id: string;
@@ -333,32 +333,6 @@ export const AI_MODELS: Record<string, AIModel> = {
     capabilities: ['code', 'analysis'],
     tier: 'standard',
     releaseDate: '2024-05',
-  },
-
-  // XAI (GROK) MODELS
-  'grok-2': {
-    id: 'grok-2',
-    provider: 'xai',
-    displayName: 'Grok 2',
-    contextWindow: 131072,
-    maxOutputTokens: 8192,
-    inputPricePerMillion: 2,
-    outputPricePerMillion: 10,
-    capabilities: ['chat', 'code', 'analysis', 'vision'],
-    tier: 'flagship',
-    releaseDate: '2024-08',
-  },
-  'grok-2-mini': {
-    id: 'grok-2-mini',
-    provider: 'xai',
-    displayName: 'Grok 2 Mini',
-    contextWindow: 131072,
-    maxOutputTokens: 8192,
-    inputPricePerMillion: 0.2,
-    outputPricePerMillion: 1,
-    capabilities: ['chat', 'code', 'analysis'],
-    tier: 'economy',
-    releaseDate: '2024-08',
   },
 
   // PERPLEXITY MODELS
@@ -889,13 +863,6 @@ class AIModelRegistryService {
       provider: 'mistral' as AIProviderType,
       configured: !!process.env.MISTRAL_API_KEY,
       healthy: !!process.env.MISTRAL_API_KEY,
-    });
-
-    // xAI (Grok)
-    results.push({
-      provider: 'xai' as AIProviderType,
-      configured: !!process.env.XAI_API_KEY,
-      healthy: !!process.env.XAI_API_KEY,
     });
 
     // Perplexity

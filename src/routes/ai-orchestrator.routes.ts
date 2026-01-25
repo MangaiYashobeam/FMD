@@ -3,7 +3,7 @@
  * 
  * Endpoints for AI model management and intelligent routing
  * 
- * @version 1.0.0
+ * @version 2.0.0 - Added health, cost, and rate limit endpoints
  */
 
 import { Router, Response } from 'express';
@@ -17,6 +17,9 @@ import {
   TASK_TYPES, 
   DEFAULT_TASK_ASSIGNMENTS,
 } from '@/services/ai-orchestrator.service';
+import { modelHealthService } from '@/services/model-health.service';
+import { costTrackingService } from '@/services/cost-tracking.service';
+import { rateLimitService } from '@/services/rate-limit.service';
 import { authenticate, AuthRequest } from '@/middleware/auth';
 import { requireAdmin, requireAccountOwner } from '@/middleware/rbac';
 
@@ -33,7 +36,7 @@ const router = Router();
 router.get('/models', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
     const allModels = copilotModelService.getAllModels();
-    const families = ['gpt', 'claude', 'gemini', 'codex', 'grok', 'raptor'];
+    const families = ['gpt', 'claude', 'gemini', 'codex', 'raptor'];
     const grouped: Record<string, typeof allModels> = {};
     
     families.forEach(family => {
@@ -608,6 +611,278 @@ router.post('/invoke', authenticate, async (req: AuthRequest, res: Response) => 
   } catch (error) {
     logger.error('Error invoking AI:', error);
     return res.status(500).json({ success: false, error: 'Failed to invoke AI' });
+  }
+});
+
+// ============================================
+// HEALTH MONITORING ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/ai-orchestrator/health
+ * Get health status of all providers
+ */
+router.get('/health', authenticate, async (_req: AuthRequest, res: Response) => {
+  try {
+    const providerHealth = modelHealthService.getAllProviderHealth();
+    
+    const healthSummary = {
+      providers: providerHealth,
+      overall: providerHealth.every(p => p.status === 'healthy') 
+        ? 'healthy' 
+        : providerHealth.some(p => p.status === 'unhealthy') 
+          ? 'degraded' 
+          : 'healthy',
+      lastCheck: new Date().toISOString(),
+    };
+
+    res.json({ success: true, data: healthSummary });
+  } catch (error) {
+    logger.error('Error fetching health status:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch health status' });
+  }
+});
+
+/**
+ * GET /api/ai-orchestrator/health/:provider
+ * Get health status for a specific provider
+ */
+router.get('/health/:provider', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const provider = req.params.provider as 'openai' | 'anthropic' | 'google';
+    const health = modelHealthService.getAllProviderHealth().find(p => p.provider === provider);
+    
+    if (!health) {
+      return res.status(404).json({ success: false, error: 'Provider not found' });
+    }
+
+    return res.json({ success: true, data: health });
+  } catch (error) {
+    logger.error('Error fetching provider health:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch provider health' });
+  }
+});
+
+/**
+ * POST /api/ai-orchestrator/health/check
+ * Trigger a manual health check
+ */
+router.post('/health/check', authenticate, requireAdmin, async (_req: AuthRequest, res: Response) => {
+  try {
+    await modelHealthService.checkAllProviders();
+    const health = modelHealthService.getAllProviderHealth();
+    res.json({ success: true, data: { providers: health, checkedAt: new Date().toISOString() } });
+  } catch (error) {
+    logger.error('Error running health check:', error);
+    res.status(500).json({ success: false, error: 'Failed to run health check' });
+  }
+});
+
+// ============================================
+// COST TRACKING ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/ai-orchestrator/costs
+ * Get cost summary
+ */
+router.get('/costs', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const accountId = (req.query.accountId || req.body.accountId) as string | undefined;
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+
+    const summary = await costTrackingService.getCostSummary({
+      accountId,
+      startDate,
+      endDate,
+      groupByDay: req.query.groupByDay === 'true',
+    });
+
+    res.json({ success: true, data: summary });
+  } catch (error) {
+    logger.error('Error fetching costs:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch costs' });
+  }
+});
+
+/**
+ * GET /api/ai-orchestrator/costs/daily
+ * Get daily cost
+ */
+router.get('/costs/daily', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const accountId = (req.query.accountId || req.body.accountId) as string | undefined;
+    const dailyCost = await costTrackingService.getDailyCost(accountId);
+    res.json({ success: true, data: { dailyCost, date: new Date().toISOString().split('T')[0] } });
+  } catch (error) {
+    logger.error('Error fetching daily cost:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch daily cost' });
+  }
+});
+
+/**
+ * GET /api/ai-orchestrator/costs/monthly
+ * Get monthly cost
+ */
+router.get('/costs/monthly', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const accountId = (req.query.accountId || req.body.accountId) as string | undefined;
+    const monthlyCost = await costTrackingService.getMonthlyCost(accountId);
+    res.json({ success: true, data: { monthlyCost, month: new Date().toISOString().slice(0, 7) } });
+  } catch (error) {
+    logger.error('Error fetching monthly cost:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch monthly cost' });
+  }
+});
+
+/**
+ * GET /api/ai-orchestrator/costs/realtime
+ * Get real-time cost totals
+ */
+router.get('/costs/realtime', authenticate, async (_req: AuthRequest, res: Response) => {
+  try {
+    const totals = costTrackingService.getRealtimeTotals();
+    res.json({ success: true, data: totals });
+  } catch (error) {
+    logger.error('Error fetching realtime costs:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch realtime costs' });
+  }
+});
+
+/**
+ * GET /api/ai-orchestrator/costs/pricing/:modelId
+ * Get pricing for a model
+ */
+router.get('/costs/pricing/:modelId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const modelId = req.params.modelId as string;
+    const pricing = costTrackingService.getModelPricing(modelId);
+    if (!pricing) {
+      return res.status(404).json({ success: false, error: 'Model not found' });
+    }
+    return res.json({ success: true, data: pricing });
+  } catch (error) {
+    logger.error('Error fetching pricing:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch pricing' });
+  }
+});
+
+// ============================================
+// RATE LIMITING ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/ai-orchestrator/rate-limits
+ * Get all rate limit configurations
+ */
+router.get('/rate-limits', authenticate, requireAdmin, async (_req: AuthRequest, res: Response) => {
+  try {
+    const limits = rateLimitService.getAllLimits();
+    res.json({ success: true, data: { limits, total: limits.length } });
+  } catch (error) {
+    logger.error('Error fetching rate limits:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch rate limits' });
+  }
+});
+
+/**
+ * GET /api/ai-orchestrator/rate-limits/:modelId
+ * Get rate limit for a specific model
+ */
+router.get('/rate-limits/:modelId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const modelId = req.params.modelId as string;
+    const limits = rateLimitService.getModelLimits(modelId);
+    if (!limits) {
+      return res.status(404).json({ success: false, error: 'Model rate limits not found' });
+    }
+    return res.json({ success: true, data: limits });
+  } catch (error) {
+    logger.error('Error fetching model rate limits:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch model rate limits' });
+  }
+});
+
+/**
+ * PUT /api/ai-orchestrator/rate-limits/:modelId
+ * Update rate limits for a model
+ */
+router.put('/rate-limits/:modelId', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const modelId = req.params.modelId as string;
+    await rateLimitService.updateModelLimits(modelId, req.body);
+    const updated = rateLimitService.getModelLimits(modelId);
+    logger.info('Updated rate limits:', { modelId, userId: req.user?.id });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    logger.error('Error updating rate limits:', error);
+    res.status(500).json({ success: false, error: 'Failed to update rate limits' });
+  }
+});
+
+/**
+ * GET /api/ai-orchestrator/rate-limits/stats
+ * Get rate limit usage stats
+ */
+router.get('/rate-limits/stats', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const accountId = (req.query.accountId) as string | undefined;
+    
+    if (accountId) {
+      // Get stats for specific account
+      const allLimits = rateLimitService.getAllLimits();
+      const stats = allLimits.map(l => rateLimitService.getStats(l.modelId, accountId));
+      return res.json({ success: true, data: { stats, accountId } });
+    }
+    
+    const stats = rateLimitService.getAllStats();
+    return res.json({ success: true, data: { stats } });
+  } catch (error) {
+    logger.error('Error fetching rate limit stats:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch rate limit stats' });
+  }
+});
+
+/**
+ * POST /api/ai-orchestrator/rate-limits/:modelId/reset
+ * Reset rate limits for a model
+ */
+router.post('/rate-limits/:modelId/reset', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const modelId = req.params.modelId as string;
+    const { accountId, userId } = req.body;
+    rateLimitService.resetLimits(modelId, accountId, userId);
+    logger.info('Reset rate limits:', { modelId, accountId, userId });
+    res.json({ success: true, message: 'Rate limits reset' });
+  } catch (error) {
+    logger.error('Error resetting rate limits:', error);
+    res.status(500).json({ success: false, error: 'Failed to reset rate limits' });
+  }
+});
+
+/**
+ * POST /api/ai-orchestrator/rate-limits/check
+ * Check if a request would be allowed
+ */
+router.post('/rate-limits/check', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { modelId, estimatedTokens, accountId, userId } = req.body;
+    
+    if (!modelId) {
+      return res.status(400).json({ success: false, error: 'Model ID is required' });
+    }
+
+    const result = rateLimitService.checkRateLimit(modelId, {
+      accountId,
+      userId,
+      estimatedTokens,
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error checking rate limit:', error);
+    return res.status(500).json({ success: false, error: 'Failed to check rate limit' });
   }
 });
 

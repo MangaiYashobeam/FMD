@@ -4,13 +4,12 @@
  * Manages AI agent assignments, hierarchical permissions,
  * session context preservation, and seamless agent handoffs
  * 
- * @version 1.0.0
+ * @version 2.0.0 - Full Database Persistence
  * @author FMD Engineering Team
  */
 
 import { logger } from '@/utils/logger';
-// prisma import reserved for future database persistence
-// import prisma from '@/config/database';
+import prisma from '@/config/database';
 import { copilotModelService, COPILOT_MODELS, CopilotModel, RoutingRule } from './copilot-models.service';
 import { EventEmitter } from 'events';
 
@@ -353,12 +352,24 @@ class AIOrchestrator extends EventEmitter {
 
   private async persistSessionNote(note: SessionNote): Promise<void> {
     try {
-      // Database persistence is optional - in-memory always works
-      // Prisma schema needs migration before this will work
-      logger.debug(`[AIOrchestrator] Session note stored in memory: ${note.id}`);
+      await prisma.aISessionNote.create({
+        data: {
+          id: note.id,
+          sessionId: note.sessionId,
+          accountId: note.accountId,
+          userId: note.userId,
+          agentId: note.agentId,
+          modelId: note.modelId,
+          noteType: note.noteType,
+          content: note.content,
+          metadata: note.metadata,
+          expiresAt: note.expiresAt,
+        },
+      });
+      logger.debug(`[AIOrchestrator] Session note persisted to DB: ${note.id}`);
     } catch (error: any) {
       // Table might not exist yet - log but don't fail
-      logger.debug('[AIOrchestrator] Database persistence skipped - table not migrated');
+      logger.debug('[AIOrchestrator] Database persistence skipped:', error.message);
     }
   }
 
@@ -367,12 +378,16 @@ class AIOrchestrator extends EventEmitter {
     this.sessionCleanupInterval = setInterval(() => {
       this.cleanupExpiredNotes();
     }, 60 * 60 * 1000);
+    
+    // Also run initial cleanup
+    this.cleanupExpiredNotes();
   }
 
   private async cleanupExpiredNotes(): Promise<void> {
     const now = Date.now();
     let cleanedCount = 0;
 
+    // Clean in-memory cache
     for (const [sessionId, notes] of this.state.sessionNotes.entries()) {
       const validNotes = notes.filter(n => n.expiresAt.getTime() > now);
       cleanedCount += notes.length - validNotes.length;
@@ -384,16 +399,23 @@ class AIOrchestrator extends EventEmitter {
       }
     }
 
-    // Also clean database (if table exists)
+    // Clean database
     try {
-      // Database cleanup is optional - in-memory always works
-      logger.debug('[AIOrchestrator] In-memory cleanup complete');
+      const dbResult = await prisma.aISessionNote.deleteMany({
+        where: {
+          expiresAt: { lt: new Date() },
+        },
+      });
+      if (dbResult.count > 0) {
+        logger.info(`[AIOrchestrator] Cleaned ${dbResult.count} expired notes from database`);
+      }
     } catch (error) {
-      // Table might not exist
+      // Table might not exist yet
+      logger.debug('[AIOrchestrator] Database cleanup skipped');
     }
 
     if (cleanedCount > 0) {
-      logger.info(`[AIOrchestrator] Cleaned up ${cleanedCount} expired session notes`);
+      logger.info(`[AIOrchestrator] Cleaned up ${cleanedCount} expired session notes from memory`);
     }
   }
 
@@ -523,13 +545,49 @@ class AIOrchestrator extends EventEmitter {
     return `${assignment.assignmentLevel}:${accountId || 'global'}:${assignment.taskType}`;
   }
 
-  private async persistAssignment(assignment: AIAssignment, _setBy: { userId: string; accountId?: string }): Promise<void> {
+  private async persistAssignment(assignment: AIAssignment, setBy: { userId: string; accountId?: string }): Promise<void> {
     try {
-      // Database persistence is optional - in-memory always works
-      logger.debug(`[AIOrchestrator] Task assignment stored in memory: ${assignment.taskType}`);
+      await prisma.aITaskAssignment.upsert({
+        where: {
+          taskType_assignmentLevel_accountId_teamId_userId: {
+            taskType: assignment.taskType,
+            assignmentLevel: assignment.assignmentLevel,
+            accountId: setBy.accountId ?? '',
+            teamId: '',
+            userId: assignment.assignmentLevel === 'user' ? setBy.userId : '',
+          },
+        },
+        update: {
+          primaryModel: assignment.primaryModel,
+          fallbackModel: assignment.fallbackModel,
+          allowedModels: assignment.allowedModels,
+          assignedBy: assignment.assignedBy,
+          priority: assignment.priority,
+          conditions: assignment.conditions || {},
+          expiresAt: assignment.expiresAt,
+          enabled: true,
+        },
+        create: {
+          id: assignment.id,
+          taskType: assignment.taskType,
+          primaryModel: assignment.primaryModel,
+          fallbackModel: assignment.fallbackModel,
+          allowedModels: assignment.allowedModels,
+          assignedBy: assignment.assignedBy,
+          assignmentLevel: assignment.assignmentLevel,
+          priority: assignment.priority,
+          conditions: assignment.conditions || {},
+          accountId: setBy.accountId ?? '',
+          teamId: '',
+          userId: assignment.assignmentLevel === 'user' ? setBy.userId : '',
+          createdById: setBy.userId,
+          expiresAt: assignment.expiresAt,
+        },
+      });
+      logger.debug(`[AIOrchestrator] Task assignment persisted to DB: ${assignment.taskType}`);
     } catch (error: any) {
       // Table might not exist yet
-      logger.debug('[AIOrchestrator] Database persistence skipped - table not migrated');
+      logger.debug('[AIOrchestrator] Database persistence skipped:', error.message);
     }
   }
 
@@ -549,6 +607,8 @@ class AIOrchestrator extends EventEmitter {
     toModel: string;
     reason: string;
     preserveContext: boolean;
+    accountId?: string;
+    userId?: string;
   }): Promise<AgentHandoff> {
     const contextSummary = params.preserveContext 
       ? this.buildContextSummary(params.sessionId)
@@ -571,12 +631,32 @@ class AIOrchestrator extends EventEmitter {
       this.state.handoffHistory.shift();
     }
 
+    // Persist handoff to database
+    try {
+      await prisma.aIHandoffLog.create({
+        data: {
+          sessionId: params.sessionId,
+          accountId: params.accountId,
+          userId: params.userId,
+          fromAgent: params.fromAgent,
+          fromModel: params.fromModel,
+          toAgent: params.toAgent,
+          toModel: params.toModel,
+          reason: params.reason,
+          contextSummary: contextSummary || null,
+          seamless: true,
+        },
+      });
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Handoff DB persistence skipped:', error.message);
+    }
+
     // Add handoff note to session (for the new agent to read)
     if (contextSummary) {
       this.addSessionNote({
         sessionId: params.sessionId,
-        accountId: '', // Will be set from session
-        userId: '',
+        accountId: params.accountId || '',
+        userId: params.userId || '',
         agentId: params.toAgent,
         modelId: params.toModel,
         noteType: 'handoff',
@@ -777,6 +857,247 @@ class AIOrchestrator extends EventEmitter {
   }
 
   /**
+   * Load assignments from database (called on startup)
+   */
+  async loadAssignmentsFromDB(): Promise<void> {
+    try {
+      const dbAssignments = await prisma.aITaskAssignment.findMany({
+        where: { enabled: true },
+      });
+
+      for (const dbAssign of dbAssignments) {
+        const assignment: AIAssignment = {
+          id: dbAssign.id,
+          taskType: dbAssign.taskType,
+          primaryModel: dbAssign.primaryModel,
+          fallbackModel: dbAssign.fallbackModel,
+          allowedModels: dbAssign.allowedModels,
+          assignedBy: dbAssign.assignedBy,
+          assignmentLevel: dbAssign.assignmentLevel as AIAssignment['assignmentLevel'],
+          priority: dbAssign.priority,
+          conditions: dbAssign.conditions as Record<string, any>,
+          createdAt: dbAssign.createdAt,
+          expiresAt: dbAssign.expiresAt || undefined,
+        };
+
+        const key = this.getAssignmentKey(assignment, dbAssign.accountId || undefined);
+        this.state.activeAssignments.set(key, assignment);
+      }
+
+      logger.info(`[AIOrchestrator] Loaded ${dbAssignments.length} assignments from database`);
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Could not load assignments from DB:', error.message);
+    }
+  }
+
+  /**
+   * Load routing rules from database
+   */
+  async loadRoutingRulesFromDB(): Promise<RoutingRule[]> {
+    try {
+      const dbRules = await prisma.aIRoutingRule.findMany({
+        where: { enabled: true },
+        orderBy: { priority: 'desc' },
+      });
+
+      const rules: RoutingRule[] = dbRules.map(r => ({
+        id: r.id,
+        name: r.name,
+        description: r.description || '',
+        priority: r.priority,
+        conditions: r.conditions as any[],
+        targetModel: r.targetModel,
+        fallbackModel: r.fallbackModel,
+        enabled: r.enabled,
+      }));
+
+      logger.info(`[AIOrchestrator] Loaded ${rules.length} routing rules from database`);
+      return rules;
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Could not load routing rules from DB:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Save a routing rule to database
+   */
+  async saveRoutingRuleToDB(rule: RoutingRule, createdById: string, accountId?: string): Promise<void> {
+    try {
+      await prisma.aIRoutingRule.upsert({
+        where: { id: rule.id },
+        update: {
+          name: rule.name,
+          description: rule.description,
+          priority: rule.priority,
+          conditions: JSON.parse(JSON.stringify(rule.conditions)), // Convert to plain JSON
+          targetModel: rule.targetModel,
+          fallbackModel: rule.fallbackModel,
+          enabled: rule.enabled,
+        },
+        create: {
+          id: rule.id,
+          name: rule.name,
+          description: rule.description,
+          priority: rule.priority,
+          conditions: JSON.parse(JSON.stringify(rule.conditions)), // Convert to plain JSON
+          targetModel: rule.targetModel,
+          fallbackModel: rule.fallbackModel,
+          enabled: rule.enabled,
+          createdById,
+          accountId,
+        },
+      });
+      logger.debug(`[AIOrchestrator] Routing rule saved to DB: ${rule.name}`);
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Routing rule DB save skipped:', error.message);
+    }
+  }
+
+  /**
+   * Delete a routing rule from database
+   */
+  async deleteRoutingRuleFromDB(ruleId: string): Promise<void> {
+    try {
+      await prisma.aIRoutingRule.delete({ where: { id: ruleId } });
+      logger.debug(`[AIOrchestrator] Routing rule deleted from DB: ${ruleId}`);
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Routing rule DB delete skipped:', error.message);
+    }
+  }
+
+  /**
+   * Get company AI preferences
+   */
+  async getCompanyPreferences(accountId: string): Promise<any | null> {
+    try {
+      return await prisma.companyAIPreferences.findUnique({
+        where: { accountId },
+      });
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Could not fetch company preferences:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Update company AI preferences
+   */
+  async updateCompanyPreferences(accountId: string, preferences: {
+    defaultModel?: string;
+    allowedModels?: string[];
+    blockedModels?: string[];
+    maxTokensPerRequest?: number;
+    maxRequestsPerDay?: number;
+    costBudgetDaily?: number;
+    costBudgetMonthly?: number;
+    enableVision?: boolean;
+    enableCodeGen?: boolean;
+    enableAutomation?: boolean;
+    customInstructions?: string;
+  }): Promise<any> {
+    try {
+      return await prisma.companyAIPreferences.upsert({
+        where: { accountId },
+        update: preferences,
+        create: {
+          accountId,
+          ...preferences,
+        },
+      });
+    } catch (error: any) {
+      logger.error('[AIOrchestrator] Could not update company preferences:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Record model usage for analytics
+   */
+  async recordModelUsage(usage: {
+    modelId: string;
+    agentId: string;
+    accountId?: string;
+    userId?: string;
+    sessionId?: string;
+    taskType?: string;
+    inputTokens: number;
+    outputTokens: number;
+    latencyMs: number;
+    success: boolean;
+    errorMessage?: string;
+    routingRule?: string;
+    wasHandoff?: boolean;
+  }): Promise<void> {
+    try {
+      await prisma.aIModelUsage.create({
+        data: usage,
+      });
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Usage recording skipped:', error.message);
+    }
+  }
+
+  /**
+   * Get usage analytics
+   */
+  async getUsageAnalytics(accountId?: string, startDate?: Date, endDate?: Date): Promise<{
+    totalRequests: number;
+    totalTokens: { input: number; output: number };
+    avgLatency: number;
+    successRate: number;
+    byModel: Record<string, { requests: number; tokens: number }>;
+  }> {
+    try {
+      const where: any = {};
+      if (accountId) where.accountId = accountId;
+      if (startDate || endDate) {
+        where.createdAt = {};
+        if (startDate) where.createdAt.gte = startDate;
+        if (endDate) where.createdAt.lte = endDate;
+      }
+
+      const usage = await prisma.aIModelUsage.findMany({ where });
+
+      const byModel: Record<string, { requests: number; tokens: number }> = {};
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let totalLatency = 0;
+      let successCount = 0;
+
+      for (const u of usage) {
+        totalInputTokens += u.inputTokens;
+        totalOutputTokens += u.outputTokens;
+        totalLatency += u.latencyMs;
+        if (u.success) successCount++;
+
+        if (!byModel[u.modelId]) {
+          byModel[u.modelId] = { requests: 0, tokens: 0 };
+        }
+        byModel[u.modelId].requests++;
+        byModel[u.modelId].tokens += u.inputTokens + u.outputTokens;
+      }
+
+      return {
+        totalRequests: usage.length,
+        totalTokens: { input: totalInputTokens, output: totalOutputTokens },
+        avgLatency: usage.length > 0 ? Math.round(totalLatency / usage.length) : 0,
+        successRate: usage.length > 0 ? (successCount / usage.length) * 100 : 100,
+        byModel,
+      };
+    } catch (error: any) {
+      logger.debug('[AIOrchestrator] Usage analytics fetch failed:', error.message);
+      return {
+        totalRequests: 0,
+        totalTokens: { input: 0, output: 0 },
+        avgLatency: 0,
+        successRate: 100,
+        byModel: {},
+      };
+    }
+  }
+
+  /**
    * Cleanup resources
    */
   destroy(): void {
@@ -789,3 +1110,7 @@ class AIOrchestrator extends EventEmitter {
 
 // Singleton export
 export const aiOrchestrator = new AIOrchestrator();
+
+// Initialize from database on load
+aiOrchestrator.loadAssignmentsFromDB().catch(() => {});
+aiOrchestrator.loadRoutingRulesFromDB().catch(() => {});

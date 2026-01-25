@@ -3997,3 +3997,70 @@ model CompanyAIPreferences {
 
   @@map("company_ai_preferences")
 }
+
+// AI Model Health Status - Real-time monitoring
+model AIModelHealth {
+  id           String   @id @default(uuid())
+  modelId      String   @unique @map("model_id")
+  provider     String
+  status       String   @default("unknown") // healthy, degraded, down, unknown
+  latencyMs    Int?     @map("latency_ms")
+  errorRate    Decimal? @map("error_rate") @db.Decimal(5, 2) // Percentage 0-100
+  lastChecked  DateTime @default(now()) @map("last_checked")
+  lastError    String?  @map("last_error")
+  lastSuccess  DateTime? @map("last_success")
+  checksCount  Int      @default(0) @map("checks_count")
+  failsCount   Int      @default(0) @map("fails_count")
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([provider])
+  @@index([lastChecked])
+  @@map("ai_model_health")
+}
+
+// AI Rate Limit Configuration
+model AIRateLimit {
+  id                String   @id @default(uuid())
+  modelId           String   @map("model_id")
+  accountId         String?  @map("account_id") // null for global
+  requestsPerMinute Int?     @map("requests_per_minute")
+  requestsPerHour   Int?     @map("requests_per_hour")
+  requestsPerDay    Int?     @map("requests_per_day")
+  tokensPerMinute   Int?     @map("tokens_per_minute")
+  tokensPerHour     Int?     @map("tokens_per_hour")
+  tokensPerDay      Int?     @map("tokens_per_day")
+  enabled           Boolean  @default(true)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([modelId, accountId])
+  @@index([modelId])
+  @@index([accountId])
+  @@map("ai_rate_limits")
+}
+
+// AI Cost Tracking
+model AICostTracking {
+  id            String   @id @default(uuid())
+  modelId       String   @map("model_id")
+  accountId     String   @map("account_id")
+  userId        String?  @map("user_id")
+  period        String   // daily, weekly, monthly
+  periodStart   DateTime @map("period_start")
+  periodEnd     DateTime @map("period_end")
+  inputTokens   Int      @default(0) @map("input_tokens")
+  outputTokens  Int      @default(0) @map("output_tokens")
+  totalCost     Decimal  @default(0) @map("total_cost") @db.Decimal(10, 4)
+  requestCount  Int      @default(0) @map("request_count")
+  errorCount    Int      @default(0) @map("error_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([modelId, accountId, period, periodStart])
+  @@index([accountId, periodStart])
+  @@index([modelId, periodStart])
+  @@map("ai_cost_tracking")
+}

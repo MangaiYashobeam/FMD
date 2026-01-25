@@ -77,18 +77,6 @@ const DEFAULT_PROVIDERS = [
     apiKey: process.env.MISTRAL_API_KEY ? '***configured***' : null,
   },
   {
-    id: 'xai',
-    name: 'xAI Grok',
-    displayName: 'Grok',
-    type: 'xai',
-    isActive: !!process.env.XAI_API_KEY,
-    defaultModel: 'grok-2',
-    availableModels: ['grok-2', 'grok-2-mini'],
-    healthStatus: process.env.XAI_API_KEY ? 'healthy' : 'unknown',
-    capabilities: ['text', 'code', 'vision'],
-    apiKey: process.env.XAI_API_KEY ? '***configured***' : null,
-  },
-  {
     id: 'perplexity',
     name: 'Perplexity AI',
     displayName: 'Perplexity',

@@ -4,7 +4,7 @@
  * Comprehensive dashboard for managing AI models, routing rules,
  * task assignments, and monitoring agent performance
  * 
- * @version 1.0.0
+ * @version 2.0.0 - Added health monitoring, cost tracking, rate limits
  */
 
 import React, { useState, useEffect } from 'react';
@@ -31,7 +31,29 @@ import {
   Image as ImageIcon,
   Sparkles,
   Shield,
+  Heart,
+  DollarSign,
+  Clock,
+  TrendingUp,
 } from 'lucide-react';
+
+// Health status interface
+interface ProviderHealth {
+  provider: string;
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+  latencyMs: number;
+  lastCheck: string;
+  errorRate: number;
+  message?: string;
+}
+
+// Cost summary interface
+interface CostSummary {
+  totalCost: number;
+  totalTokens: number;
+  requestCount: number;
+  byModel: Record<string, { cost: number; tokens: number; requests: number }>;
+}
 
 interface CopilotModel {
   id: string;
@@ -111,7 +133,6 @@ const MODEL_FAMILY_COLORS: Record<string, string> = {
   claude: 'bg-orange-500',
   gemini: 'bg-blue-500',
   codex: 'bg-purple-500',
-  grok: 'bg-red-500',
   raptor: 'bg-yellow-500',
 };
 
@@ -174,12 +195,38 @@ export default function AIOrchestratorPage() {
     },
   });
 
+  // Fetch health status
+  const { data: healthData } = useQuery<{ success: boolean; data: { providers: ProviderHealth[]; overall: string } }>({
+    queryKey: ['ai-orchestrator-health'],
+    queryFn: async () => {
+      const res = await fetch('/api/ai-orchestrator/health', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      return res.json();
+    },
+    refetchInterval: 60000, // Refresh every minute
+  });
+
+  // Fetch cost summary
+  const { data: costData } = useQuery<{ success: boolean; data: CostSummary }>({
+    queryKey: ['ai-orchestrator-costs'],
+    queryFn: async () => {
+      const res = await fetch('/api/ai-orchestrator/costs', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      });
+      return res.json();
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   const models = modelsData?.data?.models || [];
   const groupedModels = modelsData?.data?.grouped || {};
   const rules = routingData?.data?.rules || [];
   const assignments = assignmentsData?.data?.assignments || [];
   const taskTypes = assignmentsData?.data?.taskTypes || [];
   const dashboardStats = dashboard?.data;
+  const providerHealth = healthData?.data?.providers || [];
+  const costSummary = costData?.data;
 
   if (dashboardLoading) {
     return (
@@ -322,6 +369,265 @@ export default function AIOrchestratorPage() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            </div>
+
+            {/* Health Monitoring & Cost Tracking */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Provider Health */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Heart className="w-5 h-5 text-red-500" />
+                  Provider Health
+                </h3>
+                <div className="space-y-3">
+                  {providerHealth.length === 0 ? (
+                    <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                      <Heart className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">No health data available</p>
+                    </div>
+                  ) : (
+                    providerHealth.map((provider) => (
+                      <div key={provider.provider} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${
+                            provider.status === 'healthy' ? 'bg-green-500 animate-pulse' :
+                            provider.status === 'degraded' ? 'bg-yellow-500' :
+                            provider.status === 'unhealthy' ? 'bg-red-500' :
+                            'bg-gray-400'
+                          }`} />
+                          <span className="font-medium text-gray-900 dark:text-white capitalize">{provider.provider}</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                            <Clock className="w-3 h-3" />
+                            {provider.latencyMs}ms
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            provider.status === 'healthy' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                            provider.status === 'degraded' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            provider.status === 'unhealthy' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                            'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                          }`}>
+                            {provider.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Cost Summary */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-green-500" />
+                  Cost Summary
+                </h3>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        ${costSummary?.totalCost?.toFixed(4) || '0.00'}
+                      </div>
+                      <div className="text-sm text-green-600/70 dark:text-green-400/70">Total Cost</div>
+                    </div>
+                    <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        {(costSummary?.totalTokens || 0).toLocaleString()}
+                      </div>
+                      <div className="text-sm text-blue-600/70 dark:text-blue-400/70">Total Tokens</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                      <TrendingUp className="w-4 h-4" />
+                      {costSummary?.requestCount || 0} requests
+                    </div>
+                    <span className="text-xs text-gray-400">Updated live</span>
+                  </div>
+                  {costSummary?.byModel && Object.keys(costSummary.byModel).length > 0 && (
+                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Top Models by Cost</div>
+                      <div className="space-y-2">
+                        {Object.entries(costSummary.byModel)
+                          .sort((a, b) => b[1].cost - a[1].cost)
+                          .slice(0, 3)
+                          .map(([modelId, data]) => (
+                            <div key={modelId} className="flex items-center justify-between text-sm">
+                              <span className="text-gray-700 dark:text-gray-300 truncate">{modelId}</span>
+                              <span className="text-gray-500 dark:text-gray-400">${data.cost.toFixed(4)}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Routing Rules */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <GitBranch className="w-5 h-5 text-blue-500" />
+                  Active Routing Rules
+                </h3>
+                <button
+                  onClick={() => setActiveTab('routing')}
+                  className="text-sm text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+                >
+                  View All <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Visual Routing Flow */}
+              <div className="space-y-4">
+                {rules.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <GitBranch className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                    <p>No routing rules configured yet</p>
+                    <button
+                      onClick={() => { setActiveTab('routing'); setShowNewRule(true); }}
+                      className="mt-2 text-violet-600 dark:text-violet-400 hover:underline text-sm"
+                    >
+                      Create your first rule
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    {/* Input Node */}
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-xl flex items-center justify-center shadow-sm border-2 border-gray-300 dark:border-gray-600">
+                        <MessageSquare className="w-6 h-6 text-gray-500 dark:text-gray-400" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Incoming Request</div>
+                        <div className="text-xs text-gray-500">All AI requests enter here</div>
+                      </div>
+                    </div>
+                    
+                    {/* Routing Decision Tree */}
+                    <div className="ml-8 border-l-2 border-dashed border-gray-300 dark:border-gray-600 pl-8 space-y-3">
+                      {rules.slice(0, 5).map((rule) => (
+                        <div key={rule.id} className="relative">
+                          {/* Connector Line */}
+                          <div className="absolute -left-8 top-1/2 w-8 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
+                          
+                          {/* Rule Card */}
+                          <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                            rule.enabled 
+                              ? 'bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-800' 
+                              : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 opacity-60'
+                          }`}>
+                            {/* Priority Badge */}
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                              rule.priority >= 90 ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
+                              rule.priority >= 70 ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' :
+                              rule.priority >= 50 ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                              'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                            }`}>
+                              P{rule.priority}
+                            </div>
+                            
+                            {/* Rule Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900 dark:text-white text-sm truncate">{rule.name}</span>
+                                {!rule.enabled && (
+                                  <span className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400 text-xs rounded">
+                                    Disabled
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {rule.conditions.map(c => `${c.field} ${c.operator} ${c.value}`).join(' • ') || 'Default rule'}
+                              </div>
+                            </div>
+                            
+                            {/* Arrow */}
+                            <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            
+                            {/* Target Model */}
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600">
+                              <div className={`w-2 h-2 rounded-full ${MODEL_FAMILY_COLORS[rule.targetModel?.split('-')[0]] || 'bg-gray-400'}`} />
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                {models.find(m => m.id === rule.targetModel)?.displayName || rule.targetModel}
+                              </span>
+                            </div>
+                            
+                            {/* Fallback */}
+                            {rule.fallbackModel && (
+                              <>
+                                <span className="text-xs text-gray-400">→</span>
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-500 dark:text-gray-400">
+                                  <AlertCircle className="w-3 h-3" />
+                                  {models.find(m => m.id === rule.fallbackModel)?.displayName || rule.fallbackModel}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {rules.length > 5 && (
+                        <div className="relative">
+                          <div className="absolute -left-8 top-1/2 w-8 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
+                          <button
+                            onClick={() => setActiveTab('routing')}
+                            className="w-full p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            +{rules.length - 5} more rules...
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Default Fallback */}
+                    <div className="ml-8 border-l-2 border-dashed border-gray-300 dark:border-gray-600 pl-8 mt-3">
+                      <div className="relative">
+                        <div className="absolute -left-8 top-1/2 w-8 border-t-2 border-dashed border-gray-300 dark:border-gray-600" />
+                        <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">Default Handler</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Catch-all for unmatched requests</div>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-gray-400" />
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">GPT-4o</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Legend */}
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Priority Legend:</div>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400 font-bold text-[10px]">90</div>
+                    <span className="text-gray-600 dark:text-gray-400">Critical</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold text-[10px]">70</div>
+                    <span className="text-gray-600 dark:text-gray-400">High</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center text-yellow-600 dark:text-yellow-400 font-bold text-[10px]">50</div>
+                    <span className="text-gray-600 dark:text-gray-400">Medium</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-[10px]">30</div>
+                    <span className="text-gray-600 dark:text-gray-400">Low</span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -25,7 +25,6 @@ import {
   Search,
   MessageSquare,
   Globe,
-  Flame,
   GitBranch,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -87,8 +86,6 @@ const getProviderIcon = (provider: string, className?: string) => {
       return <GitBranch className={className} />;
     case 'mistral':
       return <Rocket className={className} />;
-    case 'xai':
-      return <Flame className={className} />;
     case 'perplexity':
       return <Search className={className} />;
     case 'meta':
@@ -425,7 +422,7 @@ export const AIModelSelector: React.FC<AIModelSelectorProps> = ({
                     </div>
 
                     {/* Models grouped by provider */}
-                    {['anthropic', 'openai', 'github', 'mistral', 'xai', 'perplexity', 'deepseek', 'google', 'meta', 'cohere'].map(provider => {
+                    {['anthropic', 'openai', 'github', 'mistral', 'perplexity', 'deepseek', 'google', 'meta', 'cohere'].map(provider => {
                       const providerModels = models.filter(m => m.provider === provider);
                       const providerConfig = providers.find(p => p.provider === provider);
 
@@ -436,7 +433,7 @@ export const AIModelSelector: React.FC<AIModelSelectorProps> = ({
                           <div className="flex items-center gap-2 mb-3">
                             {getProviderIcon(provider, 'w-4 h-4 text-gray-400')}
                             <h4 className="text-sm font-semibold text-gray-300 uppercase">
-                              {provider === 'xai' ? 'Grok (xAI)' : provider === 'github' ? 'GitHub Copilot' : provider}
+                              {provider === 'github' ? 'GitHub Copilot' : provider}
                             </h4>
                             {!providerConfig?.configured && (
                               <span className="text-xs text-red-400">(Not Configured)</span>

@@ -4,22 +4,28 @@
  * Complete integration with all GitHub Copilot selectable models
  * with real endpoints and intelligent routing
  * 
- * @version 3.0.0
+ * @version 3.1.0 - Added full Google Gemini support
  * @author FMD Engineering Team
  */
 
 import { logger } from '@/utils/logger';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-// Google AI package is optional - used for Gemini models
-// import { GoogleGenerativeAI } from '@google/generative-ai';
+
+// Google AI SDK - optional import with fallback
+let GoogleGenerativeAI: any = null;
+try {
+  GoogleGenerativeAI = require('@google/generative-ai').GoogleGenerativeAI;
+} catch (e) {
+  logger.debug('[CopilotModels] @google/generative-ai not installed, Gemini will use fallback');
+}
 
 // ============================================
 // COPILOT MODEL DEFINITIONS (From Screenshot)
 // ============================================
 
 export type CopilotModelTier = 'flagship' | 'standard' | 'preview' | 'economy';
-export type CopilotModelFamily = 'gpt' | 'claude' | 'gemini' | 'grok' | 'raptor' | 'codex';
+export type CopilotModelFamily = 'gpt' | 'claude' | 'gemini' | 'raptor' | 'codex';
 
 export interface CopilotModel {
   id: string;
@@ -29,7 +35,7 @@ export interface CopilotModel {
   multiplier: string; // e.g., "3x", "1x", "0.33x" from the screenshot
   capabilities: string[];
   endpoint: {
-    provider: 'openai' | 'anthropic' | 'google' | 'xai' | 'internal';
+    provider: 'openai' | 'anthropic' | 'google' | 'internal';
     model: string;
     baseUrl?: string;
   };
@@ -205,23 +211,6 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     maxOutput: 100000,
     specializations: ['autonomous-development', 'full-projects'],
     isPreview: false,
-  },
-
-  // === GROK MODELS ===
-  'grok-code-fast-1': {
-    id: 'grok-code-fast-1',
-    displayName: 'Grok Code Fast 1',
-    family: 'grok',
-    tier: 'economy',
-    multiplier: '0x',
-    capabilities: ['code', 'fast-completion', 'analysis'],
-    endpoint: { provider: 'xai', model: 'grok-2' },
-    costPerMillion: { input: 2, output: 10 },
-    contextWindow: 131072,
-    maxOutput: 8192,
-    specializations: ['fast-code', 'quick-analysis'],
-    isPreview: false,
-    discount: 10,
   },
 
   // === RAPTOR MODELS ===
@@ -508,10 +497,15 @@ export class CopilotModelService {
     if (process.env.OPENAI_API_KEY) {
       this.openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     }
-    // Google AI client can be initialized if the package is installed
-    // if (process.env.GOOGLE_AI_KEY) {
-    //   this.googleClient = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY);
-    // }
+    // Initialize Google Gemini client if SDK available and API key present
+    if (process.env.GOOGLE_AI_KEY && GoogleGenerativeAI) {
+      try {
+        this.googleClient = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY);
+        logger.info('[CopilotModels] Google Gemini client initialized');
+      } catch (error: any) {
+        logger.warn('[CopilotModels] Failed to initialize Google client:', error.message);
+      }
+    }
     
     logger.info('[CopilotModels] Initialized with providers:', {
       anthropic: !!this.anthropicClient,
@@ -628,7 +622,6 @@ export class CopilotModelService {
       case 'anthropic': return !!this.anthropicClient;
       case 'openai': return !!this.openaiClient;
       case 'google': return !!this.googleClient;
-      case 'xai': return !!process.env.XAI_API_KEY;
       case 'internal': return true;
       default: return false;
     }
@@ -765,27 +758,73 @@ export class CopilotModelService {
     };
   }
 
-  private async invokeGoogle(model: CopilotModel, messages: any[], _options?: any): Promise<{ response: string; tokensUsed: { input: number; output: number } }> {
+  private async invokeGoogle(model: CopilotModel, messages: any[], options?: any): Promise<{ response: string; tokensUsed: { input: number; output: number } }> {
     if (!this.googleClient) {
       // Fallback to OpenAI if Google isn't available
       logger.warn('[CopilotModels] Google client not configured, falling back to OpenAI');
-      return this.invokeOpenAI(model, messages, _options);
+      return this.invokeOpenAI(model, messages, options);
     }
 
-    const genModel = this.googleClient.getGenerativeModel({ model: model.endpoint.model });
-    
-    const history = messages.slice(0, -1).map((m: any) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
+    try {
+      const genModel = this.googleClient.getGenerativeModel({ 
+        model: model.endpoint.model,
+        generationConfig: {
+          maxOutputTokens: options?.maxTokens || model.maxOutput,
+          temperature: options?.temperature || 0.7,
+        },
+      });
+      
+      // Build chat history from previous messages
+      const systemMessage = messages.find((m: any) => m.role === 'system');
+      const chatMessages = messages.filter((m: any) => m.role !== 'system');
+      
+      // Format history for Gemini (user/model roles)
+      const history = chatMessages.slice(0, -1).map((m: any) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
 
-    const chat = genModel.startChat({ history });
-    const lastMessage = messages[messages.length - 1];
-    
-    const result = await chat.sendMessage(lastMessage.content);
-    const response = result.response.text();
+      // Start chat with optional system instruction
+      const chat = genModel.startChat({ 
+        history,
+        systemInstruction: systemMessage ? { parts: [{ text: systemMessage.content }] } : undefined,
+      });
+      
+      const lastMessage = chatMessages[chatMessages.length - 1];
+      
+      // Handle images if present
+      let messageParts: any[] = [];
+      if (options?.images && options.images.length > 0) {
+        // Add images as inline data
+        for (const img of options.images) {
+          messageParts.push({
+            inlineData: {
+              mimeType: 'image/png',
+              data: img, // base64 string
+            },
+          });
+        }
+      }
+      messageParts.push({ text: lastMessage.content });
+      
+      const result = await chat.sendMessage(messageParts);
+      const response = result.response.text();
 
-    return { response, tokensUsed: { input: 0, output: 0 } }; // Google doesn't return token counts easily
+      // Try to get token counts if available
+      const usage = result.response.usageMetadata;
+      const tokensUsed = {
+        input: usage?.promptTokenCount || 0,
+        output: usage?.candidatesTokenCount || 0,
+      };
+
+      logger.debug(`[CopilotModels] Gemini response received, tokens: ${tokensUsed.input}/${tokensUsed.output}`);
+      return { response, tokensUsed };
+    } catch (error: any) {
+      logger.error('[CopilotModels] Gemini invocation failed:', error.message);
+      // Fallback to OpenAI on error
+      logger.warn('[CopilotModels] Falling back to OpenAI');
+      return this.invokeOpenAI(model, messages, options);
+    }
   }
 
   private recordUsage(modelId: string, tokens: number, latency: number): void {
