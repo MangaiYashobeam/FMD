@@ -8,6 +8,65 @@ import { CSVParserService } from '@/services/csvParser.service';
 import { getRedisConnection } from '@/config/redis';
 import { FBMPostLogService } from '@/routes/fbm-posts.routes';
 
+/**
+ * Helper to check if account has active session for Facebook posting
+ * Returns session info if available, null otherwise
+ */
+async function getActiveSession(accountId: string) {
+  // First check for FbSession (new session-based auth)
+  const fbSession = await prisma.fbSession.findFirst({
+    where: {
+      accountId,
+      sessionStatus: 'ACTIVE',
+    },
+    orderBy: { lastValidatedAt: 'desc' },
+  });
+
+  if (fbSession) {
+    return {
+      type: 'session' as const,
+      id: fbSession.id,
+      facebookUserId: fbSession.fbUserId,
+      facebookUserName: fbSession.fbUserName,
+      hasTotp: await prisma.fbTotpSecret.findFirst({
+        where: { accountId, isVerified: true },
+        select: { id: true },
+      }) !== null,
+    };
+  }
+
+  // Fall back to legacy FacebookProfile (deprecated)
+  const fbProfile = await prisma.facebookProfile.findFirst({
+    where: {
+      accountId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      facebookUserId: true,
+      facebookUserName: true,
+      accessToken: true,
+      tokenExpiresAt: true,
+    },
+  });
+
+  if (fbProfile && fbProfile.accessToken) {
+    // Check token expiry
+    if (fbProfile.tokenExpiresAt && new Date(fbProfile.tokenExpiresAt) > new Date()) {
+      logger.warn(`Account ${accountId} using deprecated FacebookProfile auth - migrate to session-based auth`);
+      return {
+        type: 'profile' as const,
+        id: fbProfile.id,
+        facebookUserId: fbProfile.facebookUserId,
+        facebookUserName: fbProfile.facebookUserName,
+        deprecated: true,
+      };
+    }
+  }
+
+  return null;
+}
+
 export class VehicleController {
   /**
    * Get all vehicles for account
@@ -319,24 +378,20 @@ export class VehicleController {
 
   /**
    * Post vehicle to Facebook via multiple methods
-   * - IAI: Browser automation through Chrome extension
-   * - Soldier: Server-side headless browser automation
-   * - API: Facebook Graph API (requires Business verification)
+   * - IAI: Browser automation through Chrome extension (uses browser session)
+   * - Soldier: Server-side headless browser automation (uses synced session cookies)
+   * - API: Facebook Graph API (DEPRECATED - no Marketplace API exists)
    * Plus optional Facebook Pixel tracking for retargeting
    */
   async postToFacebook(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
     const { title, price, description, photos, method, includePixelTracking } = req.body;
 
-    // Get the vehicle with account and Facebook profiles
+    // Get the vehicle with account
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: id as string },
       include: { 
-        account: {
-          include: {
-            facebookProfiles: true,
-          },
-        },
+        account: true,
       },
     });
 
@@ -451,8 +506,30 @@ export class VehicleController {
 
     // =====================================================
     // METHOD 1: IAI (Browser Automation via Chrome Extension)
+    // Uses browser's logged-in Facebook session (captured cookies)
     // =====================================================
     if (method === 'iai') {
+      // Check if account has an active session for posting
+      const activeSession = await getActiveSession(vehicle.accountId);
+      
+      if (!activeSession) {
+        res.json({
+          success: false,
+          message: 'No active Facebook session. Please capture a session via the Chrome extension.',
+          data: {
+            method: 'iai',
+            status: 'no_session',
+            instructions: [
+              '1. Install the Dealers Face Chrome extension',
+              '2. Log into Facebook in Chrome',
+              '3. Click the extension icon and select "Capture Session"',
+              '4. Return here to post your vehicle',
+            ],
+          },
+        });
+        return;
+      }
+
       // Create FBM Post Log entry for tracking
       let fbmLog: any = null;
       try {
@@ -488,6 +565,11 @@ export class VehicleController {
             vehicle: vehicleData,
             pixelTracking: includePixelTracking ? pixelEvent : null,
             fbmLogId: fbmLog?.id,  // Include log ID for status updates
+            sessionInfo: {
+              type: activeSession.type,
+              facebookUserId: activeSession.facebookUserId,
+              facebookUserName: activeSession.facebookUserName,
+            },
             instructions: {
               navigateTo: 'marketplace_create_vehicle',
               fillForm: true,
@@ -511,17 +593,23 @@ export class VehicleController {
         }
       }
 
-      // Create a pending Facebook post record
-      const fbProfile = vehicle.account.facebookProfiles?.[0];
-      if (fbProfile) {
-        await prisma.facebookPost.create({
-          data: {
-            vehicleId: vehicle.id,
-            profileId: fbProfile.id,
-            status: 'pending',
-            message: vehicleData.description,
-          },
-        });
+      // Create a pending Facebook post record (using session's FB user as reference)
+      try {
+        // Get or create a minimal profile reference for post tracking
+        const profileId = activeSession.type === 'profile' ? activeSession.id : null;
+        
+        if (profileId) {
+          await prisma.facebookPost.create({
+            data: {
+              vehicleId: vehicle.id,
+              profileId: profileId,
+              status: 'pending',
+              message: vehicleData.description,
+            },
+          });
+        }
+      } catch (postErr) {
+        logger.warn(`Could not create Facebook post record: ${postErr}`);
       }
 
       logger.info(`IAI task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}`);
@@ -535,9 +623,14 @@ export class VehicleController {
           method: 'iai',
           status: 'pending',
           pixelTracking: includePixelTracking,
+          sessionInfo: {
+            facebookUserId: activeSession.facebookUserId,
+            facebookUserName: activeSession.facebookUserName,
+            hasTotp: activeSession.type === 'session' ? activeSession.hasTotp : false,
+          },
           instructions: [
             '1. Ensure Chrome Extension is installed and logged in',
-            '2. Open Facebook.com in the same browser',
+            '2. Open Facebook.com in the same browser (logged in as ' + (activeSession.facebookUserName || activeSession.facebookUserId) + ')',
             '3. The IAI Soldier will automatically detect and execute the task',
             '4. Review the listing before publishing',
           ],
@@ -548,8 +641,37 @@ export class VehicleController {
 
     // =====================================================
     // METHOD 2: SOLDIER WORKERS (Server-side Headless Browser)
+    // Uses session cookies synced from Chrome extension
     // =====================================================
     if (method === 'soldier') {
+      // Check if account has an active session for posting
+      const activeSession = await getActiveSession(vehicle.accountId);
+      
+      if (!activeSession) {
+        res.json({
+          success: false,
+          message: 'No active Facebook session. Please capture a session via the Chrome extension first.',
+          data: {
+            method: 'soldier',
+            status: 'no_session',
+            instructions: [
+              '1. Install the Dealers Face Chrome extension',
+              '2. Log into Facebook in Chrome',
+              '3. Click the extension icon and select "Capture Session"',
+              '4. Session cookies will be synced for Soldier Workers',
+              '5. Return here to post your vehicle',
+            ],
+          },
+        });
+        return;
+      }
+
+      // For soldier workers, also check if we have TOTP for recovery
+      const hasTotp = activeSession.type === 'session' ? activeSession.hasTotp : false;
+      if (!hasTotp) {
+        logger.warn(`Account ${vehicle.accountId} using Soldier without 2FA - session recovery may fail`);
+      }
+
       // Create FBM Post Log entry for tracking
       let fbmLog: any = null;
       try {
@@ -591,6 +713,13 @@ export class VehicleController {
               targetPlatform: 'facebook_marketplace',
               useHeadlessBrowser: true,
               workerType: 'soldier',
+              sessionInfo: {
+                type: activeSession.type,
+                sessionId: activeSession.type === 'session' ? activeSession.id : null,
+                facebookUserId: activeSession.facebookUserId,
+                facebookUserName: activeSession.facebookUserName,
+                hasTotp: hasTotp,
+              },
               instructions: {
                 navigateTo: 'marketplace_create_vehicle',
                 fillForm: true,
@@ -627,6 +756,13 @@ export class VehicleController {
             vehicle: vehicleData,
             createdAt: new Date().toISOString(),
             priority: 5,
+            // Session info for workers to fetch from API
+            sessionInfo: {
+              type: activeSession.type,
+              sessionId: activeSession.type === 'session' ? activeSession.id : null,
+              facebookUserId: activeSession.facebookUserId,
+              hasTotp: hasTotp,
+            },
           }));
           
           // Update log to processing status
@@ -647,17 +783,21 @@ export class VehicleController {
           }
         }
 
-        // Create a pending Facebook post record
-        const fbProfile = vehicle.account.facebookProfiles?.[0];
-        if (fbProfile) {
-          await prisma.facebookPost.create({
-            data: {
-              vehicleId: vehicle.id,
-              profileId: fbProfile.id,
-              status: 'queued_soldier',
-              message: vehicleData.description,
-            },
-          });
+        // Create a pending Facebook post record if we have a profile reference
+        try {
+          const profileId = activeSession.type === 'profile' ? activeSession.id : null;
+          if (profileId) {
+            await prisma.facebookPost.create({
+              data: {
+                vehicleId: vehicle.id,
+                profileId: profileId,
+                status: 'queued_soldier',
+                message: vehicleData.description,
+              },
+            });
+          }
+        } catch (postErr) {
+          logger.warn(`Could not create Facebook post record: ${postErr}`);
         }
 
         logger.info(`Soldier Worker task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}`);
@@ -672,15 +812,21 @@ export class VehicleController {
             status: 'queued',
             pixelTracking: includePixelTracking,
             estimatedProcessingTime: '1-5 minutes',
+            sessionInfo: {
+              facebookUserId: activeSession.facebookUserId,
+              facebookUserName: activeSession.facebookUserName,
+              hasTotp: hasTotp,
+            },
             features: [
               '🤖 Fully automated headless browser posting',
-              '🔒 Secure server-side processing',
+              '🔒 Secure server-side processing using your synced session',
               '📸 Automatic photo upload',
               '🛡️ Anti-detection measures',
-              '⚡ No browser extension required',
+              hasTotp ? '🔐 2FA enabled for automatic session recovery' : '⚠️ No 2FA - manual recovery if session expires',
             ],
             instructions: [
               'Your listing is being processed by our Soldier Workers',
+              `Using Facebook session for: ${activeSession.facebookUserName || activeSession.facebookUserId}`,
               'You will receive a notification when complete',
               'Check the posting status in Settings > Posting History',
             ],
@@ -712,95 +858,61 @@ export class VehicleController {
     }
 
     // =====================================================
-    // METHOD 3: API (Facebook Graph API - Limited)
+    // METHOD 3: API (Facebook Graph API - DEPRECATED)
+    // ⚠️ DEPRECATED: Facebook does NOT have a public Marketplace API
+    // This method is kept for historical reference only
     // =====================================================
     if (method === 'api') {
-      // Check if account has a connected Facebook profile with valid token
-      const fbProfile = vehicle.account.facebookProfiles?.[0];
-      
-      if (!fbProfile || !fbProfile.accessToken) {
-        res.json({
-          success: false,
-          message: 'No Facebook profile connected. Please connect via Settings > Facebook.',
-          data: { 
-            method: 'api',
-            status: 'no_profile',
-            instructions: [
-              'Go to Settings > Facebook Integration',
-              'Click "Connect Facebook Page"',
-              'Authorize the required permissions',
-            ],
-          },
-        });
-        return;
-      }
-
-      // Check token expiry
-      if (new Date(fbProfile.tokenExpiresAt) < new Date()) {
-        res.json({
-          success: false,
-          message: 'Facebook token expired. Please reconnect your Facebook page.',
-          data: { 
-            method: 'api',
-            status: 'token_expired',
-          },
-        });
-        return;
-      }
-
       // IMPORTANT: Facebook does NOT have a public Marketplace API
       // The Graph API can only post to Pages, not Marketplace
-      // This creates a Page post with vehicle info (not a Marketplace listing)
+      // This method is deprecated in favor of session-based IAI/Soldier methods
       
-      try {
-        const pagePostMessage = `🚗 ${vehicleData.title}\n\n` +
-          `💰 Price: $${vehicleData.price.toLocaleString()}\n` +
-          `📍 Mileage: ${vehicleData.mileage?.toLocaleString() || 'N/A'} miles\n` +
-          `🎨 Color: ${vehicleData.exteriorColor || 'See photos'}\n\n` +
-          `${vehicleData.description?.slice(0, 500) || 'Contact us for more details!'}\n\n` +
-          `Stock #${vehicleData.stockNumber || 'N/A'} | VIN: ${vehicleData.vin?.slice(-6) || 'Ask us'}`;
-
-        // Note: This would post to the PAGE, not Marketplace
-        // Marketplace API does not exist for general public use
-        
-        logger.info(`API post attempted for vehicle ${id} (Page post only)`);
-
-        res.json({
-          success: true,
-          message: 'Facebook Graph API can only post to Pages, not Marketplace. Consider using IAI method.',
-          data: { 
-            method: 'api',
-            status: 'page_post_only',
-            limitations: [
-              '⚠️ Facebook has NO public Marketplace API',
-              '⚠️ Graph API can only post to Facebook Pages',
-              '⚠️ Marketplace listings require browser automation (IAI)',
-              '✅ Page posts can include vehicle details and photos',
-              '✅ Page posts can link to your website inventory',
-            ],
-            recommendation: 'Use IAI method for actual Marketplace listings',
-            pagePostContent: pagePostMessage,
+      res.json({
+        success: false,
+        message: 'The API posting method is deprecated. Facebook does not have a public Marketplace API.',
+        data: { 
+          method: 'api',
+          status: 'deprecated',
+          deprecationNotice: true,
+          limitations: [
+            '❌ Facebook has NO public Marketplace API',
+            '❌ Graph API can only post to Facebook Pages, NOT Marketplace',
+            '❌ OAuth tokens cannot be used for Marketplace listings',
+          ],
+          recommendation: {
+            method: 'iai',
+            reason: 'Use IAI or Soldier method for Marketplace listings',
+            description: 'These methods use browser session cookies to automate posting directly to Marketplace',
           },
-        });
-        return;
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        logger.error(`API post failed for vehicle ${id}: ${errorMessage}`);
-        throw new AppError(`Facebook API error: ${errorMessage}`, 500);
-      }
+          migration: {
+            step1: 'Capture your Facebook session via the Chrome extension',
+            step2: 'Enable 2FA for automatic session recovery (optional but recommended)',
+            step3: 'Use method="iai" or method="soldier" when posting vehicles',
+          },
+        },
+      });
+      return;
     }
 
     // Unknown method
     res.json({
       success: false,
-      message: `Unknown posting method: ${method}. Use 'iai', 'api', or 'soldier'.`,
+      message: `Unknown posting method: ${method}. Use 'iai' or 'soldier'.`,
       data: { 
         availableMethods: {
-          iai: 'Browser automation via Chrome Extension - RECOMMENDED for Marketplace',
-          soldier: 'Headless browser automation via Soldier Workers - Server-side processing',
-          api: 'Facebook Graph API - Page posts only, no Marketplace',
+          iai: 'Browser automation via Chrome Extension - Uses your logged-in browser session',
+          soldier: 'Headless browser automation via Soldier Workers - Uses synced session cookies',
         },
-        note: 'Facebook Pixel tracking is an optional addon, not a posting method.',
+        deprecatedMethods: {
+          api: 'DEPRECATED - Facebook does not have a public Marketplace API',
+        },
+        note: 'Both methods require capturing a Facebook session via the Chrome extension first.',
+        sessionSetup: [
+          '1. Install the Dealers Face Chrome extension',
+          '2. Log into Facebook in Chrome',
+          '3. Click the extension icon and select "Capture Session"',
+          '4. (Optional) Enable 2FA for automatic session recovery',
+        ],
       },
     });
   }

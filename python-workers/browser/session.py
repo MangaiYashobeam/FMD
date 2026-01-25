@@ -469,3 +469,161 @@ class FacebookSessionValidator:
             if cookie['name'] == 'c_user':
                 return cookie['value']
         return None
+
+
+class SessionSyncService:
+    """
+    Syncs sessions between local storage and DealersFace API
+    
+    This allows sessions captured by the Chrome extension to be
+    used by Nova workers on the server.
+    """
+    
+    def __init__(self, api_url: str, api_token: str):
+        self.api_url = api_url.rstrip('/')
+        self.api_token = api_token
+        self._session_manager = SessionManager()
+    
+    async def fetch_session_from_api(
+        self, 
+        account_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch session synced from desktop extension
+        
+        Args:
+            account_id: Account identifier
+            
+        Returns:
+            Storage state dict if session exists
+        """
+        import aiohttp
+        
+        try:
+            url = f"{self.api_url}/fb-session/internal/export/{account_id}"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={'Authorization': f'Bearer {self.api_token}'}
+                ) as response:
+                    if response.status == 404:
+                        logger.info("No session found in API", account_id=account_id)
+                        return None
+                    
+                    if response.status != 200:
+                        logger.warning(
+                            "Failed to fetch session from API",
+                            account_id=account_id,
+                            status=response.status
+                        )
+                        return None
+                    
+                    data = await response.json()
+                    
+                    if not data.get('success'):
+                        return None
+                    
+                    storage_state = data.get('storageState')
+                    if storage_state:
+                        logger.info(
+                            "Session fetched from API",
+                            account_id=account_id,
+                            cookies=len(storage_state.get('cookies', [])),
+                            has_2fa=data.get('has2FA', False)
+                        )
+                    
+                    return storage_state
+                    
+        except Exception as e:
+            logger.error(
+                "Error fetching session from API",
+                account_id=account_id,
+                error=str(e)
+            )
+            return None
+    
+    async def get_best_session(
+        self, 
+        account_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get the best available session (newest between local and API)
+        
+        Priority:
+        1. Fetch from API (synced from extension)
+        2. Use local session if API unavailable
+        3. Return None if no valid session
+        
+        Args:
+            account_id: Account identifier
+            
+        Returns:
+            Storage state dict
+        """
+        # Try API first (may have fresher session from extension)
+        api_session = await self.fetch_session_from_api(account_id)
+        local_session = await self._session_manager.load_session(account_id)
+        
+        # If we got API session, prefer it (it's synced from active extension)
+        if api_session:
+            # Validate it
+            if FacebookSessionValidator.validate(api_session):
+                # Save locally for offline use
+                await self._session_manager.save_session(account_id, api_session)
+                return api_session
+            else:
+                logger.warning("API session invalid", account_id=account_id)
+        
+        # Fall back to local session
+        if local_session:
+            if FacebookSessionValidator.validate(local_session):
+                return local_session
+            else:
+                logger.warning("Local session invalid", account_id=account_id)
+        
+        return None
+    
+    async def request_2fa_code(self, account_id: str) -> Optional[str]:
+        """
+        Request a 2FA code for session recovery
+        
+        Args:
+            account_id: Account identifier
+            
+        Returns:
+            TOTP code if available
+        """
+        import aiohttp
+        
+        try:
+            url = f"{self.api_url}/fb-session/totp/generate/{account_id}"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={'Authorization': f'Bearer {self.api_token}'}
+                ) as response:
+                    if response.status != 200:
+                        return None
+                    
+                    data = await response.json()
+                    
+                    if data.get('success'):
+                        logger.info(
+                            "2FA code retrieved",
+                            account_id=account_id,
+                            valid_for=data.get('validFor', 30)
+                        )
+                        return data.get('code')
+                    
+                    return None
+                    
+        except Exception as e:
+            logger.error(
+                "Error requesting 2FA code",
+                account_id=account_id,
+                error=str(e)
+            )
+            return None
+

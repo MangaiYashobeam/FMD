@@ -532,10 +532,379 @@ async function checkIAIHeartbeat() {
 }
 
 // ============================================
-// OAuth Flow
+// Session-Based Auth (REPLACES OAuth)
+// ============================================
+
+// Session sync state
+let sessionSyncTimeout = null;
+let sessionAutoSyncInterval = null;
+const SESSION_SYNC_DEBOUNCE_MS = 5000;
+const SESSION_AUTO_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+/**
+ * Capture Facebook cookies
+ */
+async function captureFacebookCookies() {
+  try {
+    const cookies = await chrome.cookies.getAll({ domain: '.facebook.com' });
+    const wwwCookies = await chrome.cookies.getAll({ domain: 'www.facebook.com' });
+    
+    // Merge and deduplicate
+    const allCookies = [...cookies];
+    for (const cookie of wwwCookies) {
+      if (!allCookies.some(c => c.name === cookie.name && c.domain === cookie.domain)) {
+        allCookies.push(cookie);
+      }
+    }
+    
+    return allCookies.map(c => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain,
+      path: c.path,
+      expires: c.expirationDate,
+      httpOnly: c.httpOnly,
+      secure: c.secure,
+      sameSite: c.sameSite
+    }));
+  } catch (error) {
+    console.error('Failed to capture Facebook cookies:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check if user is logged into Facebook
+ */
+async function isLoggedIntoFacebook() {
+  const cookies = await captureFacebookCookies();
+  const required = ['c_user', 'xs', 'datr'];
+  const fbCookies = cookies.filter(c => c.domain?.includes('facebook.com'));
+  return required.every(name => fbCookies.some(c => c.name === name));
+}
+
+/**
+ * Capture and sync session to server
+ */
+async function captureAndSyncSession() {
+  try {
+    console.log('🔄 Capturing Facebook session...');
+    
+    // Get auth token
+    const { authToken, authState: savedAuth } = await chrome.storage.local.get(['authToken', 'authState']);
+    const token = authToken || savedAuth?.accessToken;
+    
+    if (!token) {
+      return { success: false, error: 'Not authenticated with DealersFace. Please log in first.' };
+    }
+    
+    // Capture cookies
+    const cookies = await captureFacebookCookies();
+    
+    // Validate
+    const fbCookies = cookies.filter(c => c.domain?.includes('facebook.com'));
+    const required = ['c_user', 'xs', 'datr'];
+    const missing = required.filter(name => !fbCookies.some(c => c.name === name));
+    
+    if (missing.length > 0) {
+      return { 
+        success: false, 
+        error: `Not logged into Facebook. Missing: ${missing.join(', ')}` 
+      };
+    }
+    
+    const cUser = fbCookies.find(c => c.name === 'c_user');
+    const fbUserId = cUser?.value;
+    
+    // Get browser fingerprint
+    let { browserFingerprint } = await chrome.storage.local.get(['browserFingerprint']);
+    if (!browserFingerprint) {
+      const array = new Uint8Array(16);
+      crypto.getRandomValues(array);
+      browserFingerprint = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+      await chrome.storage.local.set({ browserFingerprint });
+    }
+    
+    // Send to server
+    const response = await fetch(`${CONFIG.API_URL}/fb-session/capture`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Browser-ID': browserFingerprint
+      },
+      body: JSON.stringify({
+        cookies,
+        userAgent: navigator.userAgent,
+        browserFingerprint
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.error || 'Session capture failed' };
+    }
+    
+    const result = await response.json();
+    
+    // Update local state with session info
+    authState = {
+      ...authState,
+      isAuthenticated: true,
+      fbSessionId: result.sessionId,
+      fbUserId: result.fbUserId,
+    };
+    
+    await chrome.storage.local.set({ 
+      authState,
+      fbSessionInfo: {
+        sessionId: result.sessionId,
+        fbUserId: result.fbUserId,
+        expiresAt: result.expiresAt,
+        status: result.status,
+        capturedAt: new Date().toISOString()
+      },
+      fbSessionCapturedAt: Date.now()
+    });
+    
+    console.log('✅ Session captured:', { sessionId: result.sessionId, fbUserId: result.fbUserId });
+    
+    // Start auto-sync
+    startSessionAutoSync();
+    
+    return { 
+      success: true, 
+      sessionId: result.sessionId,
+      fbUserId: result.fbUserId,
+      expiresAt: result.expiresAt,
+      message: 'Facebook session captured successfully!'
+    };
+  } catch (error) {
+    console.error('❌ Session capture error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Sync session to server
+ */
+async function syncSessionToServer() {
+  try {
+    console.log('🔄 Syncing session to server...');
+    
+    const { authToken, authState: savedAuth, accountId } = await chrome.storage.local.get([
+      'authToken', 'authState', 'accountId'
+    ]);
+    
+    const token = authToken || savedAuth?.accessToken;
+    const targetAccountId = accountId || savedAuth?.dealerAccountId || savedAuth?.accountId;
+    
+    if (!token || !targetAccountId) {
+      console.log('⏭️ Skipping sync - not authenticated');
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    const isLoggedIn = await isLoggedIntoFacebook();
+    if (!isLoggedIn) {
+      console.log('⏭️ Skipping sync - not logged into Facebook');
+      return { success: false, error: 'Not logged into Facebook' };
+    }
+    
+    const cookies = await captureFacebookCookies();
+    
+    let { browserFingerprint } = await chrome.storage.local.get(['browserFingerprint']);
+    if (!browserFingerprint) {
+      browserFingerprint = 'unknown';
+    }
+    
+    const response = await fetch(`${CONFIG.API_URL}/fb-session/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Browser-ID': browserFingerprint
+      },
+      body: JSON.stringify({
+        accountId: targetAccountId,
+        storageState: { cookies, origins: [] },
+        source: 'extension',
+        timestamp: Date.now()
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.error || 'Sync failed' };
+    }
+    
+    const result = await response.json();
+    await chrome.storage.local.set({ fbSessionLastSync: Date.now() });
+    
+    console.log('✅ Session synced');
+    return { success: true, syncedAt: result.syncedAt };
+  } catch (error) {
+    console.error('❌ Session sync error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get session status from server
+ */
+async function getSessionStatus() {
+  try {
+    const { authToken, authState: savedAuth, accountId } = await chrome.storage.local.get([
+      'authToken', 'authState', 'accountId'
+    ]);
+    
+    const token = authToken || savedAuth?.accessToken;
+    const targetAccountId = accountId || savedAuth?.dealerAccountId || savedAuth?.accountId;
+    
+    if (!token || !targetAccountId) {
+      return { success: true, hasSession: false, error: 'Not authenticated' };
+    }
+    
+    const response = await fetch(`${CONFIG.API_URL}/fb-session/status/${targetAccountId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) {
+      return { success: false, hasSession: false };
+    }
+    
+    const result = await response.json();
+    await chrome.storage.local.set({ fbSessionInfo: result });
+    
+    return { success: true, ...result };
+  } catch (error) {
+    console.error('Failed to get session status:', error);
+    return { success: false, hasSession: false, error: error.message };
+  }
+}
+
+/**
+ * Setup 2FA for session recovery
+ */
+async function setup2FAForSession(existingSecret = null) {
+  try {
+    const { authToken, authState: savedAuth } = await chrome.storage.local.get(['authToken', 'authState']);
+    const token = authToken || savedAuth?.accessToken;
+    
+    if (!token) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    const response = await fetch(`${CONFIG.API_URL}/fb-session/totp/setup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ existingSecret })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.error || '2FA setup failed' };
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('2FA setup failed:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Verify 2FA code
+ */
+async function verify2FACode(code) {
+  try {
+    const { authToken, authState: savedAuth } = await chrome.storage.local.get(['authToken', 'authState']);
+    const token = authToken || savedAuth?.accessToken;
+    
+    if (!token) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    const response = await fetch(`${CONFIG.API_URL}/fb-session/totp/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ code })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      return { success: false, error: error.error || 'Verification failed' };
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      const { fbSessionInfo } = await chrome.storage.local.get(['fbSessionInfo']);
+      if (fbSessionInfo) {
+        fbSessionInfo.has2FA = true;
+        await chrome.storage.local.set({ fbSessionInfo });
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('2FA verification failed:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Start session auto-sync
+ */
+function startSessionAutoSync() {
+  // Cookie change listener
+  if (!chrome.cookies.onChanged.hasListener(handleCookieChange)) {
+    chrome.cookies.onChanged.addListener(handleCookieChange);
+    console.log('🍪 Cookie monitoring started');
+  }
+  
+  // Periodic sync
+  if (sessionAutoSyncInterval) {
+    clearInterval(sessionAutoSyncInterval);
+  }
+  sessionAutoSyncInterval = setInterval(async () => {
+    const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/*' });
+    if (tabs.length > 0) {
+      await syncSessionToServer();
+    }
+  }, SESSION_AUTO_SYNC_INTERVAL_MS);
+  console.log('⏰ Session auto-sync started');
+}
+
+/**
+ * Handle cookie changes
+ */
+async function handleCookieChange(changeInfo) {
+  if (changeInfo.cookie.domain.includes('facebook.com')) {
+    clearTimeout(sessionSyncTimeout);
+    sessionSyncTimeout = setTimeout(async () => {
+      const isLoggedIn = await isLoggedIntoFacebook();
+      if (isLoggedIn) {
+        const { authState: savedAuth } = await chrome.storage.local.get(['authState']);
+        if (savedAuth?.isAuthenticated) {
+          await syncSessionToServer();
+        }
+      }
+    }, SESSION_SYNC_DEBOUNCE_MS);
+  }
+}
+
+// ============================================
+// OAuth Flow (DEPRECATED - kept for backwards compatibility)
 // ============================================
 
 /**
+ * @deprecated Use captureAndSyncSession() instead
  * Initiate Facebook OAuth login
  */
 async function initiateOAuth() {
@@ -865,13 +1234,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleMessage(message, sender) {
   switch (message.type) {
+    // ============================================
+    // Session-Based Auth (NEW - Replaces OAuth)
+    // ============================================
+    case 'CAPTURE_SESSION':
+      // Capture Facebook session cookies and sync to server
+      return await captureAndSyncSession();
+    
+    case 'SYNC_SESSION':
+      // Force sync session to server
+      return await syncSessionToServer();
+    
+    case 'GET_SESSION_STATUS':
+      // Get current session status from server
+      return await getSessionStatus();
+    
+    case 'IS_LOGGED_INTO_FACEBOOK':
+      // Check if user is logged into Facebook
+      const isLoggedIn = await isLoggedIntoFacebook();
+      return { success: true, isLoggedIn };
+    
+    case 'SETUP_2FA':
+      // Setup 2FA for session recovery
+      return await setup2FAForSession(message.existingSecret);
+    
+    case 'VERIFY_2FA':
+      // Verify 2FA code
+      return await verify2FACode(message.code);
+    
+    // ============================================
+    // Legacy Login (Deprecating OAuth)
+    // ============================================
     case 'LOGIN':
-      const loginResult = await initiateOAuth();
-      // Start IAI polling after successful login
-      if (loginResult && loginResult.accessToken) {
+      // NEW: Use session-based login instead of OAuth
+      console.log('⚠️ LOGIN via OAuth is deprecated. Use CAPTURE_SESSION instead.');
+      // Check if already logged into Facebook
+      const fbLoggedIn = await isLoggedIntoFacebook();
+      if (!fbLoggedIn) {
+        return { 
+          success: false, 
+          error: 'Please log in to Facebook first, then click "Capture Session"' 
+        };
+      }
+      // Capture session instead of OAuth
+      const sessionResult = await captureAndSyncSession();
+      if (sessionResult.success) {
         await startIAITaskPolling();
       }
-      return loginResult;
+      return sessionResult;
       
     case 'LOGOUT':
       // Stop IAI polling on logout

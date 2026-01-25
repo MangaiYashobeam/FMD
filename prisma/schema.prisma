@@ -28,23 +28,23 @@ model User {
   lastLoginAt   DateTime? @map("last_login_at")
 
   // UTM Source Tracking - Capture how users discovered us
-  utmSource     String?   @map("utm_source")   // e.g., google, facebook, referral
-  utmMedium     String?   @map("utm_medium")   // e.g., cpc, social, email
-  utmCampaign   String?   @map("utm_campaign") // e.g., spring_sale, launch
-  utmTerm       String?   @map("utm_term")     // Search keyword
-  utmContent    String?   @map("utm_content")  // Ad variant identifier
-  referralCode  String?   @map("referral_code") // Referral tracking
-  signupIp      String?   @map("signup_ip")    // IP at registration
-  signupCountry String?   @map("signup_country") // Country at registration
+  utmSource     String? @map("utm_source") // e.g., google, facebook, referral
+  utmMedium     String? @map("utm_medium") // e.g., cpc, social, email
+  utmCampaign   String? @map("utm_campaign") // e.g., spring_sale, launch
+  utmTerm       String? @map("utm_term") // Search keyword
+  utmContent    String? @map("utm_content") // Ad variant identifier
+  referralCode  String? @map("referral_code") // Referral tracking
+  signupIp      String? @map("signup_ip") // IP at registration
+  signupCountry String? @map("signup_country") // Country at registration
 
   // IntelliCeil Session Tracking
-  lastActiveAt      DateTime? @map("last_active_at")
-  loginCount        Int       @default(0) @map("login_count")
-  currentSessionId  String?   @map("current_session_id")
-  lastIpAddress     String?   @map("last_ip_address")
-  lastUserAgent     String?   @map("last_user_agent")
-  loginMethod       String?   @map("login_method") // 'email', 'google', 'facebook'
-  visitHeatScore    Int       @default(0) @map("visit_heat_score") // Frequency heat: 0-100
+  lastActiveAt     DateTime? @map("last_active_at")
+  loginCount       Int       @default(0) @map("login_count")
+  currentSessionId String?   @map("current_session_id")
+  lastIpAddress    String?   @map("last_ip_address")
+  lastUserAgent    String?   @map("last_user_agent")
+  loginMethod      String?   @map("login_method") // 'email', 'google', 'facebook'
+  visitHeatScore   Int       @default(0) @map("visit_heat_score") // Frequency heat: 0-100
 
   // Two-Factor Authentication
   twoFactorEnabled     Boolean  @default(false) @map("two_factor_enabled")
@@ -73,6 +73,7 @@ model User {
   iaiSoldiers         IAISoldier[]
   trainingSessions    TrainingSession[]
   userSessions        UserSession[]
+  iaiInstances        IAIInstance[]
 
   @@map("users")
 }
@@ -132,6 +133,11 @@ model Account {
   fbmPostLogs       FBMPostLog[]
   iaiSoldiers       IAISoldier[]
   iaiActivityLogs   IAIActivityLog[]
+  // New Session-Based Auth Relations
+  fbSessions        FbSession[]
+  fbTotpSecret      FbTotpSecret?
+  scheduledTasks    ScheduledTask[]
+  iaiInstances      IAIInstance[]
 
   @@map("accounts")
 }
@@ -2914,11 +2920,11 @@ model AIInterventionSummary {
 // ============================================
 
 model IAISoldier {
-  id            String   @id @default(uuid())
-  soldierNumber Int      @default(autoincrement()) @map("soldier_number")
-  soldierId     String   @unique @map("soldier_id") // IAI-0, IAI-1, etc.
-  accountId     String   @map("account_id")
-  userId        String?  @map("user_id")
+  id            String  @id @default(uuid())
+  soldierNumber Int     @default(autoincrement()) @map("soldier_number")
+  soldierId     String  @unique @map("soldier_id") // IAI-0, IAI-1, etc.
+  accountId     String  @map("account_id")
+  userId        String? @map("user_id")
 
   // Status
   status   String  @default("offline") // online, offline, working, idle, error
@@ -2930,19 +2936,19 @@ model IAISoldier {
   userAgent        String? @map("user_agent")
 
   // Location & Network
-  ipAddress        String?  @map("ip_address")
-  locationCountry  String?  @map("location_country")
-  locationCity     String?  @map("location_city")
-  locationLat      Decimal? @map("location_lat") @db.Decimal(10, 8)
-  locationLng      Decimal? @map("location_lng") @db.Decimal(11, 8)
-  timezone         String?
+  ipAddress       String?  @map("ip_address")
+  locationCountry String?  @map("location_country")
+  locationCity    String?  @map("location_city")
+  locationLat     Decimal? @map("location_lat") @db.Decimal(10, 8)
+  locationLng     Decimal? @map("location_lng") @db.Decimal(11, 8)
+  timezone        String?
 
   // Performance Stats
-  tasksCompleted       Int      @default(0) @map("tasks_completed")
-  tasksFailed          Int      @default(0) @map("tasks_failed")
-  totalRuntimeMinutes  Int      @default(0) @map("total_runtime_minutes")
-  avgTaskDurationSec   Int?     @map("avg_task_duration_sec")
-  successRate          Decimal? @map("success_rate") @db.Decimal(5, 2)
+  tasksCompleted      Int      @default(0) @map("tasks_completed")
+  tasksFailed         Int      @default(0) @map("tasks_failed")
+  totalRuntimeMinutes Int      @default(0) @map("total_runtime_minutes")
+  avgTaskDurationSec  Int?     @map("avg_task_duration_sec")
+  successRate         Decimal? @map("success_rate") @db.Decimal(5, 2)
 
   // Current Work
   currentTaskId        String?   @map("current_task_id")
@@ -2966,9 +2972,9 @@ model IAISoldier {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  account            Account                    @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  user               User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  activityLogs       IAIActivityLog[]
+  account              Account                  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user                 User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  activityLogs         IAIActivityLog[]
   performanceSnapshots IAIPerformanceSnapshot[]
 
   @@index([accountId])
@@ -2984,8 +2990,8 @@ model IAIActivityLog {
   accountId String @map("account_id")
 
   // Event Details
-  eventType String @map("event_type") // heartbeat, task_start, task_complete, task_fail, status_change, error
-  eventData Json?  @map("event_data")
+  eventType String  @map("event_type") // heartbeat, task_start, task_complete, task_fail, status_change, error
+  eventData Json?   @map("event_data")
   message   String?
 
   // Task Reference
@@ -3052,19 +3058,19 @@ model TrainingSession {
   recordingType String @default("iai") @map("recording_type") // iai, soldier
 
   // Session Data
-  duration              Int      @default(0) @map("duration") // Duration in ms
-  totalEvents           Int      @default(0) @map("total_events")
-  markedElementsCount   Int      @default(0) @map("marked_elements_count")
-  metadata              Json?    @map("metadata")
+  duration            Int   @default(0) @map("duration") // Duration in ms
+  totalEvents         Int   @default(0) @map("total_events")
+  markedElementsCount Int   @default(0) @map("marked_elements_count")
+  metadata            Json? @map("metadata")
 
   // Processed Data
-  clickSequence         Json?    @map("click_sequence") // Array of click events in order
-  typingPatterns        Json?    @map("typing_patterns") // Typing patterns detected
-  automationCode        Json?    @map("automation_code") // Generated automation code
+  clickSequence  Json? @map("click_sequence") // Array of click events in order
+  typingPatterns Json? @map("typing_patterns") // Typing patterns detected
+  automationCode Json? @map("automation_code") // Generated automation code
 
   // Status
-  status     String    @default("RECORDED") @map("status") // RECORDED, PROCESSED, ACTIVE, ARCHIVED
-  isActive   Boolean   @default(false) @map("is_active")
+  status      String    @default("RECORDED") @map("status") // RECORDED, PROCESSED, ACTIVE, ARCHIVED
+  isActive    Boolean   @default(false) @map("is_active")
   processedAt DateTime? @map("processed_at")
 
   // Relations
@@ -3101,13 +3107,13 @@ model TrainingEvent {
   url          String?  @map("url")
 
   // Element Information
-  fieldType   String?  @map("field_type") // vehicleType, year, make, model, etc.
-  isMarked    Boolean  @default(false) @map("is_marked")
-  elementData Json?    @map("element_data") // Full element info
+  fieldType   String? @map("field_type") // vehicleType, year, make, model, etc.
+  isMarked    Boolean @default(false) @map("is_marked")
+  elementData Json?   @map("element_data") // Full element info
 
   // Position & Modifiers
-  mousePosition Json?   @map("mouse_position") // x, y coordinates
-  modifiers     Json?   @map("modifiers") // ctrl, shift, alt, meta
+  mousePosition Json? @map("mouse_position") // x, y coordinates
+  modifiers     Json? @map("modifiers") // ctrl, shift, alt, meta
 
   // Additional Data
   additionalData Json? @map("additional_data")
@@ -3210,43 +3216,43 @@ model TrainingPattern {
 
 // User Session - Authenticated user sessions
 model UserSession {
-  id             String    @id @default(uuid())
-  userId         String    @map("user_id")
-  sessionToken   String    @unique @map("session_token")
-  
+  id           String @id @default(uuid())
+  userId       String @map("user_id")
+  sessionToken String @unique @map("session_token")
+
   // Session Info
-  ipAddress      String    @map("ip_address")
-  userAgent      String    @map("user_agent")
-  deviceType     String?   @map("device_type") // desktop, mobile, tablet
-  browser        String?
-  os             String?
-  
+  ipAddress  String  @map("ip_address")
+  userAgent  String  @map("user_agent")
+  deviceType String? @map("device_type") // desktop, mobile, tablet
+  browser    String?
+  os         String?
+
   // Timing
-  loginAt        DateTime  @default(now()) @map("login_at")
-  lastActiveAt   DateTime  @default(now()) @map("last_active_at")
-  logoutAt       DateTime? @map("logout_at")
-  duration       Int?      @map("duration") // seconds
-  
+  loginAt      DateTime  @default(now()) @map("login_at")
+  lastActiveAt DateTime  @default(now()) @map("last_active_at")
+  logoutAt     DateTime? @map("logout_at")
+  duration     Int?      @map("duration") // seconds
+
   // Status
-  isActive       Boolean   @default(true) @map("is_active")
-  loginMethod    String?   @map("login_method") // email, google, facebook
-  
+  isActive    Boolean @default(true) @map("is_active")
+  loginMethod String? @map("login_method") // email, google, facebook
+
   // Security
-  ipInfo         Json?     @map("ip_info") // Full IP analysis data
-  botScore       Int       @default(0) @map("bot_score") // 0-100
-  threatLevel    String    @default("NORMAL") @map("threat_level")
-  
+  ipInfo      Json?  @map("ip_info") // Full IP analysis data
+  botScore    Int    @default(0) @map("bot_score") // 0-100
+  threatLevel String @default("NORMAL") @map("threat_level")
+
   // Geolocation
-  country        String?
-  countryCode    String?   @map("country_code")
-  city           String?
-  latitude       Float?
-  longitude      Float?
-  timezone       String?
-  
+  country     String?
+  countryCode String? @map("country_code")
+  city        String?
+  latitude    Float?
+  longitude   Float?
+  timezone    String?
+
   // Relations
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activities     SessionActivity[]
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities SessionActivity[]
 
   @@index([userId])
   @@index([sessionToken])
@@ -3258,22 +3264,22 @@ model UserSession {
 
 // Session Activity - Actions within a session
 model SessionActivity {
-  id          String   @id @default(uuid())
-  sessionId   String   @map("session_id")
-  
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+
   // Activity Info
-  action      String   // page_view, api_call, login, logout, etc.
-  path        String?  // URL path
-  method      String?  // HTTP method
-  statusCode  Int?     @map("status_code")
-  responseMs  Int?     @map("response_ms")
-  
+  action     String // page_view, api_call, login, logout, etc.
+  path       String? // URL path
+  method     String? // HTTP method
+  statusCode Int?    @map("status_code")
+  responseMs Int?    @map("response_ms")
+
   // Details
-  details     Json?
-  timestamp   DateTime @default(now())
+  details   Json?
+  timestamp DateTime @default(now())
 
   // Relations
-  session     UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([timestamp])
@@ -3283,38 +3289,38 @@ model SessionActivity {
 
 // Visitor - Anonymous/unauthenticated visitors
 model Visitor {
-  id                String    @id @default(uuid())
-  fingerprint       String    @unique // Browser fingerprint
-  
+  id          String @id @default(uuid())
+  fingerprint String @unique // Browser fingerprint
+
   // Visit Frequency & Heat
-  visitCount        Int       @default(1) @map("visit_count")
-  heatScore         Int       @default(0) @map("heat_score") // 0-100, frequency indicator
-  firstVisitAt      DateTime  @default(now()) @map("first_visit_at")
-  lastVisitAt       DateTime  @default(now()) @map("last_visit_at")
-  
+  visitCount   Int      @default(1) @map("visit_count")
+  heatScore    Int      @default(0) @map("heat_score") // 0-100, frequency indicator
+  firstVisitAt DateTime @default(now()) @map("first_visit_at")
+  lastVisitAt  DateTime @default(now()) @map("last_visit_at")
+
   // Visit Classification
-  visitorType       String    @default("first_time") @map("visitor_type") // first_time, returning, frequent, loyal
-  potentialUser     Boolean   @default(false) @map("potential_user")
-  potentialScore    Int       @default(0) @map("potential_score") // 0-100
-  
+  visitorType    String  @default("first_time") @map("visitor_type") // first_time, returning, frequent, loyal
+  potentialUser  Boolean @default(false) @map("potential_user")
+  potentialScore Int     @default(0) @map("potential_score") // 0-100
+
   // Conversion
-  convertedAt       DateTime? @map("converted_at")
-  convertedUserId   String?   @map("converted_user_id")
-  
+  convertedAt     DateTime? @map("converted_at")
+  convertedUserId String?   @map("converted_user_id")
+
   // Last Known Info
-  lastIpAddress     String?   @map("last_ip_address")
-  lastUserAgent     String?   @map("last_user_agent")
-  lastCountry       String?   @map("last_country")
-  lastCity          String?   @map("last_city")
-  
+  lastIpAddress String? @map("last_ip_address")
+  lastUserAgent String? @map("last_user_agent")
+  lastCountry   String? @map("last_country")
+  lastCity      String? @map("last_city")
+
   // Bot Detection
-  isBotConfirmed    Boolean   @default(false) @map("is_bot_confirmed")
-  botScore          Int       @default(0) @map("bot_score")
-  botIndicators     String[]  @default([]) @map("bot_indicators")
-  botName           String?   @map("bot_name") // Googlebot, Bingbot, etc.
-  
+  isBotConfirmed Boolean  @default(false) @map("is_bot_confirmed")
+  botScore       Int      @default(0) @map("bot_score")
+  botIndicators  String[] @default([]) @map("bot_indicators")
+  botName        String?  @map("bot_name") // Googlebot, Bingbot, etc.
+
   // Relations
-  visits            VisitorSession[]
+  visits VisitorSession[]
 
   @@index([fingerprint])
   @@index([heatScore])
@@ -3325,44 +3331,44 @@ model Visitor {
 
 // Visitor Session - Individual visit sessions for anonymous users
 model VisitorSession {
-  id            String   @id @default(uuid())
-  visitorId     String   @map("visitor_id")
-  
+  id        String @id @default(uuid())
+  visitorId String @map("visitor_id")
+
   // Session Info
-  sessionToken  String   @unique @map("session_token")
-  ipAddress     String   @map("ip_address")
-  userAgent     String   @map("user_agent")
-  
+  sessionToken String @unique @map("session_token")
+  ipAddress    String @map("ip_address")
+  userAgent    String @map("user_agent")
+
   // Timing
-  startedAt     DateTime @default(now()) @map("started_at")
-  endedAt       DateTime? @map("ended_at")
-  duration      Int?
-  pageViews     Int      @default(0) @map("page_views")
-  
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  duration  Int?
+  pageViews Int       @default(0) @map("page_views")
+
   // Journey
-  entryPage     String?  @map("entry_page")
-  exitPage      String?  @map("exit_page")
-  referrer      String?
-  
+  entryPage String? @map("entry_page")
+  exitPage  String? @map("exit_page")
+  referrer  String?
+
   // Device
-  deviceType    String?  @map("device_type")
-  browser       String?
-  os            String?
-  
+  deviceType String? @map("device_type")
+  browser    String?
+  os         String?
+
   // Geolocation
-  country       String?
-  countryCode   String?  @map("country_code")
-  city          String?
-  latitude      Float?
-  longitude     Float?
-  
+  country     String?
+  countryCode String? @map("country_code")
+  city        String?
+  latitude    Float?
+  longitude   Float?
+
   // IP Analysis
-  ipInfo        Json?    @map("ip_info")
-  botScore      Int      @default(0) @map("bot_score")
-  
+  ipInfo   Json? @map("ip_info")
+  botScore Int   @default(0) @map("bot_score")
+
   // Relations
-  visitor       Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
-  pageViewed    VisitorPageView[]
+  visitor    Visitor           @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  pageViewed VisitorPageView[]
 
   @@index([visitorId])
   @@index([sessionToken])
@@ -3373,17 +3379,17 @@ model VisitorSession {
 
 // Visitor Page Views
 model VisitorPageView {
-  id          String   @id @default(uuid())
-  sessionId   String   @map("session_id")
-  
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+
   path        String
   title       String?
-  duration    Int?     // seconds on page
+  duration    Int? // seconds on page
   scrollDepth Int?     @map("scroll_depth") // percentage
   timestamp   DateTime @default(now())
 
   // Relations
-  session     VisitorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session VisitorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([path])
@@ -3392,52 +3398,52 @@ model VisitorPageView {
 
 // IP Intelligence - Detailed IP analysis cache
 model IPIntelligence {
-  id             String   @id @default(uuid())
-  ipAddress      String   @unique @map("ip_address")
-  
+  id        String @id @default(uuid())
+  ipAddress String @unique @map("ip_address")
+
   // Geolocation
-  country        String?
-  countryCode    String?  @map("country_code")
-  region         String?
-  city           String?
-  latitude       Float?
-  longitude      Float?
-  timezone       String?
-  isp            String?
-  org            String?
-  asn            String?
-  
+  country     String?
+  countryCode String? @map("country_code")
+  region      String?
+  city        String?
+  latitude    Float?
+  longitude   Float?
+  timezone    String?
+  isp         String?
+  org         String?
+  asn         String?
+
   // Threat Assessment
-  threatScore    Int      @default(0) @map("threat_score") // 0-100
-  threatLevel    String   @default("NORMAL") @map("threat_level") // NORMAL, LOW, MEDIUM, HIGH, CRITICAL
-  isProxy        Boolean  @default(false) @map("is_proxy")
-  isVpn          Boolean  @default(false) @map("is_vpn")
-  isTor          Boolean  @default(false) @map("is_tor")
-  isDatacenter   Boolean  @default(false) @map("is_datacenter")
-  isKnownAbuser  Boolean  @default(false) @map("is_known_abuser")
-  
+  threatScore   Int     @default(0) @map("threat_score") // 0-100
+  threatLevel   String  @default("NORMAL") @map("threat_level") // NORMAL, LOW, MEDIUM, HIGH, CRITICAL
+  isProxy       Boolean @default(false) @map("is_proxy")
+  isVpn         Boolean @default(false) @map("is_vpn")
+  isTor         Boolean @default(false) @map("is_tor")
+  isDatacenter  Boolean @default(false) @map("is_datacenter")
+  isKnownAbuser Boolean @default(false) @map("is_known_abuser")
+
   // Bot Detection
   isBotConfirmed Boolean  @default(false) @map("is_bot_confirmed")
   botScore       Int      @default(0) @map("bot_score")
   botName        String?  @map("bot_name")
   botType        String?  @map("bot_type") // search_engine, scraper, monitoring, malicious
   botIdentifiers String[] @default([]) @map("bot_identifiers")
-  
+
   // Request Statistics
-  totalRequests  Int      @default(0) @map("total_requests")
-  requestsToday  Int      @default(0) @map("requests_today")
-  lastRequestAt  DateTime @default(now()) @map("last_request_at")
-  firstSeenAt    DateTime @default(now()) @map("first_seen_at")
-  
+  totalRequests Int      @default(0) @map("total_requests")
+  requestsToday Int      @default(0) @map("requests_today")
+  lastRequestAt DateTime @default(now()) @map("last_request_at")
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at")
+
   // Block Status
-  isBlocked      Boolean  @default(false) @map("is_blocked")
-  blockedAt      DateTime? @map("blocked_at")
-  blockedReason  String?  @map("blocked_reason")
-  autoBlocked    Boolean  @default(false) @map("auto_blocked")
-  
+  isBlocked     Boolean   @default(false) @map("is_blocked")
+  blockedAt     DateTime? @map("blocked_at")
+  blockedReason String?   @map("blocked_reason")
+  autoBlocked   Boolean   @default(false) @map("auto_blocked")
+
   // Cache
-  lastUpdated    DateTime @default(now()) @map("last_updated")
-  rawData        Json?    @map("raw_data")
+  lastUpdated DateTime @default(now()) @map("last_updated")
+  rawData     Json?    @map("raw_data")
 
   @@index([ipAddress])
   @@index([threatScore])
@@ -3448,25 +3454,25 @@ model IPIntelligence {
 
 // Known Bots Registry
 model KnownBot {
-  id              String   @id @default(uuid())
-  name            String   @unique
-  type            String   // search_engine, scraper, monitoring, security, malicious
-  
+  id   String @id @default(uuid())
+  name String @unique
+  type String // search_engine, scraper, monitoring, security, malicious
+
   // Identification
-  userAgentPattern String? @map("user_agent_pattern")
+  userAgentPattern String?  @map("user_agent_pattern")
   ipRanges         String[] @default([]) @map("ip_ranges")
-  
+
   // Classification
-  isGood           Boolean  @default(false) @map("is_good") // Googlebot = good, Scraper = bad
-  description      String?
-  website          String?
-  
+  isGood      Boolean @default(false) @map("is_good") // Googlebot = good, Scraper = bad
+  description String?
+  website     String?
+
   // Stats
-  lastSeenAt       DateTime? @map("last_seen_at")
-  totalRequests    Int       @default(0) @map("total_requests")
-  
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  lastSeenAt    DateTime? @map("last_seen_at")
+  totalRequests Int       @default(0) @map("total_requests")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([name])
   @@index([type])
@@ -3475,33 +3481,379 @@ model KnownBot {
 
 // Admin Login Audit
 model AdminLoginAudit {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
-  email         String
-  role          String
-  
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+  email  String
+  role   String
+
   // Login Details
-  ipAddress     String   @map("ip_address")
-  userAgent     String   @map("user_agent")
-  loginMethod   String   @map("login_method")
-  
+  ipAddress   String @map("ip_address")
+  userAgent   String @map("user_agent")
+  loginMethod String @map("login_method")
+
   // Status
-  success       Boolean  @default(true)
-  failureReason String?  @map("failure_reason")
-  
+  success       Boolean @default(true)
+  failureReason String? @map("failure_reason")
+
   // Geolocation
-  country       String?
-  city          String?
-  
+  country String?
+  city    String?
+
   // Security
-  suspicious    Boolean  @default(false)
+  suspicious        Boolean  @default(false)
   suspiciousReasons String[] @default([]) @map("suspicious_reasons")
-  
-  timestamp     DateTime @default(now())
+
+  timestamp DateTime @default(now())
 
   @@index([userId])
   @@index([email])
   @@index([timestamp])
   @@index([ipAddress])
   @@map("admin_login_audit")
+}
+
+// ============================================
+// Facebook Session-Based Authentication
+// (Replaces OAuth - for Marketplace posting)
+// ============================================
+
+// Session Status Enum
+enum FbSessionStatus {
+  ACTIVE // Session is valid and working
+  EXPIRED // Session has expired
+  INVALID // Session was invalidated by Facebook
+  SYNCING // Session is being synced
+  RECOVERING // Session recovery in progress via 2FA
+}
+
+// Session Source Enum
+enum FbSessionSource {
+  EXTENSION // Captured from desktop Chrome extension
+  SERVER // Created by Nova worker on server
+  MANUAL // Manually imported
+  RECOVERED // Recovered via 2FA auto-login
+}
+
+// Session Sync Direction
+enum FbSyncDirection {
+  EXTENSION_TO_SERVER
+  SERVER_TO_EXTENSION
+}
+
+// Session Sync Status
+enum FbSyncStatus {
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+// Main Facebook Session Table
+model FbSession {
+  id        String @id @default(cuid())
+  accountId String @map("account_id")
+
+  // Facebook Identity
+  fbUserId     String? @map("fb_user_id") // From c_user cookie
+  fbUserName   String? @map("fb_user_name") // Display name
+  fbProfilePic String? @map("fb_profile_pic")
+
+  // Encrypted Session Data (AES-256-GCM)
+  encryptedCookies      String  @map("encrypted_cookies") @db.Text
+  encryptedLocalStorage String? @map("encrypted_local_storage") @db.Text
+  encryptionSalt        String  @map("encryption_salt")
+  encryptionIv          String  @map("encryption_iv")
+
+  // Session Metadata
+  sessionStatus      FbSessionStatus @default(ACTIVE) @map("session_status")
+  source             FbSessionSource @default(EXTENSION)
+  userAgent          String?         @map("user_agent")
+  ipAddress          String?         @map("ip_address")
+  browserFingerprint String?         @map("browser_fingerprint")
+
+  // Validity Tracking
+  capturedAt      DateTime  @default(now()) @map("captured_at")
+  expiresAt       DateTime? @map("expires_at")
+  lastValidatedAt DateTime? @map("last_validated_at")
+  lastUsedAt      DateTime? @map("last_used_at")
+  lastSyncedAt    DateTime? @map("last_synced_at")
+
+  // Health Metrics
+  validationCount   Int @default(0) @map("validation_count")
+  failedValidations Int @default(0) @map("failed_validations")
+  successfulTasks   Int @default(0) @map("successful_tasks")
+  failedTasks       Int @default(0) @map("failed_tasks")
+
+  // 2FA Association
+  totpSecretId String? @map("totp_secret_id")
+  has2FA       Boolean @default(false) @map("has_2fa")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account    Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  totpSecret FbTotpSecret?      @relation(fields: [totpSecretId], references: [id])
+  syncLogs   FbSessionSyncLog[]
+
+  @@unique([accountId, fbUserId])
+  @@index([accountId])
+  @@index([sessionStatus])
+  @@index([lastValidatedAt])
+  @@index([expiresAt])
+  @@map("fb_sessions")
+}
+
+// 2FA TOTP Secrets for Auto-Recovery
+model FbTotpSecret {
+  id        String @id @default(cuid())
+  accountId String @unique @map("account_id")
+
+  // Facebook Identity
+  fbUserId String @map("fb_user_id")
+
+  // Encrypted TOTP Secret (AES-256-GCM)
+  encryptedSecret String @map("encrypted_secret") @db.Text
+  encryptionSalt  String @map("encryption_salt")
+  encryptionIv    String @map("encryption_iv")
+
+  // Verification Status
+  isVerified Boolean   @default(false) @map("is_verified")
+  verifiedAt DateTime? @map("verified_at")
+
+  // Usage Tracking
+  lastUsedAt     DateTime? @map("last_used_at")
+  useCount       Int       @default(0) @map("use_count")
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lastFailedAt   DateTime? @map("last_failed_at")
+
+  // Security
+  isLocked    Boolean   @default(false) @map("is_locked")
+  lockedUntil DateTime? @map("locked_until")
+  lockReason  String?   @map("lock_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account      Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  sessions     FbSession[]
+  recoveryLogs FbRecoveryLog[]
+
+  @@index([fbUserId])
+  @@map("fb_totp_secrets")
+}
+
+// Session Sync Log - Track syncs between desktop and server
+model FbSessionSyncLog {
+  id        String @id @default(cuid())
+  sessionId String @map("session_id")
+
+  // Sync Details
+  direction FbSyncDirection
+  status    FbSyncStatus
+
+  // Source/Target
+  sourceDevice String? @map("source_device") // Browser ID or worker ID
+  targetDevice String? @map("target_device")
+
+  // Result
+  errorMessage String? @map("error_message")
+  cookiesCount Int?    @map("cookies_count")
+
+  syncedAt DateTime @default(now()) @map("synced_at")
+
+  // Relations
+  session FbSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([syncedAt])
+  @@map("fb_session_sync_logs")
+}
+
+// 2FA Recovery Log - Track auto-login attempts
+model FbRecoveryLog {
+  id           String @id @default(cuid())
+  totpSecretId String @map("totp_secret_id")
+
+  // Attempt Details
+  success      Boolean
+  errorMessage String? @map("error_message")
+
+  // Source
+  triggeredBy String  @map("triggered_by") // 'nova_worker', 'scheduled', 'manual'
+  workerId    String? @map("worker_id")
+
+  // New Session
+  newSessionId String? @map("new_session_id")
+
+  attemptedAt DateTime  @default(now()) @map("attempted_at")
+  completedAt DateTime? @map("completed_at")
+
+  // Relations
+  totpSecret FbTotpSecret @relation(fields: [totpSecretId], references: [id], onDelete: Cascade)
+
+  @@index([totpSecretId])
+  @@index([attemptedAt])
+  @@map("fb_recovery_logs")
+}
+
+// ============================================
+// Task Scheduling System
+// (For automated IAI task execution)
+// ============================================
+
+// Schedule Status
+enum ScheduleStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+// Scheduled Task - Cron-based automation
+model ScheduledTask {
+  id        String @id @default(cuid())
+  accountId String @map("account_id")
+
+  // Task Definition
+  taskType     String @map("task_type") // POST_VEHICLE, REFRESH_LISTING, etc.
+  taskData     Json   @map("task_data")
+  taskPriority Int    @default(5) @map("task_priority") // 1-10
+
+  // Schedule
+  cronExpression  String?   @map("cron_expression") // "0 9 * * *" = 9 AM daily
+  intervalMinutes Int?      @map("interval_minutes") // Alternative to cron
+  nextRunAt       DateTime  @map("next_run_at")
+  lastRunAt       DateTime? @map("last_run_at")
+
+  // Execution Preferences
+  preferredInstance String? @map("preferred_instance") // 'desktop', 'server', null=any
+  maxRetries        Int     @default(3) @map("max_retries")
+  retryDelayMin     Int     @default(5) @map("retry_delay_min")
+
+  // Status
+  status       ScheduleStatus @default(ACTIVE)
+  runCount     Int            @default(0) @map("run_count")
+  successCount Int            @default(0) @map("success_count")
+  failureCount Int            @default(0) @map("failure_count")
+
+  // Metadata
+  name        String?
+  description String?
+  tags        String[] @default([])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account    Account                  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  executions ScheduledTaskExecution[]
+
+  @@index([accountId])
+  @@index([nextRunAt, status])
+  @@index([status])
+  @@map("scheduled_tasks")
+}
+
+// Scheduled Task Execution Log
+model ScheduledTaskExecution {
+  id              String @id @default(cuid())
+  scheduledTaskId String @map("scheduled_task_id")
+
+  // Execution Details
+  instanceType String  @map("instance_type") // 'desktop' or 'server'
+  instanceId   String? @map("instance_id")
+
+  // Status
+  status      String // PENDING, RUNNING, SUCCESS, FAILED, CANCELLED
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  durationMs  Int?      @map("duration_ms")
+
+  // Result
+  resultData   Json?   @map("result_data")
+  errorMessage String? @map("error_message")
+  retryAttempt Int     @default(0) @map("retry_attempt")
+
+  // Relations
+  scheduledTask ScheduledTask @relation(fields: [scheduledTaskId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledTaskId])
+  @@index([startedAt])
+  @@index([status])
+  @@map("scheduled_task_executions")
+}
+
+// ============================================
+// IAI Instance Coordination
+// (Prevent duplicate task execution)
+// ============================================
+
+// Active IAI Instances (Desktop & Server)
+model IAIInstance {
+  id         String  @id @default(cuid())
+  instanceId String  @unique @map("instance_id") // Unique ID per browser/worker
+  accountId  String  @map("account_id")
+  userId     String? @map("user_id")
+
+  // Instance Type
+  instanceType String @map("instance_type") // 'desktop' or 'server'
+
+  // Identity
+  browserId        String? @map("browser_id")
+  workerId         String? @map("worker_id")
+  extensionVersion String? @map("extension_version")
+  userAgent        String? @map("user_agent")
+
+  // Capabilities
+  capabilities String[] @default([]) // List of supported task types
+
+  // Status
+  status        String  @default("online") // online, offline, working, idle, error
+  currentTaskId String? @map("current_task_id")
+
+  // Heartbeat
+  lastHeartbeat DateTime  @default(now()) @map("last_heartbeat")
+  lastTaskAt    DateTime? @map("last_task_at")
+
+  // Performance
+  tasksCompleted  Int  @default(0) @map("tasks_completed")
+  tasksFailed     Int  @default(0) @map("tasks_failed")
+  avgTaskDuration Int? @map("avg_task_duration") // ms
+
+  // Session Reference
+  fbSessionId   String? @map("fb_session_id")
+  sessionStatus String? @map("session_status")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([instanceType])
+  @@index([status])
+  @@index([lastHeartbeat])
+  @@map("iai_instances")
+}
+
+// Task Lock - Prevent duplicate execution
+model TaskLock {
+  id         String @id @default(cuid())
+  taskId     String @unique @map("task_id")
+  instanceId String @map("instance_id")
+
+  // Lock Details
+  lockedAt  DateTime @default(now()) @map("locked_at")
+  expiresAt DateTime @map("expires_at")
+
+  // Task Info
+  taskType  String? @map("task_type")
+  accountId String? @map("account_id")
+
+  @@index([taskId])
+  @@index([expiresAt])
+  @@map("task_locks")
 }

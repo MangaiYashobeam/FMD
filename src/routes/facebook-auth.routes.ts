@@ -1,332 +1,93 @@
 /**
- * Facebook OAuth Routes
+ * Facebook OAuth Routes - DEPRECATED
  * 
- * Handles Facebook OAuth for both web app and Chrome extension.
- * Extension uses POST /callback, web app uses GET redirect flow.
+ * ⚠️ DEPRECATED: OAuth is being phased out in favor of session-based authentication
+ * 
+ * Facebook's Marketplace API is not publicly available, so OAuth tokens cannot be
+ * used to post vehicles. Instead, we now use browser session cookies captured via
+ * the Chrome extension, combined with TOTP-based 2FA for session recovery.
+ * 
+ * New system: See fb-session.routes.ts for the session-based API
+ * 
+ * This file is kept for backward compatibility during migration.
+ * All routes now return deprecation warnings.
  */
 
 import { Router, Request, Response } from 'express';
 import { logger } from '@/utils/logger';
-import axios from 'axios';
-import prisma from '../config/database';
-import jwt from 'jsonwebtoken';
 
 const router = Router();
 
+// Deprecation warning helper
+const sendDeprecationWarning = (res: Response, oldEndpoint: string, newEndpoint: string) => {
+  res.status(410).json({
+    success: false,
+    deprecated: true,
+    error: `OAuth authentication is deprecated. Facebook Marketplace does not support API posting.`,
+    message: `Please use session-based authentication instead.`,
+    migration: {
+      oldEndpoint,
+      newEndpoint,
+      documentation: '/docs/SESSION_AUTH_MIGRATION.md',
+    },
+    newAuthSystem: {
+      description: 'Session-based authentication with browser cookies and TOTP 2FA',
+      endpoints: {
+        captureSession: 'POST /api/fb-session/capture',
+        syncSession: 'POST /api/fb-session/sync',
+        validateSession: 'POST /api/fb-session/validate',
+        setup2FA: 'POST /api/fb-session/totp/setup',
+        verify2FA: 'POST /api/fb-session/totp/verify',
+      },
+    },
+  });
+};
+
 /**
  * GET /api/auth/facebook/config
- * Get Facebook OAuth configuration (safe to expose)
+ * DEPRECATED - OAuth configuration
  */
 router.get('/config', (_req: Request, res: Response) => {
+  logger.warn('DEPRECATED: /api/auth/facebook/config called - OAuth is deprecated');
   res.json({
-    appId: process.env.FACEBOOK_APP_ID || '',
-    scope: 'email,public_profile',
-    version: 'v18.0',
-    available: true,
+    appId: '',
+    scope: '',
+    version: '',
+    available: false,
+    deprecated: true,
+    deprecationNotice: 'OAuth is deprecated. Use session-based auth via /api/fb-session/*',
+    migration: {
+      newEndpoint: 'GET /api/fb-session/status/:accountId',
+      documentation: 'Session-based authentication uses browser cookies, not OAuth tokens',
+    },
   });
 });
 
 /**
  * POST /api/auth/facebook/callback
- * Handle Facebook OAuth callback from Chrome extension
- * Extension sends authorization code, we exchange it for token
+ * DEPRECATED - OAuth callback (both extension and web)
  */
 router.post('/callback', async (req: Request, res: Response) => {
-  try {
-    const { code, redirectUri } = req.body;
-    
-    if (!code) {
-      res.status(400).json({
-        success: false,
-        error: 'Authorization code is required',
-      });
-      return;
-    }
-    
-    logger.info('Extension OAuth callback received');
-    
-    // Use extension-specific credentials if redirect is from Chrome extension
-    const isExtensionCallback = redirectUri?.includes('chromiumapp.org');
-    const appId = isExtensionCallback 
-      ? (process.env.FACEBOOK_EXTENSION_APP_ID || process.env.FACEBOOK_APP_ID)
-      : process.env.FACEBOOK_APP_ID;
-    const appSecret = isExtensionCallback 
-      ? (process.env.FACEBOOK_EXTENSION_APP_SECRET || process.env.FACEBOOK_APP_SECRET)
-      : process.env.FACEBOOK_APP_SECRET;
-    
-    logger.info(`Using ${isExtensionCallback ? 'extension' : 'web'} Facebook credentials for callback`);
-    logger.info(`App ID: ${appId?.substring(0, 8)}...`);
-    logger.info(`App Secret: ${appSecret?.substring(0, 8)}...`);
-    logger.info(`Redirect URI: ${redirectUri}`);
-    logger.info(`Code: ${code?.substring(0, 20)}...`);
-    
-    // Exchange code for access token with Facebook
-    let tokenResponse;
-    const fbUrl = `https://graph.facebook.com/v18.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&redirect_uri=${encodeURIComponent(redirectUri || '')}&code=${encodeURIComponent(code)}`;
-    logger.info(`Calling Facebook API...`);
-    
-    try {
-      tokenResponse = await axios.get(fbUrl);
-      logger.info(`Facebook token response status: ${tokenResponse.status}`);
-    } catch (fbError: unknown) {
-      // Detailed error logging for axios errors
-      if (axios.isAxiosError(fbError)) {
-        logger.error('Facebook API error:', JSON.stringify({
-          status: fbError.response?.status,
-          statusText: fbError.response?.statusText,
-          data: fbError.response?.data,
-          message: fbError.message,
-          code: fbError.code,
-        }));
-        // Return Facebook's actual error to the client
-        if (fbError.response?.data?.error) {
-          res.status(400).json({
-            success: false,
-            error: fbError.response.data.error.message || 'Facebook authentication failed',
-            facebookError: fbError.response.data.error,
-          });
-          return;
-        }
-      } else {
-        logger.error('Unknown error during Facebook token exchange:', String(fbError));
-      }
-      throw fbError;
-    }
-    
-    const { access_token: accessToken, expires_in: expiresIn } = tokenResponse.data;
-    
-    // Get user info from Facebook
-    const userResponse = await axios.get('https://graph.facebook.com/v18.0/me', {
-      params: {
-        access_token: accessToken,
-        fields: 'id,name,email',
-      },
-    });
-    
-    const fbUser = userResponse.data;
-    logger.info(`Facebook user retrieved: ${fbUser.name} (${fbUser.id})`);
-    
-    // Find existing user by email or look up by FacebookProfile
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: fbUser.email },
-          {
-            facebookProfiles: {
-              some: {
-                facebookUserId: fbUser.id,
-              },
-            },
-          },
-        ],
-      },
-      include: {
-        accountUsers: {
-          include: {
-            account: true,
-          },
-        },
-        facebookProfiles: true,
-      },
-    });
-    
-    if (!user) {
-      // Create new user with Facebook login
-      const nameParts = (fbUser.name || 'Facebook User').split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ') || 'User';
-      
-      user = await prisma.user.create({
-        data: {
-          email: fbUser.email || `fb_${fbUser.id}@facebook.local`,
-          firstName,
-          lastName,
-        },
-        include: {
-          accountUsers: {
-            include: {
-              account: true,
-            },
-          },
-          facebookProfiles: true,
-        },
-      });
-      
-      logger.info(`New user created from Facebook: ${user.id}`);
-    }
-    
-    // Get or create the user's dealer account
-    let dealerAccount = user.accountUsers[0]?.account;
-    
-    if (!dealerAccount) {
-      // Create a default account for this user
-      dealerAccount = await prisma.account.create({
-        data: {
-          name: `${fbUser.name}'s Dealership`,
-          accountUsers: {
-            create: {
-              userId: user.id,
-              role: 'ADMIN',
-            },
-          },
-        },
-      });
-      logger.info(`Default account created for user: ${dealerAccount.id}`);
-    }
-    
-    // Create or update FacebookProfile to store the OAuth token
-    const tokenExpiry = new Date(Date.now() + (expiresIn || 3600) * 1000);
-    
-    await prisma.facebookProfile.upsert({
-      where: {
-        accountId_pageId: {
-          accountId: dealerAccount.id,
-          pageId: fbUser.id, // Using FB user ID as page ID for personal account
-        },
-      },
-      update: {
-        accessToken,
-        tokenExpiresAt: tokenExpiry,
-        facebookUserName: fbUser.name,
-        isActive: true,
-      },
-      create: {
-        accountId: dealerAccount.id,
-        userId: user.id,
-        pageId: fbUser.id,
-        pageName: fbUser.name || 'Personal Account',
-        facebookUserId: fbUser.id,
-        facebookUserName: fbUser.name,
-        accessToken,
-        tokenExpiresAt: tokenExpiry,
-        category: 'Personal',
-      },
-    });
-    
-    // Generate JWT tokens for API auth (same as login flow)
-    const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-for-dev';
-    const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'refresh-secret-for-dev';
-    
-    const serverToken = jwt.sign(
-      { 
-        userId: user.id, 
-        id: user.id,
-        email: user.email,
-        accountId: dealerAccount.id,
-      },
-      jwtSecret,
-      { expiresIn: '24h' }
-    );
-    
-    // Generate refresh token for extension (long-lived)
-    const refreshToken = jwt.sign(
-      { 
-        id: user.id,
-        type: 'refresh',
-      },
-      jwtRefreshSecret,
-      { expiresIn: '30d' }
-    );
-    
-    // Save refresh token to database
-    await prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        token: refreshToken,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-      },
-    });
-    
-    logger.info(`Extension OAuth successful for user ${user.id}`);
-    
-    res.json({
-      success: true,
-      accessToken,
-      expiresIn: expiresIn || 3600,
-      serverToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        facebookId: fbUser.id,
-      },
-      dealerAccount: {
-        id: dealerAccount.id,
-        name: dealerAccount.name,
-      },
-    });
-  } catch (error: unknown) {
-    const err = error as { response?: { data?: { error?: { message?: string } }; status?: number }; message?: string };
-    const errorDetails = {
-      message: err.message,
-      responseData: err.response?.data,
-      responseStatus: err.response?.status,
-    };
-    logger.error('Extension OAuth error:', JSON.stringify(errorDetails, null, 2));
-    res.status(500).json({
-      success: false,
-      error: err.response?.data?.error?.message || err.message || 'Failed to complete Facebook authentication',
-      details: process.env.NODE_ENV !== 'production' ? errorDetails : undefined,
-    });
-  }
+  logger.warn('DEPRECATED: /api/auth/facebook/callback called - OAuth is deprecated');
+  sendDeprecationWarning(res, 'POST /api/auth/facebook/callback', 'POST /api/fb-session/capture');
 });
 
 /**
  * POST /api/auth/facebook/refresh
- * Refresh Facebook access token
- * TODO: Implement token refresh when needed
+ * DEPRECATED - Token refresh
  */
 router.post('/refresh', (_req: Request, res: Response) => {
-  res.status(501).json({
-    success: false,
-    error: 'Token refresh not yet implemented',
-  });
+  logger.warn('DEPRECATED: /api/auth/facebook/refresh called - OAuth is deprecated');
+  sendDeprecationWarning(res, 'POST /api/auth/facebook/refresh', 'POST /api/fb-session/validate');
 });
 
 /**
  * POST /api/auth/facebook/disconnect
- * Disconnect Facebook from user account
+ * DEPRECATED - Disconnect Facebook OAuth
  */
 router.post('/disconnect', async (req: Request, res: Response) => {
-  try {
-    const { userId, profileId } = req.body;
-    
-    if (!userId && !profileId) {
-      res.status(400).json({
-        success: false,
-        error: 'userId or profileId is required',
-      });
-      return;
-    }
-    
-    // Delete Facebook profiles
-    if (profileId) {
-      await prisma.facebookProfile.delete({
-        where: { id: profileId },
-      });
-      logger.info(`Facebook profile disconnected: ${profileId}`);
-    } else if (userId) {
-      // Delete all profiles for this user
-      await prisma.facebookProfile.deleteMany({
-        where: { userId },
-      });
-      logger.info(`All Facebook profiles disconnected for user: ${userId}`);
-    }
-    
-    res.json({
-      success: true,
-      message: 'Facebook account disconnected successfully',
-    });
-  } catch (error: unknown) {
-    const err = error as { message?: string };
-    logger.error('Disconnect error:', err.message);
-    res.status(500).json({
-      success: false,
-      error: err.message || 'Failed to disconnect Facebook account',
-    });
-  }
+  logger.warn('DEPRECATED: /api/auth/facebook/disconnect called - OAuth is deprecated');
+  sendDeprecationWarning(res, 'POST /api/auth/facebook/disconnect', 'DELETE /api/fb-session/:sessionId');
 });
 
 export default router;

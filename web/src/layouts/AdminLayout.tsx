@@ -21,6 +21,7 @@ import {
   Send,
   Zap,
   BarChart3,
+  Layers,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
@@ -32,6 +33,7 @@ const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'AI Center', href: '/admin/ai-center', icon: Brain },
   { name: 'IAI Command', href: '/admin/iai-command', icon: Zap },
+  { name: 'Abstraction Center', href: '/admin/abstraction-center', icon: Layers },
   { name: 'API Dashboard', href: '/admin/api-dashboard', icon: Terminal },
   { name: 'FBM Posts', href: '/admin/fbm-posts', icon: Send },
   { name: 'Error Monitoring', href: '/admin/errors', icon: AlertTriangle },
@@ -58,7 +60,8 @@ export default function AdminLayout() {
   const isAICenterPage = location.pathname === '/admin/ai-center';
   const isIAICommandPage = location.pathname === '/admin/iai-command';
   const isSessionAnalyticsPage = location.pathname === '/admin/session-analytics';
-  const isDarkPage = isAICenterPage || isIAICommandPage || isSessionAnalyticsPage;
+  const isAbstractionCenterPage = location.pathname === '/admin/abstraction-center';
+  const isDarkPage = isAICenterPage || isIAICommandPage || isSessionAnalyticsPage || isAbstractionCenterPage;
 
   return (
     <div className={`flex h-screen ${isDarkPage ? 'bg-gray-900' : 'bg-gray-50'} ${impersonation.isImpersonating ? 'pt-10' : ''}`}>

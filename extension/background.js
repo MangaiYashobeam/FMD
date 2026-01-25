@@ -100,6 +100,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   // ============================================
+  // SESSION CAPTURE (Session-Based Auth)
+  // ============================================
+  
+  if (message.type === 'CAPTURE_FB_SESSION') {
+    captureFacebookSession()
+      .then(sendResponse)
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'GET_SESSION_STATUS') {
+    getSessionStatus()
+      .then(sendResponse)
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  
+  if (message.type === 'SYNC_SESSION') {
+    syncSessionToServer()
+      .then(sendResponse)
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  
+  // ============================================
   // MULTI-TAB MANAGEMENT
   // ============================================
   
@@ -876,6 +901,249 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
   }
 });
+
+// ============================================
+// SESSION CAPTURE FUNCTIONS (Session-Based Auth)
+// ============================================
+
+/**
+ * Capture Facebook session cookies
+ * This is the PRIMARY authentication method for Marketplace posting
+ */
+async function captureFacebookSession() {
+  console.log('[Session] Capturing Facebook session...');
+  
+  try {
+    // Get auth token and account ID
+    const storage = await chrome.storage.local.get(['authToken', 'accountId']);
+    if (!storage.authToken) {
+      throw new Error('Not logged in. Please log in to DealersFace first.');
+    }
+    
+    // Get all Facebook cookies
+    const cookies = await chrome.cookies.getAll({ domain: '.facebook.com' });
+    
+    if (!cookies || cookies.length === 0) {
+      throw new Error('No Facebook cookies found. Please log into Facebook first.');
+    }
+    
+    // Check for required cookies
+    const requiredCookies = ['c_user', 'xs', 'datr'];
+    const foundCookies = cookies.map(c => c.name);
+    const missingCookies = requiredCookies.filter(name => !foundCookies.includes(name));
+    
+    if (missingCookies.length > 0) {
+      throw new Error(`Missing required Facebook cookies: ${missingCookies.join(', ')}. Please log into Facebook.`);
+    }
+    
+    // Format cookies for sending to server
+    const formattedCookies = cookies.map(cookie => ({
+      name: cookie.name,
+      value: cookie.value,
+      domain: cookie.domain,
+      path: cookie.path,
+      expires: cookie.expirationDate,
+      httpOnly: cookie.httpOnly,
+      secure: cookie.secure,
+      sameSite: cookie.sameSite
+    }));
+    
+    // Get browser user agent
+    const userAgent = navigator.userAgent;
+    
+    // Generate a simple browser fingerprint
+    const browserFingerprint = await generateBrowserFingerprint();
+    
+    // Send to server
+    const response = await fetch(`${API_BASE_URL}/api/fb-session/capture`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${storage.authToken}`
+      },
+      body: JSON.stringify({
+        cookies: formattedCookies,
+        userAgent,
+        browserFingerprint
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Store session info locally
+    await chrome.storage.local.set({
+      fbSessionId: result.sessionId,
+      fbUserId: result.fbUserId,
+      fbSessionStatus: 'ACTIVE',
+      fbSessionCapturedAt: new Date().toISOString()
+    });
+    
+    console.log('[Session] Session captured successfully:', result);
+    
+    // Update badge to show session active
+    chrome.action.setBadgeText({ text: '✓' });
+    chrome.action.setBadgeBackgroundColor({ color: '#10B981' });
+    
+    return {
+      success: true,
+      sessionId: result.sessionId,
+      fbUserId: result.fbUserId,
+      expiresAt: result.expiresAt,
+      recommendations: result.recommendations
+    };
+  } catch (error) {
+    console.error('[Session] Capture error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get current session status from server
+ */
+async function getSessionStatus() {
+  try {
+    const storage = await chrome.storage.local.get(['authToken', 'accountId']);
+    if (!storage.authToken || !storage.accountId) {
+      return { success: true, hasSession: false, reason: 'Not logged in' };
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/fb-session/status/${storage.accountId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${storage.authToken}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Update local storage
+    if (result.hasSession) {
+      await chrome.storage.local.set({
+        fbSessionId: result.sessionId,
+        fbUserId: result.fbUserId,
+        fbSessionStatus: result.status,
+        fbHas2FA: result.has2FA
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('[Session] Status check error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Sync session to server (re-capture and send)
+ */
+async function syncSessionToServer() {
+  console.log('[Session] Syncing session to server...');
+  
+  try {
+    const storage = await chrome.storage.local.get(['authToken', 'accountId']);
+    if (!storage.authToken || !storage.accountId) {
+      throw new Error('Not logged in');
+    }
+    
+    // Get fresh cookies
+    const cookies = await chrome.cookies.getAll({ domain: '.facebook.com' });
+    
+    // Format for storage state
+    const storageState = {
+      cookies: cookies.map(cookie => ({
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        expires: cookie.expirationDate,
+        httpOnly: cookie.httpOnly,
+        secure: cookie.secure,
+        sameSite: cookie.sameSite
+      })),
+      timestamp: Date.now()
+    };
+    
+    // Send to server
+    const response = await fetch(`${API_BASE_URL}/api/fb-session/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${storage.authToken}`,
+        'x-browser-id': await getBrowserId()
+      },
+      body: JSON.stringify({
+        accountId: storage.accountId,
+        storageState,
+        source: 'extension',
+        timestamp: Date.now()
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Sync failed: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('[Session] Session synced:', result);
+    
+    return {
+      success: true,
+      sessionId: result.sessionId,
+      syncedAt: result.syncedAt
+    };
+  } catch (error) {
+    console.error('[Session] Sync error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate a simple browser fingerprint
+ */
+async function generateBrowserFingerprint() {
+  const data = [
+    navigator.userAgent,
+    screen.width,
+    screen.height,
+    screen.colorDepth,
+    new Date().getTimezoneOffset(),
+    navigator.language
+  ].join('|');
+  
+  // Simple hash
+  let hash = 0;
+  for (let i = 0; i < data.length; i++) {
+    const char = data.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  
+  return Math.abs(hash).toString(16);
+}
+
+/**
+ * Get or generate a unique browser ID
+ */
+async function getBrowserId() {
+  const storage = await chrome.storage.local.get(['browserId']);
+  if (storage.browserId) {
+    return storage.browserId;
+  }
+  
+  const browserId = 'ext_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  await chrome.storage.local.set({ browserId });
+  return browserId;
+}
 
 // ============================================
 // STARTUP

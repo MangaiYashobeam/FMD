@@ -64,6 +64,7 @@ import ErrorMonitoringPage from './pages/admin/ErrorMonitoringPage';
 import FBMPostsPage from './pages/admin/FBMPostsPage';
 import IAICommandCenter from './pages/admin/IAICommandCenterV2';
 import SessionAnalyticsPage from './pages/admin/SessionAnalyticsPage';
+import AbstractionCenterPage from './pages/admin/AbstractionCenterPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -160,6 +161,7 @@ function App() {
               <Route path="errors" element={<ErrorMonitoringPage />} />
               <Route path="fbm-posts" element={<FBMPostsPage />} />
               <Route path="iai-command" element={<IAICommandCenter />} />
+              <Route path="abstraction-center" element={<AbstractionCenterPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

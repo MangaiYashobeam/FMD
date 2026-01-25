@@ -644,8 +644,14 @@ app.use('/api/dashboard', ring5AuthBarrier, require('./routes/dashboard.routes')
 // User Settings Routes (requires auth)
 app.use('/api/settings', ring5AuthBarrier, require('./routes/user-settings.routes').default); // User settings & preferences
 
+// ============================================
+// Facebook Session-Based Auth (REPLACES OAuth)
+// ============================================
+app.use('/api/fb-session', ring5AuthBarrier, require('./routes/fb-session.routes').default); // Session capture & sync
+
 // Chrome Extension AI Hybrid System
-app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (public callback)
+// DEPRECATED: OAuth routes kept for backwards compatibility - will return 410 Gone
+app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (DEPRECATED)
 app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
 
 // IAI Soldier Command Center
@@ -679,6 +685,9 @@ app.use('/api/error-monitoring', ring5AuthBarrier, require('./routes/error-monit
 
 // Nova Monitoring Integration (AI-powered error alerts & chat history)
 app.use('/api/nova', require('./routes/nova-monitoring.routes').default); // Nova monitoring (mixed auth - SSE public with token)
+
+// Abstraction Center - Unified IAI Extension & Nova Soldiers Dashboard
+app.use('/api/abstraction', ring5AuthBarrier, require('./routes/abstraction.routes').default); // Abstraction Center (super admin)
 
 // FBM Posts Tracking & Debugging System
 app.use('/api/fbm-posts', ring5AuthBarrier, require('./routes/fbm-posts.routes').default); // FBM post tracking (requires auth)
