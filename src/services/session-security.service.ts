@@ -14,17 +14,20 @@
  */
 
 import crypto from 'crypto';
-import { authenticator } from 'otplib';
+import { OTP } from 'otplib';
 import QRCode from 'qrcode';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { Prisma } from '@prisma/client';
+
+// Create OTP instance for TOTP operations
+const otp = new OTP({ strategy: 'totp' });
 
 // Configuration
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
 const SALT_LENGTH = 16;
 const IV_LENGTH = 16;
-const AUTH_TAG_LENGTH = 16;
 const PBKDF2_ITERATIONS = 100000;
 
 // Master encryption key from environment
@@ -335,12 +338,12 @@ class SessionSecurityService {
   /**
    * Generate a new TOTP secret
    */
-  async generateTotpSecret(accountName: string, fbUserId: string): Promise<TotpSetupResult> {
-    const secret = authenticator.generateSecret();
+  async generateTotpSecret(accountName: string, _fbUserId?: string): Promise<TotpSetupResult> {
+    const secret = otp.generateSecret();
     const issuer = 'DealersFace';
     
-    // Generate QR code
-    const otpauth = authenticator.keyuri(accountName, issuer, secret);
+    // Generate QR code using OTP URI
+    const otpauth = otp.generateURI({ issuer, label: accountName, secret });
     const qrCodeDataUrl = await QRCode.toDataURL(otpauth);
 
     // Generate backup codes
@@ -404,8 +407,8 @@ class SessionSecurityService {
         authTag: '' // Adjust based on storage format
       });
 
-      // Generate code
-      const code = authenticator.generate(secret);
+      // Generate code using OTP class
+      const code = await otp.generate({ secret });
 
       // Update usage tracking
       await prisma.fbTotpSecret.update({
@@ -452,8 +455,9 @@ class SessionSecurityService {
         authTag: ''
       });
 
-      // Verify
-      const isValid = authenticator.verify({ token: code, secret });
+      // Verify using OTP class
+      const result = await otp.verify({ token: code, secret });
+      const isValid = result.valid;
 
       if (isValid) {
         // Reset failed attempts on success
@@ -517,7 +521,7 @@ class SessionSecurityService {
           entityId: event.accountId,
           ipAddress: event.ipAddress,
           userAgent: event.userAgent,
-          metadata: event.details
+          metadata: event.details as Prisma.InputJsonValue
         }
       });
 

@@ -667,7 +667,7 @@ router.get('/nova/tickets', requireRole(UserRole.SUPER_ADMIN), async (_req: Auth
  */
 router.post('/session/sync', async (req: AuthRequest, res: Response) => {
   try {
-    const { accountId, cookies, localStorage, source } = req.body;
+    const { accountId, cookies, localStorage: _localStorage, source } = req.body;
 
     if (!accountId || !cookies) {
       res.status(400).json({ error: 'accountId and cookies are required' });
@@ -719,7 +719,7 @@ router.post('/session/sync', async (req: AuthRequest, res: Response) => {
  */
 router.get('/session/status/:accountId', async (req: AuthRequest, res: Response) => {
   try {
-    const { accountId } = req.params;
+    const accountId = req.params.accountId as string;
 
     // Verify access
     const hasAccess = await prisma.accountUser.findFirst({

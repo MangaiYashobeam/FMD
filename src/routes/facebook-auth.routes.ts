@@ -67,7 +67,7 @@ router.get('/config', (_req: Request, res: Response) => {
  * POST /api/auth/facebook/callback
  * DEPRECATED - OAuth callback (both extension and web)
  */
-router.post('/callback', async (req: Request, res: Response) => {
+router.post('/callback', async (_req: Request, res: Response) => {
   logger.warn('DEPRECATED: /api/auth/facebook/callback called - OAuth is deprecated');
   sendDeprecationWarning(res, 'POST /api/auth/facebook/callback', 'POST /api/fb-session/capture');
 });
@@ -85,7 +85,7 @@ router.post('/refresh', (_req: Request, res: Response) => {
  * POST /api/auth/facebook/disconnect
  * DEPRECATED - Disconnect Facebook OAuth
  */
-router.post('/disconnect', async (req: Request, res: Response) => {
+router.post('/disconnect', async (_req: Request, res: Response) => {
   logger.warn('DEPRECATED: /api/auth/facebook/disconnect called - OAuth is deprecated');
   sendDeprecationWarning(res, 'POST /api/auth/facebook/disconnect', 'DELETE /api/fb-session/:sessionId');
 });

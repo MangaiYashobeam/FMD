@@ -322,7 +322,7 @@ router.post('/sync', authenticate, async (req: AuthRequest, res: Response): Prom
 router.get('/status/:accountId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { accountId } = req.params;
+    const accountId = req.params.accountId as string;
 
     if (!userId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -466,7 +466,7 @@ router.post('/validate', authenticate, async (req: AuthRequest, res: Response): 
 router.delete('/:sessionId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { sessionId } = req.params;
+    const sessionId = req.params.sessionId as string;
 
     if (!userId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -712,7 +712,7 @@ router.get('/totp/generate/:accountId',
   requireRole(UserRole.SUPER_ADMIN),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { accountId } = req.params;
+      const accountId = req.params.accountId as string;
 
       // Generate code
       const code = await sessionSecurityService.generateTotpCode(accountId);
@@ -770,7 +770,7 @@ router.get('/totp/generate/:accountId',
 router.delete('/totp/:accountId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { accountId } = req.params;
+    const accountId = req.params.accountId as string;
 
     if (!userId) {
       res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -827,7 +827,7 @@ router.get('/internal/export/:accountId', async (req: AuthRequest, res: Response
       return;
     }
 
-    const { accountId } = req.params;
+    const accountId = req.params.accountId as string;
 
     // Get active session
     const session = await prisma.fbSession.findFirst({
