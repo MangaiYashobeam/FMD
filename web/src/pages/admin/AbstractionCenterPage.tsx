@@ -16,8 +16,8 @@
  * - Live logs viewer
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Layers,
   Chrome,
@@ -29,35 +29,22 @@ import {
   RefreshCw,
   Clock,
   Cpu,
-  HardDrive,
   MemoryStick,
   Globe,
   Zap,
-  BarChart3,
-  Eye,
   Terminal,
-  FileText,
   Plus,
-  Filter,
-  Download,
   Search,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
   MapPin,
   Shield,
   KeyRound,
   Link2,
   Unlink,
-  Play,
-  Pause,
   RotateCcw,
-  Trash2,
   X,
   Send,
   MessageSquare,
   Bug,
-  Settings2,
   Users,
   Hash,
 } from 'lucide-react';
@@ -1058,7 +1045,7 @@ const IAIExtensionDashboard = () => {
     refetchInterval: 30000,
   });
 
-  const { data: stats, isLoading: loadingStats } = useQuery({
+  const { data: stats, isLoading: _loadingStats } = useQuery({
     queryKey: ['abstraction-extension-stats'],
     queryFn: fetchExtensionStats,
     refetchInterval: 30000,
@@ -1225,7 +1212,6 @@ const IAIExtensionDashboard = () => {
 
 // Nova Soldiers Dashboard Tab
 const NovaSoldiersDashboard = () => {
-  const queryClient = useQueryClient();
   const [selectedWorker, setSelectedWorker] = useState<NovaWorker | null>(null);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [logLevel, setLogLevel] = useState<string>('');
@@ -1243,7 +1229,7 @@ const NovaSoldiersDashboard = () => {
     refetchInterval: 10000,
   });
 
-  const { data: stats, isLoading: loadingStats } = useQuery({
+  const { data: stats, isLoading: _loadingStats2 } = useQuery({
     queryKey: ['abstraction-nova-stats'],
     queryFn: fetchNovaStats,
     refetchInterval: 15000,
