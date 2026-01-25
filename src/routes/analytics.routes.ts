@@ -100,4 +100,17 @@ router.get(
   asyncHandler(controller.getMetrics.bind(controller))
 );
 
+/**
+ * @route   GET /api/analytics/dashboard
+ * @desc    Get full analytics dashboard data in one call
+ * @access  Private
+ */
+router.get(
+  '/dashboard',
+  validate([
+    query('period').optional().isIn(['7d', '30d', '90d', 'year']),
+  ]),
+  asyncHandler(controller.getDashboard.bind(controller))
+);
+
 export default router;

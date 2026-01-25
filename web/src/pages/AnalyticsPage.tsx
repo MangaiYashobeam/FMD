@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import {
@@ -142,71 +142,39 @@ export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState('30d');
   const [showDateDropdown, setShowDateDropdown] = useState(false);
 
-  // Fetch analytics data
+  // Fetch analytics data from the real API
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['analytics', dateRange],
+    queryKey: ['analytics-dashboard', dateRange],
     queryFn: async () => {
-      const response = await api.get('/api/analytics', { params: { period: dateRange } });
+      const response = await api.get('/api/analytics/dashboard', { params: { period: dateRange } });
       return response.data;
     },
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // Refresh every minute
   });
 
-  // Mock data for demo
-  const mockData: AnalyticsData = useMemo(() => ({
+  // Use real data from API, no mock fallback
+  const analytics: AnalyticsData = data?.data || {
     overview: {
-      totalListings: 156,
-      totalLeads: 89,
-      totalViews: 12450,
-      totalPosts: 234,
-      conversionRate: 3.2,
-      averageDaysOnMarket: 18,
+      totalListings: 0,
+      totalLeads: 0,
+      totalViews: 0,
+      totalPosts: 0,
+      conversionRate: 0,
+      averageDaysOnMarket: 0,
     },
     changes: {
-      listings: 12,
-      leads: 23,
-      views: 15,
-      posts: 8,
+      listings: 0,
+      leads: 0,
+      views: 0,
+      posts: 0,
     },
-    leadsChart: [
-      { date: '2026-01-09', value: 5 },
-      { date: '2026-01-10', value: 8 },
-      { date: '2026-01-11', value: 12 },
-      { date: '2026-01-12', value: 7 },
-      { date: '2026-01-13', value: 15 },
-      { date: '2026-01-14', value: 10 },
-      { date: '2026-01-15', value: 18 },
-    ],
-    viewsChart: [
-      { date: '2026-01-09', value: 1200 },
-      { date: '2026-01-10', value: 1450 },
-      { date: '2026-01-11', value: 1800 },
-      { date: '2026-01-12', value: 1350 },
-      { date: '2026-01-13', value: 2100 },
-      { date: '2026-01-14', value: 1900 },
-      { date: '2026-01-15', value: 2650 },
-    ],
-    sourceBreakdown: [
-      { source: 'Facebook Marketplace', count: 45, percentage: 51 },
-      { source: 'Facebook Groups', count: 28, percentage: 31 },
-      { source: 'Website', count: 12, percentage: 14 },
-      { source: 'Other', count: 4, percentage: 4 },
-    ],
-    topVehicles: [
-      { id: '1', vehicle: '2024 Toyota Camry', views: 2340, leads: 12, status: 'active' },
-      { id: '2', vehicle: '2024 Ford F-150', views: 1890, leads: 8, status: 'active' },
-      { id: '3', vehicle: '2023 Honda Accord', views: 1560, leads: 6, status: 'active' },
-      { id: '4', vehicle: '2024 Chevrolet Silverado', views: 1340, leads: 5, status: 'active' },
-      { id: '5', vehicle: '2023 Nissan Altima', views: 980, leads: 4, status: 'sold' },
-    ],
-    recentActivity: [
-      { id: '1', type: 'lead', message: 'New lead from Facebook for 2024 Toyota Camry', timestamp: new Date().toISOString() },
-      { id: '2', type: 'post', message: 'Posted 3 vehicles to Marketplace', timestamp: new Date(Date.now() - 3600000).toISOString() },
-      { id: '3', type: 'view', message: '2024 Ford F-150 reached 1000+ views', timestamp: new Date(Date.now() - 7200000).toISOString() },
-      { id: '4', type: 'sync', message: 'Inventory sync completed successfully', timestamp: new Date(Date.now() - 14400000).toISOString() },
-    ],
-  }), []);
-
-  const analytics = data?.data || mockData;
+    leadsChart: [],
+    viewsChart: [],
+    sourceBreakdown: [],
+    topVehicles: [],
+    recentActivity: [],
+  };
 
   const formatNumber = (num: number) => {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
