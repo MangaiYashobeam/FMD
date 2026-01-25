@@ -899,17 +899,21 @@ async function sendSessionToWebapp(sessionData) {
   try {
     const payload = {
       sessionId: sessionData.sessionId || `session_${Date.now()}`,
-      mode: ConsoleState.currentMode,
-      recordingType: 'training',
+      mode: sessionData.mode || ConsoleState.currentMode,
+      recordingType: sessionData.recordingType || 'training',
       duration: sessionData.duration || 0,
       events: sessionData.events || [],
       markedElements: sessionData.markedElements || [],
       clickSequence: sessionData.clickSequence || [],
       typingPatterns: sessionData.typingPatterns || [],
+      patterns: sessionData.patterns || {},
+      fieldMappings: sessionData.fieldMappings || {},
+      automationCode: sessionData.automationCode || {},
       metadata: {
-        tabUrl: sessionData.url || window.location.href,
+        ...sessionData.metadata,
+        tabUrl: sessionData.url || sessionData.metadata?.url || window.location.href,
         recordedAt: new Date().toISOString(),
-        extensionVersion: '2.0.0',
+        extensionVersion: '2.1.0',
         config: ConsoleState.config
       }
     };
@@ -1212,16 +1216,16 @@ async function uploadSessionData() {
   try {
     log('Uploading session to server...', 'info');
     
-    const response = await fetch(`${ConsoleState.config.apiEndpoint}/training/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ConsoleState.sessionData)
-    });
+    // Use sendSessionToWebapp which formats the payload correctly
+    const result = await sendSessionToWebapp(ConsoleState.sessionData);
     
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    
-    const result = await response.json();
-    log(`Session uploaded successfully: ID ${result.id || 'N/A'}`, 'success');
+    if (result.success) {
+      log(`Session uploaded successfully: ID ${result.sessionId || 'N/A'}`, 'success');
+    } else if (result.queued) {
+      log('Session queued for upload when connected', 'warning');
+    } else {
+      log(`Upload failed: ${result.error || 'Unknown error'}`, 'error');
+    }
     
   } catch (error) {
     log(`Upload failed: ${error.message}`, 'error');
@@ -1246,8 +1250,8 @@ async function saveSession(sessionData) {
     ConsoleState.savedSessions.unshift(session);
     
     // Keep only last 20 sessions
-    if (ConsoleState.savedSessions.length > 20) {
-      ConsoleState.savedSessions = ConsoleState.savedSessions.slice(0, 20);
+    if (ConsoleState.savedSessions.length > 100) {
+      ConsoleState.savedSessions = ConsoleState.savedSessions.slice(0, 100);
     }
     
     await chrome.storage.local.set({ savedSessions: ConsoleState.savedSessions });
@@ -2204,6 +2208,12 @@ function handleBackgroundMessage(message, sender, sendResponse) {
       
     case 'RECORDING_ERROR':
       log(`Recording error: ${message.error}`, 'error');
+      break;
+      
+    case 'TRIGGER_PUBLISH':
+      // Publish button was pressed from Ctrl grid overlay
+      log('Publish triggered from overlay', 'info');
+      uploadSessionData();
       break;
   }
   

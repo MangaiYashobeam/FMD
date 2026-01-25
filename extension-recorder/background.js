@@ -207,6 +207,11 @@ async function processMessage(message, sender) {
     case 'PING_TAB':
       return await handlePingTab(message);
       
+    case 'PUBLISH_SESSION':
+      // Forward publish request to sidebar
+      chrome.runtime.sendMessage({ type: 'TRIGGER_PUBLISH' }).catch(() => {});
+      return { success: true, message: 'Publish triggered' };
+      
     default:
       console.log('[Recorder BG] Unknown message type:', message.type);
       return { success: false, error: 'Unknown message type' };

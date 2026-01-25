@@ -457,6 +457,9 @@ app.use('/api', secureGateway);
 // ============================================
 // Body Parsing (API only)
 // ============================================
+// Increase limit for training session uploads which can be large
+app.use('/api/training', express.json({ limit: '50mb' }));
+app.use('/api/training', express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api', express.json({ limit: '10mb' }));
 app.use('/api', express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -490,6 +493,8 @@ app.use('/api', (req, res, next) => {
     // Training console endpoints (extension uses JWT, not CSRF)
     '/training/console/heartbeat',
     '/training/console/status',
+    '/training/console/log',
+    '/training/sessions', // Training session uploads from extension
     // Public auth endpoints (no CSRF token available yet)
     '/auth/login',
     '/auth/register',
