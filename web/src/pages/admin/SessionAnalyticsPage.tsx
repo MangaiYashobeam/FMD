@@ -309,12 +309,14 @@ export default function SessionAnalyticsPage() {
     queryKey: ['session-stats'],
     queryFn: sessionAnalyticsApi.getSessionStats,
     refetchInterval: 30000,
+    staleTime: 20000,
   });
   
   const { data: activeSessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['active-sessions'],
     queryFn: sessionAnalyticsApi.getActiveSessions,
-    refetchInterval: 10000,
+    refetchInterval: 30000, // Reduced from 10s
+    staleTime: 20000,
   });
   
   const { data: visitorAnalytics, isLoading: visitorsLoading } = useQuery({

@@ -87,13 +87,13 @@ const API_ENDPOINTS: Omit<EndpointInfo, 'status' | 'lastChecked' | 'responseTime
   { id: 'auth-forgot', path: '/api/auth/forgot-password', method: 'POST', description: 'Forgot password', category: 'auth', protected: false, rateLimit: 5 },
   { id: 'auth-reset', path: '/api/auth/reset-password', method: 'POST', description: 'Reset password', category: 'auth', protected: false, rateLimit: 5 },
   
-  // Facebook Endpoints
-  { id: 'fb-auth-url', path: '/api/facebook/auth-url', method: 'GET', description: 'Get Facebook OAuth URL', category: 'facebook', protected: true, rateLimit: 30 },
-  { id: 'fb-callback', path: '/api/facebook/callback', method: 'GET', description: 'OAuth callback', category: 'facebook', protected: false, rateLimit: null },
+  // Facebook Endpoints (Session-Based Auth)
+  { id: 'fb-session-capture', path: '/api/facebook/sessions/capture', method: 'POST', description: 'Capture FB session from extension', category: 'facebook', protected: true, rateLimit: 30 },
+  { id: 'fb-session-status', path: '/api/facebook/sessions/status', method: 'GET', description: 'Get session status', category: 'facebook', protected: true, rateLimit: 60 },
   { id: 'fb-profiles', path: '/api/facebook/profiles', method: 'GET', description: 'Get connected profiles', category: 'facebook', protected: true, rateLimit: 60 },
   { id: 'fb-disconnect', path: '/api/facebook/profiles/:id', method: 'DELETE', description: 'Disconnect profile', category: 'facebook', protected: true, rateLimit: 30 },
   { id: 'fb-groups', path: '/api/facebook/groups', method: 'GET', description: 'Get Facebook groups', category: 'facebook', protected: true, rateLimit: 30 },
-  { id: 'fb-refresh-token', path: '/api/facebook/profiles/:id/refresh', method: 'POST', description: 'Refresh FB token', category: 'facebook', protected: true, rateLimit: 10 },
+  { id: 'fb-refresh-session', path: '/api/facebook/sessions/:id/refresh', method: 'POST', description: 'Refresh FB session', category: 'facebook', protected: true, rateLimit: 10 },
   
   // Extension Endpoints
   { id: 'ext-health', path: '/api/extension/health', method: 'GET', description: 'Extension health check', category: 'extension', protected: false, rateLimit: null },

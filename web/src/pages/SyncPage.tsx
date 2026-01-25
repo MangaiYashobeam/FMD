@@ -146,14 +146,20 @@ export default function SyncPage() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch sync history
+  // Fetch sync history (only poll if there's a running job)
   const { data, isLoading, error } = useQuery({
     queryKey: ['sync-history'],
     queryFn: async () => {
       const response = await syncApi.getHistory();
       return response.data;
     },
-    refetchInterval: 5000, // Poll every 5 seconds for running jobs
+    refetchInterval: (query) => {
+      // Only poll every 5s if there's a running job, otherwise 30s
+      const jobs = query.state.data?.data?.jobs || [];
+      const hasRunningJob = jobs.some((j: SyncJob) => j.status === 'running');
+      return hasRunningJob ? 5000 : 30000;
+    },
+    staleTime: 5000,
   });
 
   const jobs: SyncJob[] = data?.data?.jobs || [];

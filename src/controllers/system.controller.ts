@@ -728,7 +728,7 @@ export const getFacebookConfig = async (_req: Request, res: Response, next: Next
           appSecret: integrations.facebookAppSecret ? '********' : '',
           hasSecret: !!(integrations.facebookAppSecret || process.env.FACEBOOK_APP_SECRET),
           configured: !!(integrations.facebookAppId || process.env.FACEBOOK_APP_ID),
-          oauthRedirectUri: process.env.FACEBOOK_REDIRECT_URI || `${process.env.API_URL || process.env.FRONTEND_URL || 'https://dealersface.com'}/api/facebook/callback`,
+          sessionCallbackUri: process.env.FACEBOOK_REDIRECT_URI || `${process.env.API_URL || process.env.FRONTEND_URL || 'https://dealersface.com'}/api/facebook/session/callback`,
           extensionRedirectPattern: 'https://*.chromiumapp.org/*',
         },
         stats: {
@@ -1012,7 +1012,7 @@ export const getExtensionConfig = async (_req: Request, res: Response, next: Nex
           hasSecret: !!extensionAppSecret,
           configured: !!(extensionAppId && extensionId),
           apiUrl: process.env.API_URL || 'https://dealersface.com',
-          oauthRedirectPattern: 'https://*.chromiumapp.org/*',
+          sessionRedirectPattern: 'https://*.chromiumapp.org/*',
           chromeWebStoreUrl: extensionId 
             ? `https://chrome.google.com/webstore/detail/${extensionId}`
             : null,
@@ -1021,7 +1021,7 @@ export const getExtensionConfig = async (_req: Request, res: Response, next: Nex
           extensionId: extensionId ? 'configured' : 'not-configured',
           facebookAppId: extensionAppId ? 'configured' : 'not-configured',
           facebookAppSecret: extensionAppSecret ? 'configured' : 'not-configured',
-          oauthReady: !!(extensionAppId && extensionAppSecret),
+          sessionReady: !!(extensionAppId && extensionAppSecret),
         },
         stats: {
           totalSessions,

@@ -31,7 +31,7 @@ interface ExtensionConfig {
   hasSecret: boolean;
   configured: boolean;
   apiUrl: string;
-  oauthRedirectPattern: string;
+  sessionRedirectPattern: string;
   chromeWebStoreUrl: string | null;
 }
 
@@ -39,7 +39,7 @@ interface ExtensionStatus {
   extensionId: 'configured' | 'not-configured';
   facebookAppId: 'configured' | 'not-configured';
   facebookAppSecret: 'configured' | 'not-configured';
-  oauthReady: boolean;
+  sessionReady: boolean;
 }
 
 interface ExtensionStats {
@@ -158,7 +158,7 @@ export default function ExtensionConfigPage() {
             Extension Configuration
           </h1>
           <p className="text-gray-500 mt-1">
-            Manage Chrome Extension settings and Facebook OAuth for extension
+            Manage Chrome Extension settings and Facebook session integration
           </p>
         </div>
         <Button variant="secondary" onClick={() => refetch()}>
@@ -258,7 +258,7 @@ export default function ExtensionConfigPage() {
                   className="font-mono"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Separate Facebook App for extension OAuth (can be same as web app)
+                  Facebook App for extension session validation (can be same as web app)
                 </p>
               </div>
 
@@ -342,8 +342,8 @@ export default function ExtensionConfigPage() {
               <div className="flex gap-3">
                 <span className="flex-shrink-0 w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
                 <div>
-                  <p className="font-medium">Configure OAuth Settings</p>
-                  <p className="text-gray-500">Add <code className="bg-gray-100 px-1 rounded">https://*.chromiumapp.org/*</code> to Valid OAuth Redirect URIs</p>
+                  <p className="font-medium">Configure Extension Permissions</p>
+                  <p className="text-gray-500">Ensure the extension has permission to access Facebook cookies for session capture</p>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -419,10 +419,10 @@ export default function ExtensionConfigPage() {
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2">
                   <Link2 className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm">OAuth Ready</span>
+                  <span className="text-sm">Session Ready</span>
                 </div>
-                <Badge variant={status?.oauthReady ? 'success' : 'danger'}>
-                  {status?.oauthReady ? (
+                <Badge variant={status?.sessionReady ? 'success' : 'danger'}>
+                  {status?.sessionReady ? (
                     <><CheckCircle className="h-3 w-3 mr-1" /> Ready</>
                   ) : (
                     <><AlertCircle className="h-3 w-3 mr-1" /> Not Ready</>
@@ -432,14 +432,14 @@ export default function ExtensionConfigPage() {
             </div>
           </Card>
 
-          {/* OAuth Redirect URIs */}
+          {/* Session Configuration */}
           <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">OAuth Redirect URIs</h3>
+            <h3 className="text-lg font-semibold mb-4">Session Configuration</h3>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-gray-500 mb-1">Chrome Extension:</p>
+                <p className="text-xs text-gray-500 mb-1">Chrome Extension Pattern:</p>
                 <code className="text-xs bg-gray-100 px-2 py-1 rounded block break-all">
-                  {config?.oauthRedirectPattern || 'https://*.chromiumapp.org/*'}
+                  {config?.sessionRedirectPattern || 'https://*.chromiumapp.org/*'}
                 </code>
               </div>
               <div>

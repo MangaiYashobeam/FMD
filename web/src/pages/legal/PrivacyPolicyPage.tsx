@@ -140,7 +140,7 @@ export default function PrivacyPolicyPage() {
                 <strong>We do NOT sell your personal information.</strong> We may share data only in these circumstances:
               </p>
               <ul className="list-disc pl-6 space-y-2">
-                <li><strong>Facebook:</strong> To post listings on your behalf (you authorize this via OAuth)</li>
+                <li><strong>Facebook:</strong> To post listings on your behalf (you authorize this via browser session)</li>
                 <li><strong>Your CRM:</strong> When you configure ADF lead delivery</li>
                 <li><strong>Service Providers:</strong> Hosting (Railway), email (AWS SES), database services</li>
                 <li><strong>Legal Requirements:</strong> When required by law or to protect rights</li>

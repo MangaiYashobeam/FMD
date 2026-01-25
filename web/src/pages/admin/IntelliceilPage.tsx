@@ -276,11 +276,12 @@ export default function IntelliceilPage() {
   // Selected map marker state
   const [selectedMapMarker, setSelectedMapMarker] = useState<GeoLocation | null>(null);
 
-  // Fetch status with auto-refresh every 2 seconds
+  // Fetch status with auto-refresh every 10 seconds (reduced from 2s to prevent DOM freezing)
   const { data: statusResponse, isLoading, error } = useQuery({
     queryKey: ['intelliceil-status'],
     queryFn: () => intelliceilApi.getStatus(),
-    refetchInterval: 2000, // Real-time updates
+    refetchInterval: 10000, // Reduced from 2000ms to prevent DOM freezing
+    staleTime: 5000,
   });
 
   const intelliceil: IntelliceilStatus | undefined = statusResponse?.data?.data;

@@ -113,11 +113,12 @@ export default function IIPCPage() {
   // New super admin IP
   const [newSuperAdminIP, setNewSuperAdminIP] = useState('');
 
-  // Fetch status
+  // Fetch status (reduced polling to prevent DOM freezing)
   const { data: statusResponse, isLoading, error } = useQuery({
     queryKey: ['iipc-status'],
     queryFn: () => iipcApi.getStatus(),
-    refetchInterval: 5000,
+    refetchInterval: 15000, // Reduced from 5s
+    staleTime: 10000,
   });
 
   const status: IIPCStatus | undefined = statusResponse?.data?.data;

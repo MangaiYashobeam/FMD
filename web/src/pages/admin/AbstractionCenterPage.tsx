@@ -1043,18 +1043,21 @@ const IAIExtensionDashboard = () => {
     queryKey: ['abstraction-extension-instances'],
     queryFn: fetchExtensionInstances,
     refetchInterval: 30000,
+    staleTime: 20000,
   });
 
   const { data: stats, isLoading: _loadingStats } = useQuery({
     queryKey: ['abstraction-extension-stats'],
     queryFn: fetchExtensionStats,
     refetchInterval: 30000,
+    staleTime: 20000,
   });
 
   const { data: activitiesData } = useQuery({
     queryKey: ['abstraction-extension-activities'],
     queryFn: () => fetchExtensionActivities(1, 20),
-    refetchInterval: 15000,
+    refetchInterval: 30000, // Reduced from 15s
+    staleTime: 20000,
   });
 
   const filteredInstances = instancesData?.data?.filter(instance => {
@@ -1220,25 +1223,29 @@ const NovaSoldiersDashboard = () => {
   const { data: workersData, isLoading: loadingWorkers, refetch: refetchWorkers } = useQuery({
     queryKey: ['abstraction-nova-workers'],
     queryFn: fetchNovaWorkers,
-    refetchInterval: 10000,
+    refetchInterval: 20000, // Reduced from 10s
+    staleTime: 15000,
   });
 
   const { data: sessionsData, isLoading: loadingSessions } = useQuery({
     queryKey: ['abstraction-nova-sessions'],
     queryFn: fetchNovaSessions,
-    refetchInterval: 10000,
+    refetchInterval: 20000, // Reduced from 10s
+    staleTime: 15000,
   });
 
   const { data: stats, isLoading: _loadingStats2 } = useQuery({
     queryKey: ['abstraction-nova-stats'],
     queryFn: fetchNovaStats,
-    refetchInterval: 15000,
+    refetchInterval: 30000, // Reduced from 15s
+    staleTime: 20000,
   });
 
   const { data: logsData, refetch: refetchLogs } = useQuery({
     queryKey: ['abstraction-nova-logs', logLevel],
     queryFn: () => fetchNovaLogs(1, 100, logLevel || undefined),
-    refetchInterval: 5000,
+    refetchInterval: 15000, // Reduced from 5s
+    staleTime: 10000,
   });
 
   const { data: ticketsData, refetch: refetchTickets } = useQuery({

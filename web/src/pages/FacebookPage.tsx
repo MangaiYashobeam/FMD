@@ -116,7 +116,7 @@ export default function FacebookPage() {
   const [newGroupUrl, setNewGroupUrl] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
 
-  // Handle OAuth callback success/error messages
+  // Handle session callback success/error messages
   useEffect(() => {
     const success = searchParams.get('success');
     const error = searchParams.get('error');
@@ -141,22 +141,25 @@ export default function FacebookPage() {
     }
   }, [searchParams, setSearchParams, toast, queryClient]);
 
-  // Handle Facebook Connect button
+  // Handle Facebook Connect button - Now uses extension session capture
   const handleConnectFacebook = async () => {
     try {
       setIsConnecting(true);
+      // Show instructions for using the Chrome extension for session-based auth
+      toast.info('Please use the FaceMyDealer Chrome Extension to connect your Facebook account. The extension will securely capture your Facebook session.');
+      // Open extension instructions or trigger extension
       const response = await facebookApi.getAuthUrl();
       const authUrl = response.data?.data?.url;
       if (authUrl) {
-        // Redirect to Facebook OAuth
+        // Redirect to session setup page
         window.location.href = authUrl;
       } else {
         console.error('No auth URL received from server');
-        toast.error('Failed to get Facebook authorization URL. Please try again.');
+        toast.error('Please install and use the Chrome Extension to connect Facebook.');
       }
     } catch (error: any) {
       console.error('Failed to connect to Facebook:', error?.response?.data || error.message);
-      toast.error('Failed to connect to Facebook. Please try again.');
+      toast.error('Please use the Chrome Extension to connect your Facebook account.');
     } finally {
       setIsConnecting(false);
     }

@@ -61,7 +61,7 @@ interface FacebookConfig {
   appSecret: string;
   hasSecret: boolean;
   configured: boolean;
-  oauthRedirectUri: string;
+  sessionCallbackUri: string;
   extensionRedirectPattern: string;
 }
 
@@ -530,7 +530,7 @@ export default function FacebookConfigPage() {
               <div className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex items-center gap-2">
                   <Facebook className="h-4 w-4 text-gray-500" />
-                  <span>OAuth Ready</span>
+                  <span>Session Ready</span>
                 </div>
                 {config?.configured && config?.hasSecret ? (
                   <Badge variant="success">
@@ -547,11 +547,11 @@ export default function FacebookConfigPage() {
             </div>
 
             <div className="pt-4 mt-4 border-t space-y-2">
-              <p className="text-sm font-medium">OAuth Redirect URIs</p>
+              <p className="text-sm font-medium">Session Callback URLs</p>
               <div className="space-y-1">
                 <p className="text-xs text-gray-500">Web App:</p>
                 <code className="text-xs bg-gray-100 p-1 rounded block overflow-x-auto">
-                  {config?.oauthRedirectUri || 'Not configured'}
+                  {config?.sessionCallbackUri || 'Not configured'}
                 </code>
               </div>
               <div className="space-y-1">
@@ -571,9 +571,9 @@ export default function FacebookConfigPage() {
               <li>Create or select your app</li>
               <li>Go to Settings → Basic</li>
               <li>Copy the <strong>App ID</strong> and <strong>App Secret</strong></li>
-              <li>Add the OAuth redirect URIs shown above to your app's Valid OAuth Redirect URIs</li>
-              <li>For Chrome Extension, add <code className="bg-gray-100 px-1 rounded">https://&lt;extension-id&gt;.chromiumapp.org/</code> to Valid OAuth Redirect URIs</li>
-              <li>Ensure your app has <strong>Facebook Login</strong> product added</li>
+              <li>Configure the session callback URLs shown above in your app settings</li>
+              <li>The extension captures Facebook sessions directly - no OAuth flow needed</li>
+              <li>Ensure your app has <strong>Facebook Login</strong> product added for API features</li>
             </ol>
           </Card>
         </div>

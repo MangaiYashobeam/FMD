@@ -275,13 +275,15 @@ function SoldierDetailModal({ soldier, onClose }: { soldier: IAISoldier; onClose
   const { data: activityData } = useQuery({
     queryKey: ['soldierActivity', soldier.id],
     queryFn: () => fetchSoldierActivity(soldier.id),
-    refetchInterval: 10000,
+    refetchInterval: 30000, // Reduced from 10s - modal polling
+    staleTime: 20000,
   });
 
   const { data: performanceData } = useQuery({
     queryKey: ['soldierPerformance', soldier.id],
     queryFn: () => fetchSoldierPerformance(soldier.id),
-    refetchInterval: 30000,
+    refetchInterval: 60000, // Reduced from 30s - performance data doesn't change often
+    staleTime: 30000,
   });
 
   return (
@@ -591,7 +593,8 @@ export default function IAICommandCenter() {
   } = useQuery({
     queryKey: ['soldiers'],
     queryFn: fetchSoldiers,
-    refetchInterval: 5000, // Refresh every 5 seconds
+    refetchInterval: 15000, // Reduced from 5s to prevent DOM freezing
+    staleTime: 10000,
   });
 
   const {
@@ -601,7 +604,8 @@ export default function IAICommandCenter() {
   } = useQuery({
     queryKey: ['iaiStats'],
     queryFn: fetchStats,
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 30000, // Reduced from 10s to prevent DOM freezing
+    staleTime: 15000,
   });
 
   const soldiers = soldiersData?.soldiers || [];
