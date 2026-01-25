@@ -307,15 +307,17 @@ router.post('/assignments', authenticate, requireAdmin, async (req: AuthRequest,
 router.post('/sessions/:sessionId/note', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const sessionId = req.params.sessionId as string;
-    const { noteType, content, metadata } = req.body;
+    const { noteType, content, metadata, agentId, modelId } = req.body;
 
     const note = aiOrchestrator.addSessionNote({
       sessionId,
       accountId: req.body.accountId || 'default',
       userId: req.user?.id || 'system',
+      agentId: agentId || 'system',
+      modelId: modelId || 'default',
       noteType: noteType || 'context',
       content,
-      metadata,
+      metadata: metadata || {},
     });
 
     res.json({ success: true, data: note });
@@ -371,7 +373,7 @@ router.get('/sessions/:sessionId/context', authenticate, async (req: AuthRequest
  */
 router.post('/handoff', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { sessionId, fromModel, toModel, reason, preserveContext } = req.body;
+    const { sessionId, fromAgent, fromModel, toAgent, toModel, reason, preserveContext } = req.body;
 
     if (!sessionId || !fromModel || !toModel) {
       return res.status(400).json({ 
@@ -382,7 +384,9 @@ router.post('/handoff', authenticate, async (req: AuthRequest, res: Response) =>
 
     const result = await aiOrchestrator.executeHandoff({
       sessionId,
+      fromAgent: fromAgent || 'system',
       fromModel,
+      toAgent: toAgent || 'system',
       toModel,
       reason: reason || 'User requested',
       preserveContext: preserveContext !== false,
