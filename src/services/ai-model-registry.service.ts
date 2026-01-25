@@ -16,7 +16,7 @@ import OpenAI from 'openai';
 // TYPE DEFINITIONS
 // ============================================
 
-export type AIProviderType = 'anthropic' | 'openai' | 'deepseek' | 'google' | 'meta' | 'custom';
+export type AIProviderType = 'anthropic' | 'openai' | 'deepseek' | 'google' | 'meta' | 'github' | 'mistral' | 'xai' | 'perplexity' | 'cohere' | 'custom';
 
 export interface AIModel {
   id: string;
@@ -257,6 +257,198 @@ export const AI_MODELS: Record<string, AIModel> = {
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'file-processing'],
     tier: 'standard',
     releaseDate: '2024-05',
+  },
+
+  // GITHUB COPILOT MODELS
+  'copilot-gpt-4': {
+    id: 'copilot-gpt-4',
+    provider: 'github',
+    displayName: 'Copilot GPT-4',
+    contextWindow: 128000,
+    maxOutputTokens: 4096,
+    inputPricePerMillion: 0,
+    outputPricePerMillion: 0,
+    capabilities: ['chat', 'code', 'analysis', 'tools'],
+    tier: 'flagship',
+    releaseDate: '2024-01',
+  },
+  'copilot-claude': {
+    id: 'copilot-claude',
+    provider: 'github',
+    displayName: 'Copilot Claude',
+    contextWindow: 200000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 0,
+    outputPricePerMillion: 0,
+    capabilities: ['chat', 'code', 'analysis', 'extended-thinking'],
+    tier: 'flagship',
+    releaseDate: '2024-12',
+  },
+  'copilot-o1': {
+    id: 'copilot-o1',
+    provider: 'github',
+    displayName: 'Copilot o1',
+    contextWindow: 128000,
+    maxOutputTokens: 32000,
+    inputPricePerMillion: 0,
+    outputPricePerMillion: 0,
+    capabilities: ['chat', 'code', 'analysis', 'extended-thinking'],
+    tier: 'flagship',
+    releaseDate: '2025-01',
+  },
+
+  // MISTRAL MODELS
+  'mistral-large': {
+    id: 'mistral-large-latest',
+    provider: 'mistral',
+    displayName: 'Mistral Large',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 2,
+    outputPricePerMillion: 6,
+    capabilities: ['chat', 'code', 'analysis', 'tools'],
+    tier: 'flagship',
+    releaseDate: '2024-02',
+  },
+  'mistral-small': {
+    id: 'mistral-small-latest',
+    provider: 'mistral',
+    displayName: 'Mistral Small',
+    contextWindow: 32000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 0.2,
+    outputPricePerMillion: 0.6,
+    capabilities: ['chat', 'code', 'analysis'],
+    tier: 'economy',
+    releaseDate: '2024-09',
+  },
+  'codestral': {
+    id: 'codestral-latest',
+    provider: 'mistral',
+    displayName: 'Codestral',
+    contextWindow: 32000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 0.2,
+    outputPricePerMillion: 0.6,
+    capabilities: ['code', 'analysis'],
+    tier: 'standard',
+    releaseDate: '2024-05',
+  },
+
+  // XAI (GROK) MODELS
+  'grok-2': {
+    id: 'grok-2',
+    provider: 'xai',
+    displayName: 'Grok 2',
+    contextWindow: 131072,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 2,
+    outputPricePerMillion: 10,
+    capabilities: ['chat', 'code', 'analysis', 'vision'],
+    tier: 'flagship',
+    releaseDate: '2024-08',
+  },
+  'grok-2-mini': {
+    id: 'grok-2-mini',
+    provider: 'xai',
+    displayName: 'Grok 2 Mini',
+    contextWindow: 131072,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 0.2,
+    outputPricePerMillion: 1,
+    capabilities: ['chat', 'code', 'analysis'],
+    tier: 'economy',
+    releaseDate: '2024-08',
+  },
+
+  // PERPLEXITY MODELS
+  'sonar-pro': {
+    id: 'sonar-pro',
+    provider: 'perplexity',
+    displayName: 'Sonar Pro',
+    contextWindow: 200000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 3,
+    outputPricePerMillion: 15,
+    capabilities: ['chat', 'analysis', 'tools'],
+    tier: 'flagship',
+    releaseDate: '2024-11',
+  },
+  'sonar': {
+    id: 'sonar',
+    provider: 'perplexity',
+    displayName: 'Sonar',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 1,
+    outputPricePerMillion: 5,
+    capabilities: ['chat', 'analysis'],
+    tier: 'standard',
+    releaseDate: '2024-11',
+  },
+  'sonar-reasoning': {
+    id: 'sonar-reasoning',
+    provider: 'perplexity',
+    displayName: 'Sonar Reasoning',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 5,
+    outputPricePerMillion: 25,
+    capabilities: ['chat', 'analysis', 'extended-thinking'],
+    tier: 'flagship',
+    releaseDate: '2025-01',
+  },
+
+  // META LLAMA MODELS (via Together/Groq)
+  'llama-3.3-70b': {
+    id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    provider: 'meta',
+    displayName: 'Llama 3.3 70B',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 0.88,
+    outputPricePerMillion: 0.88,
+    capabilities: ['chat', 'code', 'analysis'],
+    tier: 'flagship',
+    releaseDate: '2024-12',
+  },
+  'llama-3.1-8b': {
+    id: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+    provider: 'meta',
+    displayName: 'Llama 3.1 8B',
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    inputPricePerMillion: 0.18,
+    outputPricePerMillion: 0.18,
+    capabilities: ['chat', 'code', 'analysis'],
+    tier: 'economy',
+    releaseDate: '2024-07',
+  },
+
+  // COHERE MODELS
+  'command-r-plus': {
+    id: 'command-r-plus',
+    provider: 'cohere',
+    displayName: 'Command R+',
+    contextWindow: 128000,
+    maxOutputTokens: 4096,
+    inputPricePerMillion: 2.5,
+    outputPricePerMillion: 10,
+    capabilities: ['chat', 'code', 'analysis', 'tools'],
+    tier: 'flagship',
+    releaseDate: '2024-04',
+  },
+  'command-r': {
+    id: 'command-r',
+    provider: 'cohere',
+    displayName: 'Command R',
+    contextWindow: 128000,
+    maxOutputTokens: 4096,
+    inputPricePerMillion: 0.5,
+    outputPricePerMillion: 1.5,
+    capabilities: ['chat', 'code', 'analysis'],
+    tier: 'standard',
+    releaseDate: '2024-03',
   },
 };
 
@@ -683,6 +875,48 @@ class AIModelRegistryService {
       provider: 'google' as AIProviderType,
       configured: !!process.env.GOOGLE_AI_KEY,
       healthy: !!process.env.GOOGLE_AI_KEY,
+    });
+
+    // GitHub Copilot
+    results.push({
+      provider: 'github' as AIProviderType,
+      configured: !!process.env.GITHUB_COPILOT_TOKEN,
+      healthy: !!process.env.GITHUB_COPILOT_TOKEN,
+    });
+
+    // Mistral
+    results.push({
+      provider: 'mistral' as AIProviderType,
+      configured: !!process.env.MISTRAL_API_KEY,
+      healthy: !!process.env.MISTRAL_API_KEY,
+    });
+
+    // xAI (Grok)
+    results.push({
+      provider: 'xai' as AIProviderType,
+      configured: !!process.env.XAI_API_KEY,
+      healthy: !!process.env.XAI_API_KEY,
+    });
+
+    // Perplexity
+    results.push({
+      provider: 'perplexity' as AIProviderType,
+      configured: !!process.env.PERPLEXITY_API_KEY,
+      healthy: !!process.env.PERPLEXITY_API_KEY,
+    });
+
+    // Meta (via Together AI)
+    results.push({
+      provider: 'meta' as AIProviderType,
+      configured: !!process.env.TOGETHER_API_KEY,
+      healthy: !!process.env.TOGETHER_API_KEY,
+    });
+
+    // Cohere
+    results.push({
+      provider: 'cohere' as AIProviderType,
+      configured: !!process.env.COHERE_API_KEY,
+      healthy: !!process.env.COHERE_API_KEY,
     });
 
     return results;

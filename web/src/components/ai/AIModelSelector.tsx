@@ -21,6 +21,12 @@ import {
   Clock,
   Settings2,
   Loader2,
+  Rocket,
+  Search,
+  MessageSquare,
+  Globe,
+  Flame,
+  GitBranch,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
@@ -77,6 +83,18 @@ const getProviderIcon = (provider: string, className?: string) => {
       return <Zap className={className} />;
     case 'google':
       return <Activity className={className} />;
+    case 'github':
+      return <GitBranch className={className} />;
+    case 'mistral':
+      return <Rocket className={className} />;
+    case 'xai':
+      return <Flame className={className} />;
+    case 'perplexity':
+      return <Search className={className} />;
+    case 'meta':
+      return <Globe className={className} />;
+    case 'cohere':
+      return <MessageSquare className={className} />;
     default:
       return <Bot className={className} />;
   }
@@ -407,7 +425,7 @@ export const AIModelSelector: React.FC<AIModelSelectorProps> = ({
                     </div>
 
                     {/* Models grouped by provider */}
-                    {['anthropic', 'openai', 'deepseek', 'google'].map(provider => {
+                    {['anthropic', 'openai', 'github', 'mistral', 'xai', 'perplexity', 'deepseek', 'google', 'meta', 'cohere'].map(provider => {
                       const providerModels = models.filter(m => m.provider === provider);
                       const providerConfig = providers.find(p => p.provider === provider);
 
@@ -418,7 +436,7 @@ export const AIModelSelector: React.FC<AIModelSelectorProps> = ({
                           <div className="flex items-center gap-2 mb-3">
                             {getProviderIcon(provider, 'w-4 h-4 text-gray-400')}
                             <h4 className="text-sm font-semibold text-gray-300 uppercase">
-                              {provider}
+                              {provider === 'xai' ? 'Grok (xAI)' : provider === 'github' ? 'GitHub Copilot' : provider}
                             </h4>
                             {!providerConfig?.configured && (
                               <span className="text-xs text-red-400">(Not Configured)</span>
