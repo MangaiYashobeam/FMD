@@ -894,7 +894,7 @@ router.get('/utm/analytics', async (_req: AuthRequest, res: Response) => {
  */
 router.get('/utm/user/:userId', async (req: AuthRequest, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = req.params.userId as string;
     
     const user = await prisma.user.findUnique({
       where: { id: userId },

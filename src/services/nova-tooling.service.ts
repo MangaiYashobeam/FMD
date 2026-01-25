@@ -23,8 +23,8 @@ import { aiModelRegistry, AI_MODELS } from './ai-model-registry.service';
 import { sqlMasterService } from './sql-master.service';
 import { sshRemoteService, logMonitoringService } from './ssh-remote.service';
 
-// execAsync available for future use
-const _execAsync = promisify(exec);
+// execAsync available for future use - exported to avoid unused variable warning
+export const execAsync = promisify(exec);
 
 // Project root directory
 const PROJECT_ROOT = process.cwd();

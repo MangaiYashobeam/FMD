@@ -9,10 +9,10 @@
  */
 
 import { logger } from '@/utils/logger';
-import { spawn, exec } from 'child_process';
+import { spawn as _spawn, exec } from 'child_process';
 import { promisify } from 'util';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as _fs from 'fs/promises';
+import * as _path from 'path';
 
 const execAsync = promisify(exec);
 

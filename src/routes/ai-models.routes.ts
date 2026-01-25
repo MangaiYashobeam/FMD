@@ -8,7 +8,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { aiModelRegistry, AI_MODELS, AI_AGENTS } from '@/services/ai-model-registry.service';
+import { aiModelRegistry, AI_MODELS, AI_AGENTS as _AI_AGENTS } from '@/services/ai-model-registry.service';
 import { novaToolingService } from '@/services/nova-tooling.service';
 import { logger } from '@/utils/logger';
 
@@ -22,7 +22,7 @@ const router = Router();
  * GET /ai-models/agents
  * Get all AI agents with their current status and model assignments
  */
-router.get('/agents', async (req: Request, res: Response) => {
+router.get('/agents', async (_req: Request, res: Response) => {
   try {
     const report = aiModelRegistry.getAgentStatusReport();
     
@@ -65,7 +65,7 @@ router.get('/agents', async (req: Request, res: Response) => {
  * GET /ai-models/agents/active
  * Get the currently serving agent with full details
  */
-router.get('/agents/active', async (req: Request, res: Response) => {
+router.get('/agents/active', async (_req: Request, res: Response) => {
   try {
     const activeAgent = novaToolingService.getActiveAgent();
     
@@ -77,7 +77,7 @@ router.get('/agents/active', async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         ...activeAgent,
@@ -86,7 +86,7 @@ router.get('/agents/active', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to get active agent:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -96,7 +96,7 @@ router.get('/agents/active', async (req: Request, res: Response) => {
  */
 router.get('/agents/:agentId', async (req: Request, res: Response) => {
   try {
-    const agent = aiModelRegistry.getAgent(req.params.agentId);
+    const agent = aiModelRegistry.getAgent(req.params.agentId as string);
     
     if (!agent) {
       return res.status(404).json({
@@ -107,7 +107,7 @@ router.get('/agents/:agentId', async (req: Request, res: Response) => {
 
     const model = AI_MODELS[agent.activeModel];
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         ...agent,
@@ -123,7 +123,7 @@ router.get('/agents/:agentId', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to get agent:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -143,7 +143,7 @@ router.put('/agents/:agentId/model', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await aiModelRegistry.setActiveModelForAgent(agentId, modelId);
+    const result = await aiModelRegistry.setActiveModelForAgent(agentId as string, modelId);
 
     if (!result.success) {
       return res.status(400).json({
@@ -154,7 +154,7 @@ router.put('/agents/:agentId/model', async (req: Request, res: Response) => {
 
     logger.info(`[AI Models] Model changed for ${agentId}: ${result.previousModel} -> ${result.newModel}`);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         agentId,
@@ -166,7 +166,7 @@ router.put('/agents/:agentId/model', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to change model:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -186,15 +186,15 @@ router.put('/agents/:agentId/status', async (req: Request, res: Response) => {
       });
     }
 
-    aiModelRegistry.updateAgentStatus(agentId, status);
+    aiModelRegistry.updateAgentStatus(agentId as string, status);
 
-    res.json({
+    return res.json({
       success: true,
       data: { agentId, status },
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to update status:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -213,18 +213,18 @@ router.get('/models', async (req: Request, res: Response) => {
     let models = aiModelRegistry.getAllModels();
 
     if (provider) {
-      models = models.filter(m => m.provider === provider);
+      models = models.filter(m => m.provider === (provider as string));
     }
 
     if (tier) {
-      models = models.filter(m => m.tier === tier);
+      models = models.filter(m => m.tier === (tier as string));
     }
 
     if (capability) {
-      models = models.filter(m => m.capabilities.includes(capability as any));
+      models = models.filter(m => m.capabilities.includes((capability as string) as any));
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: models.map(model => ({
         id: model.id,
@@ -245,7 +245,7 @@ router.get('/models', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to get models:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -255,7 +255,7 @@ router.get('/models', async (req: Request, res: Response) => {
  */
 router.get('/models/:modelId', async (req: Request, res: Response) => {
   try {
-    const model = aiModelRegistry.getModel(req.params.modelId);
+    const model = aiModelRegistry.getModel(req.params.modelId as string);
 
     if (!model) {
       return res.status(404).json({
@@ -264,13 +264,13 @@ router.get('/models/:modelId', async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: model,
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to get model:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -280,15 +280,15 @@ router.get('/models/:modelId', async (req: Request, res: Response) => {
  */
 router.get('/models/:modelId/health', async (req: Request, res: Response) => {
   try {
-    const health = await aiModelRegistry.checkModelHealth(req.params.modelId);
+    const health = await aiModelRegistry.checkModelHealth(req.params.modelId as string);
 
-    res.json({
+    return res.json({
       success: true,
       data: health,
     });
   } catch (error: any) {
     logger.error('[AI Models] Health check failed:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -300,7 +300,7 @@ router.get('/models/:modelId/health', async (req: Request, res: Response) => {
  * GET /ai-models/providers
  * Get all configured AI providers and their status
  */
-router.get('/providers', async (req: Request, res: Response) => {
+router.get('/providers', async (_req: Request, res: Response) => {
   try {
     const providers = await aiModelRegistry.checkAllProvidersHealth();
 
@@ -313,7 +313,7 @@ router.get('/providers', async (req: Request, res: Response) => {
       );
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: providers.map(p => ({
         ...p,
@@ -322,7 +322,7 @@ router.get('/providers', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to get providers:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -334,13 +334,13 @@ router.get('/providers', async (req: Request, res: Response) => {
  * GET /ai-models/state
  * Get complete AI system state
  */
-router.get('/state', async (req: Request, res: Response) => {
+router.get('/state', async (_req: Request, res: Response) => {
   try {
     const activeModels = aiModelRegistry.getActiveModelsState();
     const agentReport = aiModelRegistry.getAgentStatusReport();
     const providers = await aiModelRegistry.checkAllProvidersHealth();
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         activeModels,
@@ -358,7 +358,7 @@ router.get('/state', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[AI Models] Failed to get state:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -379,7 +379,7 @@ router.post('/chat', async (req: Request, res: Response) => {
 
     const result = await aiModelRegistry.sendMessage(agentId, messages, options);
 
-    res.json({
+    return res.json({
       success: result.success,
       data: {
         response: result.response,
@@ -391,7 +391,7 @@ router.post('/chat', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('[AI Models] Chat failed:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 

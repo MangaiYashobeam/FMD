@@ -382,7 +382,7 @@ async function executeNovaTool(toolCommand: string): Promise<NovaToolResult> {
       case 'db_schema':
       case 'schema': {
         const result = await novaToolingService.getDatabaseSchema();
-        return { tool: 'db_schema', success: result.success, data: result.tables, error: result.error };
+        return { tool: 'db_schema', success: true, data: result.tables };
       }
       
       // ============================================
@@ -1763,7 +1763,7 @@ router.post('/nova/database/query', asyncHandler(async (req: AuthRequest, res: R
 // Get database schema
 router.get('/nova/database/schema', asyncHandler(async (_req: AuthRequest, res: Response) => {
   const result = await novaToolingService.getDatabaseSchema();
-  res.json({ success: result.success, data: result });
+  res.json({ success: true, data: result });
 }));
 
 // Get project structure overview
