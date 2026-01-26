@@ -749,6 +749,12 @@ app.use('/api/ai-orchestrator', ring5AuthBarrier, require('./routes/ai-orchestra
 // AI Chat Routes - Nova's Backend (requires auth, handles own file uploads)
 app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default); // AI Chat with memory system
 
+// IAI Injection System - Pattern/Container management (requires admin)
+app.use('/api/injection', ring5AuthBarrier, require('./routes/injection.routes').default); // Injection containers & patterns
+
+// Mission Control - Mission planning and execution (requires admin)
+app.use('/api/mission-control', ring5AuthBarrier, require('./routes/mission-control.routes').default); // Mission Control system
+
 // Error Monitoring & AI Intervention System
 app.use('/api/error-monitoring', ring5AuthBarrier, require('./routes/error-monitoring.routes').default); // Error monitoring & AI intervention
 

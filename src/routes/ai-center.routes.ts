@@ -178,14 +178,32 @@ router.post('/providers/:providerId/wake-up', asyncHandler(async (req: AuthReque
   const start = Date.now();
   
   // Check if provider has API key configured
-  const providerConfigs: Record<string, { envKey: string; testEndpoint?: string }> = {
+  const providerConfigs: Record<string, { envKey: string | string[]; testEndpoint?: string }> = {
     openai: { envKey: 'OPENAI_API_KEY', testEndpoint: 'https://api.openai.com/v1/models' },
     anthropic: { envKey: 'ANTHROPIC_API_KEY', testEndpoint: 'https://api.anthropic.com/v1/messages' },
     deepseek: { envKey: 'DEEPSEEK_API_KEY', testEndpoint: 'https://api.deepseek.com/v1/models' },
+    github: { envKey: ['GITHUB_COPILOT_API_KEY', 'GITHUB_COPILOT_TOKEN'], testEndpoint: 'https://models.github.ai/inference/chat/completions' },
+    copilot: { envKey: ['GITHUB_COPILOT_API_KEY', 'GITHUB_COPILOT_TOKEN'], testEndpoint: 'https://models.github.ai/inference/chat/completions' },
+    mistral: { envKey: 'MISTRAL_API_KEY', testEndpoint: 'https://api.mistral.ai/v1/models' },
+    perplexity: { envKey: 'PERPLEXITY_API_KEY' },
+    google: { envKey: 'GOOGLE_AI_KEY' },
+    meta: { envKey: 'TOGETHER_API_KEY' },
+    cohere: { envKey: 'COHERE_API_KEY' },
   };
   
   const config = providerConfigs[providerKey];
-  const apiKey = config ? process.env[config.envKey] : null;
+  // Handle single key or array of keys
+  const getApiKey = () => {
+    if (!config) return null;
+    if (Array.isArray(config.envKey)) {
+      for (const key of config.envKey) {
+        if (process.env[key]) return process.env[key];
+      }
+      return null;
+    }
+    return process.env[config.envKey];
+  };
+  const apiKey = getApiKey();
   
   if (!apiKey) {
     const latency = Date.now() - start;
@@ -214,6 +232,30 @@ router.post('/providers/:providerId/wake-up', asyncHandler(async (req: AuthReque
       // Anthropic doesn't have a simple test endpoint, so we verify key format
       if (!apiKey.startsWith('sk-ant-')) throw new Error('Invalid Anthropic key format');
     } else if (providerKey === 'deepseek' && config.testEndpoint) {
+      const response = await fetch(config.testEndpoint, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+    } else if ((providerKey === 'github' || providerKey === 'copilot') && config.testEndpoint) {
+      // GitHub Models API - test with a minimal request
+      const response = await fetch(config.testEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API returned ${response.status}: ${errorText.substring(0, 100)}`);
+      }
+    } else if (providerKey === 'mistral' && config.testEndpoint) {
       const response = await fetch(config.testEndpoint, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${apiKey}` },

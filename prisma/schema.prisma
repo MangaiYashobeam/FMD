@@ -3885,23 +3885,23 @@ model AISessionNote {
 
 // AI Task Assignments - Hierarchical model assignments
 model AITaskAssignment {
-  id              String   @id @default(uuid())
-  taskType        String   @map("task_type") // screenshot_analysis, customer_service, etc
-  primaryModel    String   @map("primary_model")
-  fallbackModel   String   @map("fallback_model")
-  allowedModels   String[] @map("allowed_models")
-  assignedBy      String   @map("assigned_by") // system, super_admin, admin, etc
-  assignmentLevel String   @map("assignment_level") // global, company, team, user
-  priority        Int      @default(50)
-  conditions      Json     @default("{}")
-  accountId       String?  @map("account_id") // null for global
-  teamId          String?  @map("team_id")
-  userId          String?  @map("user_id")
-  createdById     String   @map("created_by_id")
+  id              String    @id @default(uuid())
+  taskType        String    @map("task_type") // screenshot_analysis, customer_service, etc
+  primaryModel    String    @map("primary_model")
+  fallbackModel   String    @map("fallback_model")
+  allowedModels   String[]  @map("allowed_models")
+  assignedBy      String    @map("assigned_by") // system, super_admin, admin, etc
+  assignmentLevel String    @map("assignment_level") // global, company, team, user
+  priority        Int       @default(50)
+  conditions      Json      @default("{}")
+  accountId       String?   @map("account_id") // null for global
+  teamId          String?   @map("team_id")
+  userId          String?   @map("user_id")
+  createdById     String    @map("created_by_id")
   expiresAt       DateTime? @map("expires_at")
-  enabled         Boolean  @default(true)
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  enabled         Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@unique([taskType, assignmentLevel, accountId, teamId, userId])
   @@index([taskType])
@@ -3937,18 +3937,18 @@ model AIModelUsage {
 
 // AI Routing Rules - Admin-configurable routing
 model AIRoutingRule {
-  id           String   @id @default(uuid())
-  name         String
-  description  String?
-  priority     Int      @default(50)
-  conditions   Json     @default("[]") // Array of routing conditions
-  targetModel  String   @map("target_model")
-  fallbackModel String  @map("fallback_model")
-  accountId    String?  @map("account_id") // null for global
-  enabled      Boolean  @default(true)
-  createdById  String   @map("created_by_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  priority      Int      @default(50)
+  conditions    Json     @default("[]") // Array of routing conditions
+  targetModel   String   @map("target_model")
+  fallbackModel String   @map("fallback_model")
+  accountId     String?  @map("account_id") // null for global
+  enabled       Boolean  @default(true)
+  createdById   String   @map("created_by_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([priority])
   @@index([accountId])
@@ -4000,20 +4000,20 @@ model CompanyAIPreferences {
 
 // AI Model Health Status - Real-time monitoring
 model AIModelHealth {
-  id           String   @id @default(uuid())
-  modelId      String   @unique @map("model_id")
-  provider     String
-  status       String   @default("unknown") // healthy, degraded, down, unknown
-  latencyMs    Int?     @map("latency_ms")
-  errorRate    Decimal? @map("error_rate") @db.Decimal(5, 2) // Percentage 0-100
-  lastChecked  DateTime @default(now()) @map("last_checked")
-  lastError    String?  @map("last_error")
-  lastSuccess  DateTime? @map("last_success")
-  checksCount  Int      @default(0) @map("checks_count")
-  failsCount   Int      @default(0) @map("fails_count")
-  metadata     Json     @default("{}")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id          String    @id @default(uuid())
+  modelId     String    @unique @map("model_id")
+  provider    String
+  status      String    @default("unknown") // healthy, degraded, down, unknown
+  latencyMs   Int?      @map("latency_ms")
+  errorRate   Decimal?  @map("error_rate") @db.Decimal(5, 2) // Percentage 0-100
+  lastChecked DateTime  @default(now()) @map("last_checked")
+  lastError   String?   @map("last_error")
+  lastSuccess DateTime? @map("last_success")
+  checksCount Int       @default(0) @map("checks_count")
+  failsCount  Int       @default(0) @map("fails_count")
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@index([status])
   @@index([provider])
@@ -4044,23 +4044,303 @@ model AIRateLimit {
 
 // AI Cost Tracking
 model AICostTracking {
-  id            String   @id @default(uuid())
-  modelId       String   @map("model_id")
-  accountId     String   @map("account_id")
-  userId        String?  @map("user_id")
-  period        String   // daily, weekly, monthly
-  periodStart   DateTime @map("period_start")
-  periodEnd     DateTime @map("period_end")
-  inputTokens   Int      @default(0) @map("input_tokens")
-  outputTokens  Int      @default(0) @map("output_tokens")
-  totalCost     Decimal  @default(0) @map("total_cost") @db.Decimal(10, 4)
-  requestCount  Int      @default(0) @map("request_count")
-  errorCount    Int      @default(0) @map("error_count")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  modelId      String   @map("model_id")
+  accountId    String   @map("account_id")
+  userId       String?  @map("user_id")
+  period       String // daily, weekly, monthly
+  periodStart  DateTime @map("period_start")
+  periodEnd    DateTime @map("period_end")
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  totalCost    Decimal  @default(0) @map("total_cost") @db.Decimal(10, 4)
+  requestCount Int      @default(0) @map("request_count")
+  errorCount   Int      @default(0) @map("error_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@unique([modelId, accountId, period, periodStart])
   @@index([accountId, periodStart])
   @@index([modelId, periodStart])
   @@map("ai_cost_tracking")
+}
+
+// ============================================
+// IAI Injection System
+// ============================================
+
+// Injection Container - Groups related patterns
+model InjectionContainer {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?  @db.Text
+  category    String   @default("custom") // fbm_flow, messaging, analytics, automation, custom
+  icon        String? // Icon identifier for UI
+  color       String? // Color theme for UI
+  isActive    Boolean  @default(true) @map("is_active")
+  isDefault   Boolean  @default(false) @map("is_default")
+  priority    Int      @default(0) // Higher = more likely to be selected
+  config      Json     @default("{}") // Container-level configuration
+  metadata    Json     @default("{}") // Additional metadata
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  patterns      InjectionPattern[]
+  missions      Mission[]
+  injectionLogs InjectionLog[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([priority])
+  @@map("injection_containers")
+}
+
+// Injection Pattern - The actual injectable code/logic
+model InjectionPattern {
+  id          String  @id @default(uuid())
+  containerId String  @map("container_id")
+  name        String
+  description String? @db.Text
+  code        String  @db.Text // The injectable code/logic
+  codeType    String  @default("javascript") @map("code_type") // javascript, json, workflow
+  version     String  @default("1.0.0")
+  isDefault   Boolean @default(false) @map("is_default")
+  isActive    Boolean @default(true) @map("is_active")
+  priority    Int     @default(0) // Higher = more likely if random selection
+  weight      Int     @default(100) // Weight for weighted random selection (0-100)
+
+  // Configuration
+  timeout       Int    @default(30000) // ms timeout for execution
+  retryCount    Int    @default(3) @map("retry_count")
+  failureAction String @default("skip") @map("failure_action") // skip, retry, abort
+  preConditions Json   @default("[]") @map("pre_conditions") // Conditions to check before injection
+  postActions   Json   @default("[]") @map("post_actions") // Actions after successful injection
+
+  // Statistics (denormalized for performance)
+  totalExecutions  Int       @default(0) @map("total_executions")
+  successCount     Int       @default(0) @map("success_count")
+  failureCount     Int       @default(0) @map("failure_count")
+  avgExecutionTime Int       @default(0) @map("avg_execution_time") // ms
+  lastExecutedAt   DateTime? @map("last_executed_at")
+  lastSuccessAt    DateTime? @map("last_success_at")
+  lastFailureAt    DateTime? @map("last_failure_at")
+  lastError        String?   @map("last_error") @db.Text
+
+  // Metadata
+  tags      String[] @default([])
+  metadata  Json     @default("{}")
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  container     InjectionContainer @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  injectionLogs InjectionLog[]
+  missionTasks  MissionTask[]
+
+  @@unique([containerId, name])
+  @@index([containerId])
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([priority])
+  @@index([weight])
+  @@map("injection_patterns")
+}
+
+// Injection Log - Tracks every injection execution
+model InjectionLog {
+  id            String  @id @default(uuid())
+  containerId   String  @map("container_id")
+  patternId     String  @map("pattern_id")
+  iaiInstanceId String? @map("iai_instance_id")
+  missionId     String? @map("mission_id")
+  taskId        String? @map("task_id")
+
+  status          String @default("pending") // pending, running, success, failure, aborted
+  executionTimeMs Int?   @map("execution_time_ms")
+  retryAttempt    Int    @default(0) @map("retry_attempt")
+
+  input      Json    @default("{}") // Input data for the injection
+  output     Json? // Output/result from injection
+  error      String? @db.Text
+  stackTrace String? @map("stack_trace") @db.Text
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  // Relations
+  container InjectionContainer @relation(fields: [containerId], references: [id])
+  pattern   InjectionPattern   @relation(fields: [patternId], references: [id])
+
+  @@index([containerId])
+  @@index([patternId])
+  @@index([iaiInstanceId])
+  @@index([missionId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("injection_logs")
+}
+
+// ============================================
+// Mission Control System
+// ============================================
+
+// Mission - A planned/scheduled set of tasks
+model Mission {
+  id          String  @id @default(uuid())
+  name        String
+  description String? @db.Text
+  type        String  @default("manual") // scheduled, manual, triggered, continuous
+  status      String  @default("draft") // draft, active, paused, completed, failed, archived
+  priority    Int     @default(0) // Mission priority
+
+  // Container assignment
+  containerId String? @map("container_id")
+
+  // Scheduling
+  scheduleType    String?   @map("schedule_type") // cron, interval, once
+  cronExpression  String?   @map("cron_expression")
+  intervalMinutes Int?      @map("interval_minutes")
+  timezone        String    @default("UTC")
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+  lastRunAt       DateTime? @map("last_run_at")
+  nextRunAt       DateTime? @map("next_run_at")
+
+  // Configuration
+  maxConcurrency  Int     @default(1) @map("max_concurrency")
+  retryPolicy     String  @default("none") @map("retry_policy") // none, linear, exponential
+  maxRetries      Int     @default(3) @map("max_retries")
+  alertOnFailure  Boolean @default(true) @map("alert_on_failure")
+  alertOnSuccess  Boolean @default(false) @map("alert_on_success")
+  abortOnTaskFail Boolean @default(false) @map("abort_on_task_fail")
+
+  // Execution stats
+  totalRuns     Int @default(0) @map("total_runs")
+  successRuns   Int @default(0) @map("success_runs")
+  failedRuns    Int @default(0) @map("failed_runs")
+  avgDurationMs Int @default(0) @map("avg_duration_ms")
+
+  // Metadata
+  tags      String[] @default([])
+  config    Json     @default("{}")
+  metadata  Json     @default("{}")
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  container  InjectionContainer? @relation(fields: [containerId], references: [id])
+  tasks      MissionTask[]
+  executions MissionExecution[]
+
+  @@index([status])
+  @@index([type])
+  @@index([containerId])
+  @@index([nextRunAt])
+  @@index([priority])
+  @@map("missions")
+}
+
+// Mission Task - Individual task within a mission
+model MissionTask {
+  id          String  @id @default(uuid())
+  missionId   String  @map("mission_id")
+  patternId   String? @map("pattern_id") // Optional, can be custom task
+  name        String
+  description String? @db.Text
+  taskType    String  @default("pattern") @map("task_type") // pattern, webhook, delay, condition
+  order       Int     @default(0) // Execution order
+
+  // Task configuration
+  config     Json @default("{}")
+  input      Json @default("{}") // Static input for the task
+  timeout    Int  @default(30000) // ms
+  retryCount Int  @default(0) @map("retry_count")
+
+  // Conditional execution
+  condition       String? // JavaScript expression to evaluate
+  skipOnCondition Boolean @default(false) @map("skip_on_condition")
+
+  // Dependencies
+  dependsOn String[] @default([]) @map("depends_on") // Task IDs this task depends on
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  mission  Mission           @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  pattern  InjectionPattern? @relation(fields: [patternId], references: [id])
+  taskRuns MissionTaskRun[]
+
+  @@index([missionId])
+  @@index([patternId])
+  @@index([order])
+  @@map("mission_tasks")
+}
+
+// Mission Execution - Each run of a mission
+model MissionExecution {
+  id              String  @id @default(uuid())
+  missionId       String  @map("mission_id")
+  status          String  @default("pending") // pending, running, completed, failed, aborted
+  triggeredBy     String? @map("triggered_by") // scheduler, manual, api, webhook
+  triggeredUserId String? @map("triggered_user_id")
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  durationMs  Int?      @map("duration_ms")
+
+  // Results
+  tasksTotal     Int @default(0) @map("tasks_total")
+  tasksCompleted Int @default(0) @map("tasks_completed")
+  tasksFailed    Int @default(0) @map("tasks_failed")
+  tasksSkipped   Int @default(0) @map("tasks_skipped")
+
+  output Json?
+  error  String? @db.Text
+  logs   Json    @default("[]") // Execution logs
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  mission  Mission          @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  taskRuns MissionTaskRun[]
+
+  @@index([missionId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("mission_executions")
+}
+
+// Mission Task Run - Individual task execution within a mission run
+model MissionTaskRun {
+  id          String @id @default(uuid())
+  executionId String @map("execution_id")
+  taskId      String @map("task_id")
+  status      String @default("pending") // pending, running, completed, failed, skipped
+
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  durationMs   Int?      @map("duration_ms")
+  retryAttempt Int       @default(0) @map("retry_attempt")
+
+  input  Json?
+  output Json?
+  error  String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  execution MissionExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  task      MissionTask      @relation(fields: [taskId], references: [id])
+
+  @@index([executionId])
+  @@index([taskId])
+  @@index([status])
+  @@map("mission_task_runs")
 }

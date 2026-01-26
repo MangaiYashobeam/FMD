@@ -21,10 +21,14 @@ import {
   BarChart3,
   Chrome,
   Terminal,
+  Boxes,
+  Target,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import IAIPrototypePanel from './IAIPrototypePanel';
 import IAITrainingPanel from './IAITrainingPanel';
+import IAIInjectionPanel from './IAIInjectionPanel';
+import IAIMissionControlPanel from './IAIMissionControlPanel';
 
 // ============================================
 // Types
@@ -476,7 +480,7 @@ function SystemDashboard({ systemInfo }: { systemInfo: SystemInfo | undefined })
 
 export default function IAICommandCenterV2() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'soldiers' | 'system' | 'prototype' | 'training'>('soldiers');
+  const [activeTab, setActiveTab] = useState<'soldiers' | 'system' | 'prototype' | 'training' | 'injection' | 'mission-control'>('soldiers');
   const queryClient = useQueryClient();
 
   const {
@@ -674,6 +678,28 @@ export default function IAICommandCenterV2() {
               <Terminal className="w-4 h-4 inline mr-2" />
               Prototype Test
             </button>
+            <button
+              onClick={() => setActiveTab('injection')}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
+                activeTab === 'injection'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              <Boxes className="w-4 h-4 inline mr-2" />
+              Injection
+            </button>
+            <button
+              onClick={() => setActiveTab('mission-control')}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
+                activeTab === 'mission-control'
+                  ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              <Target className="w-4 h-4 inline mr-2" />
+              Mission Control
+            </button>
           </div>
         </div>
       </div>
@@ -770,6 +796,10 @@ export default function IAICommandCenterV2() {
           <SystemDashboard systemInfo={systemInfo} />
         ) : activeTab === 'training' ? (
           <IAITrainingPanel />
+        ) : activeTab === 'injection' ? (
+          <IAIInjectionPanel />
+        ) : activeTab === 'mission-control' ? (
+          <IAIMissionControlPanel />
         ) : (
           <IAIPrototypePanel />
         )}
