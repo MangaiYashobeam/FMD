@@ -329,69 +329,249 @@ const loadTrainingData = loadInjectionPattern;
  * This is the main pattern execution engine
  */
 async function executeInjectedWorkflow(vehicleData) {
-  if (!IAI_INJECTION._loaded || !IAI_INJECTION.WORKFLOW.length) {
+  if (!IAI_INJECTION._loaded) {
     console.error('[IAI] ❌ No injection pattern loaded - cannot execute workflow');
     return { success: false, error: 'No injection pattern loaded' };
   }
   
   console.log(`[IAI] 🚀 Executing injected workflow: ${IAI_INJECTION._patternName}`);
-  console.log(`[IAI] 📋 Steps to execute: ${IAI_INJECTION.WORKFLOW.length}`);
   
   const startTime = Date.now();
   const stealth = new IAIStealth();
   const results = {
     success: false,
     stepsExecuted: 0,
-    stepsTotal: IAI_INJECTION.WORKFLOW.length,
+    stepsTotal: 0,
     errors: [],
     completed: [],
     duration: 0,
   };
   
-  for (let i = 0; i < IAI_INJECTION.WORKFLOW.length; i++) {
-    const step = IAI_INJECTION.WORKFLOW[i];
-    console.log(`[IAI] Step ${i + 1}/${IAI_INJECTION.WORKFLOW.length}: ${step.action || step.type} - ${step.description || step.fieldType || ''}`);
+  // === PHASE 1: Fill fields directly using fieldMappings (stable approach) ===
+  console.log('[IAI] 📋 Phase 1: Filling fields via fieldMappings...');
+  const fieldMappings = IAI_INJECTION.FIELD_SELECTORS || {};
+  const filledFields = new Set();
+  
+  // Map vehicle data fields to form fields
+  const fieldValueMap = {
+    'year': vehicleData.year,
+    'make': vehicleData.make,
+    'model': vehicleData.model,
+    'price': vehicleData.price,
+    'mileage': vehicleData.mileage,
+    'vin': vehicleData.vin,
+    'title': vehicleData.title || `${vehicleData.year} ${vehicleData.make} ${vehicleData.model}`,
+    'description': vehicleData.description,
+    'location': vehicleData.location || vehicleData.city,
+    'transmission': vehicleData.transmission,
+    'fuelType': vehicleData.fuelType || vehicleData.fuel,
+    'bodyStyle': vehicleData.bodyStyle || vehicleData.body,
+    'condition': vehicleData.condition,
+    'color': vehicleData.color || vehicleData.exteriorColor,
+    'exteriorColor': vehicleData.exteriorColor || vehicleData.color,
+    'interiorColor': vehicleData.interiorColor,
+  };
+  
+  for (const [fieldType, value] of Object.entries(fieldValueMap)) {
+    if (value === null || value === undefined || value === '') continue;
+    
+    results.stepsTotal++;
+    const mapping = fieldMappings[fieldType];
+    
+    if (!mapping || !mapping.selectors) {
+      console.log(`[IAI] ⚠ No mapping for ${fieldType}, will try later...`);
+      continue;
+    }
+    
+    // Find element using stable selectors
+    let element = null;
+    for (const selector of mapping.selectors) {
+      try {
+        element = document.querySelector(selector);
+        if (element && isVisible(element)) break;
+      } catch (e) { /* invalid selector */ }
+    }
+    
+    if (!element) {
+      console.log(`[IAI] ⚠ Element not found for ${fieldType}`);
+      results.errors.push({ field: fieldType, error: 'Element not found' });
+      continue;
+    }
     
     try {
-      const stepResult = await executeWorkflowStep(step, vehicleData, stealth);
-      results.stepsExecuted++;
+      const inputType = mapping.type || 'input';
+      console.log(`[IAI] 📝 Filling ${fieldType} = "${String(value).substring(0, 30)}..." (${inputType})`);
       
-      if (stepResult.success) {
-        results.completed.push({ step: i + 1, action: step.action, field: step.fieldType });
-      } else {
-        results.errors.push({ step: i + 1, error: stepResult.error, action: step.action });
-        // Continue on non-critical errors
-        if (step.critical) {
-          console.error(`[IAI] Critical step ${i + 1} failed - aborting`);
-          break;
+      if (inputType === 'dropdown' || inputType === 'select') {
+        // Click to open dropdown
+        await stealth.click(element);
+        await stealth.delay(400, 600);
+        
+        // Find and select option
+        const options = document.querySelectorAll('[role="option"], [role="listbox"] [role="option"]');
+        let found = false;
+        for (const opt of options) {
+          if (opt.textContent?.toLowerCase().includes(String(value).toLowerCase())) {
+            await stealth.click(opt);
+            found = true;
+            break;
+          }
         }
+        if (!found) {
+          // Try typing in combobox
+          const input = element.querySelector('input') || element;
+          if (input) {
+            await stealth.type(input, String(value));
+            await stealth.delay(300, 500);
+            // Press Enter or Tab
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+          }
+        }
+      } else if (inputType === 'contenteditable') {
+        await stealth.click(element);
+        await stealth.delay(200, 400);
+        element.focus();
+        element.innerHTML = '';
+        document.execCommand('insertText', false, String(value));
+      } else {
+        // Standard input
+        await stealth.click(element);
+        await stealth.delay(100, 200);
+        element.value = '';
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        await stealth.type(element, String(value));
       }
       
-      // Delay between steps
-      const delay = step.delay || IAI_INJECTION.TIMING.recommendedDelay;
-      await stealth.delay(delay * 0.8, delay * 1.2);
+      filledFields.add(fieldType);
+      results.completed.push({ field: fieldType, value: String(value).substring(0, 50) });
+      results.stepsExecuted++;
       
-    } catch (stepError) {
-      console.error(`[IAI] Step ${i + 1} error:`, stepError);
-      results.errors.push({ step: i + 1, error: stepError.message });
+      await stealth.delay(300, 600);
+      
+    } catch (err) {
+      console.error(`[IAI] Error filling ${fieldType}:`, err);
+      results.errors.push({ field: fieldType, error: err.message });
     }
   }
   
-  results.success = results.errors.length === 0 || results.stepsExecuted > IAI_INJECTION.WORKFLOW.length * 0.7;
+  console.log(`[IAI] Phase 1 complete: ${filledFields.size} fields filled`);
+  
+  // === PHASE 2: Execute remaining workflow steps (for clicks, navigation, etc.) ===
+  if (IAI_INJECTION.WORKFLOW?.length > 0) {
+    console.log('[IAI] 📋 Phase 2: Executing workflow steps for unfilled fields...');
+    
+    // Only process steps for fields not yet filled
+    for (let i = 0; i < IAI_INJECTION.WORKFLOW.length; i++) {
+      const step = IAI_INJECTION.WORKFLOW[i];
+      const fieldType = step.fieldType || step.field;
+      
+      // Skip if already filled in Phase 1
+      if (fieldType && filledFields.has(fieldType)) {
+        continue;
+      }
+      
+      // Skip pure click steps with no field association
+      if (step.type === 'click' && !fieldType && !step.label && !step.ariaLabel) {
+        continue;
+      }
+      
+      results.stepsTotal++;
+      
+      try {
+        const stepResult = await executeWorkflowStep(step, vehicleData, stealth);
+        results.stepsExecuted++;
+        
+        if (stepResult.success) {
+          if (fieldType) {
+            filledFields.add(fieldType);
+            results.completed.push({ step: i + 1, field: fieldType });
+          }
+        } else if (!stepResult.skipped) {
+          results.errors.push({ step: i + 1, error: stepResult.error, field: fieldType });
+        }
+        
+        // Delay between steps
+        const delay = step.delay || IAI_INJECTION.TIMING?.recommendedDelay || 400;
+        await stealth.delay(delay * 0.8, delay * 1.2);
+        
+      } catch (stepError) {
+        console.error(`[IAI] Step ${i + 1} error:`, stepError);
+        results.errors.push({ step: i + 1, error: stepError.message });
+      }
+    }
+  }
+  
+  results.success = results.completed.length > 0 && (results.errors.length < results.completed.length);
   results.duration = Date.now() - startTime;
-  console.log(`[IAI] Workflow complete: ${results.stepsExecuted}/${results.stepsTotal} steps (${results.errors.length} errors) in ${results.duration}ms`);
+  console.log(`[IAI] ✅ Workflow complete: ${results.completed.length} fields filled, ${results.errors.length} errors in ${results.duration}ms`);
   
   return results;
 }
 
 /**
  * Execute a single workflow step
+ * ENHANCED: Use fieldMappings type info to determine correct action
  */
 async function executeWorkflowStep(step, vehicleData, stealth) {
   const action = step.action || step.type;
   const fieldType = step.fieldType || step.field;
   const value = resolveStepValue(step, vehicleData);
   
+  // Get field mapping info for intelligent handling
+  const fieldMapping = fieldType ? IAI_INJECTION.FIELD_SELECTORS?.[fieldType] : null;
+  const fieldInputType = fieldMapping?.type || 'input';
+  
+  // Skip steps without fieldType if they're just clicks with no value
+  if (action === 'click' && !fieldType && !step.label && !step.ariaLabel) {
+    console.log(`[IAI] ⏭ Skipping non-field click step ${step.step}`);
+    return { success: true, skipped: true };
+  }
+  
+  // If we have a fieldType with a value, handle it intelligently
+  if (fieldType && value !== null && value !== undefined && value !== '') {
+    const el = await findElementForStep(step);
+    if (!el) {
+      return { success: false, error: `Element not found for ${fieldType}` };
+    }
+    
+    console.log(`[IAI] 📝 Filling ${fieldType} = "${String(value).substring(0, 30)}..." (type: ${fieldInputType})`);
+    
+    switch (fieldInputType) {
+      case 'dropdown':
+      case 'select':
+        // For dropdowns, click to open then select option
+        await stealth.click(el);
+        await stealth.delay(300, 500);
+        const selectSuccess = await selectFacebookDropdownEnhancedV2(step.label || fieldType, value, stealth);
+        return { success: selectSuccess };
+        
+      case 'contenteditable':
+        // For description and rich text fields
+        await stealth.click(el);
+        await stealth.delay(200, 400);
+        if (el.contentEditable === 'true' || el.getAttribute('role') === 'textbox') {
+          el.innerHTML = '';
+          el.focus();
+          document.execCommand('insertText', false, String(value));
+        } else {
+          await stealth.type(el, String(value));
+        }
+        return { success: true };
+        
+      case 'input':
+      default:
+        // For regular inputs
+        await stealth.click(el);
+        await stealth.delay(100, 200);
+        // Clear existing value
+        el.value = '';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        await stealth.type(el, String(value));
+        return { success: true };
+    }
+  }
+  
+  // Fall back to action-based handling
   switch (action) {
     case 'click':
       const clickEl = await findElementForStep(step);
@@ -399,7 +579,7 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
         await stealth.click(clickEl);
         return { success: true };
       }
-      return { success: false, error: `Element not found for click: ${step.selector || step.label}` };
+      return { success: false, error: `Element not found for click: ${fieldType || step.selector || step.label}` };
       
     case 'type':
     case 'input':
@@ -409,7 +589,7 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
         await stealth.type(inputEl, String(value || ''));
         return { success: true };
       }
-      return { success: false, error: `Input not found: ${step.selector || step.label}` };
+      return { success: false, error: `Input not found: ${fieldType || step.selector || step.label}` };
       
     case 'select':
     case 'dropdown':
@@ -436,40 +616,150 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
 
 /**
  * Find element for a workflow step
+ * PRIORITY: Use stable fieldMappings (aria-label) FIRST, then fall back to recorded selectors
  */
 async function findElementForStep(step) {
-  // Try selector first
-  if (step.selector) {
-    try {
-      const el = document.querySelector(step.selector);
-      if (el && isVisible(el)) return el;
-    } catch (e) { /* invalid selector */ }
-  }
+  const fieldType = step.fieldType || step.field;
   
-  // Try label with C() function
-  if (step.label) {
-    const el = C('label', step.label) || C('span', step.label) || C('div', step.label);
-    if (el) return el;
-  }
-  
-  // Try aria-label
-  if (step.ariaLabel) {
-    const el = document.querySelector(`[aria-label="${step.ariaLabel}"]`) ||
-               document.querySelector(`[aria-label*="${step.ariaLabel}"]`);
-    if (el) return el;
-  }
-  
-  // Try field selectors from injection
-  if (step.fieldType && IAI_INJECTION.FIELD_SELECTORS[step.fieldType]) {
-    const fieldSelector = IAI_INJECTION.FIELD_SELECTORS[step.fieldType];
-    if (fieldSelector.primary) {
+  // === PRIORITY 1: Use stable fieldMappings (aria-label based selectors) ===
+  if (fieldType && IAI_INJECTION.FIELD_SELECTORS?.[fieldType]) {
+    const mapping = IAI_INJECTION.FIELD_SELECTORS[fieldType];
+    if (mapping?.selectors && Array.isArray(mapping.selectors)) {
+      for (const selector of mapping.selectors) {
+        try {
+          const el = document.querySelector(selector);
+          if (el && isVisible(el)) {
+            console.log(`[IAI] ✓ Found ${fieldType} via fieldMapping: ${selector}`);
+            return el;
+          }
+        } catch (e) { /* invalid selector */ }
+      }
+    }
+    // Also try primary from fieldMappings
+    if (mapping?.primary) {
       try {
-        const el = document.querySelector(fieldSelector.primary);
-        if (el) return el;
+        const el = document.querySelector(mapping.primary);
+        if (el && isVisible(el)) {
+          console.log(`[IAI] ✓ Found ${fieldType} via fieldMapping.primary`);
+          return el;
+        }
       } catch (e) { /* invalid selector */ }
     }
   }
   
+  // === PRIORITY 2: Try common aria-label patterns for vehicle fields ===
+  const ariaLabelMap = {
+    'year': 'Year',
+    'make': 'Make',
+    'model': 'Model',
+    'price': 'Price',
+    'mileage': 'Mileage',
+    'vin': 'VIN',
+    'title': 'Title',
+    'description': 'Description',
+    'location': 'Location',
+    'transmission': 'Transmission',
+    'fuelType': 'Fuel',
+    'bodyStyle': 'Body',
+    'condition': 'Condition',
+    'color': 'Color',
+    'exteriorColor': 'Exterior',
+    'interiorColor': 'Interior',
+  };
+  
+  if (fieldType && ariaLabelMap[fieldType]) {
+    const label = ariaLabelMap[fieldType];
+    const ariaSelectors = [
+      `input[aria-label*="${label}"]`,
+      `textarea[aria-label*="${label}"]`,
+      `[aria-label*="${label}"] input`,
+      `[aria-label*="${label}"] textarea`,
+      `[role="combobox"][aria-label*="${label}"]`,
+      `[role="textbox"][aria-label*="${label}"]`,
+    ];
+    for (const selector of ariaSelectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el && isVisible(el)) {
+          console.log(`[IAI] ✓ Found ${fieldType} via ariaLabel fallback: ${selector}`);
+          return el;
+        }
+      } catch (e) { /* invalid selector */ }
+    }
+  }
+  
+  // === PRIORITY 3: Try label text search ===
+  if (step.label || (fieldType && ariaLabelMap[fieldType])) {
+    const labelText = step.label || ariaLabelMap[fieldType];
+    const el = C('label', labelText) || C('span', labelText) || C('div', labelText);
+    if (el) {
+      // Find associated input
+      const input = el.querySelector('input, textarea, [contenteditable="true"]');
+      if (input && isVisible(input)) {
+        console.log(`[IAI] ✓ Found ${fieldType} via label text: ${labelText}`);
+        return input;
+      }
+      if (isVisible(el)) return el;
+    }
+  }
+  
+  // === PRIORITY 4: Try element.ariaLabel from recorded data ===
+  if (step.element?.ariaLabel) {
+    const el = document.querySelector(`[aria-label="${step.element.ariaLabel}"]`) ||
+               document.querySelector(`[aria-label*="${step.element.ariaLabel}"]`);
+    if (el && isVisible(el)) {
+      console.log(`[IAI] ✓ Found element with ariaLabel: ${step.element.ariaLabel}`);
+      return el;
+    }
+  }
+  
+  // === PRIORITY 5: Try direct selector property ===
+  if (step.selector) {
+    try {
+      const el = document.querySelector(step.selector);
+      if (el && isVisible(el)) {
+        console.log(`[IAI] ✓ Found element with step.selector`);
+        return el;
+      }
+    } catch (e) { /* invalid selector */ }
+  }
+  
+  // === PRIORITY 6: Try step.ariaLabel directly ===
+  if (step.ariaLabel) {
+    const el = document.querySelector(`[aria-label="${step.ariaLabel}"]`) ||
+               document.querySelector(`[aria-label*="${step.ariaLabel}"]`);
+    if (el && isVisible(el)) {
+      console.log(`[IAI] ✓ Found element with step.ariaLabel`);
+      return el;
+    }
+  }
+  
+  // === PRIORITY 7: Try recorded element.selectors (last resort - often broken) ===
+  if (step.element?.selectors && Array.isArray(step.element.selectors)) {
+    for (const selector of step.element.selectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el && isVisible(el)) {
+          console.log(`[IAI] ✓ Found element with recorded selector: ${selector.substring(0, 50)}...`);
+          return el;
+        }
+      } catch (e) { /* invalid selector */ }
+    }
+  }
+  
+  // === PRIORITY 8: Try element.className directly ===
+  if (step.element?.className) {
+    const classSelector = '.' + step.element.className.split(' ').join('.');
+    try {
+      const el = document.querySelector(classSelector);
+      if (el && isVisible(el)) {
+        console.log(`[IAI] ✓ Found element with className: ${classSelector.substring(0, 50)}...`);
+        return el;
+      }
+    } catch (e) { /* invalid selector */ }
+  }
+  
+  console.log(`[IAI] ✗ Element not found for step: ${fieldType || step.type || 'unknown'}`);
   return null;
 }
 
