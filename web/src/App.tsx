@@ -66,6 +66,8 @@ import IAICommandCenter from './pages/admin/IAICommandCenterV2';
 import SessionAnalyticsPage from './pages/admin/SessionAnalyticsPage';
 import AbstractionCenterPage from './pages/admin/AbstractionCenterPage';
 import AIOrchestratorPage from './pages/admin/AIOrchestratorPage';
+import SecurityDashboardPage from './pages/admin/SecurityDashboardPage';
+import ExtensionDownloadPage from './pages/ExtensionDownloadPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -133,6 +135,7 @@ function App() {
               <Route path="settings" element={<SettingsPage />} />
               <Route path="posting" element={<PostingSettingsPage />} />
               <Route path="fbm-posts" element={<FBMPostsUserPage />} />
+              <Route path="extension" element={<ExtensionDownloadPage />} />
             </Route>
 
             {/* Admin routes (Super Admin only) */}
@@ -164,6 +167,7 @@ function App() {
               <Route path="iai-command" element={<IAICommandCenter />} />
               <Route path="abstraction-center" element={<AbstractionCenterPage />} />
               <Route path="ai-orchestrator" element={<AIOrchestratorPage />} />
+              <Route path="security-dashboard" element={<SecurityDashboardPage />} />
             </Route>
 
             {/* Catch all - redirect to landing */}

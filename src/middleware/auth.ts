@@ -125,3 +125,68 @@ export const authorize = (...roles: string[]) => {
     }
   };
 };
+
+/**
+ * Optional authentication middleware
+ * Sets req.user if token is valid, but doesn't fail if no token
+ */
+export const optionalAuth = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // No token, continue without auth
+      return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    if (!token) {
+      return next();
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+      id?: string;
+      userId?: string;
+    };
+
+    const userId = decoded.id || decoded.userId;
+    
+    if (!userId) {
+      return next();
+    }
+
+    // Get user from database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        accountUsers: {
+          include: {
+            account: true,
+          },
+        },
+      },
+    });
+
+    if (user && user.isActive) {
+      const isSuperAdmin = user.accountUsers.some(au => au.role === 'SUPER_ADMIN');
+      
+      req.user = {
+        id: user.id,
+        email: user.email,
+        accountIds: user.accountUsers.map((au) => au.accountId),
+        role: isSuperAdmin ? UserRole.SUPER_ADMIN : undefined,
+      };
+    }
+
+    next();
+  } catch (error) {
+    // Token invalid, continue without auth
+    next();
+  }
+};

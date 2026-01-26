@@ -808,6 +808,13 @@ async function updateTaskStatus(taskId, status, result = null) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('📨 Content-AI received message:', message.type);
   
+  // IAI_FILL_LISTING is handled EXCLUSIVELY by iai-soldier.js
+  // Return false immediately to let other listeners handle it
+  if (message.type === 'IAI_FILL_LISTING') {
+    console.log('🚗 IAI_FILL_LISTING - DEFERRING to iai-soldier.js (not responding)');
+    return false; // Do not handle this message - let iai-soldier.js respond
+  }
+  
   // Handle async messages
   handleMessageAsync(message)
     .then(result => {
@@ -854,40 +861,9 @@ async function handleMessageAsync(message) {
     // =============================================
     // IAI SIDEPANEL POSTING HANDLERS
     // =============================================
-    // NOTE: IAI_FILL_LISTING is handled EXCLUSIVELY by iai-soldier.js injection system
-    // NO HARDCODED FALLBACK - must use server-configured patterns only
-    
-    case 'IAI_FILL_LISTING':
-      console.log('🚗 IAI_FILL_LISTING in content-ai.js - MUST use injection system');
-      
-      // Check if IAI injection system is available (loaded by iai-soldier.js)
-      if (window.__IAI_INJECTION__?._loaded && window.__IAI_INJECTION__?.WORKFLOW?.length > 0) {
-        console.log(`[content-ai] ✅ IAI Injection available: ${window.__IAI_INJECTION__._patternName}`);
-        // iai-soldier.js will handle this via its own message listener
-        // Return null to let the other listener handle it
-        return null;
-      }
-      
-      // Fallback: Try to load injection pattern via iai-soldier.js
-      if (typeof window.__IAI_LOAD_PATTERN__ === 'function') {
-        console.log('[content-ai] 🔄 Loading injection pattern via iai-soldier...');
-        const loaded = await window.__IAI_LOAD_PATTERN__();
-        if (loaded && window.__IAI_INJECTION__?._loaded) {
-          console.log(`[content-ai] ✅ Pattern loaded: ${window.__IAI_INJECTION__._patternName}`);
-          // Now iai-soldier.js should handle this
-          return null;
-        }
-      }
-      
-      // NO HARDCODED FALLBACK - Return error and require pattern configuration
-      console.error('❌ IAI Injection NOT available - no hardcoded fallback allowed!');
-      console.error('❌ Please configure a pattern in IAI Command Center at dealersface.com');
-      return {
-        success: false,
-        error: 'No injection pattern available. Please configure a pattern in IAI Command Center.',
-        requiresPattern: true,
-        message: 'The extension requires a pattern configured in IAI Command Center to post listings.'
-      };
+    // NOTE: IAI_FILL_LISTING is handled EXCLUSIVELY by iai-soldier.js
+    // It is filtered out in the message listener above (returns false)
+    // and never reaches this switch statement
       
     case 'IAI_UPLOAD_IMAGES':
       console.log('📷 IAI_UPLOAD_IMAGES: Uploading', message.images?.length, 'images');

@@ -117,6 +117,19 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refreshToken');
+        const impersonationState = localStorage.getItem('impersonationState');
+        
+        // If impersonating without refresh token, don't attempt refresh - just fail silently
+        // Impersonation sessions are intentionally short-lived without refresh capability
+        if (impersonationState) {
+          const state = JSON.parse(impersonationState);
+          if (state.isImpersonating && (!refreshToken || refreshToken === 'undefined' || refreshToken === 'null' || refreshToken === '')) {
+            console.log('[Auth] Impersonation session - skipping refresh, token may have expired');
+            isRefreshing = false;
+            // Don't redirect - let the component handle the error
+            return Promise.reject(error);
+          }
+        }
         
         // Only attempt refresh if we have a valid refresh token
         if (!refreshToken || refreshToken === 'undefined' || refreshToken === 'null' || refreshToken === '') {

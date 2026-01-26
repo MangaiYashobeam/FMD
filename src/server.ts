@@ -30,6 +30,16 @@ import {
   csrfProtection,
   attachSecurityContext,
 } from '@/middleware/security.middleware';
+// Enterprise Security - PCI-DSS & SOC2 Compliant
+import {
+  enterpriseSecurityHeaders,
+  sensitiveDataCacheControl,
+  clearSiteDataOnLogout,
+  pciAuditLogger,
+  deepSanitizeRequest,
+  advancedInjectionGuard,
+  threatIntelligenceCheck,
+} from '@/middleware/enterprise-security.middleware';
 import {
   createSecureGateway,
   ring5AuthBarrier,
@@ -470,6 +480,30 @@ app.use('/api', sanitizeRequest);
 app.use('/api', injectionGuard);
 
 // ============================================
+// Enterprise Security Layer (PCI-DSS & SOC2 Compliant)
+// ============================================
+// 1. PCI Audit Logging - All requests logged with compliance tags
+app.use('/api', pciAuditLogger);
+
+// 2. Enterprise Security Headers (CSP, HSTS, X-Frame-Options, etc.)
+app.use('/api', enterpriseSecurityHeaders);
+
+// 3. Sensitive Data Cache Control
+app.use('/api', sensitiveDataCacheControl);
+
+// 4. Clear Site Data on Logout
+app.use('/api', clearSiteDataOnLogout);
+
+// 5. Threat Intelligence Check
+app.use('/api', threatIntelligenceCheck);
+
+// 6. Deep Sanitization (advanced XSS/Injection prevention)
+app.use('/api', deepSanitizeRequest);
+
+// 7. Advanced Injection Guard
+app.use('/api', advancedInjectionGuard);
+
+// ============================================
 // Security Context & CSRF Protection
 // ============================================
 // Attach security context (request ID, IP, user agent) for audit logging
@@ -539,6 +573,8 @@ app.use('/api', (req, res, next) => {
     '/ai/',
     // Facebook session management (admin-authenticated)
     '/facebook/session',
+    // IAI public endpoints (extension uses own token/no CSRF)
+    '/iai/',
   ];
   
   if (skipPaths.some(p => req.path.startsWith(p))) {
@@ -855,6 +891,17 @@ app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').def
 app.use('/api/posting', ring5AuthBarrier, postingRoutes);                      // Auto-posting settings & triggers
 app.use('/api/workers', ring5AuthBarrier, require('./routes/worker.routes').default); // Python worker management
 
+// ============================================
+// Invitation & Security Routes
+// ============================================
+app.use('/api/invitations', require('./routes/invitation.routes').default);    // Invitation codes (mixed auth - validate is public)
+app.use('/api/security', ring5AuthBarrier, require('./routes/security.routes').default); // Security dashboard (super admin)
+
+// ============================================
+// Green Route - Secure Internal API (works during mitigation)
+// ============================================
+app.use('/api/green', require('./routes/green-route.routes').default); // Green Route (verified ecosystem only)
+
 // Super Admin Dashboard Routes (requires super admin access)
 app.use('/api/dashboard', ring5AuthBarrier, require('./routes/dashboard.routes').default); // Dashboard analytics (RBAC protected)
 
@@ -870,6 +917,13 @@ app.use('/api/fb-session', ring5AuthBarrier, require('./routes/fb-session.routes
 // DEPRECATED: OAuth routes kept for backwards compatibility - will return 410 Gone
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (DEPRECATED)
 app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
+
+// ============================================
+// Extension Token Exchange (SECURE - No bundled secrets)
+// ============================================
+// These routes replace the need for bundled secrets in the extension
+// Extension calls these to get ephemeral session tokens
+app.use('/api/extension/token', require('./routes/extension-token.routes').default); // Token exchange (public)
 
 // IAI Soldier Command Center
 app.use('/api/admin/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier tracking (admin)

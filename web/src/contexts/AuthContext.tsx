@@ -78,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('accessToken');
+      const storedImpersonation = localStorage.getItem('impersonationState');
+      
       if (token && token !== 'undefined' && token !== 'null') {
         try {
           const response = await authApi.getProfile();
@@ -100,6 +102,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('[AuthContext] checkAuth failed:', error?.response?.status || error.message);
           
           if (error?.response?.status === 401) {
+            // Check if we're in an impersonation session
+            if (storedImpersonation) {
+              try {
+                const impState = JSON.parse(storedImpersonation);
+                if (impState.isImpersonating && impState.originalToken) {
+                  // Impersonation token expired - restore original admin session
+                  console.log('[AuthContext] Impersonation token expired, restoring admin session');
+                  localStorage.setItem('accessToken', impState.originalToken);
+                  const originalRefresh = localStorage.getItem('originalRefreshToken');
+                  if (originalRefresh) {
+                    localStorage.setItem('refreshToken', originalRefresh);
+                  }
+                  localStorage.removeItem('impersonationState');
+                  localStorage.removeItem('originalRefreshToken');
+                  setImpersonation({
+                    isImpersonating: false,
+                    originalToken: null,
+                    impersonator: null,
+                  });
+                  // Re-check auth with restored token
+                  window.location.reload();
+                  return;
+                }
+              } catch {
+                // Invalid impersonation state, clear it
+                localStorage.removeItem('impersonationState');
+              }
+            }
             // Interceptor already tried refresh and failed - tokens are invalid
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
@@ -213,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const response = await authApi.impersonateUser(userId);
-    const { accessToken, user: userData, accounts, impersonator } = response.data.data;
+    const { accessToken, refreshToken, user: userData, accounts, impersonator } = response.data.data;
 
     // Store original tokens for restoration
     const impersonationState: ImpersonationState = {
@@ -226,8 +256,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('originalRefreshToken', currentRefreshToken || '');
     localStorage.setItem('impersonationState', JSON.stringify(impersonationState));
     localStorage.setItem('accessToken', accessToken);
-    // Remove refresh token during impersonation (security)
-    localStorage.removeItem('refreshToken');
+    // Store the impersonation refresh token for session continuity
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
     
     setImpersonation(impersonationState);
     setUser({

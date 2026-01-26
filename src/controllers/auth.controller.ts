@@ -11,10 +11,14 @@ import { emailService } from '@/services/email.service';
 import { getJwtSecret, getJwtRefreshSecret } from '@/config/security';
 import { recordLogin, recordLogout, getClientIP, linkVisitorToUser } from '@/middleware/session-tracker';
 import { ipIntelligenceService } from '@/services/ip-intelligence.service';
+import invitationService from '@/services/invitation.service';
+import whitelistService from '@/services/account-whitelist.service';
+import dealerVerificationService from '@/services/dealer-verification.service';
 
 export class AuthController {
   /**
    * Register a new user and create account
+   * Supports invitation codes for controlled registration
    */
   async register(req: Request, res: Response) {
     const errors = validationResult(req);
@@ -28,6 +32,7 @@ export class AuthController {
       firstName, 
       lastName, 
       accountName,
+      invitationCode, // NEW: Invitation code
       // UTM Tracking parameters
       utmSource,
       utmMedium,
@@ -36,6 +41,40 @@ export class AuthController {
       utmContent,
       referralCode
     } = req.body;
+
+    // ============================================
+    // INVITATION CODE VALIDATION (if enabled)
+    // ============================================
+    let invitation: any = null;
+    let intendedRole = 'ACCOUNT_OWNER';
+    let isTrial = true;
+    let trialDays = 15;
+    let invitedAccountName: string | null = null;
+    
+    // Check if invitation codes are required
+    const requireInvitation = process.env.REQUIRE_INVITATION_CODE === 'true';
+    
+    if (requireInvitation || invitationCode) {
+      if (!invitationCode) {
+        throw new AppError('Invitation code is required for registration', 400);
+      }
+      
+      // Validate invitation code
+      const validationResult = await invitationService.validateInvitationCode(
+        invitationCode,
+        email
+      );
+      
+      if (!validationResult.valid) {
+        throw new AppError(validationResult.reason || 'Invalid invitation code', 400);
+      }
+      
+      invitation = validationResult.invitation;
+      intendedRole = invitation.intendedRole || 'ACCOUNT_OWNER';
+      isTrial = invitation.isTrial ?? true;
+      trialDays = invitation.trialDays || 15;
+      invitedAccountName = invitation.accountName;
+    }
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -59,6 +98,10 @@ export class AuthController {
       // Non-critical, continue without country
     }
 
+    // Check dealer domain verification
+    const dealerCheck = dealerVerificationService.checkDealerDomain(email);
+    const isVerifiedDealer = dealerCheck.verified && dealerCheck.confidence >= 70;
+
     // Create user and account in transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create user with UTM tracking
@@ -80,19 +123,26 @@ export class AuthController {
         },
       });
 
-      // Create account
+      // Calculate trial end date
+      const trialEndsAt = isTrial 
+        ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
+        : null;
+
+      // Create account with trial info
       const account = await tx.account.create({
         data: {
-          name: accountName,
+          name: invitedAccountName || accountName,
+          subscriptionStatus: isTrial ? 'trial' : 'active',
+          trialEndsAt,
         },
       });
 
-      // Link user to account as owner
+      // Link user to account with appropriate role
       await tx.accountUser.create({
         data: {
           userId: user.id,
           accountId: account.id,
-          role: 'ACCOUNT_OWNER',
+          role: intendedRole as any,
         },
       });
 
@@ -113,12 +163,34 @@ export class AuthController {
           metadata: {
             email: user.email,
             accountId: account.id,
+            invitationCode: invitation?.code || null,
+            isTrial,
+            trialDays,
+            isVerifiedDealer,
           },
         },
       });
 
       return { user, account };
     });
+
+    // ============================================
+    // POST-REGISTRATION: Mark invitation used & whitelist
+    // ============================================
+    if (invitation) {
+      await invitationService.markInvitationUsed(invitation.code, result.user.id);
+    }
+    
+    // Auto-whitelist the account (extension access only)
+    try {
+      await whitelistService.autoWhitelistAfterRegistration(
+        result.account.id,
+        isVerifiedDealer
+      );
+    } catch (err) {
+      // Non-critical, log and continue
+      logger.warn('Failed to auto-whitelist account:', err);
+    }
 
     // Generate tokens
     const jwtSecret = getJwtSecret();
@@ -726,6 +798,7 @@ export class AuthController {
     // Generate impersonation tokens (shorter expiry for security)
     const jwtSecret = getJwtSecret();
     const accessTokenOptions: SignOptions = { expiresIn: '2h' }; // Shorter for impersonation
+    const refreshTokenOptions: SignOptions = { expiresIn: '4h' }; // Allow some session continuity
 
     const accessToken = jwt.sign(
       { 
@@ -735,6 +808,18 @@ export class AuthController {
       },
       jwtSecret,
       accessTokenOptions
+    );
+
+    // Generate refresh token for impersonation (with marker)
+    const refreshToken = jwt.sign(
+      {
+        id: targetUser.id,
+        email: targetUser.email,
+        impersonatedBy: impersonatorId,
+        type: 'impersonation_refresh',
+      },
+      jwtSecret,
+      refreshTokenOptions
     );
 
     // Log the impersonation action
@@ -771,7 +856,7 @@ export class AuthController {
           role: au.role,
         })),
         accessToken,
-        // No refresh token for impersonation - must re-authenticate or end session
+        refreshToken, // Include refresh token for session continuity during impersonation
         isImpersonating: true,
         impersonator: {
           id: impersonator.id,

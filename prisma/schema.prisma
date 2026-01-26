@@ -74,6 +74,7 @@ model User {
   trainingSessions    TrainingSession[]
   userSessions        UserSession[]
   iaiInstances        IAIInstance[]
+  oauthLinks          OAuthLink[]
 
   @@map("users")
 }
@@ -138,6 +139,7 @@ model Account {
   fbTotpSecret      FbTotpSecret?
   scheduledTasks    ScheduledTask[]
   iaiInstances      IAIInstance[]
+  whitelist         AccountWhitelist?
 
   @@map("accounts")
 }
@@ -617,6 +619,89 @@ model ApiKey {
   @@index([userId])
   @@index([accountId])
   @@map("api_keys")
+}
+
+// ============================================
+// Extension Session Token - Secure Token Exchange
+// Replaces bundled secrets with server-generated ephemeral tokens
+// PCI-DSS 3.4, 6.5.3, 8.2 compliant
+// ============================================
+
+model ExtensionSessionToken {
+  id                String   @id // Token ID (from generateExtensionSessionToken)
+  userId            String   @map("user_id")
+  accountId         String   @map("account_id")
+  extensionId       String   @map("extension_id")
+  deviceFingerprint String   @map("device_fingerprint")
+  signingKey        String   @map("signing_key") // Per-session HMAC key
+  capabilities      String[] @default([]) // Granted capabilities
+  revoked           Boolean  @default(false)
+  expiresAt         DateTime @map("expires_at")
+  lastUsedAt        DateTime @default(now()) @map("last_used_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([extensionId])
+  @@index([expiresAt])
+  @@map("extension_session_tokens")
+}
+
+// ============================================
+// Security Audit Log - PCI-DSS 10.x Compliant
+// Immutable audit trail for security events
+// ============================================
+
+model SecurityAuditLog {
+  id                    String   @id @default(uuid())
+  eventType             String   @map("event_type") // LOGIN_SUCCESS, LOGIN_FAILURE, etc.
+  userId                String?  @map("user_id")
+  accountId             String?  @map("account_id")
+  ipAddress             String   @map("ip_address")
+  userAgent             String?  @map("user_agent")
+  requestId             String?  @map("request_id")
+  path                  String?
+  method                String?
+  statusCode            Int?     @map("status_code")
+  success               Boolean  @default(true)
+  riskLevel             String   @default("LOW") @map("risk_level") // LOW, MEDIUM, HIGH, CRITICAL
+  sensitiveDataAccessed Boolean  @default(false) @map("sensitive_data_accessed")
+  pciRelevant           Boolean  @default(false) @map("pci_relevant")
+  details               Json?
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([eventType])
+  @@index([riskLevel])
+  @@index([createdAt])
+  @@index([pciRelevant, createdAt])
+  @@map("security_audit_logs")
+}
+
+// ============================================
+// Threat Intelligence - IP Reputation Tracking
+// ============================================
+
+model ThreatIntelligence {
+  id          String   @id @default(uuid())
+  ipAddress   String   @unique @map("ip_address")
+  threatScore Int      @default(0) @map("threat_score")
+  blocked     Boolean  @default(false)
+  reasons     String[] @default([])
+  firstSeen   DateTime @default(now()) @map("first_seen")
+  lastSeen    DateTime @default(now()) @map("last_seen")
+  attackCount Int      @default(0) @map("attack_count")
+  countryCode String?  @map("country_code")
+  asn         String?
+  isp         String?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([threatScore])
+  @@index([blocked])
+  @@map("threat_intelligence")
 }
 
 model AuditLog {
@@ -4343,4 +4428,208 @@ model MissionTaskRun {
   @@index([taskId])
   @@index([status])
   @@map("mission_task_runs")
+}
+
+// ============================================
+// Green Route & Security Infrastructure
+// ============================================
+
+// Registration Invitation Codes
+model RegistrationInvitation {
+  id            String   @id @default(uuid())
+  code          String   @unique // 8-char alphanumeric code
+  email         String   // Target email
+  inviterType   String   @default("admin") @map("inviter_type") // admin, super_admin, root_admin
+  inviterId     String?  @map("inviter_id")
+  inviterEmail  String?  @map("inviter_email")
+  
+  // Invitation details
+  accountName   String?  @map("account_name") // For new company registrations
+  companyDomain String?  @map("company_domain") // Verified dealer domain
+  intendedRole  String   @default("NEW_USER") @map("intended_role")
+  
+  // Status
+  status        String   @default("pending") // pending, used, expired, revoked
+  usedAt        DateTime? @map("used_at")
+  usedByUserId  String?  @map("used_by_user_id")
+  
+  // Trial info
+  isTrial       Boolean  @default(false) @map("is_trial")
+  trialDays     Int      @default(15) @map("trial_days")
+  
+  // Verification
+  dealerLicenseUrl    String?  @map("dealer_license_url")
+  dealerVerified      Boolean  @default(false) @map("dealer_verified")
+  verifiedAt          DateTime? @map("verified_at")
+  verifiedByUserId    String?  @map("verified_by_user_id")
+  
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([code])
+  @@index([email])
+  @@index([status])
+  @@map("registration_invitations")
+}
+
+// OAuth Link (soft-link for whitelisting)
+model OAuthLink {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  provider       String   // auth0, google, facebook
+  providerUserId String   @map("provider_user_id")
+  email          String
+  
+  // Whitelisting
+  whitelisted    Boolean  @default(false)
+  whitelistedAt  DateTime? @map("whitelisted_at")
+  whitelistedBy  String?  @map("whitelisted_by")
+  
+  // Extension access
+  extensionLinked    Boolean  @default(false) @map("extension_linked")
+  extensionLinkedAt  DateTime? @map("extension_linked_at")
+  extensionId        String?  @map("extension_id")
+  
+  lastUsedAt    DateTime? @map("last_used_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@index([email])
+  @@map("oauth_links")
+}
+
+// Green Route Request Logs
+model GreenRouteLog {
+  id            String   @id @default(uuid())
+  requestId     String   @unique @map("request_id")
+  path          String
+  method        String
+  source        String   // extension, webapp, extension-hybrid, unknown
+  
+  accountId     String?  @map("account_id")
+  userId        String?  @map("user_id")
+  fingerprint   String?
+  
+  ipAddress     String   @map("ip_address")
+  userAgent     String   @map("user_agent") @db.Text
+  
+  responseStatus Int     @map("response_status")
+  responseTimeMs Int     @map("response_time_ms")
+  
+  verified      Boolean  @default(false)
+  whitelisted   Boolean  @default(false)
+  
+  metadata      Json     @default("{}")
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@index([userId])
+  @@index([source])
+  @@index([createdAt])
+  @@map("green_route_logs")
+}
+
+// Green Route Analytics (aggregated)
+model GreenRouteAnalytics {
+  id            String   @id @default(uuid())
+  path          String
+  method        String
+  requestCount  Int      @default(0) @map("request_count")
+  lastAccessedAt DateTime @map("last_accessed_at")
+  
+  @@unique([path, method], name: "path_method")
+  @@map("green_route_analytics")
+}
+
+// Origin Validation Logs
+model OriginValidationLog {
+  id           String   @id @default(uuid())
+  path         String
+  method       String
+  origin       String?
+  referer      String?
+  extensionId  String?  @map("extension_id")
+  ipAddress    String   @map("ip_address")
+  userAgent    String   @map("user_agent") @db.Text
+  
+  blocked      Boolean  @default(false)
+  reason       String?
+  source       String?  // extension, webapp, api-key, internal, unknown
+  verified     Boolean  @default(false)
+  
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([blocked])
+  @@index([source])
+  @@index([createdAt])
+  @@map("origin_validation_logs")
+}
+
+// Dealer Verification Requests
+model DealerVerificationRequest {
+  id              String   @id @default(uuid())
+  email           String
+  companyName     String   @map("company_name")
+  companyDomain   String?  @map("company_domain")
+  
+  // Verification type
+  verificationType String  @default("domain") @map("verification_type") // domain, license, ticket
+  
+  // License upload
+  dealerLicenseUrl    String?  @map("dealer_license_url")
+  dealerLicenseNumber String?  @map("dealer_license_number")
+  
+  // Status
+  status          String   @default("pending") // pending, approved, rejected, expired
+  reviewedAt      DateTime? @map("reviewed_at")
+  reviewedByUserId String? @map("reviewed_by_user_id")
+  reviewNotes     String?  @map("review_notes") @db.Text
+  
+  // Rejection
+  rejectionReason String?  @map("rejection_reason")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([status])
+  @@map("dealer_verification_requests")
+}
+
+// Account Whitelist (for API access)
+model AccountWhitelist {
+  id            String   @id @default(uuid())
+  accountId     String   @unique @map("account_id")
+  
+  // Whitelist status
+  isWhitelisted Boolean  @default(false) @map("is_whitelisted")
+  whitelistedAt DateTime? @map("whitelisted_at")
+  whitelistedBy String?  @map("whitelisted_by")
+  
+  // Access levels
+  greenRouteAccess   Boolean @default(false) @map("green_route_access")
+  apiKeyAccess       Boolean @default(false) @map("api_key_access")
+  extensionAccess    Boolean @default(true) @map("extension_access")
+  
+  // Rate limits (custom per account)
+  customRateLimit    Int?    @map("custom_rate_limit")
+  
+  // Audit
+  reason        String?
+  notes         String?  @db.Text
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("account_whitelists")
 }

@@ -270,12 +270,14 @@ export class VehicleController {
       throw new AppError('Vehicle not found', 404);
     }
 
-    // Verify user has access
+    // Verify user has access (SUPER_ADMIN has access to all accounts)
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: vehicle.accountId,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+        OR: [
+          { role: 'SUPER_ADMIN' },
+          { accountId: vehicle.accountId, role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] } },
+        ],
       },
     });
 
@@ -313,12 +315,14 @@ export class VehicleController {
       throw new AppError('Vehicle not found', 404);
     }
 
-    // Verify user has access
+    // Verify user has access (SUPER_ADMIN has access to all accounts)
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: vehicle.accountId,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN'] },
+        OR: [
+          { role: 'SUPER_ADMIN' },
+          { accountId: vehicle.accountId, role: { in: ['ACCOUNT_OWNER', 'ADMIN'] } },
+        ],
       },
     });
 
@@ -344,12 +348,14 @@ export class VehicleController {
   async bulkUpdateStatus(req: AuthRequest, res: Response) {
     const { vehicleIds, status, accountId } = req.body;
 
-    // Verify user has access
+    // Verify user has access (SUPER_ADMIN has access to all accounts)
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+        OR: [
+          { role: 'SUPER_ADMIN' },
+          { accountId, role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] } },
+        ],
       },
     });
 
@@ -1014,12 +1020,17 @@ export class VehicleController {
       throw new AppError('Vehicle not found', 404);
     }
 
-    // Verify access
+    // Verify access - check for SUPER_ADMIN first (has access to all accounts), then account-level roles
     const hasAccess = await prisma.accountUser.findFirst({
       where: {
         userId: req.user!.id,
-        accountId: vehicle.accountId,
-        role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+        OR: [
+          { role: 'SUPER_ADMIN' }, // Super admin has access to all accounts
+          { 
+            accountId: vehicle.accountId,
+            role: { in: ['ACCOUNT_OWNER', 'ADMIN', 'SALES_REP'] },
+          },
+        ],
       },
     });
 

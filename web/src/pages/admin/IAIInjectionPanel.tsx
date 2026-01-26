@@ -294,7 +294,7 @@ function ContainerCard({
         </div>
       </div>
 
-      {container.tags.length > 0 && (
+      {container.tags && container.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-slate-700">
           {container.tags.slice(0, 5).map(tag => (
             <span key={tag} className="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded">

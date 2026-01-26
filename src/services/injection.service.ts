@@ -658,9 +658,15 @@ class InjectionService {
     startDate?: Date;
     endDate?: Date;
   }): Promise<{
+    totalContainers: number;
+    activeContainers: number;
+    totalPatterns: number;
+    activePatterns: number;
     totalInjections: number;
     successRate: number;
-    avgExecutionTime: number;
+    avgDuration: number;
+    recentInjections: any[];
+    topContainers: any[];
     topPatterns: { id: string; name: string; executions: number; successRate: number }[];
     recentFailures: { patternName: string; error: string; timestamp: Date }[];
   }> {
@@ -673,46 +679,88 @@ class InjectionService {
       if (options.endDate) where.startedAt.lte = options.endDate;
     }
 
-    const [logs, patterns] = await Promise.all([
+    // Fetch containers, patterns, and logs in parallel
+    const [containers, allPatterns, logs] = await Promise.all([
+      prisma.injectionContainer.findMany(),
+      prisma.injectionPattern.findMany({
+        orderBy: { totalExecutions: 'desc' }
+      }),
       prisma.injectionLog.findMany({
         where,
         orderBy: { startedAt: 'desc' },
         take: 1000
-      }),
-      prisma.injectionPattern.findMany({
-        where: options?.containerId ? { containerId: options.containerId } : undefined,
-        orderBy: { totalExecutions: 'desc' },
-        take: 10
       })
     ]);
 
+    // Container stats
+    const totalContainers = containers.length;
+    const activeContainers = containers.filter(c => c.isActive).length;
+
+    // Pattern stats
+    const totalPatterns = allPatterns.length;
+    const activePatterns = allPatterns.filter(p => p.isActive).length;
+
+    // Injection stats
     const totalInjections = logs.length;
     const successCount = logs.filter(l => l.status === 'success').length;
     const successRate = totalInjections > 0 ? (successCount / totalInjections) * 100 : 0;
-    const avgExecutionTime = totalInjections > 0 
+    const avgDuration = totalInjections > 0 
       ? logs.reduce((sum, l) => sum + (l.executionTimeMs || 0), 0) / totalInjections 
       : 0;
 
-    const topPatterns = patterns.map(p => ({
+    // Top patterns
+    const topPatterns = allPatterns.slice(0, 10).map(p => ({
       id: p.id,
       name: p.name,
       executions: p.totalExecutions,
       successRate: p.totalExecutions > 0 ? (p.successCount / p.totalExecutions) * 100 : 0
     }));
 
+    // Top containers
+    const topContainers = containers
+      .map(c => {
+        const containerLogs = logs.filter(l => l.containerId === c.id);
+        const containerSuccess = containerLogs.filter(l => l.status === 'success').length;
+        return {
+          id: c.id,
+          name: c.name,
+          executions: containerLogs.length,
+          successRate: containerLogs.length > 0 ? (containerSuccess / containerLogs.length) * 100 : 0
+        };
+      })
+      .sort((a, b) => b.executions - a.executions)
+      .slice(0, 5);
+
+    // Recent injections (last 10)
+    const recentInjections = logs.slice(0, 10).map(l => ({
+      id: l.id,
+      patternId: l.patternId,
+      containerId: l.containerId,
+      status: l.status,
+      executionTimeMs: l.executionTimeMs,
+      startedAt: l.startedAt
+    }));
+
+    // Recent failures
     const recentFailures = logs
       .filter(l => l.status === 'failure')
       .slice(0, 10)
       .map(l => ({
-        patternName: patterns.find(p => p.id === l.patternId)?.name || 'Unknown',
+        patternName: allPatterns.find(p => p.id === l.patternId)?.name || 'Unknown',
         error: l.error || 'Unknown error',
         timestamp: l.startedAt
       }));
 
     return {
+      totalContainers,
+      activeContainers,
+      totalPatterns,
+      activePatterns,
       totalInjections,
       successRate: Math.round(successRate * 100) / 100,
-      avgExecutionTime: Math.round(avgExecutionTime),
+      avgDuration: Math.round(avgDuration),
+      recentInjections,
+      topContainers,
       topPatterns,
       recentFailures
     };
