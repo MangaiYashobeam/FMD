@@ -325,6 +325,150 @@ async function loadInjectionPattern() {
 const loadTrainingData = loadInjectionPattern;
 
 /**
+ * Select Facebook Marketplace Make/Model typeahead fields
+ * These are combobox fields - you type and suggestions appear
+ */
+async function selectFBTypeahead(labelText, value, stealth) {
+  console.log(`[IAI] ⌨️ Typing "${labelText}" = "${value}"`);
+  
+  if (!value) {
+    console.log(`[IAI] ⚠ No value provided for ${labelText}, skipping`);
+    return false;
+  }
+  
+  try {
+    // Find the input field by looking for the label
+    let inputField = null;
+    
+    // Strategy 1: Find span with label text and get associated input
+    const spans = document.querySelectorAll('span');
+    for (const span of spans) {
+      const text = span.textContent?.trim();
+      if (text === labelText || text?.toLowerCase() === labelText.toLowerCase()) {
+        // Look for input in parent containers
+        let container = span.parentElement;
+        for (let i = 0; i < 8 && container; i++) {
+          const input = container.querySelector('input[type="text"], input:not([type]), input[role="combobox"]');
+          if (input && isVisible(input)) {
+            inputField = input;
+            break;
+          }
+          container = container.parentElement;
+        }
+        if (inputField) break;
+      }
+    }
+    
+    // Strategy 2: Find by aria-label containing label text
+    if (!inputField) {
+      inputField = document.querySelector(`input[aria-label*="${labelText}"]`);
+    }
+    
+    // Strategy 3: Find label element and associated input
+    if (!inputField) {
+      const labels = document.querySelectorAll('label');
+      for (const label of labels) {
+        if (label.textContent?.includes(labelText)) {
+          inputField = label.querySelector('input') || 
+                       label.parentElement?.querySelector('input') ||
+                       document.querySelector(`input[id="${label.getAttribute('for')}"]`);
+          if (inputField) break;
+        }
+      }
+    }
+    
+    if (!inputField) {
+      console.log(`[IAI] ✗ Typeahead input for "${labelText}" not found`);
+      return false;
+    }
+    
+    console.log(`[IAI] ✓ Found typeahead input for "${labelText}"`);
+    
+    // Click to focus
+    await stealth.click(inputField);
+    await stealth.delay(100, 150);
+    
+    // Clear any existing value
+    inputField.value = '';
+    inputField.dispatchEvent(new Event('input', { bubbles: true }));
+    await stealth.delay(50, 80);
+    
+    // Type the value character by character to trigger suggestions
+    await stealth.type(inputField, String(value));
+    await stealth.delay(300, 500); // Wait for suggestions to load
+    
+    // Look for matching suggestion
+    let suggestionFound = false;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      // Look for suggestions in listbox/menu
+      const suggestionSelectors = [
+        '[role="option"]',
+        '[role="listbox"] [role="option"]',
+        '[role="combobox"] + * [role="option"]',
+        '[data-visualcompletion="ignore-dynamic"] span',
+        'ul[role="listbox"] li',
+      ];
+      
+      for (const selector of suggestionSelectors) {
+        const suggestions = document.querySelectorAll(selector);
+        for (const suggestion of suggestions) {
+          const suggestionText = suggestion.textContent?.trim();
+          // Match exactly or partially
+          if (suggestionText?.toLowerCase() === String(value).toLowerCase() ||
+              suggestionText?.toLowerCase().includes(String(value).toLowerCase()) ||
+              String(value).toLowerCase().includes(suggestionText?.toLowerCase() || '')) {
+            console.log(`[IAI] ✓ Found suggestion: "${suggestionText}"`);
+            await stealth.click(suggestion);
+            suggestionFound = true;
+            break;
+          }
+        }
+        if (suggestionFound) break;
+      }
+      
+      if (suggestionFound) break;
+      
+      // Also try clicking any visible option that contains our value
+      const allSpans = document.querySelectorAll('span');
+      for (const span of allSpans) {
+        const spanText = span.textContent?.trim();
+        if (spanText && 
+            spanText.toLowerCase().includes(String(value).toLowerCase()) &&
+            isVisible(span)) {
+          // Check if it's in a dropdown/suggestion context
+          const inSuggestionBox = span.closest('[role="listbox"], [role="menu"], [role="option"], [data-visualcompletion]');
+          if (inSuggestionBox) {
+            console.log(`[IAI] ✓ Found suggestion by span: "${spanText}"`);
+            await stealth.click(span);
+            suggestionFound = true;
+            break;
+          }
+        }
+      }
+      
+      if (suggestionFound) break;
+      await stealth.delay(50, 80);
+    }
+    
+    if (!suggestionFound) {
+      console.log(`[IAI] ✗ Suggestion for "${value}" not found, pressing Tab to confirm`);
+      // Press Tab to confirm what was typed
+      inputField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      await stealth.delay(60, 100);
+      return true; // Still return true - value was typed even if no suggestion selected
+    }
+    
+    console.log(`[IAI] ✅ "${labelText}" = "${value}" selected successfully`);
+    await stealth.delay(80, 120);
+    return true;
+    
+  } catch (error) {
+    console.error(`[IAI] Error with typeahead ${labelText}:`, error);
+    return false;
+  }
+}
+
+/**
  * Execute workflow from injected pattern
  * This is the main pattern execution engine
  */
@@ -609,9 +753,10 @@ async function executeInjectedWorkflow(vehicleData) {
   // TEST VERSION TRACKING for debugging:
   // TEST1: Original code - clean title clicked twice
   // TEST2: Added clickedAriaLabels tracking but only for step.type === 'click'
-  // TEST3: Track ALL ariaLabels regardless of step type + pre-emptive marking
-  const TEST_VERSION = 'TEST3';
-  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Pre-emptive ariaLabel tracking`);
+  // TEST3: Track ALL ariaLabels regardless of step type + pre-emptive marking ✅ FIXED
+  // TEST4: Make/Model as TYPEAHEAD (combobox) instead of dropdown
+  const TEST_VERSION = 'TEST4';
+  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Make/Model typeahead + Body style/Condition dropdowns`);
   
   if (!IAI_INJECTION._loaded) {
     console.error('[IAI] ❌ No injection pattern loaded - cannot execute workflow');
@@ -670,41 +815,42 @@ async function executeInjectedWorkflow(vehicleData) {
     }
   }
   
-  // STEP 2: Select Make (Model depends on Make)
+  // STEP 2: Select Make using TYPEAHEAD (Model depends on Make)
+  // Make is a combobox - you type and suggestions appear
   if (vehicleData.make) {
     results.stepsTotal++;
-    // Retry Make selection up to 3 times (options may still be loading)
+    console.log('[IAI] 📝 Make is a typeahead field - typing to get suggestions...');
     let makeSuccess = false;
     for (let attempt = 0; attempt < 3 && !makeSuccess; attempt++) {
       if (attempt > 0) {
-        console.log(`[IAI] 🔄 Retrying Make selection (attempt ${attempt + 1})...`);
-        await stealth.delay(500, 800);
+        console.log(`[IAI] 🔄 Retrying Make typeahead (attempt ${attempt + 1})...`);
+        await stealth.delay(400, 600);
       }
-      makeSuccess = await selectFBDropdown('Make', vehicleData.make, stealth);
+      makeSuccess = await selectFBTypeahead('Make', vehicleData.make, stealth);
     }
     if (makeSuccess) {
       filledFields.add('make');
       results.completed.push({ field: 'make', value: String(vehicleData.make) });
       results.stepsExecuted++;
       // CRITICAL: Wait for Model options to load after Make selection
-      console.log('[IAI] ⏳ Waiting for Model options to load...');
-      await stealth.delay(800, 1200);
+      console.log('[IAI] ⏳ Waiting for Model field to update...');
+      await stealth.delay(600, 900);
     } else {
       results.errors.push({ field: 'make', error: 'Failed to select Make' });
     }
   }
   
-  // STEP 3: Select Model (depends on Make being selected)
+  // STEP 3: Select Model using TYPEAHEAD (depends on Make being selected)
   if (vehicleData.model) {
     results.stepsTotal++;
-    // Retry Model selection up to 3 times
+    console.log('[IAI] 📝 Model is a typeahead field - typing to get suggestions...');
     let modelSuccess = false;
     for (let attempt = 0; attempt < 3 && !modelSuccess; attempt++) {
       if (attempt > 0) {
-        console.log(`[IAI] 🔄 Retrying Model selection (attempt ${attempt + 1})...`);
-        await stealth.delay(500, 800);
+        console.log(`[IAI] 🔄 Retrying Model typeahead (attempt ${attempt + 1})...`);
+        await stealth.delay(400, 600);
       }
-      modelSuccess = await selectFBDropdown('Model', vehicleData.model, stealth);
+      modelSuccess = await selectFBTypeahead('Model', vehicleData.model, stealth);
     }
     if (modelSuccess) {
       filledFields.add('model');
