@@ -325,11 +325,11 @@ async function loadInjectionPattern() {
 const loadTrainingData = loadInjectionPattern;
 
 /**
- * Upload images to Facebook Marketplace listing
- * Finds the file input, fetches images from URLs, and triggers upload
+ * Upload images to Facebook Marketplace listing - TEST7
+ * Uses multiple strategies to find and interact with FB's photo upload area
  */
 async function uploadImagesToFB(imageUrls, stealth) {
-  console.log(`[IAI] 📷 Uploading ${imageUrls?.length || 0} images...`);
+  console.log(`[IAI] 📷 TEST7: Uploading ${imageUrls?.length || 0} images...`);
   
   if (!imageUrls || imageUrls.length === 0) {
     console.log('[IAI] ⚠️ No images to upload');
@@ -337,113 +337,188 @@ async function uploadImagesToFB(imageUrls, stealth) {
   }
   
   try {
-    // Strategy 1: Find file input by various methods
+    // ========== STEP 1: Find the photo upload area ==========
     let fileInput = null;
+    let uploadArea = null;
     
-    // Look for file input with accept="image/*" or similar
-    const fileInputs = document.querySelectorAll('input[type="file"]');
-    for (const input of fileInputs) {
+    // Strategy 1: Find ANY file input on the page
+    const allFileInputs = document.querySelectorAll('input[type="file"]');
+    console.log(`[IAI] 🔍 Found ${allFileInputs.length} file inputs on page`);
+    
+    for (const input of allFileInputs) {
       const accept = input.getAttribute('accept') || '';
-      if (accept.includes('image') || accept.includes('video') || !accept) {
+      const multiple = input.hasAttribute('multiple');
+      console.log(`[IAI]   - Input: accept="${accept}", multiple=${multiple}, visible=${isVisible(input)}`);
+      
+      // Prefer inputs that accept images
+      if (accept.includes('image') || accept.includes('video') || accept === '*' || !accept) {
         fileInput = input;
-        console.log('[IAI] ✓ Found file input via type="file"');
+        console.log('[IAI] ✓ Selected file input for images');
         break;
       }
     }
     
-    // Strategy 2: Look for the "Add photos" button and find associated input
+    // Strategy 2: Find "Add photos" clickable area by text content
     if (!fileInput) {
-      const addPhotoButtons = document.querySelectorAll('[aria-label*="photo"], [aria-label*="Photo"], [role="button"]');
-      for (const btn of addPhotoButtons) {
-        if (btn.textContent?.toLowerCase().includes('photo') || 
-            btn.textContent?.toLowerCase().includes('add')) {
-          // Check for file input in parent or sibling
-          const container = btn.closest('div');
+      const allDivs = document.querySelectorAll('div');
+      for (const div of allDivs) {
+        const text = div.textContent?.toLowerCase() || '';
+        if ((text.includes('add photos') || text.includes('add photo')) && 
+            text.length < 100 && isVisible(div)) {
+          uploadArea = div;
+          console.log('[IAI] ✓ Found "Add photos" area by text');
+          
+          // Click it to potentially reveal/activate file input
+          await stealth.click(div);
+          await stealth.delay(300, 500);
+          
+          // Check for file input in same container or newly appeared
+          const container = div.closest('div[class*="x"]')?.parentElement;
           if (container) {
             fileInput = container.querySelector('input[type="file"]');
-            if (fileInput) {
-              console.log('[IAI] ✓ Found file input near "Add photos" button');
-              break;
-            }
           }
+          if (!fileInput) {
+            fileInput = document.querySelector('input[type="file"]');
+          }
+          break;
         }
       }
     }
     
-    // Strategy 3: Look for hidden file inputs
+    // Strategy 3: Find by aria-label
     if (!fileInput) {
-      const hiddenInputs = document.querySelectorAll('input[type="file"][style*="display: none"], input[type="file"][hidden]');
-      if (hiddenInputs.length > 0) {
-        fileInput = hiddenInputs[0];
-        console.log('[IAI] ✓ Found hidden file input');
-      }
-    }
-    
-    // Strategy 4: Click the "Add photos" area to potentially reveal file input
-    if (!fileInput) {
-      const photoArea = document.querySelector('[aria-label*="Add photos"], [aria-label*="photo"]');
-      if (photoArea) {
-        console.log('[IAI] 🖱️ Clicking photo upload area...');
-        await stealth.click(photoArea);
-        await stealth.delay(500, 800);
-        // Try again after click
+      uploadArea = document.querySelector('[aria-label*="photo" i], [aria-label*="Photo"]');
+      if (uploadArea) {
+        console.log('[IAI] ✓ Found upload area by aria-label');
+        await stealth.click(uploadArea);
+        await stealth.delay(300, 500);
         fileInput = document.querySelector('input[type="file"]');
       }
     }
     
+    // Strategy 4: Look for the drag-and-drop zone with specific structure
     if (!fileInput) {
-      console.log('[IAI] ✗ Could not find file input for image upload');
+      // FB's photo upload area typically has this structure
+      const dropZones = document.querySelectorAll('[role="button"]');
+      for (const zone of dropZones) {
+        if (zone.textContent?.includes('photo') || zone.textContent?.includes('drag')) {
+          console.log('[IAI] ✓ Found potential drop zone');
+          // Look for file input in ancestors
+          let parent = zone.parentElement;
+          for (let i = 0; i < 10 && parent; i++) {
+            fileInput = parent.querySelector('input[type="file"]');
+            if (fileInput) {
+              console.log('[IAI] ✓ Found file input in drop zone ancestor');
+              break;
+            }
+            parent = parent.parentElement;
+          }
+          if (fileInput) break;
+        }
+      }
+    }
+    
+    if (!fileInput) {
+      console.log('[IAI] ✗ Could not find file input - listing all inputs for debugging:');
+      document.querySelectorAll('input').forEach((inp, i) => {
+        console.log(`[IAI]   Input ${i}: type=${inp.type}, name=${inp.name}, id=${inp.id}`);
+      });
       return { success: false, error: 'File input not found' };
     }
     
-    // Fetch and convert images to File objects
+    console.log('[IAI] ✓ File input found, preparing images...');
+    
+    // ========== STEP 2: Fetch images and convert to Files ==========
     const files = [];
-    for (let i = 0; i < Math.min(imageUrls.length, 20); i++) { // FB limit is usually 20 images
+    const maxImages = Math.min(imageUrls.length, 20); // FB limit
+    
+    for (let i = 0; i < maxImages; i++) {
       const url = imageUrls[i];
-      console.log(`[IAI] 📥 Fetching image ${i + 1}: ${url.substring(0, 50)}...`);
+      const shortUrl = url.length > 60 ? url.substring(0, 60) + '...' : url;
+      console.log(`[IAI] 📥 Fetching image ${i + 1}/${maxImages}: ${shortUrl}`);
       
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          console.warn(`[IAI] ⚠️ Failed to fetch image ${i + 1}: ${response.status}`);
-          continue;
+        // Handle different URL types
+        let blob;
+        
+        if (url.startsWith('data:')) {
+          // Data URL - convert directly
+          const response = await fetch(url);
+          blob = await response.blob();
+        } else if (url.startsWith('blob:')) {
+          // Blob URL - fetch directly
+          const response = await fetch(url);
+          blob = await response.blob();
+        } else {
+          // Regular URL - fetch with CORS handling
+          const response = await fetch(url, { 
+            mode: 'cors',
+            credentials: 'omit'
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          blob = await response.blob();
         }
         
-        const blob = await response.blob();
-        const fileName = `vehicle_image_${i + 1}.${blob.type.split('/')[1] || 'jpg'}`;
-        const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+        // Determine file extension
+        const mimeType = blob.type || 'image/jpeg';
+        const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+        const fileName = `vehicle_${Date.now()}_${i + 1}.${ext}`;
+        
+        const file = new File([blob], fileName, { type: mimeType });
         files.push(file);
-        console.log(`[IAI] ✓ Image ${i + 1} ready: ${fileName} (${(blob.size / 1024).toFixed(1)}KB)`);
+        
+        const sizeKB = (blob.size / 1024).toFixed(1);
+        console.log(`[IAI] ✓ Image ${i + 1} ready: ${fileName} (${sizeKB}KB)`);
+        
       } catch (fetchError) {
-        console.warn(`[IAI] ⚠️ Error fetching image ${i + 1}:`, fetchError.message);
+        console.warn(`[IAI] ⚠️ Failed to fetch image ${i + 1}: ${fetchError.message}`);
       }
     }
     
     if (files.length === 0) {
       console.log('[IAI] ✗ No images could be fetched');
-      return { success: false, error: 'No images fetched' };
+      return { success: false, error: 'No images fetched successfully' };
     }
     
-    // Create DataTransfer to set files on input
+    // ========== STEP 3: Set files on input and trigger events ==========
+    console.log(`[IAI] 📤 Setting ${files.length} files on input...`);
+    
     const dataTransfer = new DataTransfer();
     files.forEach(file => dataTransfer.items.add(file));
     
-    // Set files on input
+    // Set the files
     fileInput.files = dataTransfer.files;
     
-    // Dispatch events to trigger FB's handlers
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+    // Trigger all possible events that FB might listen to
+    const events = ['input', 'change', 'drop'];
+    for (const eventType of events) {
+      const event = new Event(eventType, { bubbles: true, cancelable: true });
+      fileInput.dispatchEvent(event);
+      console.log(`[IAI]   Dispatched '${eventType}' event`);
+    }
     
-    console.log(`[IAI] ✅ ${files.length} images uploaded successfully!`);
+    // Also try dispatching on the upload area if we found one
+    if (uploadArea) {
+      const dropEvent = new DragEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dataTransfer
+      });
+      uploadArea.dispatchEvent(dropEvent);
+      console.log('[IAI]   Dispatched drop event on upload area');
+    }
     
-    // Wait for FB to process
-    await stealth.delay(1000, 1500);
+    console.log(`[IAI] ✅ ${files.length} images uploaded!`);
+    
+    // Wait for FB to process the upload
+    await stealth.delay(1500, 2500);
     
     return { success: true, count: files.length };
     
   } catch (error) {
-    console.error('[IAI] Image upload error:', error);
+    console.error('[IAI] ❌ Image upload error:', error);
     return { success: false, error: error.message };
   }
 }
@@ -879,9 +954,11 @@ async function executeInjectedWorkflow(vehicleData) {
   // TEST2: Added clickedAriaLabels tracking but only for step.type === 'click'
   // TEST3: Track ALL ariaLabels regardless of step type + pre-emptive marking ✅ FIXED
   // TEST4: Make/Model as TYPEAHEAD (combobox) instead of dropdown ✅ WORKING
-  // TEST5: Add Body style, Vehicle condition dropdowns + IMAGE UPLOAD
-  const TEST_VERSION = 'TEST5';
-  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Body style/Condition + Image Upload`);
+  // TEST5: Add Body style, Vehicle condition dropdowns + IMAGE UPLOAD - saved as TEST6
+  // TEST6: All form fields working! ✅ Image upload not finding images in vehicleData
+  // TEST7: Improved image upload with better FB file input detection
+  const TEST_VERSION = 'TEST7';
+  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Improved Image Upload`);
   
   // Log vehicleData to debug missing fields
   console.log('[IAI] 📦 Vehicle data received:', JSON.stringify({
@@ -890,7 +967,8 @@ async function executeInjectedWorkflow(vehicleData) {
     model: vehicleData.model,
     bodyStyle: vehicleData.bodyStyle || vehicleData.body,
     condition: vehicleData.condition,
-    images: vehicleData.images?.length || 0
+    images: vehicleData.images?.length || 0,
+    imageUrls: vehicleData.images ? vehicleData.images.slice(0, 3).map(u => u?.substring(0, 50) + '...') : 'none'
   }));
   
   // Apply defaults for missing fields
