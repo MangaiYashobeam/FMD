@@ -329,6 +329,148 @@ const loadTrainingData = loadInjectionPattern;
  * This is the main pattern execution engine
  */
 /**
+ * Generic Facebook Marketplace dropdown selector
+ * Finds dropdown by visible label text, clicks to open, selects option
+ * Works for Year, Make, Model, Transmission, Fuel Type, etc.
+ */
+async function selectFBDropdown(labelText, value, stealth) {
+  console.log(`[IAI] 🔽 Selecting "${labelText}" = "${value}"`);
+  
+  if (!value) {
+    console.log(`[IAI] ⚠ No value provided for ${labelText}, skipping`);
+    return false;
+  }
+  
+  try {
+    // Strategy 1: Find clickable element containing the label text
+    let dropdown = null;
+    
+    // Look for spans/divs with the label text
+    const findDropdownTrigger = () => {
+      // Find span with exact label text
+      const spans = document.querySelectorAll('span');
+      for (const span of spans) {
+        const text = span.textContent?.trim();
+        if (text === labelText || text?.toLowerCase() === labelText.toLowerCase()) {
+          // Walk up to find clickable parent
+          let parent = span.parentElement;
+          for (let i = 0; i < 6 && parent; i++) {
+            if (parent.getAttribute('role') === 'button' ||
+                parent.getAttribute('role') === 'combobox' ||
+                parent.getAttribute('tabindex') === '0' ||
+                parent.tagName === 'LABEL' ||
+                parent.classList.contains('x1i10hfl')) {
+              return parent;
+            }
+            parent = parent.parentElement;
+          }
+          // If no clickable parent, the span's parent might be clickable
+          if (span.parentElement?.closest('[role="button"], [tabindex="0"], label')) {
+            return span.parentElement.closest('[role="button"], [tabindex="0"], label');
+          }
+        }
+      }
+      
+      // Try aria-label
+      const ariaEl = document.querySelector(`[aria-label*="${labelText}"]`);
+      if (ariaEl && isVisible(ariaEl)) return ariaEl;
+      
+      // Try label element
+      const labels = document.querySelectorAll('label');
+      for (const label of labels) {
+        if (label.textContent?.trim().toLowerCase().includes(labelText.toLowerCase())) {
+          return label;
+        }
+      }
+      
+      return null;
+    };
+    
+    dropdown = findDropdownTrigger();
+    
+    if (!dropdown) {
+      console.log(`[IAI] ✗ Dropdown trigger for "${labelText}" not found`);
+      return false;
+    }
+    
+    console.log(`[IAI] ✓ Found dropdown trigger for "${labelText}"`);
+    
+    // Click to open dropdown
+    await stealth.click(dropdown);
+    await stealth.delay(400, 600);
+    
+    // Wait for options to appear and select the value
+    let optionFound = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      // Look for options in various containers
+      const optionSelectors = [
+        '[role="option"]',
+        '[role="menuitem"]',
+        '[role="listbox"] [role="option"]',
+        '[role="menu"] span',
+        '[data-visualcompletion="ignore-dynamic"] span',
+      ];
+      
+      for (const selector of optionSelectors) {
+        const options = document.querySelectorAll(selector);
+        for (const option of options) {
+          const optionText = option.textContent?.trim();
+          // Exact match or contains match
+          if (optionText === String(value) || 
+              optionText?.toLowerCase() === String(value).toLowerCase() ||
+              optionText?.includes(String(value))) {
+            console.log(`[IAI] ✓ Found option: "${optionText}"`);
+            await stealth.click(option);
+            optionFound = true;
+            break;
+          }
+        }
+        if (optionFound) break;
+      }
+      
+      if (optionFound) break;
+      
+      // Also try finding visible spans with the value
+      if (!optionFound) {
+        const allSpans = document.querySelectorAll('span');
+        for (const span of allSpans) {
+          const spanText = span.textContent?.trim();
+          if (spanText === String(value) && isVisible(span)) {
+            // Check if it's in a dropdown context (not the form itself)
+            const inDropdown = span.closest('[role="listbox"], [role="menu"], [role="dialog"], [data-visualcompletion]');
+            if (inDropdown) {
+              console.log(`[IAI] ✓ Found option by span: "${spanText}"`);
+              await stealth.click(span);
+              optionFound = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (optionFound) break;
+      await stealth.delay(100, 200);
+    }
+    
+    if (!optionFound) {
+      console.log(`[IAI] ✗ Option "${value}" not found for "${labelText}"`);
+      // Press Escape to close any open dropdown
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await stealth.delay(200, 300);
+      return false;
+    }
+    
+    console.log(`[IAI] ✅ "${labelText}" = "${value}" selected successfully`);
+    await stealth.delay(300, 500);
+    return true;
+    
+  } catch (error) {
+    console.error(`[IAI] Error selecting ${labelText}:`, error);
+    return false;
+  }
+}
+
+/**
  * Select Facebook Marketplace Vehicle Type dropdown
  * This is a special dropdown that appears first on the form
  */
@@ -473,6 +615,7 @@ async function executeInjectedWorkflow(vehicleData) {
   
   const startTime = Date.now();
   const stealth = new IAIStealth();
+  const filledFields = new Set(); // Track filled fields across all phases
   const results = {
     success: false,
     stepsExecuted: 0,
@@ -491,18 +634,52 @@ async function executeInjectedWorkflow(vehicleData) {
   if (vehicleTypeSuccess) {
     results.completed.push({ field: 'vehicleType', value: vehicleType });
     results.stepsExecuted++;
+    filledFields.add('vehicleType');
     console.log('[IAI] ✅ Vehicle type selected, waiting for form fields to load...');
-    await stealth.delay(800, 1200); // Give FB time to load additional fields
+    await stealth.delay(1000, 1500); // Give FB time to load additional fields
   } else {
     results.errors.push({ field: 'vehicleType', error: 'Failed to select vehicle type' });
     console.error('[IAI] ⚠️ Vehicle type selection failed, continuing anyway...');
   }
   
+  // === PHASE 0.5: Fill key dropdowns (Year, Make, Model, Transmission, etc.) ===
+  console.log('[IAI] 📋 Phase 0.5: Filling key dropdowns...');
+  
+  // These are the FB Marketplace dropdowns with their label text
+  const dropdownFields = [
+    { field: 'year', label: 'Year', value: vehicleData.year },
+    { field: 'make', label: 'Make', value: vehicleData.make },
+    { field: 'model', label: 'Model', value: vehicleData.model },
+    { field: 'transmission', label: 'Transmission', value: vehicleData.transmission },
+    { field: 'fuelType', label: 'Fuel type', value: vehicleData.fuelType || vehicleData.fuel },
+    { field: 'bodyStyle', label: 'Body style', value: vehicleData.bodyStyle || vehicleData.body },
+    { field: 'condition', label: 'Vehicle condition', value: vehicleData.condition },
+    { field: 'exteriorColor', label: 'Exterior color', value: vehicleData.exteriorColor || vehicleData.color },
+    { field: 'interiorColor', label: 'Interior color', value: vehicleData.interiorColor },
+  ];
+  
+  for (const { field, label, value } of dropdownFields) {
+    if (!value) continue;
+    
+    results.stepsTotal++;
+    const success = await selectFBDropdown(label, value, stealth);
+    
+    if (success) {
+      filledFields.add(field);
+      results.completed.push({ field, value: String(value) });
+      results.stepsExecuted++;
+    } else {
+      results.errors.push({ field, error: `Failed to select ${label}` });
+    }
+    
+    await stealth.delay(400, 700);
+  }
+  
+  console.log(`[IAI] Phase 0.5 complete: ${filledFields.size} dropdowns filled`);
+  
   // === PHASE 1: Fill fields directly using fieldMappings (stable approach) ===
   console.log('[IAI] 📋 Phase 1: Filling fields via fieldMappings...');
   const fieldMappings = IAI_INJECTION.FIELD_SELECTORS || {};
-  const filledFields = new Set();
-  if (vehicleTypeSuccess) filledFields.add('vehicleType');
   
   // Map vehicle data fields to form fields
   const fieldValueMap = {
@@ -526,6 +703,11 @@ async function executeInjectedWorkflow(vehicleData) {
   
   for (const [fieldType, value] of Object.entries(fieldValueMap)) {
     if (value === null || value === undefined || value === '') continue;
+    
+    // Skip if already filled in Phase 0.5
+    if (filledFields.has(fieldType)) {
+      continue;
+    }
     
     results.stepsTotal++;
     const mapping = fieldMappings[fieldType];
