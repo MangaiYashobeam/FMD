@@ -56,8 +56,8 @@ const IAI_CONFIG = {
     },
     TIMING: {
       ACTION_DELAY: { MIN: 80, MAX: 360 },  // 5x faster
-      PAGE_LOAD_WAIT: { MIN: 300, MAX: 700 },  // 5x faster
-      THINK_TIME: { MIN: 80, MAX: 300 },  // 10x faster
+      PAGE_LOAD_WAIT: { MIN: 1000, MAX: 1500 },  // FB form field load (for pictures)
+      THINK_TIME: { MIN: 80, MAX: 250 },  // Fast think time
       SESSION_BREAK: { MIN: 4500, MAX: 18000 },  // 10x faster
       // Dropdown specific timing
       DROPDOWN_WAIT: 50,        // 4x faster - wait between dropdown retries
@@ -616,6 +616,7 @@ async function executeInjectedWorkflow(vehicleData) {
   const startTime = Date.now();
   const stealth = new IAIStealth();
   const filledFields = new Set(); // Track filled fields across all phases
+  const clickedAriaLabels = new Set(); // Track clicked ariaLabels to prevent double-clicks (clean title issue)
   const results = {
     success: false,
     stepsExecuted: 0,
@@ -645,11 +646,69 @@ async function executeInjectedWorkflow(vehicleData) {
   // === PHASE 0.5: Fill key dropdowns (Year, Make, Model, Transmission, etc.) ===
   console.log('[IAI] 📋 Phase 0.5: Filling key dropdowns...');
   
-  // These are the FB Marketplace dropdowns with their label text
-  const dropdownFields = [
-    { field: 'year', label: 'Year', value: vehicleData.year },
-    { field: 'make', label: 'Make', value: vehicleData.make },
-    { field: 'model', label: 'Model', value: vehicleData.model },
+  // STEP 1: Select Year FIRST (Make depends on Year)
+  if (vehicleData.year) {
+    results.stepsTotal++;
+    const yearSuccess = await selectFBDropdown('Year', vehicleData.year, stealth);
+    if (yearSuccess) {
+      filledFields.add('year');
+      results.completed.push({ field: 'year', value: String(vehicleData.year) });
+      results.stepsExecuted++;
+      // CRITICAL: Wait for Make options to load after Year selection
+      console.log('[IAI] ⏳ Waiting for Make options to load...');
+      await stealth.delay(800, 1200);
+    } else {
+      results.errors.push({ field: 'year', error: 'Failed to select Year' });
+    }
+  }
+  
+  // STEP 2: Select Make (Model depends on Make)
+  if (vehicleData.make) {
+    results.stepsTotal++;
+    // Retry Make selection up to 3 times (options may still be loading)
+    let makeSuccess = false;
+    for (let attempt = 0; attempt < 3 && !makeSuccess; attempt++) {
+      if (attempt > 0) {
+        console.log(`[IAI] 🔄 Retrying Make selection (attempt ${attempt + 1})...`);
+        await stealth.delay(500, 800);
+      }
+      makeSuccess = await selectFBDropdown('Make', vehicleData.make, stealth);
+    }
+    if (makeSuccess) {
+      filledFields.add('make');
+      results.completed.push({ field: 'make', value: String(vehicleData.make) });
+      results.stepsExecuted++;
+      // CRITICAL: Wait for Model options to load after Make selection
+      console.log('[IAI] ⏳ Waiting for Model options to load...');
+      await stealth.delay(800, 1200);
+    } else {
+      results.errors.push({ field: 'make', error: 'Failed to select Make' });
+    }
+  }
+  
+  // STEP 3: Select Model (depends on Make being selected)
+  if (vehicleData.model) {
+    results.stepsTotal++;
+    // Retry Model selection up to 3 times
+    let modelSuccess = false;
+    for (let attempt = 0; attempt < 3 && !modelSuccess; attempt++) {
+      if (attempt > 0) {
+        console.log(`[IAI] 🔄 Retrying Model selection (attempt ${attempt + 1})...`);
+        await stealth.delay(500, 800);
+      }
+      modelSuccess = await selectFBDropdown('Model', vehicleData.model, stealth);
+    }
+    if (modelSuccess) {
+      filledFields.add('model');
+      results.completed.push({ field: 'model', value: String(vehicleData.model) });
+      results.stepsExecuted++;
+    } else {
+      results.errors.push({ field: 'model', error: 'Failed to select Model' });
+    }
+  }
+  
+  // STEP 4: Fill remaining dropdowns (non-dependent)
+  const remainingDropdowns = [
     { field: 'transmission', label: 'Transmission', value: vehicleData.transmission },
     { field: 'fuelType', label: 'Fuel type', value: vehicleData.fuelType || vehicleData.fuel },
     { field: 'bodyStyle', label: 'Body style', value: vehicleData.bodyStyle || vehicleData.body },
@@ -658,7 +717,7 @@ async function executeInjectedWorkflow(vehicleData) {
     { field: 'interiorColor', label: 'Interior color', value: vehicleData.interiorColor },
   ];
   
-  for (const { field, label, value } of dropdownFields) {
+  for (const { field, label, value } of remainingDropdowns) {
     if (!value) continue;
     
     results.stepsTotal++;
@@ -807,6 +866,17 @@ async function executeInjectedWorkflow(vehicleData) {
       // Skip pure click steps with no field association
       if (step.type === 'click' && !fieldType && !step.label && !step.ariaLabel) {
         continue;
+      }
+      
+      // CRITICAL: Skip duplicate ariaLabel clicks to prevent checkbox double-toggle
+      // (This fixes the clean title checkbox being clicked then immediately unclicked)
+      const stepAriaLabel = step.element?.ariaLabel || step.ariaLabel;
+      if (stepAriaLabel && step.type === 'click') {
+        if (clickedAriaLabels.has(stepAriaLabel)) {
+          console.log(`[IAI] ⏭ Skipping duplicate click on ariaLabel: ${stepAriaLabel}`);
+          continue;
+        }
+        clickedAriaLabels.add(stepAriaLabel);
       }
       
       results.stepsTotal++;
