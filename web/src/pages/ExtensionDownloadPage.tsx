@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Download,
@@ -27,7 +27,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useToast } from '../contexts/ToastContext';
 
 type UserType = 'admin' | 'user';
 
@@ -98,14 +98,19 @@ const userSteps: InstallStep[] = [
 ];
 
 export function ExtensionDownloadPage() {
-  const { user, accountUser } = useAuth();
-  const [userType, setUserType] = useState<UserType>(
-    accountUser?.role === 'SUPER_ADMIN' || accountUser?.role === 'ACCOUNT_OWNER' || accountUser?.role === 'ADMIN' 
-      ? 'admin' 
-      : 'user'
-  );
+  const { user } = useAuth();
+  const toast = useToast();
+  const [userType, setUserType] = useState<UserType>('user');
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  // Set user type based on role
+  useState(() => {
+    const isAdmin = user?.accounts?.some(a => 
+      a.role === 'SUPER_ADMIN' || a.role === 'ACCOUNT_OWNER' || a.role === 'ADMIN'
+    );
+    if (isAdmin) setUserType('admin');
+  });
 
   const steps = userType === 'admin' ? adminSteps : userSteps;
 

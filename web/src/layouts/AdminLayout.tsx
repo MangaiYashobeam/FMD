@@ -22,6 +22,7 @@ import {
   Zap,
   BarChart3,
   Layers,
+  Route,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import ImpersonationBanner from '../components/ImpersonationBanner';
@@ -30,12 +31,16 @@ import { FacebookConnectionStatus } from '../components/FacebookConnectionStatus
 import { ExtensionStatus } from '../components/ExtensionStatus';
 import { HealthStatus } from '../components/HealthStatus';
 
+// App version - synced with package.json
+const APP_VERSION = '3.1.0';
+
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'AI Center', href: '/admin/ai-center', icon: Brain },
   { name: 'AI Orchestrator', href: '/admin/ai-orchestrator', icon: Layers },
   { name: 'IAI Command', href: '/admin/iai-command', icon: Zap },
   { name: 'Abstraction Center', href: '/admin/abstraction-center', icon: Layers },
+  { name: 'Green Routes', href: '/admin/green-routes', icon: Route },
   { name: 'API Dashboard', href: '/admin/api-dashboard', icon: Terminal },
   { name: 'FBM Posts', href: '/admin/fbm-posts', icon: Send },
   { name: 'Error Monitoring', href: '/admin/errors', icon: AlertTriangle },
@@ -147,6 +152,15 @@ export default function AdminLayout() {
             {/* Facebook Status */}
             <div className="px-4 py-3 border-b border-slate-700">
               <FacebookConnectionStatus variant="compact" className="text-slate-300" />
+            </div>
+            
+            {/* Version Badge */}
+            <div className="px-4 py-2 border-b border-slate-700">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span className="text-xs text-slate-400">App v{APP_VERSION}</span>
+                <span className="px-1.5 py-0.5 bg-green-600/20 text-green-400 text-[10px] rounded font-medium">LIVE</span>
+              </div>
             </div>
             
             {/* User Info */}

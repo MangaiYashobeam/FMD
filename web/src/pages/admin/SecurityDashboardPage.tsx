@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
@@ -20,22 +20,15 @@ import {
   XCircle,
   Users,
   BarChart3,
-  Clock,
-  Globe,
   RefreshCw,
-  Search,
-  Filter,
-  ChevronRight,
   Eye,
   X,
-  Plus,
-  Trash2,
   Settings,
   Lock,
   Unlock
 } from 'lucide-react';
-import toast from 'react-hot-toast';
-import api from '@/lib/api';
+import { useToast } from '../../contexts/ToastContext';
+import { api } from '../../lib/api';
 
 interface DashboardData {
   overview: {
@@ -58,7 +51,8 @@ interface LogDetail {
 }
 
 export function SecurityDashboardPage() {
-  const { accountUser } = useAuth();
+  const { user } = useAuth();
+  const toast = useToast();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'blocked' | 'whitelist'>('overview');
@@ -66,7 +60,7 @@ export function SecurityDashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Check permissions
-  const isSuperAdmin = accountUser?.role === 'SUPER_ADMIN';
+  const isSuperAdmin = user?.accounts?.some(a => a.role === 'SUPER_ADMIN');
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -78,7 +72,7 @@ export function SecurityDashboardPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     fetchDashboard();
@@ -472,6 +466,7 @@ function BlockedRequestsTable({ requests }: { requests: any[] }) {
 
 // Whitelist Manager Component
 function WhitelistManager() {
+  const toast = useToast();
   const [whitelist, setWhitelist] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

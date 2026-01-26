@@ -125,7 +125,33 @@ function getClientIPForRateLimit(req: Request): string {
 // ============================================
 
 /**
+ * High-frequency GREEN ROUTE endpoints that bypass rate limiting
+ * These are internal dashboard/extension polling endpoints
+ */
+const GREEN_ROUTE_SKIP_PATHS = [
+  '/extension/status',
+  '/extension/heartbeat',
+  '/extension/tasks',
+  '/admin/stats',
+  '/admin/accounts',
+  '/ai-center/dashboard',
+  '/ai-center/chat',
+  '/injection/stats',
+  '/injection/containers',
+  '/messages/conversations',
+  '/iai/pattern',
+  '/training/console',
+  '/facebook/callback',
+  '/auth/facebook/callback',
+  '/config/facebook',
+  '/health',
+  '/api-dashboard',
+  '/notifications/stream',
+];
+
+/**
  * General API rate limiter - 500 requests per 15 minutes (increased for admin dashboard)
+ * GREEN ROUTE endpoints skip rate limiting entirely
  */
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -141,6 +167,12 @@ export const generalLimiter = rateLimit({
   skip: (req) => {
     // Skip rate limiting for health checks
     if (req.path === '/health') return true;
+    
+    // Skip for GREEN ROUTE high-frequency endpoints
+    if (GREEN_ROUTE_SKIP_PATHS.some(p => req.path.includes(p))) {
+      return true;
+    }
+    
     // Skip for IIPC whitelisted IPs (super admin)
     return canBypassRateLimit(req);
   },

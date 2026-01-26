@@ -67,6 +67,7 @@ import SessionAnalyticsPage from './pages/admin/SessionAnalyticsPage';
 import AbstractionCenterPage from './pages/admin/AbstractionCenterPage';
 import AIOrchestratorPage from './pages/admin/AIOrchestratorPage';
 import SecurityDashboardPage from './pages/admin/SecurityDashboardPage';
+import GreenRoutesPage from './pages/admin/GreenRoutesPage';
 import ExtensionDownloadPage from './pages/ExtensionDownloadPage';
 import './index.css';
 
@@ -167,6 +168,7 @@ function App() {
               <Route path="iai-command" element={<IAICommandCenter />} />
               <Route path="abstraction-center" element={<AbstractionCenterPage />} />
               <Route path="ai-orchestrator" element={<AIOrchestratorPage />} />
+              <Route path="green-routes" element={<GreenRoutesPage />} />
               <Route path="security-dashboard" element={<SecurityDashboardPage />} />
             </Route>
 
