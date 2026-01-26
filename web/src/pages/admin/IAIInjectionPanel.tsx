@@ -102,27 +102,29 @@ interface InjectionStats {
 
 async function fetchContainers() {
   const response = await api.get('/api/injection/containers');
-  return response.data.containers || [];
+  // API returns { success, data: [...], total } - data contains the containers array
+  return response.data.data || [];
 }
 
 async function fetchStats(): Promise<InjectionStats> {
   const response = await api.get('/api/injection/stats');
-  return response.data.stats;
+  return response.data.data;
 }
 
 async function fetchPatterns(containerId: string) {
   const response = await api.get(`/api/injection/containers/${containerId}?includePatterns=true`);
-  return response.data.container?.patterns || [];
+  // API returns { success, data: container } - patterns are inside the container
+  return response.data.data?.patterns || [];
 }
 
 async function createContainer(data: Partial<InjectionContainer>) {
   const response = await api.post('/api/injection/containers', data);
-  return response.data.container;
+  return response.data.data;
 }
 
 async function updateContainer(id: string, data: Partial<InjectionContainer>) {
   const response = await api.put(`/api/injection/containers/${id}`, data);
-  return response.data.container;
+  return response.data.data;
 }
 
 async function deleteContainer(id: string) {
@@ -132,12 +134,12 @@ async function deleteContainer(id: string) {
 
 async function createPattern(data: Partial<InjectionPattern>) {
   const response = await api.post('/api/injection/patterns', data);
-  return response.data.pattern;
+  return response.data.data;
 }
 
 async function updatePattern(id: string, data: Partial<InjectionPattern>) {
   const response = await api.put(`/api/injection/patterns/${id}`, data);
-  return response.data.pattern;
+  return response.data.data;
 }
 
 async function deletePattern(id: string) {
@@ -152,7 +154,7 @@ async function testPattern(id: string, input: Record<string, any>) {
 
 async function setDefaultContainer(id: string) {
   const response = await api.post(`/api/injection/containers/${id}/set-default`);
-  return response.data.container;
+  return response.data.data;
 }
 
 // ============================================

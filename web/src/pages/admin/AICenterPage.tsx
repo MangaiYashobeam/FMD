@@ -29,6 +29,7 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle2,
+  Check,
   Clock,
   TrendingUp,
   BarChart3,
@@ -65,6 +66,205 @@ import type {
   ChatMessage,
 } from '../../services/ai-center.service';
 import { useToast } from '../../contexts/ToastContext';
+
+// ============================================
+// Global Model Selector - Header Dropdown with Nested Providers
+// ============================================
+
+interface GlobalModelSelectorProps {
+  providers: AIProvider[];
+  selectedProvider: string | null;
+  onSelectProvider: (providerId: string) => void;
+  onSelectModel: (providerId: string, modelId: string) => void;
+}
+
+function GlobalModelSelector({ providers, selectedProvider, onSelectProvider, onSelectModel }: GlobalModelSelectorProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const currentProvider = providers.find(p => p.id === selectedProvider) || providers[0];
+
+  const getProviderColor = (type: string) => {
+    switch (type) {
+      case 'anthropic': return 'from-orange-500 to-amber-600';
+      case 'openai': return 'from-green-500 to-emerald-600';
+      case 'github': return 'from-purple-500 to-pink-500';
+      case 'deepseek': return 'from-blue-500 to-indigo-600';
+      case 'mistral': return 'from-cyan-500 to-blue-600';
+      case 'perplexity': return 'from-teal-500 to-green-600';
+      case 'google': return 'from-red-500 to-yellow-500';
+      default: return 'from-gray-500 to-slate-600';
+    }
+  };
+
+  const getStatusDot = (status: string) => {
+    switch (status) {
+      case 'healthy': return 'bg-green-400';
+      case 'degraded': return 'bg-yellow-400';
+      case 'unknown': return 'bg-gray-400';
+      default: return 'bg-red-400';
+    }
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Trigger Button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg transition"
+      >
+        <div className={`w-2 h-2 rounded-full ${getStatusDot(currentProvider?.healthStatus || 'unknown')}`} />
+        <span className="text-sm font-medium">{currentProvider?.name || 'Select Provider'}</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Dropdown Menu */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute right-0 mt-2 w-80 bg-gray-800 border border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden"
+          >
+            <div className="p-2 border-b border-gray-700">
+              <p className="text-xs text-gray-400 px-2">Select AI Provider & Model</p>
+            </div>
+            
+            <div className="max-h-96 overflow-y-auto">
+              {providers.map((provider) => {
+                const providerType = provider.type as string;
+                const models = PROVIDER_MODELS[providerType] || PROVIDER_MODELS[provider.id];
+                const isExpanded = expandedProvider === provider.id;
+                const isSelected = selectedProvider === provider.id;
+                const isGitHub = providerType === 'github' || provider.id === 'github';
+                void isGitHub; // Suppress unused variable warning
+
+                return (
+                  <div key={provider.id} className="border-b border-gray-700/50 last:border-b-0">
+                    {/* Provider Header */}
+                    <button
+                      onClick={() => {
+                        if (models) {
+                          setExpandedProvider(isExpanded ? null : provider.id);
+                        } else {
+                          onSelectProvider(provider.id);
+                          setIsOpen(false);
+                        }
+                      }}
+                      className={`w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition ${
+                        isSelected ? 'bg-purple-500/10' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-1.5 rounded-lg bg-gradient-to-br ${getProviderColor(provider.type)}`}>
+                          <Bot className="w-4 h-4 text-white" />
+                        </div>
+                        <div className="text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{provider.name}</span>
+                            <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot(provider.healthStatus)}`} />
+                          </div>
+                          <span className="text-xs text-gray-400">{provider.defaultModel}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {models && (
+                          <span className="text-xs text-gray-500">
+                            {Object.values(models).reduce((sum: number, company: any) => sum + (company.models?.length || 0), 0)} models
+                          </span>
+                        )}
+                        {models ? (
+                          isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          isSelected && <Check className="w-4 h-4 text-purple-400" />
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Nested Models */}
+                    <AnimatePresence>
+                      {isExpanded && models && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden bg-gray-900/50"
+                        >
+                          {Object.entries(models).map(([companyKey, companyData]: [string, any]) => (
+                            <div key={companyKey} className="px-3 py-2">
+                              {/* Company Header */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className={`w-1 h-4 rounded-full bg-gradient-to-b ${companyData.color}`} />
+                                <span className="text-xs font-semibold text-gray-400 uppercase">{companyData.company}</span>
+                              </div>
+                              
+                              {/* Model List */}
+                              <div className="space-y-1 pl-3">
+                                {companyData.models?.slice(0, 4).map((model: any) => (
+                                  <button
+                                    key={model.id}
+                                    onClick={() => {
+                                      onSelectModel(provider.id, model.id);
+                                      setIsOpen(false);
+                                    }}
+                                    className="w-full flex items-center justify-between p-2 rounded hover:bg-gray-700/50 transition text-left"
+                                  >
+                                    <div>
+                                      <span className="text-sm">{model.name}</span>
+                                      {model.multiplier && model.multiplier !== '1x' && (
+                                        <span className={`ml-2 text-xs ${
+                                          model.multiplier === '0x' ? 'text-green-400' :
+                                          model.multiplier === '0.33x' ? 'text-blue-400' :
+                                          model.multiplier === '3x' ? 'text-red-400' : 'text-yellow-400'
+                                        }`}>
+                                          {model.multiplier}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                      model.tier === 'Flagship' ? 'bg-yellow-500/20 text-yellow-400' :
+                                      model.tier === 'Standard' ? 'bg-blue-500/20 text-blue-400' :
+                                      model.tier === 'Economy' ? 'bg-green-500/20 text-green-400' :
+                                      'bg-purple-500/20 text-purple-400'
+                                    }`}>
+                                      {model.tier}
+                                    </span>
+                                  </button>
+                                ))}
+                                {companyData.models?.length > 4 && (
+                                  <div className="text-xs text-gray-500 pl-2">
+                                    +{companyData.models.length - 4} more models
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // Main Component
 export default function AICenterPage() {
@@ -104,7 +304,7 @@ export default function AICenterPage() {
       id: 'github',
       name: 'GitHub Copilot',
       displayName: 'GitHub',
-      type: 'github',
+      type: 'github' as AIProvider['type'],
       isActive: true,
       defaultModel: 'gpt-4o',
       availableModels: [
@@ -265,18 +465,16 @@ export default function AICenterPage() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              {/* Provider Selector */}
-              <select
-                value={selectedProvider || ''}
-                onChange={(e) => setSelectedProvider(e.target.value)}
-                className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm"
-              >
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} {p.healthStatus === 'healthy' ? '●' : '○'}
-                  </option>
-                ))}
-              </select>
+              {/* Global Model Selector with nested provider dropdowns */}
+              <GlobalModelSelector 
+                providers={providers}
+                selectedProvider={selectedProvider}
+                onSelectProvider={setSelectedProvider}
+                onSelectModel={(providerId, modelId) => {
+                  console.log(`Selected model ${modelId} from provider ${providerId}`);
+                  setSelectedProvider(providerId);
+                }}
+              />
               <button
                 onClick={() => setRefreshKey(k => k + 1)}
                 className="p-2 hover:bg-gray-700 rounded-lg transition"
@@ -638,8 +836,9 @@ function ProviderModal({ provider, isOpen, onClose, onSelectModel }: ProviderMod
 
   if (!isOpen || !provider) return null;
 
-  const providerModels = PROVIDER_MODELS[provider.type] || PROVIDER_MODELS[provider.id];
-  const isGitHub = provider.type === 'github' || provider.type === 'copilot' || provider.id === 'github';
+  const providerType = provider.type as string;
+  const providerModels = PROVIDER_MODELS[providerType] || PROVIDER_MODELS[provider.id];
+  const isGitHub = providerType === 'github' || providerType === 'copilot' || provider.id === 'github';
 
   const getTierColor = (tier: string) => {
     switch (tier.toLowerCase()) {
@@ -968,7 +1167,9 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {providers.map((provider) => (
+        {providers.map((provider) => {
+          const pType = provider.type as string;
+          return (
           <motion.div 
             key={provider.id} 
             className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-750 hover:ring-2 hover:ring-purple-500/50 transition-all"
@@ -978,10 +1179,10 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center space-x-3">
                 <div className={`p-2 rounded-lg ${
-                  provider.type === 'openai' ? 'bg-green-500/20' : 
-                  provider.type === 'anthropic' ? 'bg-orange-500/20' :
-                  provider.type === 'deepseek' ? 'bg-blue-500/20' : 
-                  provider.type === 'github' || provider.id === 'github' ? 'bg-purple-500/20' : 'bg-gray-500/20'
+                  pType === 'openai' ? 'bg-green-500/20' : 
+                  pType === 'anthropic' ? 'bg-orange-500/20' :
+                  pType === 'deepseek' ? 'bg-blue-500/20' : 
+                  pType === 'github' || provider.id === 'github' ? 'bg-purple-500/20' : 'bg-gray-500/20'
                 }`}>
                   <Bot className="w-6 h-6" />
                 </div>
@@ -1067,7 +1268,7 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
               </button>
             </div>
           </motion.div>
-        ))}
+        );})}
       </div>
 
       {/* Provider Modal */}
@@ -1094,8 +1295,37 @@ function ChatTab({ selectedProvider, providers }: { selectedProvider: string | n
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [provider, setProvider] = useState(selectedProvider || 'anthropic');
+  const [model, setModel] = useState(''); // Model selection state
   const [mode, setMode] = useState<'chat' | 'code' | 'reason'>('chat');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Model options per provider
+  const MODEL_OPTIONS: Record<string, { id: string; name: string }[]> = {
+    anthropic: [
+      { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Default)' },
+      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+    ],
+    openai: [
+      { id: 'gpt-4o', name: 'GPT-4o (Default)' },
+      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+      { id: 'gpt-4', name: 'GPT-4' },
+      { id: 'o1', name: 'O1 (Reasoning)' },
+      { id: 'o1-mini', name: 'O1 Mini' },
+    ],
+    github: [
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet' },
+      { id: 'o1', name: 'O1' },
+      { id: 'o1-mini', name: 'O1 Mini' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+    ],
+    deepseek: [
+      { id: 'deepseek-chat', name: 'DeepSeek Chat' },
+      { id: 'deepseek-coder', name: 'DeepSeek Coder' },
+      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner' },
+    ],
+  };
 
   // Toggle thoughts visibility
   const toggleThoughts = (index: number) => {
@@ -1193,7 +1423,7 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
           ...messages.map(m => ({ role: m.role, content: m.content })),
           { role: 'user' as const, content: userMessage }
         ];
-        const result = await aiCenterService.chat.send(chatMessages, { provider });
+        const result = await aiCenterService.chat.send(chatMessages, { provider, model: model || undefined });
         response = result.content;
       }
 
@@ -1224,7 +1454,10 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
           </select>
           <select
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              setModel(''); // Reset model when provider changes
+            }}
             className="px-3 py-2 bg-gray-700 rounded-lg text-sm text-white"
             disabled={mode !== 'chat'}
           >
@@ -1232,6 +1465,19 @@ users, accounts, account_users, inventory, leads, conversations, messages, ai_pr
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+          {/* Model Selector */}
+          {mode === 'chat' && MODEL_OPTIONS[provider] && (
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="px-3 py-2 bg-gray-700 rounded-lg text-sm text-white"
+            >
+              <option value="">Default Model</option>
+              {MODEL_OPTIONS[provider].map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setMessages([])}
             className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm"

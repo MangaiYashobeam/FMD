@@ -678,6 +678,157 @@ app.get('/api/config/facebook', async (_req, res) => {
   });
 });
 
+// Public IAI Pattern Endpoint - For extension to load workflow patterns
+// No auth required - returns only active/default pattern for IAI soldiers
+app.get('/api/iai/pattern', async (_req, res): Promise<void> => {
+  try {
+    const { injectionService } = require('./services/injection.service');
+    
+    // Get active containers
+    const { containers } = await injectionService.listContainers({
+      isActive: true,
+      includePatterns: true,
+      limit: 10
+    });
+    
+    if (!containers || containers.length === 0) {
+      res.status(404).json({ 
+        success: false, 
+        error: 'No active injection containers found',
+        message: 'Please configure an injection container in the admin panel'
+      });
+      return;
+    }
+    
+    // Find default or first container
+    const container = containers.find((c: any) => c.isDefault) || containers[0];
+    
+    // Get patterns from container
+    const { patterns } = await injectionService.listPatterns({
+      containerId: container.id,
+      isActive: true,
+      limit: 10
+    });
+    
+    if (!patterns || patterns.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'No active patterns found in container',
+        containerId: container.id,
+        containerName: container.name
+      });
+      return;
+    }
+    
+    // Find default or first pattern
+    const pattern = patterns.find((p: any) => p.isDefault) || patterns[0];
+    
+    // Return pattern data for extension
+    res.json({
+      success: true,
+      container: {
+        id: container.id,
+        name: container.name,
+        category: container.category
+      },
+      pattern: {
+        id: pattern.id,
+        name: pattern.name,
+        version: pattern.version,
+        code: pattern.code,
+        schema: pattern.schema,
+        config: pattern.config,
+        tags: pattern.tags
+      },
+      loadedAt: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('[IAI Pattern] Error loading pattern:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load IAI pattern',
+      message: error.message
+    });
+  }
+});
+
+// Public IAI Metrics Endpoint - For extension to report execution metrics
+// No auth required - allows extension to report without login
+app.post('/api/iai/metrics', async (req, res): Promise<void> => {
+  try {
+    const { injectionService } = require('./services/injection.service');
+    
+    const { 
+      eventType,
+      patternId,
+      patternName,
+      containerId: _containerId,
+      containerName: _containerName,
+      stepIndex,
+      totalSteps,
+      duration,
+      success,
+      error: _error,
+      metadata: _metadata,
+      timestamp: _timestamp,
+      instanceId: _instanceId,
+      vehicleInfo: _vehicleInfo
+    } = req.body;
+
+    console.log(`[IAI Metrics] Event: ${eventType}`, {
+      patternId,
+      patternName,
+      success,
+      duration,
+      stepIndex,
+      totalSteps
+    });
+
+    // If we have a patternId, update the pattern's execution statistics
+    if (patternId && (eventType === 'pattern_execution_complete' || eventType === 'pattern_execution_end')) {
+      try {
+        const pattern = await injectionService.getPattern(patternId);
+        if (pattern) {
+          // Update pattern stats
+          const updateData: Record<string, number | Date> = {
+            totalExecutions: (pattern.totalExecutions || 0) + 1,
+            lastExecutedAt: new Date()
+          };
+          
+          if (success) {
+            updateData.successCount = (pattern.successCount || 0) + 1;
+            if (duration) {
+              updateData.avgExecutionTime = pattern.avgExecutionTime 
+                ? Math.round((pattern.avgExecutionTime + duration) / 2)
+                : duration;
+            }
+          } else {
+            updateData.failureCount = (pattern.failureCount || 0) + 1;
+          }
+
+          await injectionService.updatePattern(patternId, updateData);
+          console.log(`[IAI Metrics] Updated pattern stats for ${patternId}`);
+        }
+      } catch (err) {
+        console.error(`[IAI Metrics] Failed to update pattern stats:`, err);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Metric recorded',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('[IAI Metrics] Error recording metric:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record metric',
+      message: error.message
+    });
+  }
+});
+
 // Cloud AI Sales Assistant - PUBLIC (no auth required for potential customers)
 app.use('/api/cloud', require('./routes/cloud.routes').default);
 

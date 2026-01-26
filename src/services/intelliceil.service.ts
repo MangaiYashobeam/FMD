@@ -711,7 +711,7 @@ class IntelliceilService extends EventEmitter {
     }
 
     // Check if request should be allowed
-    const decision = this.shouldAllowRequest(ip, sourceKey, country);
+    const decision = this.shouldAllowRequest(ip, sourceKey, country, endpoint);
     
     if (decision.allowed) {
       this.allowedRequests++;
@@ -883,7 +883,23 @@ class IntelliceilService extends EventEmitter {
   // Request Filtering (Smart Mitigation)
   // ============================================
 
-  private shouldAllowRequest(ip: string, source: string, country?: string): { allowed: boolean; reason?: string } {
+  private shouldAllowRequest(ip: string, source: string, country?: string, endpoint?: string): { allowed: boolean; reason?: string } {
+    // ALWAYS ALLOW extension and IAI endpoints - these are critical for operation
+    if (endpoint) {
+      const trustedPaths = [
+        '/api/extension/',
+        '/api/iai/',
+        '/api/health',
+        '/api/auth/',
+        '/api/injection/',
+        '/extension/',
+        '/iai/',
+      ];
+      if (trustedPaths.some(p => endpoint.startsWith(p))) {
+        return { allowed: true };
+      }
+    }
+    
     // Always check manually blocked IPs first
     if (this.config.blockedIPs.includes(ip)) {
       return { allowed: false, reason: 'IP is manually blocked' };

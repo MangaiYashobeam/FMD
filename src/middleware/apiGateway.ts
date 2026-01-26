@@ -171,7 +171,8 @@ export const ring2IPSentinel = (req: Request, res: Response, next: NextFunction)
   ipRequestCounts.set(ip, ipStats);
 
   // Auto-blacklist if too many requests (DDoS protection)
-  if (ipStats.count > 500) {
+  // 2000 requests/min threshold - dashboards can be request-heavy
+  if (ipStats.count > 2000) {
     ipBlacklist.add(ip);
     logger.error(`🔐 Ring 2 (IP Sentinel): IP Auto-blacklisted`, {
       requestId: context.requestId,
@@ -210,8 +211,8 @@ interface RateBucket {
 
 const rateBuckets = new Map<string, RateBucket>();
 const RATE_CONFIG = {
-  bucketSize: 60,        // Max tokens
-  refillRate: 1,         // Tokens per second
+  bucketSize: 300,       // Max tokens - increased for dashboard heavy apps
+  refillRate: 5,         // Tokens per second - faster refill
   refillInterval: 1000,  // 1 second
 };
 
@@ -221,11 +222,22 @@ const RATE_CONFIG = {
 export const ring3RateShield = (req: Request, res: Response, next: NextFunction): void => {
   const context = (req as any).securityContext as SecurityContext;
   
-  // Skip rate limiting for critical OAuth callbacks
+  // Skip rate limiting for critical paths and high-frequency dashboard endpoints
   const rateLimitSkipPaths = [
     '/facebook/callback',
     '/auth/facebook/callback',
     '/config/facebook',
+    '/extension/status',
+    '/extension/heartbeat',
+    '/admin/stats',
+    '/admin/accounts',
+    '/ai-center/dashboard',
+    '/ai-center/chat',
+    '/injection/stats',
+    '/injection/containers',
+    '/messages/conversations',
+    '/iai/pattern',
+    '/training/console',
   ];
   if (rateLimitSkipPaths.some(p => req.path.includes(p))) {
     context.rings.rateShield = true;
@@ -489,6 +501,7 @@ export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunct
       '/training/console/status',    // ROOT Console status check (extension/webapp)
       '/training/console/log',       // ROOT Console log entries (extension)
       '/training/upload',            // Training session upload (extension - no auth required)
+      '/iai/pattern',                // IAI pattern loading (extension - no auth required)
     ];
     const isPublicPath = publicPaths.some(p => req.path.includes(p));
     

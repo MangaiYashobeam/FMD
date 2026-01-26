@@ -99,96 +99,406 @@ const IAI_CONFIG = {
 };
 
 // ============================================
-// TRAINING INJECTION SYSTEM
+// INJECTION SYSTEM - DYNAMIC PATTERN LOADING
 // ============================================
 
 /**
- * Training data storage - can be dynamically updated
- * This is populated from the Training Recorder extension
+ * Injection data storage - loaded from server injection API
+ * This is the ONLY source of automation patterns - NO hardcoded workflows
  */
-let IAI_TRAINING = {
+let IAI_INJECTION = {
   _loaded: false,
-  _version: null,
-  _sessionId: null,
+  _patternId: null,
+  _patternName: null,
+  _patternVersion: null,
+  _containerId: null,
+  _containerName: null,
+  _loadedAt: null,
   
-  // Field selectors learned from training
+  // Workflow steps from injected pattern
+  WORKFLOW: [],
+  
+  // Field selectors from injection
   FIELD_SELECTORS: {},
   
-  // Step sequence for automation
-  STEPS: [],
-  
-  // Timing configuration
+  // Timing configuration from injection
   TIMING: {
     averageDelay: 500,
     recommendedDelay: 400,
   },
+  
+  // Pattern metadata
+  METADATA: {},
 };
 
+// Legacy alias for backwards compatibility
+let IAI_TRAINING = IAI_INJECTION;
+
 /**
- * Load training data from storage or API
+ * Process pattern data from either public or authenticated endpoint
  */
-async function loadTrainingData() {
+function processPatternData(pattern, container) {
   try {
-    // First try local storage
-    const stored = await chrome.storage?.local?.get('iaiTraining');
-    if (stored?.iaiTraining) {
-      IAI_TRAINING = { ...IAI_TRAINING, ...stored.iaiTraining, _loaded: true };
-      console.log('[IAI] ✅ Training data loaded from storage');
-      console.log('[IAI] Training version:', IAI_TRAINING._version);
-      console.log('[IAI] Training session:', IAI_TRAINING._sessionId);
-      return true;
-    }
+    // Parse workflow from pattern code
+    let workflow = [];
+    let patternCode = pattern.code;
     
-    // Then try API
-    const apiUrl = window.location.hostname === 'localhost' 
-      ? IAI_CONFIG.API.LOCAL 
-      : IAI_CONFIG.API.PRODUCTION;
-    
-    const token = await getAuthToken();
-    if (token) {
-      const response = await fetch(`${apiUrl}/training/inject/iai`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.code) {
-          IAI_TRAINING = { ...IAI_TRAINING, ...data.code, _loaded: true };
-          // Cache for future use
-          await chrome.storage?.local?.set({ iaiTraining: data.code });
-          console.log('[IAI] ✅ Training data loaded from API');
-          return true;
-        }
+    // Handle both string and object code formats
+    if (typeof patternCode === 'string') {
+      try {
+        patternCode = JSON.parse(patternCode);
+      } catch (e) {
+        console.error('[IAI] Failed to parse pattern code string:', e);
       }
     }
     
-    console.log('[IAI] ⚠️ No training data available - using defaults');
-    return false;
+    // Extract workflow steps
+    if (patternCode?.workflow) {
+      workflow = patternCode.workflow;
+    } else if (patternCode?.steps) {
+      workflow = patternCode.steps;
+    } else if (patternCode?.STEPS) {
+      workflow = patternCode.STEPS;
+    }
+    
+    IAI_INJECTION = {
+      _loaded: true,
+      _patternId: pattern.id,
+      _patternName: pattern.name,
+      _patternVersion: pattern.version,
+      _containerId: container?.id,
+      _containerName: container?.name,
+      _loadedAt: new Date(),
+      WORKFLOW: workflow,
+      FIELD_SELECTORS: patternCode?.fieldMappings || patternCode?.fieldSelectors || {},
+      TIMING: patternCode?.timing || { averageDelay: 500, recommendedDelay: 400 },
+      METADATA: {
+        tags: pattern.tags,
+        codeType: pattern.codeType || 'workflow',
+        isDefault: pattern.isDefault,
+        errorRecovery: patternCode?.errorRecovery || {},
+        actions: patternCode?.actions || {},
+      },
+    };
+    
+    // Update legacy alias
+    IAI_TRAINING = IAI_INJECTION;
+    
+    // Cache for offline use
+    chrome.storage?.local?.set({ iaiInjection: IAI_INJECTION });
+    
+    console.log(`[IAI] ✅ Injection pattern loaded: ${pattern.name} v${pattern.version}`);
+    console.log(`[IAI] 📋 Workflow steps: ${workflow.length}`);
+    console.log(`[IAI] 📦 Container: ${container?.name || 'default'}`);
+    
+    return true;
   } catch (e) {
-    console.debug('[IAI] Training data load error:', e.message);
+    console.error('[IAI] processPatternData error:', e);
     return false;
   }
 }
 
 /**
- * Inject new training data at runtime
- * Called from extension popup or background script
+ * Load cached pattern from Chrome storage
  */
-function injectTrainingData(trainingData) {
-  if (!trainingData) return false;
-  
+async function loadCachedPattern() {
   try {
-    IAI_TRAINING = { ...IAI_TRAINING, ...trainingData, _loaded: true };
-    console.log('[IAI] 🎯 New training data injected');
-    console.log('[IAI] Fields:', Object.keys(IAI_TRAINING.FIELD_SELECTORS || {}).join(', '));
-    
-    // Save to storage
-    chrome.storage?.local?.set({ iaiTraining: trainingData }).catch(() => {});
-    return true;
+    const cached = await chrome.storage?.local?.get('iaiInjection');
+    if (cached?.iaiInjection?._loaded) {
+      IAI_INJECTION = cached.iaiInjection;
+      IAI_TRAINING = IAI_INJECTION;
+      console.log('[IAI] ⚠️ Using cached injection pattern:', IAI_INJECTION._patternName);
+      return true;
+    }
+    console.error('[IAI] ❌ No cached pattern available');
+    return false;
   } catch (e) {
-    console.error('[IAI] Training injection failed:', e);
+    console.error('[IAI] loadCachedPattern error:', e);
     return false;
   }
+}
+
+/**
+ * Load injection pattern from server
+ * Uses PUBLIC endpoint first (no auth required), falls back to authenticated endpoint
+ */
+async function loadInjectionPattern() {
+  try {
+    console.log('[IAI] 🔄 Loading injection pattern from server...');
+    
+    const apiUrl = window.location.hostname === 'localhost' 
+      ? IAI_CONFIG.API.LOCAL 
+      : IAI_CONFIG.API.PRODUCTION;
+    
+    // TRY PUBLIC ENDPOINT FIRST (no auth required)
+    console.log('[IAI] 📡 Trying public pattern endpoint...');
+    const publicResponse = await fetch(`${apiUrl}/iai/pattern`);
+    
+    if (publicResponse.ok) {
+      const publicData = await publicResponse.json();
+      if (publicData.success && publicData.pattern) {
+        console.log('[IAI] ✅ Loaded pattern from public endpoint');
+        return processPatternData(publicData.pattern, publicData.container);
+      }
+    }
+    
+    // FALLBACK: Try authenticated endpoint
+    console.log('[IAI] 📡 Trying authenticated endpoint...');
+    const token = await getAuthToken();
+    if (!token) {
+      console.warn('[IAI] ⚠️ No auth token - using cached pattern if available');
+      return loadCachedPattern();
+    }
+    
+    // Fetch active pattern from injection API
+    const response = await fetch(`${apiUrl}/injection/slot/active`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.data) {
+        const { pattern, container } = data.data;
+        
+        // Parse workflow from pattern code
+        let workflow = [];
+        try {
+          if (typeof pattern.code === 'string') {
+            const parsed = JSON.parse(pattern.code);
+            workflow = parsed.steps || parsed.workflow || parsed.STEPS || [];
+          } else if (pattern.code?.steps || pattern.code?.workflow) {
+            workflow = pattern.code.steps || pattern.code.workflow;
+          }
+        } catch (parseErr) {
+          console.error('[IAI] Failed to parse pattern code:', parseErr);
+        }
+        
+        IAI_INJECTION = {
+          _loaded: true,
+          _patternId: pattern.id,
+          _patternName: pattern.name,
+          _patternVersion: pattern.version,
+          _containerId: container?.id,
+          _containerName: container?.name,
+          _loadedAt: new Date(),
+          WORKFLOW: workflow,
+          FIELD_SELECTORS: pattern.code?.fieldSelectors || {},
+          TIMING: pattern.code?.timing || { averageDelay: 500, recommendedDelay: 400 },
+          METADATA: {
+            tags: pattern.tags,
+            codeType: pattern.codeType,
+            isDefault: pattern.isDefault,
+          },
+        };
+        
+        // Update legacy alias
+        IAI_TRAINING = IAI_INJECTION;
+        
+        // Cache for offline use
+        await chrome.storage?.local?.set({ iaiInjection: IAI_INJECTION });
+        
+        console.log(`[IAI] ✅ Injection pattern loaded: ${pattern.name} v${pattern.version}`);
+        console.log(`[IAI] 📋 Workflow steps: ${workflow.length}`);
+        console.log(`[IAI] 📦 Container: ${container?.name || 'default'}`);
+        return true;
+      }
+    }
+    
+    // Try cached pattern if server unavailable
+    const cached = await chrome.storage?.local?.get('iaiInjection');
+    if (cached?.iaiInjection?._loaded) {
+      IAI_INJECTION = cached.iaiInjection;
+      IAI_TRAINING = IAI_INJECTION;
+      console.log('[IAI] ⚠️ Using cached injection pattern');
+      return true;
+    }
+    
+    console.error('[IAI] ❌ No injection pattern available - IAI cannot operate without patterns');
+    return false;
+  } catch (e) {
+    console.error('[IAI] Injection pattern load error:', e.message);
+    return false;
+  }
+}
+
+// Legacy function alias
+const loadTrainingData = loadInjectionPattern;
+
+/**
+ * Execute workflow from injected pattern
+ * This is the main pattern execution engine
+ */
+async function executeInjectedWorkflow(vehicleData) {
+  if (!IAI_INJECTION._loaded || !IAI_INJECTION.WORKFLOW.length) {
+    console.error('[IAI] ❌ No injection pattern loaded - cannot execute workflow');
+    return { success: false, error: 'No injection pattern loaded' };
+  }
+  
+  console.log(`[IAI] 🚀 Executing injected workflow: ${IAI_INJECTION._patternName}`);
+  console.log(`[IAI] 📋 Steps to execute: ${IAI_INJECTION.WORKFLOW.length}`);
+  
+  const startTime = Date.now();
+  const stealth = new IAIStealth();
+  const results = {
+    success: false,
+    stepsExecuted: 0,
+    stepsTotal: IAI_INJECTION.WORKFLOW.length,
+    errors: [],
+    completed: [],
+    duration: 0,
+  };
+  
+  for (let i = 0; i < IAI_INJECTION.WORKFLOW.length; i++) {
+    const step = IAI_INJECTION.WORKFLOW[i];
+    console.log(`[IAI] Step ${i + 1}/${IAI_INJECTION.WORKFLOW.length}: ${step.action || step.type} - ${step.description || step.fieldType || ''}`);
+    
+    try {
+      const stepResult = await executeWorkflowStep(step, vehicleData, stealth);
+      results.stepsExecuted++;
+      
+      if (stepResult.success) {
+        results.completed.push({ step: i + 1, action: step.action, field: step.fieldType });
+      } else {
+        results.errors.push({ step: i + 1, error: stepResult.error, action: step.action });
+        // Continue on non-critical errors
+        if (step.critical) {
+          console.error(`[IAI] Critical step ${i + 1} failed - aborting`);
+          break;
+        }
+      }
+      
+      // Delay between steps
+      const delay = step.delay || IAI_INJECTION.TIMING.recommendedDelay;
+      await stealth.delay(delay * 0.8, delay * 1.2);
+      
+    } catch (stepError) {
+      console.error(`[IAI] Step ${i + 1} error:`, stepError);
+      results.errors.push({ step: i + 1, error: stepError.message });
+    }
+  }
+  
+  results.success = results.errors.length === 0 || results.stepsExecuted > IAI_INJECTION.WORKFLOW.length * 0.7;
+  results.duration = Date.now() - startTime;
+  console.log(`[IAI] Workflow complete: ${results.stepsExecuted}/${results.stepsTotal} steps (${results.errors.length} errors) in ${results.duration}ms`);
+  
+  return results;
+}
+
+/**
+ * Execute a single workflow step
+ */
+async function executeWorkflowStep(step, vehicleData, stealth) {
+  const action = step.action || step.type;
+  const fieldType = step.fieldType || step.field;
+  const value = resolveStepValue(step, vehicleData);
+  
+  switch (action) {
+    case 'click':
+      const clickEl = await findElementForStep(step);
+      if (clickEl) {
+        await stealth.click(clickEl);
+        return { success: true };
+      }
+      return { success: false, error: `Element not found for click: ${step.selector || step.label}` };
+      
+    case 'type':
+    case 'input':
+      const inputEl = await findElementForStep(step);
+      if (inputEl) {
+        await stealth.click(inputEl);
+        await stealth.type(inputEl, String(value || ''));
+        return { success: true };
+      }
+      return { success: false, error: `Input not found: ${step.selector || step.label}` };
+      
+    case 'select':
+    case 'dropdown':
+      const selectSuccess = await selectFacebookDropdownEnhancedV2(step.label || fieldType, value, stealth);
+      return { success: selectSuccess };
+      
+    case 'wait':
+      await stealth.delay(step.duration || 1000, (step.duration || 1000) + 500);
+      return { success: true };
+      
+    case 'scroll':
+      await stealth.scroll(step.direction || 'down', step.amount || 300);
+      return { success: true };
+      
+    case 'navigate':
+      window.location.href = step.url || step.destination;
+      return { success: true };
+      
+    default:
+      console.warn(`[IAI] Unknown step action: ${action}`);
+      return { success: false, error: `Unknown action: ${action}` };
+  }
+}
+
+/**
+ * Find element for a workflow step
+ */
+async function findElementForStep(step) {
+  // Try selector first
+  if (step.selector) {
+    try {
+      const el = document.querySelector(step.selector);
+      if (el && isVisible(el)) return el;
+    } catch (e) { /* invalid selector */ }
+  }
+  
+  // Try label with C() function
+  if (step.label) {
+    const el = C('label', step.label) || C('span', step.label) || C('div', step.label);
+    if (el) return el;
+  }
+  
+  // Try aria-label
+  if (step.ariaLabel) {
+    const el = document.querySelector(`[aria-label="${step.ariaLabel}"]`) ||
+               document.querySelector(`[aria-label*="${step.ariaLabel}"]`);
+    if (el) return el;
+  }
+  
+  // Try field selectors from injection
+  if (step.fieldType && IAI_INJECTION.FIELD_SELECTORS[step.fieldType]) {
+    const fieldSelector = IAI_INJECTION.FIELD_SELECTORS[step.fieldType];
+    if (fieldSelector.primary) {
+      try {
+        const el = document.querySelector(fieldSelector.primary);
+        if (el) return el;
+      } catch (e) { /* invalid selector */ }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Resolve the value for a step from vehicle data
+ */
+function resolveStepValue(step, vehicleData) {
+  if (step.value) return step.value;
+  if (!step.fieldType || !vehicleData) return null;
+  
+  const fieldMap = {
+    'vehicleType': vehicleData.vehicleType || 'Car/Truck',
+    'year': vehicleData.year,
+    'make': vehicleData.make,
+    'model': vehicleData.model,
+    'price': vehicleData.price,
+    'mileage': vehicleData.mileage,
+    'description': vehicleData.description,
+    'condition': vehicleData.condition,
+    'exteriorColor': vehicleData.exteriorColor || vehicleData.color,
+    'interiorColor': vehicleData.interiorColor,
+    'bodyStyle': vehicleData.bodyStyle || vehicleData.body,
+    'fuelType': vehicleData.fuelType || vehicleData.fuel,
+    'transmission': vehicleData.transmission,
+    'trim': vehicleData.trim,
+    'vin': vehicleData.vin,
+  };
+  
+  return fieldMap[step.fieldType] || null;
 }
 
 /**
@@ -243,14 +553,90 @@ function findWithTrainedSelector(fieldType) {
   return null;
 }
 
-// Expose training injection to window for external control
+// Expose injection system to window for external control
 if (typeof window !== 'undefined') {
-  window.__IAI_INJECT_TRAINING__ = injectTrainingData;
-  window.__IAI_TRAINING__ = IAI_TRAINING;
+  window.__IAI_INJECTION__ = IAI_INJECTION;
+  window.__IAI_LOAD_PATTERN__ = loadInjectionPattern;
+  window.__IAI_CLEAR_CACHE__ = clearInjectionCache;
+  // Legacy aliases
+  window.__IAI_INJECT_TRAINING__ = (data) => {
+    console.warn('[IAI] __IAI_INJECT_TRAINING__ is deprecated, use injection API instead');
+    return false;
+  };
+  window.__IAI_TRAINING__ = IAI_INJECTION;
 }
 
-// Load training data on initialization
-loadTrainingData().catch(console.debug);
+/**
+ * Clear cached injection pattern - forces fresh load from server
+ */
+async function clearInjectionCache() {
+  console.log('[IAI] 🧹 Clearing injection cache...');
+  try {
+    await chrome.storage?.local?.remove('iaiInjection');
+    IAI_INJECTION = {
+      _loaded: false,
+      _patternId: null,
+      _patternName: null,
+      _patternVersion: null,
+      _containerId: null,
+      _containerName: null,
+      _loadedAt: null,
+      WORKFLOW: [],
+      FIELD_SELECTORS: {},
+      TIMING: { averageDelay: 500, recommendedDelay: 400 },
+      METADATA: {},
+    };
+    IAI_TRAINING = IAI_INJECTION;
+    console.log('[IAI] ✅ Injection cache cleared');
+    return true;
+  } catch (e) {
+    console.error('[IAI] Failed to clear cache:', e);
+    return false;
+  }
+}
+
+/**
+ * Report IAI metrics to server for analytics
+ */
+async function reportIAIMetric(eventType, data) {
+  try {
+    const token = await getAuthToken();
+    // Flatten data into the request body for server compatibility
+    await fetch(`${IAI_CONFIG.API.PRODUCTION}/iai/metrics`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        eventType,
+        // Spread the data directly so server gets patternId, containerId, etc. at top level
+        ...data,
+        source: 'extension',
+        extensionVersion: '3.4.0',
+        timestamp: data.timestamp || new Date().toISOString(),
+      }),
+    });
+    console.log(`[IAI] 📊 Metric reported: ${eventType}`);
+  } catch (e) {
+    console.debug('[IAI] Metric report failed:', e.message);
+  }
+}
+
+/**
+ * Get auth token from storage
+ */
+async function getAuthToken() {
+  try {
+    const result = await chrome.storage?.local?.get('authToken');
+    return result?.authToken || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Load injection pattern on initialization (but don't use cache)
+loadInjectionPattern().catch(console.debug);
 
 // ============================================
 // CORE HELPER FUNCTIONS (Competitor-Proven)
@@ -1429,54 +1815,55 @@ class IAILister {
   }
   
   /**
-   * Create a new vehicle listing
+   * Create a new vehicle listing using INJECTED PATTERNS ONLY
+   * No hardcoded workflow - patterns must be loaded from injection system
    */
   async createListing(vehicleData, images = []) {
-    console.log('🚗 Creating vehicle listing:', vehicleData);
+    console.log('🚗 Creating vehicle listing with injection system:', vehicleData);
+    
+    // CRITICAL: Load injection pattern if not loaded
+    if (!IAI_INJECTION._loaded) {
+      console.log('[IAI] 🔄 Loading injection pattern before listing...');
+      const loaded = await loadInjectionPattern();
+      if (!loaded) {
+        console.error('[IAI] ❌ Cannot create listing - no injection pattern available');
+        return { 
+          success: false, 
+          error: 'No injection pattern loaded',
+          message: 'IAI requires an injected pattern to operate. Please configure a pattern in the admin panel.'
+        };
+      }
+    }
+    
+    // Log pattern info
+    console.log(`[IAI] 📦 Using pattern: ${IAI_INJECTION._patternName} v${IAI_INJECTION._patternVersion}`);
+    console.log(`[IAI] 📋 Workflow steps: ${IAI_INJECTION.WORKFLOW.length}`);
     
     // Navigate to create listing page
     await this.navigator.navigateTo('create_listing');
     await this.stealth.delay(2000, 3000);
     
-    // Fill in form fields
-    const formFields = [
-      { selectors: IAI_SELECTORS.marketplace.yearDropdown, value: vehicleData.year, type: 'select' },
-      { selectors: IAI_SELECTORS.marketplace.makeDropdown, value: vehicleData.make, type: 'select' },
-      { selectors: IAI_SELECTORS.marketplace.modelDropdown, value: vehicleData.model, type: 'select' },
-      { selectors: IAI_SELECTORS.marketplace.priceInput, value: vehicleData.price, type: 'input' },
-      { selectors: IAI_SELECTORS.marketplace.mileageInput, value: vehicleData.mileage, type: 'input' },
-      { selectors: IAI_SELECTORS.marketplace.descriptionInput, value: vehicleData.description, type: 'textarea' },
-      { selectors: IAI_SELECTORS.marketplace.conditionDropdown, value: vehicleData.condition, type: 'select' },
-    ];
+    // Execute injected workflow - this is the ONLY way to fill forms
+    const workflowResult = await executeInjectedWorkflow(vehicleData);
     
-    for (const field of formFields) {
-      if (!field.value) continue;
-      
-      const element = await this.navigator.findElement(field.selectors, {
-        description: `${field.type} field`,
-        useAI: true,
-      });
-      
-      if (element) {
-        if (field.type === 'select') {
-          await this.fillDropdown(element, field.value);
-        } else {
-          await this.stealth.click(element);
-          await this.stealth.type(element, String(field.value));
-        }
-        await this.stealth.delay(500, 1500);
-      } else {
-        console.warn(`Field not found for: ${field.value}`);
-      }
+    if (!workflowResult.success && workflowResult.errors.length > 0) {
+      console.warn('[IAI] Workflow completed with errors:', workflowResult.errors);
     }
     
-    // Upload images
+    // Upload images after form is filled
     if (images.length > 0) {
       await this.uploadImages(images);
     }
     
-    console.log('✅ Listing form filled. Ready for review.');
-    return true;
+    console.log(`✅ Listing workflow complete: ${workflowResult.stepsExecuted}/${workflowResult.stepsTotal} steps`);
+    return {
+      success: workflowResult.success,
+      stepsExecuted: workflowResult.stepsExecuted,
+      stepsTotal: workflowResult.stepsTotal,
+      errors: workflowResult.errors,
+      patternUsed: IAI_INJECTION._patternName,
+      patternVersion: IAI_INJECTION._patternVersion,
+    };
   }
   
   /**
@@ -2077,8 +2464,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       switch (message.type) {
         case 'IAI_FILL_LISTING':
-          const fillResult = await fillVehicleListingEnhanced(message.vehicle);
-          sendResponse(fillResult);
+          // FIXED: Use injection system ONLY - NO HARDCODED FALLBACK
+          console.log('[IAI] 🚗 IAI_FILL_LISTING received');
+          
+          // Clear any stale cached patterns first
+          await chrome.storage?.local?.remove('iaiInjection');
+          IAI_INJECTION._loaded = false;
+          
+          // Load fresh injection pattern from server
+          console.log('[IAI] 🔄 Loading fresh injection pattern from server...');
+          const loaded = await loadInjectionPattern();
+          
+          if (!loaded || !IAI_INJECTION._loaded || !IAI_INJECTION.WORKFLOW?.length) {
+            console.error('[IAI] ❌ NO INJECTION PATTERN AVAILABLE - CANNOT PROCEED');
+            console.error('[IAI] ❌ Please configure a pattern in IAI Command Center first');
+            
+            // Report failure to server
+            await reportIAIMetric('pattern_load_failed', {
+              error: 'No injection pattern available',
+              timestamp: new Date().toISOString(),
+            });
+            
+            sendResponse({
+              success: false,
+              error: 'No injection pattern available. Please configure a pattern in IAI Command Center.',
+              requiresPattern: true,
+            });
+            break;
+          }
+          
+          // Use injection workflow ONLY
+          console.log(`[IAI] ✅ Using pattern: ${IAI_INJECTION._patternName} v${IAI_INJECTION._patternVersion}`);
+          console.log(`[IAI] 📋 Workflow steps: ${IAI_INJECTION.WORKFLOW.length}`);
+          
+          // Report pattern execution start
+          await reportIAIMetric('pattern_execution_start', {
+            patternId: IAI_INJECTION._patternId,
+            patternName: IAI_INJECTION._patternName,
+            patternVersion: IAI_INJECTION._patternVersion,
+            containerId: IAI_INJECTION._containerId,
+            containerName: IAI_INJECTION._containerName,
+            workflowSteps: IAI_INJECTION.WORKFLOW.length,
+            vehicleData: message.vehicle,
+            timestamp: new Date().toISOString(),
+          });
+          
+          const workflowResult = await executeInjectedWorkflow(message.vehicle);
+          
+          // Report pattern execution result
+          await reportIAIMetric('pattern_execution_complete', {
+            patternId: IAI_INJECTION._patternId,
+            patternName: IAI_INJECTION._patternName,
+            patternVersion: IAI_INJECTION._patternVersion,
+            containerId: IAI_INJECTION._containerId,
+            containerName: IAI_INJECTION._containerName,
+            success: workflowResult.success,
+            stepsExecuted: workflowResult.stepsExecuted,
+            stepsTotal: workflowResult.stepsTotal,
+            errors: workflowResult.errors,
+            duration: workflowResult.duration || 0,
+            timestamp: new Date().toISOString(),
+          });
+          
+          sendResponse({
+            success: workflowResult.success,
+            filledFields: workflowResult.completed.map(s => s.field),
+            failedFields: workflowResult.errors.map(e => e.action),
+            stepsExecuted: workflowResult.stepsExecuted,
+            stepsTotal: workflowResult.stepsTotal,
+            patternUsed: IAI_INJECTION._patternName,
+            patternVersion: IAI_INJECTION._patternVersion,
+          });
           break;
           
         case 'IAI_UPLOAD_IMAGES':
@@ -2098,7 +2554,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             page: detectCurrentPage(),
             url: window.location.href,
             tabType: detectPageTabType(),
+            // Include injection status
+            injection: {
+              loaded: IAI_INJECTION._loaded,
+              patternName: IAI_INJECTION._patternName,
+              patternVersion: IAI_INJECTION._patternVersion,
+              workflowSteps: IAI_INJECTION.WORKFLOW?.length || 0,
+              containerName: IAI_INJECTION._containerName,
+              loadedAt: IAI_INJECTION._loadedAt,
+            },
           });
+          break;
+        
+        case 'IAI_RELOAD_PATTERN':
+          // Force reload injection pattern (clears cache first)
+          console.log('[IAI] 🔄 Force reloading injection pattern...');
+          await clearInjectionCache();
+          const reloaded = await loadInjectionPattern();
+          sendResponse({
+            success: reloaded,
+            patternName: IAI_INJECTION._patternName,
+            patternVersion: IAI_INJECTION._patternVersion,
+            workflowSteps: IAI_INJECTION.WORKFLOW?.length || 0,
+          });
+          break;
+        
+        case 'IAI_CLEAR_CACHE':
+          // Clear all cached patterns
+          console.log('[IAI] 🧹 Clearing all IAI cache...');
+          const cleared = await clearInjectionCache();
+          sendResponse({ success: cleared });
           break;
         
         // ============================================

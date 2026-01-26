@@ -308,6 +308,82 @@ router.post('/test-pattern/:id', asyncHandler(async (req: AuthRequest, res: Resp
 }));
 
 // ============================================
+// Slot Routes - For Extension Pattern Loading
+// ============================================
+
+/**
+ * GET /injection/slot/active
+ * Returns the active/default pattern for the extension to use
+ * This is the main endpoint IAI calls to load its workflow
+ */
+router.get('/slot/active', asyncHandler(async (_req: AuthRequest, res: Response) => {
+  try {
+    // Get the default container (FBM)
+    const containers = await injectionService.listContainers({
+      isActive: true,
+      includePatterns: true,
+      limit: 10
+    });
+
+    if (!containers.containers || containers.containers.length === 0) {
+      res.status(404).json({ 
+        success: false, 
+        error: 'No active containers found',
+        message: 'Please create and configure an injection container in the admin panel'
+      });
+      return;
+    }
+
+    // Find the default or first container
+    const container = containers.containers.find(c => c.isDefault) || containers.containers[0];
+    
+    // Get patterns for this container
+    const patterns = await injectionService.listPatterns({
+      containerId: container.id,
+      isActive: true,
+      limit: 10
+    });
+
+    if (!patterns.patterns || patterns.patterns.length === 0) {
+      res.status(404).json({ 
+        success: false, 
+        error: 'No active patterns found',
+        message: 'Please create and configure an injection pattern in the admin panel'
+      });
+      return;
+    }
+
+    // Find the default or first pattern
+    const pattern = patterns.patterns.find(p => p.isDefault) || patterns.patterns[0];
+    
+    logger.info(`[InjectionSlot] Serving pattern "${pattern.name}" v${pattern.version} from container "${container.name}"`);
+
+    res.json({
+      success: true,
+      data: {
+        container: {
+          id: container.id,
+          name: container.name,
+          category: container.category,
+        },
+        pattern: {
+          id: pattern.id,
+          name: pattern.name,
+          version: pattern.version,
+          code: pattern.code,
+          codeType: pattern.codeType,
+          isDefault: pattern.isDefault,
+          tags: pattern.tags,
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('[InjectionSlot] Error loading active pattern:', error);
+    res.status(500).json({ success: false, error: 'Failed to load active pattern' });
+  }
+}));
+
+// ============================================
 // Statistics Routes
 // ============================================
 
@@ -337,6 +413,162 @@ router.get('/containers/:id/stats', asyncHandler(async (req: AuthRequest, res: R
 
   const stats = await injectionService.getContainerStats(id);
   res.json({ success: true, data: stats });
+}));
+
+// ============================================
+// Metrics Routes - For Extension Telemetry
+// ============================================
+
+/**
+ * POST /injection/metrics
+ * Receives execution metrics from the browser extension
+ * This is a PUBLIC endpoint - no auth required for extension reporting
+ */
+router.post('/metrics', asyncHandler(async (req: AuthRequest, res: Response) => {
+  try {
+    const { 
+      eventType,        // e.g., 'pattern_execution_start', 'pattern_execution_complete', 'step_executed'
+      patternId,
+      patternName,
+      containerId: _containerId,
+      containerName: _containerName,
+      stepIndex,
+      totalSteps,
+      duration,
+      success,
+      error: _error,
+      metadata: _metadata,
+      timestamp: _timestamp,
+      instanceId: _instanceId,
+      vehicleInfo: _vehicleInfo
+    } = req.body;
+
+    logger.info(`[IAI Metrics] Event: ${eventType}`, {
+      patternId,
+      patternName,
+      success,
+      duration,
+      stepIndex,
+      totalSteps
+    });
+
+    // If we have a patternId, update the pattern's execution statistics
+    if (patternId && (eventType === 'pattern_execution_complete' || eventType === 'pattern_execution_end')) {
+      try {
+        const pattern = await injectionService.getPattern(patternId);
+        if (pattern) {
+          // Update pattern stats
+          const updateData: Record<string, number | Date> = {
+            totalExecutions: (pattern.totalExecutions || 0) + 1,
+            lastExecutedAt: new Date()
+          };
+          
+          if (success) {
+            updateData.successCount = (pattern.successCount || 0) + 1;
+            if (duration) {
+              updateData.avgExecutionTime = pattern.avgExecutionTime 
+                ? Math.round((pattern.avgExecutionTime + duration) / 2)
+                : duration;
+            }
+          } else {
+            updateData.failureCount = (pattern.failureCount || 0) + 1;
+          }
+
+          await injectionService.updatePattern(patternId, updateData);
+          logger.info(`[IAI Metrics] Updated pattern stats for ${patternId}`);
+        }
+      } catch (err) {
+        logger.error(`[IAI Metrics] Failed to update pattern stats:`, err);
+      }
+    }
+
+    // Store metric in execution log if needed
+    // TODO: Could add injectionService.logMetric() for detailed tracking
+
+    res.json({ 
+      success: true, 
+      message: 'Metric recorded',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('[IAI Metrics] Error recording metric:', error);
+    res.status(500).json({ success: false, error: 'Failed to record metric' });
+  }
+}));
+
+/**
+ * GET /injection/metrics
+ * Returns aggregated metrics for the dashboard
+ */
+router.get('/metrics', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { containerId, patternId: _patternId, startDate, endDate, limit } = req.query;
+  const startDateStr = getString(startDate);
+  const endDateStr = getString(endDate);
+
+  try {
+    // Get all patterns with execution stats
+    const patterns = await injectionService.listPatterns({
+      containerId: getString(containerId),
+      isActive: undefined, // Get all
+      limit: getInt(limit) || 50
+    });
+
+    // Calculate aggregated metrics
+    let totalExecutions = 0;
+    let totalSuccess = 0;
+    let totalFailures = 0;
+    let avgExecutionTime = 0;
+    let executionCount = 0;
+
+    const patternStats = patterns.patterns.map(p => {
+      totalExecutions += p.totalExecutions || 0;
+      totalSuccess += p.successCount || 0;
+      totalFailures += p.failureCount || 0;
+      if (p.avgExecutionTime) {
+        avgExecutionTime += p.avgExecutionTime;
+        executionCount++;
+      }
+
+      return {
+        patternId: p.id,
+        patternName: p.name,
+        containerId: p.containerId,
+        totalExecutions: p.totalExecutions || 0,
+        successCount: p.successCount || 0,
+        failureCount: p.failureCount || 0,
+        successRate: p.totalExecutions > 0 
+          ? Math.round(((p.successCount || 0) / p.totalExecutions) * 100) 
+          : 0,
+        avgExecutionTime: p.avgExecutionTime || 0,
+        lastExecutedAt: p.lastExecutedAt
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalExecutions,
+          totalSuccess,
+          totalFailures,
+          successRate: totalExecutions > 0 
+            ? Math.round((totalSuccess / totalExecutions) * 100) 
+            : 0,
+          avgExecutionTime: executionCount > 0 
+            ? Math.round(avgExecutionTime / executionCount) 
+            : 0
+        },
+        patterns: patternStats,
+        period: {
+          startDate: startDateStr || 'all-time',
+          endDate: endDateStr || 'now'
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('[IAI Metrics] Error fetching metrics:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch metrics' });
+  }
 }));
 
 // ============================================

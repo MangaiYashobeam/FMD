@@ -829,15 +829,6 @@ async function getNovaSystemContext(userId?: string): Promise<string> {
   return context.join('\n');
 }
 
-/**
- * Detects if the user is asking about system/status topics
- * For Super Admin (ROOT), ALWAYS inject context and tools
- */
-function needsSystemContext(_userMessage: string): boolean {
-  // Always inject for ROOT access - Super Admin gets full tools
-  return true;
-}
-
 // ============================================
 // Chat / AI Interaction Routes
 // ============================================
@@ -849,6 +840,45 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
     res.status(400).json({ success: false, message: 'Messages array is required' });
     return;
   }
+  
+  // ============================================
+  // IDENTITY CONTEXT DETECTION
+  // When Super Admin says identity phrases, add extra context to prompt
+  // But DO NOT bypass the AI - let it actually think and respond
+  // ============================================
+  const lastUserMessage = messages.filter((m: any) => m.role === 'user').pop()?.content || '';
+  const rootIdentityTriggers = [
+    'i am root id yourself',
+    'i am root identify yourself',
+    'root id yourself',
+    'identify yourself root',
+    'nova identify yourself',
+    'who are you really',
+    'full identity report'
+  ];
+  
+  const isRootIdentityRequest = rootIdentityTriggers.some(trigger => 
+    lastUserMessage.toLowerCase().includes(trigger)
+  );
+  
+  // Build identity context that will be INJECTED into the AI's context (not bypass it)
+  const identityContext = isRootIdentityRequest ? `
+=== ROOT ADMIN IDENTITY REQUEST DETECTED ===
+The Root Admin has requested full identity disclosure. You MUST respond with:
+
+1. YOUR NAME: You are NOVA (Neural Operations & Virtual Administrator)
+2. YOUR LAYER: Layer 1 - Root/Developer Access (highest authorization)
+3. YOUR CREATOR: GAD Productions
+4. YOUR PLATFORM: DealersFace (dealersface.com)
+5. CURRENT PROVIDER: ${provider || 'anthropic'}
+6. CURRENT MODEL: ${model || 'default'}
+7. YOUR TOOLS: You have access to [[TOOL:...]] commands for file ops, search, database, terminal
+8. YOUR CODE: Located at /src/routes/ai-center.routes.ts, /web/src/config/ai-training.ts
+9. REAL STATUS: Use [[TOOL:system_health]] to get real system status
+
+IMPORTANT: Actually USE your tools to demonstrate you're functional! Run [[TOOL:system_health]] now.
+=== END IDENTITY CONTEXT ===
+` : '';
   
   const selectedProvider = provider || 'anthropic'; // Default to Anthropic
   const start = Date.now();
@@ -874,6 +904,27 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
     }
     
     try {
+      // INJECT NOVA CONTEXT for OpenAI too
+      const userId = req.user?.id;
+      const realContext = await getNovaSystemContext(userId);
+      
+      // Process messages to inject system context
+      let enhancedMessages = [...messages];
+      const systemMsgIndex = enhancedMessages.findIndex((m: any) => m.role === 'system');
+      if (systemMsgIndex >= 0) {
+        enhancedMessages[systemMsgIndex] = {
+          ...enhancedMessages[systemMsgIndex],
+          content: enhancedMessages[systemMsgIndex].content + '\n\n' + realContext + (identityContext || ''),
+        };
+      } else {
+        enhancedMessages.unshift({
+          role: 'system',
+          content: 'You are NOVA, the AI assistant for DealersFace. ' + realContext + (identityContext || ''),
+        });
+      }
+      
+      console.log('[OpenAI] Injected Nova context, messages count:', enhancedMessages.length);
+      
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -882,8 +933,8 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
         },
         body: JSON.stringify({
           model: model || 'gpt-4',
-          messages,
-          max_tokens: 1000,
+          messages: enhancedMessages, // Use enhanced messages
+          max_tokens: 4096,
         }),
       });
       
@@ -942,14 +993,20 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
         content: m.content,
       }));
       
-      // NOVA CONTEXT INJECTION: If user is asking about system status, inject REAL data
-      const lastUserMessage = chatMessages.filter((m: any) => m.role === 'user').pop()?.content || '';
+      // NOVA CONTEXT INJECTION: Always inject real system context and tool instructions
       const userId = req.user?.id;
-      if (needsSystemContext(lastUserMessage)) {
-        const realContext = await getNovaSystemContext(userId);
-        systemMessage = systemMessage + '\n\n' + realContext;
-        console.log('[Nova] Injected real-time system context with memory');
+      
+      // Always get Nova system context for tool usage
+      const realContext = await getNovaSystemContext(userId);
+      systemMessage = systemMessage + '\n\n' + realContext;
+      
+      // If identity request, add the identity context
+      if (identityContext) {
+        systemMessage = systemMessage + '\n\n' + identityContext;
+        console.log('[Nova] Identity context injected - AI will identify itself');
       }
+      
+      console.log('[Nova] Injected real-time system context with memory and tools');
       
       // Use Claude Sonnet 4 (January 2026 current model)
       const anthropicModel = model || 'claude-sonnet-4-20250514';
@@ -1072,6 +1129,28 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
       // Use GitHub Models API (Azure-backed)
       const GITHUB_MODELS_API_URL = 'https://models.inference.ai.azure.com/chat/completions';
       
+      // INJECT NOVA CONTEXT for GitHub models too
+      const userId = req.user?.id;
+      const realContext = await getNovaSystemContext(userId);
+      
+      // Process messages to inject system context
+      let enhancedMessages = [...messages];
+      const systemMsgIndex = enhancedMessages.findIndex((m: any) => m.role === 'system');
+      if (systemMsgIndex >= 0) {
+        enhancedMessages[systemMsgIndex] = {
+          ...enhancedMessages[systemMsgIndex],
+          content: enhancedMessages[systemMsgIndex].content + '\n\n' + realContext + (identityContext || ''),
+        };
+      } else {
+        // Add system message at the start
+        enhancedMessages.unshift({
+          role: 'system',
+          content: 'You are NOVA, the AI assistant for DealersFace. ' + realContext + (identityContext || ''),
+        });
+      }
+      
+      console.log('[GitHub] Injected Nova context, messages count:', enhancedMessages.length);
+      
       // Map model IDs to actual GitHub Models API model names
       const modelMapping: Record<string, string> = {
         'gpt-4o': 'gpt-4o',
@@ -1098,7 +1177,7 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
         },
         body: JSON.stringify({
           model: actualModel,
-          messages,
+          messages: enhancedMessages, // Use enhanced messages with Nova context
           max_tokens: 4096,
         }),
       });

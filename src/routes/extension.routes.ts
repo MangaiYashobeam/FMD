@@ -959,6 +959,38 @@ router.post('/ai-chat', authenticate, async (req: AuthRequest, res: Response) =>
       return;
     }
     
+    // ============================================
+    // IDENTITY CONTEXT DETECTION (inject, don't bypass)
+    // ============================================
+    const rootIdentityTriggers = [
+      'i am root id yourself',
+      'i am root identify yourself',
+      'root id yourself',
+      'identify yourself root',
+      'nexus identify yourself',
+      'who are you really',
+      'full identity report'
+    ];
+    
+    const isRootIdentityRequest = rootIdentityTriggers.some(trigger => 
+      message.toLowerCase().includes(trigger)
+    );
+    
+    // Build identity context to INJECT into AI prompt (not bypass)
+    const identityContext = isRootIdentityRequest ? `
+=== ROOT ADMIN IDENTITY REQUEST ===
+You are NEXUS (Network EXecution & User Services), Layer 4 Extension AI.
+When asked to identify yourself, provide:
+1. Your name: NEXUS
+2. Your layer: Layer 4 - Extension/IAI Agent
+3. Your creator: GAD Productions
+4. Your platform: DealersFace Chrome Extension
+5. Your capabilities: IAI Soldier automation, vehicle posting, lead scraping
+6. Current session status (use the context data provided)
+Respond naturally and demonstrate your intelligence.
+=== END IDENTITY CONTEXT ===
+` : '';
+    
     const userId = req.user!.id;
     const accountId = context?.accountId;
     
@@ -1151,7 +1183,8 @@ ${isSuperAdmin ? '7. Provide enhanced technical diagnostics for super admin requ
 
 Be concise, helpful, and proactive. If you see the user is stuck, offer specific help.
 Start responses with context awareness like "I see you're [action]..." when relevant.
-${isSuperAdmin ? 'For super admin: Include technical details and code references when diagnosing issues.' : ''}`;
+${isSuperAdmin ? 'For super admin: Include technical details and code references when diagnosing issues.' : ''}
+${identityContext}`;
 
     // Use OpenAI/AI service to generate response
     const response = await generateAIResponse(message, systemPrompt, context);
