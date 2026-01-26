@@ -328,6 +328,141 @@ const loadTrainingData = loadInjectionPattern;
  * Execute workflow from injected pattern
  * This is the main pattern execution engine
  */
+/**
+ * Select Facebook Marketplace Vehicle Type dropdown
+ * This is a special dropdown that appears first on the form
+ */
+async function selectVehicleType(vehicleType, stealth) {
+  console.log(`[IAI] 🚗 Selecting vehicle type: ${vehicleType}`);
+  
+  // Normalize vehicle type value
+  const typeMap = {
+    'car': 'Car/Truck',
+    'car/truck': 'Car/Truck',
+    'truck': 'Car/Truck',
+    'motorcycle': 'Motorcycle',
+    'powersport': 'Powersport',
+    'rv': 'RV/Camper',
+    'rv/camper': 'RV/Camper',
+    'camper': 'RV/Camper',
+    'trailer': 'Trailer',
+    'boat': 'Boat',
+    'commercial': 'Commercial/Industrial',
+    'commercial/industrial': 'Commercial/Industrial',
+    'other': 'Other',
+  };
+  
+  const normalizedType = typeMap[vehicleType.toLowerCase()] || vehicleType;
+  console.log(`[IAI] Normalized vehicle type: ${normalizedType}`);
+  
+  try {
+    // Strategy 1: Find dropdown by "Vehicle type" text
+    const vehicleTypeSelectors = [
+      // Text-based selectors
+      () => [...document.querySelectorAll('span')].find(s => s.textContent?.trim() === 'Vehicle type')?.closest('[role="button"], [role="combobox"], div[tabindex]'),
+      () => [...document.querySelectorAll('div')].find(d => d.textContent?.trim() === 'Vehicle type' && d.querySelector('span'))?.closest('[role="button"], [tabindex="0"]'),
+      // Aria-label based
+      () => document.querySelector('[aria-label*="Vehicle type"]'),
+      () => document.querySelector('[aria-label*="vehicle type"]'),
+      // Role-based dropdown trigger
+      () => document.querySelector('[role="combobox"][aria-haspopup="listbox"]'),
+      // Common FB dropdown pattern - look for expandable div with "Vehicle type"
+      () => {
+        const spans = document.querySelectorAll('span');
+        for (const span of spans) {
+          if (span.textContent?.trim() === 'Vehicle type') {
+            // Walk up to find the clickable parent
+            let parent = span.parentElement;
+            for (let i = 0; i < 5 && parent; i++) {
+              if (parent.getAttribute('role') === 'button' || 
+                  parent.getAttribute('tabindex') === '0' ||
+                  parent.classList.contains('x1i10hfl')) {
+                return parent;
+              }
+              parent = parent.parentElement;
+            }
+          }
+        }
+        return null;
+      },
+    ];
+    
+    let dropdownTrigger = null;
+    for (const selector of vehicleTypeSelectors) {
+      try {
+        dropdownTrigger = selector();
+        if (dropdownTrigger && isVisible(dropdownTrigger)) {
+          console.log(`[IAI] ✓ Found vehicle type dropdown trigger`);
+          break;
+        }
+      } catch (e) { /* continue */ }
+    }
+    
+    if (!dropdownTrigger) {
+      console.error('[IAI] ✗ Vehicle type dropdown not found');
+      return false;
+    }
+    
+    // Click to open dropdown
+    await stealth.click(dropdownTrigger);
+    await stealth.delay(400, 700);
+    
+    // Wait for dropdown options to appear
+    let optionFound = false;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      // Look for the options in listbox or menu
+      const options = document.querySelectorAll('[role="option"], [role="menuitem"], [role="listbox"] span, [role="menu"] span');
+      
+      for (const option of options) {
+        const optionText = option.textContent?.trim();
+        if (optionText && optionText.toLowerCase() === normalizedType.toLowerCase()) {
+          console.log(`[IAI] ✓ Found option: "${optionText}"`);
+          await stealth.click(option);
+          optionFound = true;
+          break;
+        }
+      }
+      
+      if (optionFound) break;
+      
+      // Also try finding by exact text match in any visible span
+      if (!optionFound) {
+        const allSpans = document.querySelectorAll('span');
+        for (const span of allSpans) {
+          if (span.textContent?.trim() === normalizedType && isVisible(span)) {
+            // Make sure it's in a dropdown context (not the trigger itself)
+            const parent = span.closest('[role="listbox"], [role="menu"], [role="dialog"]');
+            if (parent || span.closest('[data-visualcompletion]')) {
+              console.log(`[IAI] ✓ Found option by span text: "${normalizedType}"`);
+              await stealth.click(span);
+              optionFound = true;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (optionFound) break;
+      await stealth.delay(150, 250);
+    }
+    
+    if (!optionFound) {
+      console.error(`[IAI] ✗ Option "${normalizedType}" not found in dropdown`);
+      // Try pressing Escape to close dropdown
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return false;
+    }
+    
+    console.log(`[IAI] ✅ Vehicle type "${normalizedType}" selected successfully`);
+    await stealth.delay(500, 800); // Wait for form to update with new fields
+    return true;
+    
+  } catch (error) {
+    console.error('[IAI] Error selecting vehicle type:', error);
+    return false;
+  }
+}
+
 async function executeInjectedWorkflow(vehicleData) {
   if (!IAI_INJECTION._loaded) {
     console.error('[IAI] ❌ No injection pattern loaded - cannot execute workflow');
@@ -347,10 +482,27 @@ async function executeInjectedWorkflow(vehicleData) {
     duration: 0,
   };
   
+  // === PHASE 0: Select Vehicle Type FIRST (required to reveal other fields) ===
+  console.log('[IAI] 📋 Phase 0: Selecting vehicle type...');
+  const vehicleType = vehicleData.vehicleType || vehicleData.type || 'Car/Truck';
+  results.stepsTotal++;
+  
+  const vehicleTypeSuccess = await selectVehicleType(vehicleType, stealth);
+  if (vehicleTypeSuccess) {
+    results.completed.push({ field: 'vehicleType', value: vehicleType });
+    results.stepsExecuted++;
+    console.log('[IAI] ✅ Vehicle type selected, waiting for form fields to load...');
+    await stealth.delay(800, 1200); // Give FB time to load additional fields
+  } else {
+    results.errors.push({ field: 'vehicleType', error: 'Failed to select vehicle type' });
+    console.error('[IAI] ⚠️ Vehicle type selection failed, continuing anyway...');
+  }
+  
   // === PHASE 1: Fill fields directly using fieldMappings (stable approach) ===
   console.log('[IAI] 📋 Phase 1: Filling fields via fieldMappings...');
   const fieldMappings = IAI_INJECTION.FIELD_SELECTORS || {};
   const filledFields = new Set();
+  if (vehicleTypeSuccess) filledFields.add('vehicleType');
   
   // Map vehicle data fields to form fields
   const fieldValueMap = {
