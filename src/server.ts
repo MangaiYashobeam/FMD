@@ -494,6 +494,7 @@ app.use('/api', (req, res, next) => {
     '/training/console/heartbeat',
     '/training/console/status',
     '/training/console/log',
+    '/training/upload',    // Training session upload from extension (public)
     '/training/sessions', // Training session uploads from extension
     // Public auth endpoints (no CSRF token available yet)
     '/auth/login',

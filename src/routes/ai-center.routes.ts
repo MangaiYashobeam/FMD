@@ -1006,6 +1006,88 @@ router.post('/chat', asyncHandler(async (req: AuthRequest, res: Response) => {
     }
   }
   
+  // GitHub Copilot / GitHub Models API
+  if (selectedProvider === 'github' || selectedProvider === 'copilot') {
+    const apiKey = process.env.GITHUB_COPILOT_API_KEY || process.env.GITHUB_COPILOT_TOKEN;
+    if (!apiKey) {
+      res.json({
+        success: true,
+        data: {
+          content: `[Simulated Response] GitHub Copilot API key not configured. Set GITHUB_COPILOT_API_KEY or GITHUB_COPILOT_TOKEN to enable real AI responses.`,
+          provider: 'github',
+          model: model || 'gpt-4o',
+          inputTokens: 0,
+          outputTokens: 0,
+          latency: Date.now() - start,
+          traceId: `trace_sim_${Date.now()}`,
+          simulated: true,
+        },
+      });
+      return;
+    }
+    
+    try {
+      // Use GitHub Models API (Azure-backed)
+      const GITHUB_MODELS_API_URL = 'https://models.inference.ai.azure.com/chat/completions';
+      
+      // Map model IDs to actual GitHub Models API model names
+      const modelMapping: Record<string, string> = {
+        'gpt-4o': 'gpt-4o',
+        'gpt-4': 'gpt-4',
+        'gpt-4-turbo': 'gpt-4-turbo',
+        'o1': 'o1',
+        'o1-mini': 'o1-mini',
+        'o1-preview': 'o1-preview',
+        'claude-3-5-sonnet': 'claude-3-5-sonnet',
+        'claude-3-opus': 'claude-3-opus',
+        'claude-3-sonnet': 'claude-3-sonnet',
+        'gemini-1.5-pro': 'gemini-1.5-pro',
+        'gemini-1.5-flash': 'gemini-1.5-flash',
+      };
+      
+      const actualModel = modelMapping[model] || model || 'gpt-4o';
+      
+      const response = await fetch(GITHUB_MODELS_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          model: actualModel,
+          messages,
+          max_tokens: 4096,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`GitHub Models API returned ${response.status}: ${errorData}`);
+      }
+      
+      const data = await response.json() as any;
+      const content = data.choices?.[0]?.message?.content || 'No response';
+      
+      res.json({
+        success: true,
+        data: {
+          content,
+          provider: 'github',
+          model: data.model || actualModel,
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+          latency: Date.now() - start,
+          traceId: `trace_github_${Date.now()}`,
+        },
+      });
+      return;
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: `GitHub Models error: ${error.message}` });
+      return;
+    }
+  }
+  
   // DeepSeek
   if (selectedProvider === 'deepseek') {
     if (deepseekService.isConfigured()) {

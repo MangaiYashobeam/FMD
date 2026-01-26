@@ -4,7 +4,11 @@
  * Complete integration with all GitHub Copilot selectable models
  * with real endpoints and intelligent routing
  * 
- * @version 3.1.0 - Added full Google Gemini support
+ * Supports TWO API modes:
+ * 1. GitHub Copilot API - Access all models through GitHub's unified API
+ * 2. Direct API - Access models through their native APIs (OpenAI, Anthropic, Google)
+ * 
+ * @version 4.0.0 - Added GitHub Copilot API integration
  * @author FMD Engineering Team
  */
 
@@ -19,6 +23,12 @@ try {
 } catch (e) {
   logger.debug('[CopilotModels] @google/generative-ai not installed, Gemini will use fallback');
 }
+
+// GitHub Copilot API Configuration
+const GITHUB_MODELS_API_URL = 'https://models.inference.ai.azure.com/chat/completions';
+
+// API Mode types
+export type APIMode = 'copilot' | 'direct';
 
 // ============================================
 // COPILOT MODEL DEFINITIONS (From Screenshot)
@@ -35,8 +45,9 @@ export interface CopilotModel {
   multiplier: string; // e.g., "3x", "1x", "0.33x" from the screenshot
   capabilities: string[];
   endpoint: {
-    provider: 'openai' | 'anthropic' | 'google' | 'internal';
-    model: string;
+    provider: 'openai' | 'anthropic' | 'google' | 'internal' | 'copilot';
+    model: string; // Model ID for direct API
+    copilotModel?: string; // Model ID for GitHub Copilot API (if different)
     baseUrl?: string;
   };
   costPerMillion: {
@@ -48,11 +59,13 @@ export interface CopilotModel {
   specializations: string[];
   isPreview: boolean;
   discount?: number; // 10% discount indicator
+  apiMode: APIMode; // Which API to use: 'copilot' or 'direct'
 }
 
 // All models from the screenshot - exactly as shown
+// Using GitHub Copilot API for all models where available
 export const COPILOT_MODELS: Record<string, CopilotModel> = {
-  // === GPT MODELS ===
+  // === GPT MODELS (via Copilot API) ===
   'gpt-4.1': {
     id: 'gpt-4.1',
     displayName: 'GPT-4.1',
@@ -60,13 +73,14 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '0x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools'],
-    endpoint: { provider: 'openai', model: 'gpt-4-turbo-preview' },
+    endpoint: { provider: 'copilot', model: 'gpt-4-turbo-preview', copilotModel: 'gpt-4.1' },
     costPerMillion: { input: 10, output: 30 },
     contextWindow: 128000,
     maxOutput: 4096,
     specializations: ['general', 'code-review', 'documentation'],
     isPreview: false,
     discount: 10,
+    apiMode: 'copilot',
   },
   'gpt-4o': {
     id: 'gpt-4o',
@@ -75,13 +89,14 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '0x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'audio'],
-    endpoint: { provider: 'openai', model: 'gpt-4o' },
+    endpoint: { provider: 'copilot', model: 'gpt-4o', copilotModel: 'gpt-4o' },
     costPerMillion: { input: 2.5, output: 10 },
     contextWindow: 128000,
     maxOutput: 16384,
     specializations: ['multimodal', 'customer-service', 'real-time'],
     isPreview: false,
     discount: 10,
+    apiMode: 'copilot',
   },
   'gpt-5-mini': {
     id: 'gpt-5-mini',
@@ -90,13 +105,14 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'standard',
     multiplier: '0x',
     capabilities: ['chat', 'code', 'analysis', 'tools'],
-    endpoint: { provider: 'openai', model: 'gpt-4o-mini' },
+    endpoint: { provider: 'copilot', model: 'gpt-4o-mini', copilotModel: 'gpt-5-mini' },
     costPerMillion: { input: 0.15, output: 0.6 },
     contextWindow: 128000,
     maxOutput: 16384,
     specializations: ['quick-tasks', 'simple-queries', 'batch-processing'],
     isPreview: false,
     discount: 10,
+    apiMode: 'copilot',
   },
   'gpt-5': {
     id: 'gpt-5',
@@ -105,12 +121,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '1x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'reasoning'],
-    endpoint: { provider: 'openai', model: 'o1' },
+    endpoint: { provider: 'copilot', model: 'o1', copilotModel: 'gpt-5' },
     costPerMillion: { input: 15, output: 60 },
     contextWindow: 200000,
     maxOutput: 100000,
     specializations: ['complex-reasoning', 'research', 'planning'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'gpt-5.1': {
     id: 'gpt-5.1',
@@ -119,12 +136,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '1x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'reasoning'],
-    endpoint: { provider: 'openai', model: 'o1' },
+    endpoint: { provider: 'copilot', model: 'o1', copilotModel: 'gpt-5.1' },
     costPerMillion: { input: 15, output: 60 },
     contextWindow: 200000,
     maxOutput: 100000,
     specializations: ['complex-reasoning', 'advanced-code'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'gpt-5.2': {
     id: 'gpt-5.2',
@@ -133,15 +151,16 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '1x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'reasoning', 'agents'],
-    endpoint: { provider: 'openai', model: 'o1' },
+    endpoint: { provider: 'copilot', model: 'o1', copilotModel: 'gpt-5.2' },
     costPerMillion: { input: 15, output: 60 },
     contextWindow: 200000,
     maxOutput: 100000,
     specializations: ['autonomous-agents', 'complex-workflows'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   
-  // === CODEX MODELS ===
+  // === CODEX MODELS (via Copilot API) ===
   'gpt-5-codex-preview': {
     id: 'gpt-5-codex-preview',
     displayName: 'GPT-5-Codex (Preview)',
@@ -149,12 +168,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'preview',
     multiplier: '1x',
     capabilities: ['code', 'code-generation', 'code-review', 'refactoring'],
-    endpoint: { provider: 'openai', model: 'o1' },
+    endpoint: { provider: 'copilot', model: 'o1', copilotModel: 'gpt-5-codex' },
     costPerMillion: { input: 15, output: 60 },
     contextWindow: 200000,
     maxOutput: 100000,
     specializations: ['code-generation', 'debugging', 'architecture'],
     isPreview: true,
+    apiMode: 'copilot',
   },
   'gpt-5.1-codex': {
     id: 'gpt-5.1-codex',
@@ -163,12 +183,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '1x',
     capabilities: ['code', 'code-generation', 'code-review', 'refactoring', 'testing'],
-    endpoint: { provider: 'openai', model: 'o1' },
+    endpoint: { provider: 'copilot', model: 'o1', copilotModel: 'gpt-5.1-codex' },
     costPerMillion: { input: 15, output: 60 },
     contextWindow: 200000,
     maxOutput: 100000,
     specializations: ['full-stack', 'system-design', 'testing'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'gpt-5.1-codex-max': {
     id: 'gpt-5.1-codex-max',
@@ -177,12 +198,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '1x',
     capabilities: ['code', 'code-generation', 'code-review', 'refactoring', 'testing', 'architecture'],
-    endpoint: { provider: 'openai', model: 'o1' },
+    endpoint: { provider: 'copilot', model: 'o1', copilotModel: 'gpt-5.1-codex-max' },
     costPerMillion: { input: 20, output: 80 },
     contextWindow: 200000,
     maxOutput: 100000,
     specializations: ['enterprise', 'large-codebases', 'migrations'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'gpt-5.1-codex-mini-preview': {
     id: 'gpt-5.1-codex-mini-preview',
@@ -191,12 +213,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'preview',
     multiplier: '0.33x',
     capabilities: ['code', 'code-generation', 'quick-fixes'],
-    endpoint: { provider: 'openai', model: 'o1-mini' },
+    endpoint: { provider: 'copilot', model: 'o1-mini', copilotModel: 'gpt-5.1-codex-mini' },
     costPerMillion: { input: 3, output: 12 },
     contextWindow: 128000,
     maxOutput: 65536,
     specializations: ['quick-edits', 'simple-generation'],
     isPreview: true,
+    apiMode: 'copilot',
   },
   'gpt-5.2-codex': {
     id: 'gpt-5.2-codex',
@@ -205,15 +228,33 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '1x',
     capabilities: ['code', 'code-generation', 'autonomous-coding', 'agents'],
-    endpoint: { provider: 'openai', model: 'o1' },
+    endpoint: { provider: 'copilot', model: 'o1', copilotModel: 'gpt-5.2-codex' },
     costPerMillion: { input: 15, output: 60 },
     contextWindow: 200000,
     maxOutput: 100000,
     specializations: ['autonomous-development', 'full-projects'],
     isPreview: false,
+    apiMode: 'copilot',
   },
 
-  // === RAPTOR MODELS ===
+  // === GROK MODELS (via Copilot API) ===
+  'grok-code-fast-1': {
+    id: 'grok-code-fast-1',
+    displayName: 'Grok Code Fast 1',
+    family: 'gpt',
+    tier: 'standard',
+    multiplier: '0x',
+    capabilities: ['chat', 'code', 'fast-inference'],
+    endpoint: { provider: 'copilot', model: 'grok-code-fast-1', copilotModel: 'grok-code-fast-1' },
+    costPerMillion: { input: 0.5, output: 1.5 },
+    contextWindow: 128000,
+    maxOutput: 8192,
+    specializations: ['fast-code', 'quick-edits'],
+    isPreview: false,
+    apiMode: 'copilot',
+  },
+
+  // === RAPTOR MODELS (via Copilot API) ===
   'raptor-mini-preview': {
     id: 'raptor-mini-preview',
     displayName: 'Raptor mini (Preview)',
@@ -221,16 +262,17 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'preview',
     multiplier: '0x',
     capabilities: ['chat', 'code', 'fast-inference'],
-    endpoint: { provider: 'internal', model: 'raptor-mini' },
+    endpoint: { provider: 'copilot', model: 'raptor-mini', copilotModel: 'raptor-mini' },
     costPerMillion: { input: 0.1, output: 0.4 },
     contextWindow: 64000,
     maxOutput: 8192,
     specializations: ['ultra-fast', 'simple-tasks'],
     isPreview: true,
     discount: 10,
+    apiMode: 'copilot',
   },
 
-  // === CLAUDE MODELS ===
+  // === CLAUDE MODELS (via Copilot API) ===
   'claude-haiku-4.5': {
     id: 'claude-haiku-4.5',
     displayName: 'Claude Haiku 4.5',
@@ -238,12 +280,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'economy',
     multiplier: '0.33x',
     capabilities: ['chat', 'code', 'analysis', 'fast-response'],
-    endpoint: { provider: 'anthropic', model: 'claude-3-haiku-20240307' },
+    endpoint: { provider: 'copilot', model: 'claude-3-haiku-20240307', copilotModel: 'claude-haiku-4.5' },
     costPerMillion: { input: 0.25, output: 1.25 },
     contextWindow: 200000,
     maxOutput: 4096,
     specializations: ['quick-tasks', 'classification', 'extraction'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'claude-opus-4.5': {
     id: 'claude-opus-4.5',
@@ -252,12 +295,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '3x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'extended-thinking', 'computer-use'],
-    endpoint: { provider: 'anthropic', model: 'claude-opus-4-20250514' },
+    endpoint: { provider: 'copilot', model: 'claude-opus-4-20250514', copilotModel: 'claude-opus-4.5' },
     costPerMillion: { input: 15, output: 75 },
     contextWindow: 200000,
     maxOutput: 32000,
     specializations: ['complex-reasoning', 'image-analysis', 'screenshots', 'computer-use'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'claude-sonnet-4': {
     id: 'claude-sonnet-4',
@@ -266,12 +310,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'standard',
     multiplier: '1x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'computer-use'],
-    endpoint: { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+    endpoint: { provider: 'copilot', model: 'claude-sonnet-4-20250514', copilotModel: 'claude-sonnet-4' },
     costPerMillion: { input: 3, output: 15 },
     contextWindow: 200000,
     maxOutput: 16000,
     specializations: ['balanced', 'general-purpose', 'coding'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'claude-sonnet-4.5': {
     id: 'claude-sonnet-4.5',
@@ -280,15 +325,16 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'standard',
     multiplier: '1x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'extended-thinking'],
-    endpoint: { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
+    endpoint: { provider: 'copilot', model: 'claude-3-5-sonnet-20241022', copilotModel: 'claude-sonnet-4.5' },
     costPerMillion: { input: 3, output: 15 },
     contextWindow: 200000,
     maxOutput: 8192,
     specializations: ['coding', 'analysis', 'writing'],
     isPreview: false,
+    apiMode: 'copilot',
   },
 
-  // === GEMINI MODELS ===
+  // === GEMINI MODELS (via Copilot API) ===
   'gemini-2.5-pro': {
     id: 'gemini-2.5-pro',
     displayName: 'Gemini 2.5 Pro',
@@ -296,12 +342,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'flagship',
     multiplier: '1x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'long-context'],
-    endpoint: { provider: 'google', model: 'gemini-1.5-pro' },
+    endpoint: { provider: 'copilot', model: 'gemini-1.5-pro', copilotModel: 'gemini-2.5-pro' },
     costPerMillion: { input: 1.25, output: 5 },
     contextWindow: 2000000,
     maxOutput: 8192,
     specializations: ['document-analysis', 'long-context', 'video'],
     isPreview: false,
+    apiMode: 'copilot',
   },
   'gemini-3-flash-preview': {
     id: 'gemini-3-flash-preview',
@@ -310,12 +357,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'preview',
     multiplier: '0.33x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'realtime'],
-    endpoint: { provider: 'google', model: 'gemini-2.0-flash' },
+    endpoint: { provider: 'copilot', model: 'gemini-2.0-flash', copilotModel: 'gemini-3-flash' },
     costPerMillion: { input: 0.075, output: 0.3 },
     contextWindow: 1000000,
     maxOutput: 8192,
     specializations: ['fast-inference', 'streaming', 'real-time'],
     isPreview: true,
+    apiMode: 'copilot',
   },
   'gemini-3-pro-preview': {
     id: 'gemini-3-pro-preview',
@@ -324,12 +372,13 @@ export const COPILOT_MODELS: Record<string, CopilotModel> = {
     tier: 'preview',
     multiplier: '1x',
     capabilities: ['chat', 'code', 'analysis', 'vision', 'tools', 'agents'],
-    endpoint: { provider: 'google', model: 'gemini-2.0-flash' },
+    endpoint: { provider: 'copilot', model: 'gemini-2.0-flash', copilotModel: 'gemini-3-pro' },
     costPerMillion: { input: 0.5, output: 2 },
     contextWindow: 1000000,
     maxOutput: 8192,
     specializations: ['advanced-reasoning', 'planning'],
     isPreview: true,
+    apiMode: 'copilot',
   },
 };
 
@@ -483,14 +532,24 @@ export class CopilotModelService {
   private anthropicClient: Anthropic | null = null;
   private openaiClient: OpenAI | null = null;
   private googleClient: any = null; // GoogleGenerativeAI when available
+  private copilotApiKey: string | null = null;
   private routingRules: RoutingRule[] = [...DEFAULT_ROUTING_RULES];
   private modelUsageStats: Map<string, { requests: number; tokens: number; latency: number[] }> = new Map();
+  private apiMode: APIMode = 'copilot'; // Default to Copilot API
 
   constructor() {
     this.initializeClients();
   }
 
   private initializeClients(): void {
+    // GitHub Copilot API (primary)
+    if (process.env.GITHUB_COPILOT_API_KEY) {
+      this.copilotApiKey = process.env.GITHUB_COPILOT_API_KEY;
+      this.apiMode = 'copilot';
+      logger.info('[CopilotModels] GitHub Copilot API configured');
+    }
+    
+    // Direct API fallbacks
     if (process.env.ANTHROPIC_API_KEY) {
       this.anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     }
@@ -508,10 +567,34 @@ export class CopilotModelService {
     }
     
     logger.info('[CopilotModels] Initialized with providers:', {
+      copilot: !!this.copilotApiKey,
       anthropic: !!this.anthropicClient,
       openai: !!this.openaiClient,
       google: !!this.googleClient,
+      apiMode: this.apiMode,
     });
+  }
+
+  /**
+   * Get the current API mode
+   */
+  getApiMode(): APIMode {
+    return this.apiMode;
+  }
+
+  /**
+   * Set the API mode (copilot or direct)
+   */
+  setApiMode(mode: APIMode): void {
+    this.apiMode = mode;
+    logger.info(`[CopilotModels] API mode changed to: ${mode}`);
+  }
+
+  /**
+   * Check if Copilot API is available
+   */
+  isCopilotApiAvailable(): boolean {
+    return !!this.copilotApiKey;
   }
 
   // ============================================
@@ -618,7 +701,13 @@ export class CopilotModelService {
   }
 
   private isModelAvailable(model: CopilotModel): boolean {
+    // If Copilot API is available and model supports it, it's available
+    if (this.copilotApiKey && model.apiMode === 'copilot') {
+      return true;
+    }
+    // Fall back to direct API check
     switch (model.endpoint.provider) {
+      case 'copilot': return !!this.copilotApiKey;
       case 'anthropic': return !!this.anthropicClient;
       case 'openai': return !!this.openaiClient;
       case 'google': return !!this.googleClient;
@@ -667,6 +756,7 @@ export class CopilotModelService {
     temperature?: number;
     systemPrompt?: string;
     images?: string[]; // base64 images for vision
+    forceDirectApi?: boolean; // Force direct API even if Copilot available
   }): Promise<{
     success: boolean;
     response?: string;
@@ -674,10 +764,11 @@ export class CopilotModelService {
     latency: number;
     tokensUsed?: { input: number; output: number };
     error?: string;
+    apiUsed: 'copilot' | 'direct';
   }> {
     const model = COPILOT_MODELS[modelId];
     if (!model) {
-      return { success: false, model: modelId, latency: 0, error: 'Model not found' };
+      return { success: false, model: modelId, latency: 0, error: 'Model not found', apiUsed: 'direct' };
     }
 
     const start = Date.now();
@@ -685,28 +776,99 @@ export class CopilotModelService {
     try {
       let response: string = '';
       let tokensUsed = { input: 0, output: 0 };
+      let apiUsed: 'copilot' | 'direct' = 'direct';
 
-      switch (model.endpoint.provider) {
-        case 'anthropic':
-          ({ response, tokensUsed } = await this.invokeAnthropic(model, messages, options));
-          break;
-        case 'openai':
-          ({ response, tokensUsed } = await this.invokeOpenAI(model, messages, options));
-          break;
-        case 'google':
+      // Use Copilot API if available and not forced to direct
+      if (this.copilotApiKey && model.apiMode === 'copilot' && !options?.forceDirectApi) {
+        ({ response, tokensUsed } = await this.invokeCopilotApi(model, messages, options));
+        apiUsed = 'copilot';
+      } else {
+        // Fall back to direct API calls
+        switch (model.endpoint.provider) {
+          case 'copilot':
+            // If Copilot provider but no key, try to use the underlying model via direct API
+            if (this.openaiClient && model.endpoint.model.includes('gpt')) {
+              ({ response, tokensUsed } = await this.invokeOpenAI(model, messages, options));
+            } else if (this.anthropicClient && model.endpoint.model.includes('claude')) {
+              ({ response, tokensUsed } = await this.invokeAnthropic(model, messages, options));
+            } else if (this.googleClient && model.endpoint.model.includes('gemini')) {
+              ({ response, tokensUsed } = await this.invokeGoogle(model, messages, options));
+            } else {
+              throw new Error('No API client available for this model');
+            }
+            break;
+          case 'anthropic':
+            ({ response, tokensUsed } = await this.invokeAnthropic(model, messages, options));
+            break;
+          case 'openai':
+            ({ response, tokensUsed } = await this.invokeOpenAI(model, messages, options));
+            break;
+          case 'google':
           ({ response, tokensUsed } = await this.invokeGoogle(model, messages, options));
           break;
         default:
-          return { success: false, model: modelId, latency: 0, error: `Provider ${model.endpoint.provider} not implemented` };
+          return { success: false, model: modelId, latency: 0, error: `Provider ${model.endpoint.provider} not implemented`, apiUsed: 'direct' };
+        }
       }
 
       const latency = Date.now() - start;
       this.recordUsage(modelId, tokensUsed.input + tokensUsed.output, latency);
 
-      return { success: true, response, model: modelId, latency, tokensUsed };
+      return { success: true, response, model: modelId, latency, tokensUsed, apiUsed };
     } catch (error: any) {
-      return { success: false, model: modelId, latency: Date.now() - start, error: error.message };
+      return { success: false, model: modelId, latency: Date.now() - start, error: error.message, apiUsed: 'direct' };
     }
+  }
+
+  /**
+   * Invoke model via GitHub Copilot API
+   * Uses the unified GitHub Models API endpoint
+   */
+  private async invokeCopilotApi(model: CopilotModel, messages: any[], options?: any): Promise<{ response: string; tokensUsed: { input: number; output: number } }> {
+    if (!this.copilotApiKey) throw new Error('GitHub Copilot API key not configured');
+
+    const copilotModel = model.endpoint.copilotModel || model.endpoint.model;
+    
+    const requestBody = {
+      model: copilotModel,
+      messages: messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      })),
+      max_tokens: options?.maxTokens || model.maxOutput,
+      temperature: options?.temperature ?? 0.7,
+    };
+
+    const response = await fetch(GITHUB_MODELS_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.copilotApiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('[CopilotModels] Copilot API error:', { status: response.status, error: errorText });
+      throw new Error(`Copilot API error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json() as {
+      choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    
+    const responseText = result.choices?.[0]?.message?.content || '';
+    const tokensUsed = {
+      input: result.usage?.prompt_tokens || 0,
+      output: result.usage?.completion_tokens || 0,
+    };
+
+    logger.debug('[CopilotModels] Copilot API response:', { model: copilotModel, tokens: tokensUsed });
+
+    return { response: responseText, tokensUsed };
   }
 
   private async invokeAnthropic(model: CopilotModel, messages: any[], options?: any): Promise<{ response: string; tokensUsed: { input: number; output: number } }> {

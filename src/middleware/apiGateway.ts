@@ -487,6 +487,8 @@ export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunct
       '/nova/notifications/stream', // Nova SSE endpoint (token in query param)
       '/training/console/heartbeat', // ROOT Console heartbeat (extension)
       '/training/console/status',    // ROOT Console status check (extension/webapp)
+      '/training/console/log',       // ROOT Console log entries (extension)
+      '/training/upload',            // Training session upload (extension - no auth required)
     ];
     const isPublicPath = publicPaths.some(p => req.path.includes(p));
     

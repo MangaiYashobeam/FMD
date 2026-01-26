@@ -884,6 +884,24 @@ body {
   text-align: center;
 }
 
+/* Highlighted stat cards (EVENTS and CLICKS) */
+.stat-card.highlight {
+  background: linear-gradient(135deg, rgba(255, 10, 60, 0.15), rgba(0, 240, 255, 0.1));
+  border-color: var(--accent);
+  animation: highlightPulse 2s ease-in-out infinite;
+}
+
+.stat-card.highlight .stat-value {
+  font-size: 24px;
+  color: var(--primary);
+  text-shadow: 0 0 15px var(--primary-glow);
+}
+
+@keyframes highlightPulse {
+  0%, 100% { box-shadow: 0 0 5px var(--accent-glow); }
+  50% { box-shadow: 0 0 15px var(--accent-glow); }
+}
+
 .stat-value {
   font-family: 'Orbitron', monospace;
   font-size: 20px;

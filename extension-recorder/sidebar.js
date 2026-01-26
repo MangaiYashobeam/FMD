@@ -147,6 +147,7 @@ function initializeDOMReferences() {
     
     // Stats
     liveStats: document.getElementById('live-stats'),
+    liveIndicator: document.getElementById('live-indicator'),
     statEvents: document.getElementById('stat-events'),
     statClicks: document.getElementById('stat-clicks'),
     statInputs: document.getElementById('stat-inputs'),
@@ -772,9 +773,11 @@ async function startSingleTabRecording(tab) {
     updateRecordingUI(true);
     updateScriptConnectionUI('active');
     startStatsPolling();
+    startAutoBackup(); // Start auto-backup for long sessions
     
     log(`Recording ACTIVE in ${ConsoleState.currentMode.toUpperCase()} mode`, 'success');
     log('Interact with the page - events will be captured', 'info');
+    log('Auto-backup enabled every 30 seconds', 'info');
     log('Click TERMINATE RECORDING when finished', 'info');
     updateStatusIndicator('recording', 'RECORDING...');
     
@@ -819,8 +822,10 @@ async function startMultiTabRecording() {
     updateRecordingUI(true);
     updateActiveTabsDisplay(ConsoleState.activeTabs);
     startStatsPolling();
+    startAutoBackup(); // Start auto-backup for long sessions
     
     log(`Multi-tab recording started: ${allTabs.length} tabs`, 'success');
+    log('Auto-backup enabled every 30 seconds', 'info');
     
   } catch (error) {
     throw error;
@@ -855,6 +860,10 @@ async function stopRecording() {
     
     updateRecordingUI(false);
     stopStatsPolling();
+    stopAutoBackup(); // Stop auto-backup
+    
+    // Clear backup data on successful stop
+    await chrome.storage.local.remove(['fmd_session_backup', 'fmd_backup_timestamp']);
     
     if (sessionData) {
       const eventCount = sessionData?.events?.length || 0;
@@ -883,6 +892,27 @@ async function stopRecording() {
     } else {
       log('No session data received from content script', 'warning');
       updateScriptConnectionUI('idle');
+      
+      // Try to recover from backup if no session data
+      log('Attempting to recover from backup...', 'info');
+      const backup = await chrome.storage.local.get(['fmd_session_backup', 'fmd_backup_timestamp']);
+      if (backup.fmd_session_backup) {
+        const backupAge = Date.now() - (backup.fmd_backup_timestamp || 0);
+        log(`Found backup (${Math.round(backupAge/1000)}s old) with ${backup.fmd_session_backup.eventCounts?.events || 0} events`, 'info');
+        
+        // Use backup data if available
+        const recoveredData = {
+          sessionId: backup.fmd_session_backup.sessionId || `recovery_${Date.now()}`,
+          mode: backup.fmd_session_backup.mode,
+          events: backup.fmd_session_backup.liveEvents || [],
+          metadata: { recovered: true, backupTimestamp: backup.fmd_backup_timestamp },
+        };
+        
+        ConsoleState.sessionData = recoveredData;
+        displaySessionData(recoveredData);
+        await saveSession(recoveredData);
+        log('Session recovered from backup!', 'success');
+      }
     }
     
   } catch (error) {
@@ -892,6 +922,7 @@ async function stopRecording() {
     updateRecordingUI(false);
     updateScriptConnectionUI('error');
     stopStatsPolling();
+    stopAutoBackup();
   }
 }
 
@@ -1032,10 +1063,71 @@ function updateRecordingUI(isRecording) {
 }
 
 // ============================================
-// STATS POLLING
+// STATS POLLING & AUTO-BACKUP
 // ============================================
 
 let statsInterval = null;
+let autoBackupInterval = null;
+let lastBackupEventCount = 0;
+const AUTO_BACKUP_INTERVAL_MS = 30000; // 30 seconds
+const AUTO_BACKUP_MIN_EVENTS = 50;     // Don't backup if less than 50 new events
+
+async function autoBackupSession() {
+  if (!ConsoleState.isRecording) return;
+  
+  const currentEvents = ConsoleState.eventCounts.events || 0;
+  const newEventsSinceBackup = currentEvents - lastBackupEventCount;
+  
+  // Skip if not enough new events
+  if (newEventsSinceBackup < AUTO_BACKUP_MIN_EVENTS) {
+    console.log('[AutoBackup] Skipping - only', newEventsSinceBackup, 'new events');
+    return;
+  }
+  
+  try {
+    console.log('[AutoBackup] Backing up session with', currentEvents, 'events...');
+    
+    // Get live events from background script
+    const liveEventsResponse = await chrome.runtime.sendMessage({ type: 'GET_LIVE_EVENTS' });
+    const liveEvents = liveEventsResponse?.events || [];
+    
+    const backupData = {
+      sessionId: `backup_${Date.now()}`,
+      timestamp: Date.now(),
+      mode: ConsoleState.currentMode,
+      eventCounts: ConsoleState.eventCounts,
+      liveEvents: liveEvents.slice(-500), // Keep last 500 events in backup
+      recordingTabId: ConsoleState.recordingTabId,
+    };
+    
+    // Store backup in chrome.storage.local
+    await chrome.storage.local.set({ 
+      'fmd_session_backup': backupData,
+      'fmd_backup_timestamp': Date.now()
+    });
+    
+    lastBackupEventCount = currentEvents;
+    log('Auto-backup saved: ' + currentEvents + ' events', 'info');
+    console.log('[AutoBackup] Backup complete');
+  } catch (error) {
+    console.error('[AutoBackup] Failed:', error);
+  }
+}
+
+function startAutoBackup() {
+  if (autoBackupInterval) clearInterval(autoBackupInterval);
+  lastBackupEventCount = 0;
+  
+  autoBackupInterval = setInterval(autoBackupSession, AUTO_BACKUP_INTERVAL_MS);
+  console.log('[AutoBackup] Started - backing up every', AUTO_BACKUP_INTERVAL_MS/1000, 'seconds');
+}
+
+function stopAutoBackup() {
+  if (autoBackupInterval) {
+    clearInterval(autoBackupInterval);
+    autoBackupInterval = null;
+  }
+}
 
 function startStatsPolling() {
   console.log('[DEBUG STATS] startStatsPolling called');
@@ -1068,13 +1160,22 @@ function startStatsPolling() {
         console.log('[DEBUG STATS] Status response:', response);
       }
       
+      // ONLY update counts if we got valid data (events > 0 or same as before)
+      // This prevents overwriting good counts with zeros from failed polls
       if (response?.counts) {
-        ConsoleState.eventCounts = response.counts;
+        const newCounts = response.counts;
+        // Validate: only accept if new counts are >= current counts
+        // (events should only increase during recording, not decrease)
+        if (newCounts.events >= ConsoleState.eventCounts.events) {
+          ConsoleState.eventCounts = newCounts;
+          console.log('[DEBUG STATS] Updated counts:', newCounts);
+        } else {
+          console.warn('[DEBUG STATS] Rejected decreasing counts:', newCounts, 'current:', ConsoleState.eventCounts);
+        }
         updateStats();
-        console.log('[DEBUG STATS] Updated counts:', response.counts);
       }
     } catch (error) {
-      // Tab might be closed or navigated away
+      // Tab might be closed or navigated away - don't reset counts
       console.warn('[DEBUG STATS] Stats polling error:', error);
     }
   }, 500);
@@ -1105,6 +1206,13 @@ function updateStats() {
   if (fillClicks) fillClicks.style.width = `${Math.min((counts.clicks / 50) * 100, 100)}%`;
   if (fillInputs) fillInputs.style.width = `${Math.min((counts.inputs / 30) * 100, 100)}%`;
   if (fillMarks) fillMarks.style.width = `${Math.min((counts.marks / 10) * 100, 100)}%`;
+  
+  // Update live indicator with actual event count
+  if (DOM.liveIndicator && ConsoleState.isRecording) {
+    const evtCount = counts.events || 0;
+    DOM.liveIndicator.textContent = evtCount > 0 ? `● LIVE (${evtCount})` : '● WAITING...';
+    DOM.liveIndicator.style.color = evtCount > 0 ? 'var(--success)' : 'var(--warning)';
+  }
   
   // Update minimized badge if collapsed
   if (DOM.expandBadge && ConsoleState.isRecording) {
@@ -2082,12 +2190,18 @@ function updateScriptConnectionUI(status) {
 async function sendToWebapp(endpoint, data) {
   console.log('[DEBUG SEND] sendToWebapp called:', endpoint, 'webappConnected:', ConsoleState.webappConnected);
   
+  // /training/upload is a PUBLIC endpoint - doesn't require auth
+  const isPublicEndpoint = endpoint === '/training/upload' || 
+                           endpoint === '/training/console/heartbeat' ||
+                           endpoint === '/training/console/log';
+  
   // Check for token first - don't require webappConnected if we have a valid token
   const tokenCheck = await chrome.storage.local.get('fmd_admin_token');
   const hasToken = !!tokenCheck.fmd_admin_token;
-  console.log('[DEBUG SEND] hasToken:', hasToken);
+  console.log('[DEBUG SEND] hasToken:', hasToken, 'isPublicEndpoint:', isPublicEndpoint);
   
-  if (!hasToken && !ConsoleState.webappConnected) {
+  // For public endpoints, we can proceed even without token
+  if (!isPublicEndpoint && !hasToken && !ConsoleState.webappConnected) {
     log('No auth token and webapp not connected, queueing data locally', 'warning');
     console.log('[DEBUG SEND] No token and webapp not connected, queueing locally');
     await saveLocalQueue(data);
@@ -2095,13 +2209,13 @@ async function sendToWebapp(endpoint, data) {
   }
   
   try {
-    // Get auth token
+    // Get auth token (optional for public endpoints)
     let tokenResult = await chrome.storage.local.get('fmd_admin_token');
     let token = tokenResult.fmd_admin_token;
     console.log('[DEBUG SEND] Token found:', !!token);
     
-    // If no token, try to sync from webapp
-    if (!token) {
+    // If no token for non-public endpoints, try to sync from webapp
+    if (!token && !isPublicEndpoint) {
       log('No auth token cached - trying to sync from webapp...', 'warning');
       console.log('[DEBUG SEND] Attempting auth token sync...');
       const synced = await syncAuthTokenFromWebapp();
@@ -2112,19 +2226,26 @@ async function sendToWebapp(endpoint, data) {
       }
     }
     
-    if (!token) {
+    // For non-public endpoints, require token
+    if (!token && !isPublicEndpoint) {
       log('No auth token - please login at dealersface.com', 'error');
       console.log('[DEBUG SEND] No auth token after sync attempt!');
       return { success: false, error: 'Not authenticated' };
     }
     
     console.log('[DEBUG SEND] Sending to:', `${ConsoleState.config.apiEndpoint}${endpoint}`);
+    
+    // Build headers - include token only if available
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await fetch(`${ConsoleState.config.apiEndpoint}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
+      headers,
       body: JSON.stringify(data)
     });
     
@@ -2210,15 +2331,17 @@ async function syncPendingUploads() {
 function handleBackgroundMessage(message, sender, sendResponse) {
   switch (message.type) {
     case 'EVENT_RECORDED':
-      if (message.counts) {
+      // Only accept increasing event counts (events can't decrease during recording)
+      if (message.counts && message.counts.events >= ConsoleState.eventCounts.events) {
         ConsoleState.eventCounts = message.counts;
         updateStats();
+        console.log('[MSG] EVENT_RECORDED accepted:', message.counts);
       }
       break;
       
     case 'RECORDING_STATUS_UPDATE':
-      if (message.status) {
-        ConsoleState.eventCounts = message.status.counts || ConsoleState.eventCounts;
+      if (message.status?.counts && message.status.counts.events >= ConsoleState.eventCounts.events) {
+        ConsoleState.eventCounts = message.status.counts;
         updateStats();
       }
       break;

@@ -105,7 +105,8 @@
   const CONFIG = {
     API_URL: 'https://dealersface.com/api',
     // API_URL: 'http://localhost:5000/api',
-    MAX_EVENTS: 10000,
+    MAX_EVENTS: 50000,        // Increased for long sessions (was 10000)
+    MAX_EVENTS_WARNING: 40000, // Warn when approaching limit
     DEBOUNCE_SCROLL: 100,
     DEBOUNCE_MOUSE: 50,
     CAPTURE_SCREENSHOTS: false,
@@ -401,9 +402,17 @@
     }
     RecorderState.eventsByTab[tabId].push(event);
     
-    // Limit events to prevent memory issues
+    // Warn when approaching limit
+    if (RecorderState.events.length === CONFIG.MAX_EVENTS_WARNING) {
+      log(`⚠️ Warning: ${CONFIG.MAX_EVENTS_WARNING} events recorded - approaching limit`, 'warning');
+      console.warn('[FMD Recorder] Approaching event limit:', RecorderState.events.length);
+    }
+    
+    // Limit events to prevent memory issues (keep most recent)
     if (RecorderState.events.length > CONFIG.MAX_EVENTS) {
+      const discarded = RecorderState.events.length - CONFIG.MAX_EVENTS;
       RecorderState.events = RecorderState.events.slice(-CONFIG.MAX_EVENTS);
+      log(`⚠️ Event limit reached - discarded ${discarded} oldest events`, 'warning');
     }
     
     log(`Event recorded: ${type}`, event);
@@ -427,7 +436,9 @@
   
   function handleClick(e) {
     console.log('[CONTENT DEBUG] handleClick triggered, isRecording:', RecorderState.isRecording);
-    RecorderState._clickHandled = true;  // Flag that click handler fired
+    
+    // Mark that we handled this click (with timestamp to prevent stale flags)
+    RecorderState._clickHandled = Date.now();
     
     // If grid overlay is visible and click is inside it, let it handle
     if (gridOverlay?.classList.contains('visible') && gridOverlay.contains(e.target)) {
@@ -1290,6 +1301,14 @@
     window.addEventListener('click', handleClickWindow, true);
     window.addEventListener('mousedown', handleMouseDownWindow, true);
     
+    // === CRITICAL FIX FOR FACEBOOK ===
+    // Add pointer events which are harder for React to intercept
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    
+    // Monitor all iframes for clicks
+    setupIframeMonitoring();
+    
     console.log('[CONTENT DEBUG] Setting up file inputs');
     // File inputs
     document.querySelectorAll('input[type="file"]').forEach(input => {
@@ -1408,12 +1427,12 @@
    */
   function handleClickWindow(e) {
     console.log('[CONTENT DEBUG] handleClickWindow triggered');
-    // If the regular click handler didn't fire (checked via flag), record here
-    if (!RecorderState._clickHandled && RecorderState.isRecording) {
+    // If the regular click handler didn't fire recently (within 100ms), record here
+    const timeSinceHandled = Date.now() - (RecorderState._clickHandled || 0);
+    if (timeSinceHandled > 100 && RecorderState.isRecording) {
       console.log('[CONTENT DEBUG] Recording from window click handler (document handler missed)');
       handleClick(e);
     }
-    RecorderState._clickHandled = false;
   }
   
   /**
@@ -1424,6 +1443,128 @@
     // Track for debugging
   }
   
+  // === POINTER EVENT HANDLERS (More reliable on Facebook) ===
+  let lastPointerDownTime = 0;
+  let lastPointerTarget = null;
+  
+  /**
+   * Pointer down handler - captures clicks more reliably than click event
+   */
+  function handlePointerDown(e) {
+    if (!RecorderState.isRecording) return;
+    
+    lastPointerDownTime = Date.now();
+    lastPointerTarget = e.target;
+    
+    console.log('[POINTER] Down on:', e.target.tagName, e.target.className?.substring?.(0, 30));
+  }
+  
+  /**
+   * Pointer up handler - if click wasn't recorded, record it here
+   */
+  function handlePointerUp(e) {
+    if (!RecorderState.isRecording) return;
+    
+    const timeSinceDown = Date.now() - lastPointerDownTime;
+    const timeSinceHandled = Date.now() - (RecorderState._clickHandled || 0);
+    
+    // If it's a quick tap (< 500ms) and click wasn't recently handled, treat as click
+    if (timeSinceDown < 500 && timeSinceHandled > 100 && e.target === lastPointerTarget) {
+      console.log('[POINTER] Click fallback - recording via pointer events');
+      
+      // Create a synthetic click-like event
+      const element = e.target;
+      const elementInfo = extractElementInfo(element);
+      const fieldType = detectFieldType(elementInfo);
+      
+      // Add sequence marker
+      addSequenceMarker(e.pageX, e.pageY, false, fieldType || 'link');
+      
+      recordEvent('click', {
+        element: elementInfo,
+        fieldType: fieldType || 'link',
+        isMarked: false,
+        markedAs: null,
+        sequenceNumber: RecorderState.clickSequence.counter,
+        mousePosition: {
+          clientX: e.clientX,
+          clientY: e.clientY,
+          pageX: e.pageX,
+          pageY: e.pageY,
+        },
+        modifiers: {
+          ctrl: e.ctrlKey,
+          shift: e.shiftKey,
+          alt: e.altKey,
+          meta: e.metaKey,
+        },
+        button: e.button,
+        capturedVia: 'pointer-fallback'
+      });
+    }
+  }
+  
+  /**
+   * Setup iframe monitoring - Facebook uses many iframes
+   */
+  function setupIframeMonitoring() {
+    console.log('[IFRAME] Setting up iframe monitoring');
+    
+    // Track iframes we've already attached to
+    const attachedIframes = new Set();
+    
+    function attachToIframe(iframe) {
+      if (attachedIframes.has(iframe)) return;
+      
+      try {
+        // Check if we can access the iframe (same-origin only)
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!iframeDoc) return;
+        
+        console.log('[IFRAME] Attaching listeners to iframe:', iframe.src?.substring(0, 50));
+        
+        iframeDoc.addEventListener('click', handleClick, true);
+        iframeDoc.addEventListener('pointerdown', handlePointerDown, true);
+        iframeDoc.addEventListener('pointerup', handlePointerUp, true);
+        iframeDoc.addEventListener('input', handleInput, true);
+        iframeDoc.addEventListener('change', handleChange, true);
+        iframeDoc.addEventListener('keydown', handleKeyDown, true);
+        
+        attachedIframes.add(iframe);
+      } catch (err) {
+        // Cross-origin iframe - can't access
+        console.log('[IFRAME] Cross-origin iframe, cannot attach:', iframe.src?.substring(0, 50));
+      }
+    }
+    
+    // Attach to existing iframes
+    document.querySelectorAll('iframe').forEach(attachToIframe);
+    
+    // Watch for new iframes
+    const iframeObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.tagName === 'IFRAME') {
+            // Wait for iframe to load
+            node.addEventListener('load', () => attachToIframe(node));
+            attachToIframe(node);
+          }
+          if (node.querySelectorAll) {
+            node.querySelectorAll('iframe').forEach(iframe => {
+              iframe.addEventListener('load', () => attachToIframe(iframe));
+              attachToIframe(iframe);
+            });
+          }
+        }
+      }
+    });
+    
+    iframeObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
   /**
    * Setup Shadow DOM observer for Facebook's React components
    */

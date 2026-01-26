@@ -142,35 +142,20 @@
             </div>
           </div>
 
-          <!-- Live Console Log (Always visible on Record tab) -->
-          <div class="control-group" id="live-console">
-            <div class="group-header">
-              <span class="header-icon">◇</span>
-              <span class="header-text">LIVE CONSOLE</span>
-              <span class="console-count" id="console-count">0</span>
-            </div>
-            <div class="live-console-container" id="live-console-container">
-              <div class="console-entry info">
-                <span class="console-time">--:--:--</span>
-                <span class="console-msg">System initialized. Ready for recording.</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Live Stats -->
+          <!-- Live Stats - ALWAYS AT TOP FOR VISIBILITY -->
           <div class="control-group" id="live-stats" style="display: none;">
             <div class="group-header">
               <span class="header-icon">◇</span>
               <span class="header-text">LIVE TELEMETRY</span>
-              <span class="live-indicator">● LIVE</span>
+              <span class="live-indicator" id="live-indicator">● LIVE</span>
             </div>
             <div class="stats-grid">
-              <div class="stat-card">
+              <div class="stat-card highlight">
                 <div class="stat-value" id="stat-events">0</div>
                 <div class="stat-label">EVENTS</div>
                 <div class="stat-bar"><div class="stat-fill" id="fill-events"></div></div>
               </div>
-              <div class="stat-card">
+              <div class="stat-card highlight">
                 <div class="stat-value" id="stat-clicks">0</div>
                 <div class="stat-label">CLICKS</div>
                 <div class="stat-bar"><div class="stat-fill" id="fill-clicks"></div></div>
@@ -184,6 +169,21 @@
                 <div class="stat-value" id="stat-marks">0</div>
                 <div class="stat-label">MARKS</div>
                 <div class="stat-bar"><div class="stat-fill" id="fill-marks"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Console Log -->
+          <div class="control-group" id="live-console">
+            <div class="group-header">
+              <span class="header-icon">◇</span>
+              <span class="header-text">LIVE CONSOLE</span>
+              <span class="console-count" id="console-count">0</span>
+            </div>
+            <div class="live-console-container" id="live-console-container">
+              <div class="console-entry info">
+                <span class="console-time">--:--:--</span>
+                <span class="console-msg">System initialized. Ready for recording.</span>
               </div>
             </div>
           </div>

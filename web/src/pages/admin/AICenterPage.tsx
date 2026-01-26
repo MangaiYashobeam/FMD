@@ -96,9 +96,25 @@ export default function AICenterPage() {
       type: 'openai',
       isActive: true,
       defaultModel: 'gpt-4-turbo',
-      availableModels: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+      availableModels: ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'o1-preview', 'o1-mini'],
       healthStatus: 'healthy',
-      capabilities: ['text', 'embeddings', 'vision'],
+      capabilities: ['text', 'embeddings', 'vision', 'reasoning'],
+    },
+    {
+      id: 'github',
+      name: 'GitHub Copilot',
+      displayName: 'GitHub',
+      type: 'github',
+      isActive: true,
+      defaultModel: 'gpt-4o',
+      availableModels: [
+        'gpt-4o', 'gpt-4.1', 'gpt-5-mini', 'gpt-5', 'o1', 'o1-mini',
+        'claude-opus-4.5', 'claude-sonnet-4.5', 'claude-sonnet-4', 'claude-haiku-4.5',
+        'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3-pro-preview',
+        'gpt-5.1-codex', 'gpt-5.2-codex', 'grok-code-fast-1'
+      ],
+      healthStatus: 'unknown',
+      capabilities: ['text', 'code', 'vision', 'reasoning', 'multi-provider'],
     },
     {
       id: 'deepseek',
@@ -503,6 +519,365 @@ function DashboardTab({ stats, traces }: { stats: DashboardStats | null; traces:
 }
 
 // ============================================
+// Provider Modal - Detailed Model View
+// ============================================
+
+// GitHub Copilot Models organized by company - matches VS Code model picker
+const GITHUB_COPILOT_MODELS = {
+  openai: {
+    company: 'OpenAI',
+    color: 'from-green-500 to-emerald-600',
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o', tier: 'Flagship', multiplier: '0x', desc: 'Multimodal flagship model - vision, audio, fast', context: '128K', capabilities: ['chat', 'code', 'vision', 'audio'] },
+      { id: 'gpt-4.1', name: 'GPT-4.1', tier: 'Flagship', multiplier: '0x', desc: 'Latest GPT-4 with 10% discount', context: '128K', capabilities: ['chat', 'code', 'analysis'] },
+      { id: 'gpt-5-mini', name: 'GPT-5 mini', tier: 'Standard', multiplier: '0x', desc: 'Fast and efficient for simple tasks', context: '128K', capabilities: ['chat', 'code'] },
+      { id: 'gpt-5', name: 'GPT-5', tier: 'Flagship', multiplier: '1x', desc: 'Advanced reasoning and planning', context: '200K', capabilities: ['chat', 'code', 'reasoning'] },
+      { id: 'gpt-5.1', name: 'GPT-5.1', tier: 'Flagship', multiplier: '1x', desc: 'Enhanced GPT-5 with better code', context: '200K', capabilities: ['chat', 'code', 'reasoning'] },
+      { id: 'gpt-5.2', name: 'GPT-5.2', tier: 'Flagship', multiplier: '1x', desc: 'Autonomous agents support', context: '200K', capabilities: ['chat', 'code', 'agents'] },
+      { id: 'o1', name: 'o1', tier: 'Reasoning', multiplier: '1x', desc: 'Deep reasoning model', context: '200K', capabilities: ['reasoning', 'math', 'code'] },
+      { id: 'o1-mini', name: 'o1-mini', tier: 'Economy', multiplier: '0.33x', desc: 'Fast reasoning model', context: '128K', capabilities: ['reasoning', 'code'] },
+    ]
+  },
+  anthropic: {
+    company: 'Anthropic',
+    color: 'from-orange-500 to-amber-600',
+    models: [
+      { id: 'claude-opus-4.5', name: 'Claude Opus 4.5', tier: 'Flagship', multiplier: '3x', desc: 'Most capable Claude - extended thinking, computer use', context: '200K', capabilities: ['chat', 'code', 'vision', 'computer-use'] },
+      { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', tier: 'Standard', multiplier: '1x', desc: 'Balanced performance for coding and analysis', context: '200K', capabilities: ['chat', 'code', 'analysis'] },
+      { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', tier: 'Standard', multiplier: '1x', desc: 'General purpose with computer use', context: '200K', capabilities: ['chat', 'code', 'computer-use'] },
+      { id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5', tier: 'Economy', multiplier: '0.33x', desc: 'Fast and cheap for quick tasks', context: '200K', capabilities: ['chat', 'code'] },
+    ]
+  },
+  google: {
+    company: 'Google',
+    color: 'from-blue-500 to-cyan-600',
+    models: [
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'Flagship', multiplier: '1x', desc: '2M token context - document analysis', context: '2M', capabilities: ['chat', 'code', 'vision', 'long-context'] },
+      { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview)', tier: 'Preview', multiplier: '1x', desc: 'Advanced reasoning and agents', context: '1M', capabilities: ['chat', 'code', 'agents'] },
+      { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash (Preview)', tier: 'Preview', multiplier: '0.33x', desc: 'Ultra-fast real-time inference', context: '1M', capabilities: ['chat', 'code', 'realtime'] },
+    ]
+  },
+  codex: {
+    company: 'Codex (Code Specialists)',
+    color: 'from-purple-500 to-violet-600',
+    models: [
+      { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', tier: 'Flagship', multiplier: '1x', desc: 'Enterprise-grade for large codebases', context: '200K', capabilities: ['code', 'architecture', 'migrations'] },
+      { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', tier: 'Flagship', multiplier: '1x', desc: 'Autonomous coding agent', context: '200K', capabilities: ['code', 'autonomous'] },
+      { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', tier: 'Standard', multiplier: '1x', desc: 'Full-stack development', context: '200K', capabilities: ['code', 'testing'] },
+      { id: 'gpt-5-codex-preview', name: 'GPT-5 Codex (Preview)', tier: 'Preview', multiplier: '1x', desc: 'Code generation specialist', context: '200K', capabilities: ['code', 'generation'] },
+      { id: 'gpt-5.1-codex-mini-preview', name: 'GPT-5.1 Codex Mini (Preview)', tier: 'Preview', multiplier: '0.33x', desc: 'Quick code edits', context: '128K', capabilities: ['code', 'quick-fixes'] },
+    ]
+  },
+  xai: {
+    company: 'xAI',
+    color: 'from-gray-500 to-slate-600',
+    models: [
+      { id: 'grok-code-fast-1', name: 'Grok Code Fast 1', tier: 'Standard', multiplier: '0x', desc: 'Fast code inference', context: '128K', capabilities: ['code', 'fast'] },
+    ]
+  },
+  internal: {
+    company: 'GitHub (Internal)',
+    color: 'from-pink-500 to-rose-600',
+    models: [
+      { id: 'raptor-mini-preview', name: 'Raptor mini (Preview)', tier: 'Preview', multiplier: '0x', desc: 'Ultra-fast simple tasks', context: '64K', capabilities: ['chat', 'fast'] },
+    ]
+  }
+};
+
+// Provider detailed models mapping
+const PROVIDER_MODELS: Record<string, any> = {
+  github: GITHUB_COPILOT_MODELS,
+  copilot: GITHUB_COPILOT_MODELS,
+  anthropic: {
+    anthropic: {
+      company: 'Anthropic',
+      color: 'from-orange-500 to-amber-600',
+      models: [
+        { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', tier: 'Flagship', desc: 'Best for coding and analysis', context: '200K', capabilities: ['chat', 'code', 'analysis', 'vision'] },
+        { id: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', tier: 'Economy', desc: 'Fast and efficient', context: '200K', capabilities: ['chat', 'code'] },
+        { id: 'claude-3-opus-latest', name: 'Claude 3 Opus', tier: 'Premium', desc: 'Most capable for complex tasks', context: '200K', capabilities: ['chat', 'code', 'reasoning'] },
+      ]
+    }
+  },
+  openai: {
+    openai: {
+      company: 'OpenAI',
+      color: 'from-green-500 to-emerald-600',
+      models: [
+        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', tier: 'Flagship', desc: 'Fastest GPT-4 variant', context: '128K', capabilities: ['chat', 'code', 'vision'] },
+        { id: 'gpt-4', name: 'GPT-4', tier: 'Standard', desc: 'Original GPT-4', context: '8K', capabilities: ['chat', 'code'] },
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', tier: 'Economy', desc: 'Fast and cheap', context: '16K', capabilities: ['chat', 'code'] },
+        { id: 'o1-preview', name: 'o1 Preview', tier: 'Reasoning', desc: 'Advanced reasoning', context: '128K', capabilities: ['reasoning', 'math'] },
+        { id: 'o1-mini', name: 'o1 Mini', tier: 'Economy', desc: 'Fast reasoning', context: '128K', capabilities: ['reasoning'] },
+      ]
+    }
+  },
+  deepseek: {
+    deepseek: {
+      company: 'DeepSeek',
+      color: 'from-blue-500 to-indigo-600',
+      models: [
+        { id: 'deepseek-chat', name: 'DeepSeek Chat', tier: 'Standard', desc: 'General chat model', context: '64K', capabilities: ['chat', 'code'] },
+        { id: 'deepseek-coder', name: 'DeepSeek Coder', tier: 'Specialist', desc: 'Code specialist', context: '64K', capabilities: ['code'] },
+        { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', tier: 'Reasoning', desc: 'Deep thinking model', context: '64K', capabilities: ['reasoning', 'math'] },
+      ]
+    }
+  }
+};
+
+interface ProviderModalProps {
+  provider: AIProvider | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectModel: (providerId: string, modelId: string) => void;
+}
+
+function ProviderModal({ provider, isOpen, onClose, onSelectModel }: ProviderModalProps) {
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
+
+  if (!isOpen || !provider) return null;
+
+  const providerModels = PROVIDER_MODELS[provider.type] || PROVIDER_MODELS[provider.id];
+  const isGitHub = provider.type === 'github' || provider.type === 'copilot' || provider.id === 'github';
+
+  const getTierColor = (tier: string) => {
+    switch (tier.toLowerCase()) {
+      case 'flagship': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'standard': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'economy': return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'preview': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'reasoning': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      case 'premium': return 'bg-pink-500/20 text-pink-400 border-pink-500/30';
+      case 'specialist': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+      default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    }
+  };
+
+  const getMultiplierColor = (multiplier: string) => {
+    if (multiplier === '0x') return 'text-green-400';
+    if (multiplier === '0.33x') return 'text-blue-400';
+    if (multiplier === '1x') return 'text-yellow-400';
+    if (multiplier === '3x') return 'text-red-400';
+    return 'text-gray-400';
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-gray-800 rounded-xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-2xl border border-gray-700"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className={`p-6 bg-gradient-to-r ${
+            provider.type === 'anthropic' ? 'from-orange-500/20 to-orange-600/10' :
+            provider.type === 'openai' ? 'from-green-500/20 to-green-600/10' :
+            provider.type === 'deepseek' ? 'from-blue-500/20 to-blue-600/10' :
+            isGitHub ? 'from-purple-500/20 to-pink-500/10' : 'from-gray-500/20 to-gray-600/10'
+          } border-b border-gray-700`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className={`p-3 rounded-xl bg-gradient-to-br ${
+                  provider.type === 'anthropic' ? 'from-orange-500 to-amber-600' :
+                  provider.type === 'openai' ? 'from-green-500 to-emerald-600' :
+                  provider.type === 'deepseek' ? 'from-blue-500 to-indigo-600' :
+                  isGitHub ? 'from-purple-500 to-pink-500' : 'from-gray-500 to-slate-600'
+                }`}>
+                  <Bot className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">{provider.name}</h2>
+                  <p className="text-gray-400 text-sm">
+                    {isGitHub ? 'Access all models through GitHub Copilot API' : `Direct ${provider.displayName || provider.name} API access`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-700 rounded-lg transition"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            
+            {/* Provider Status */}
+            <div className="flex items-center space-x-4 mt-4">
+              <span className={`px-3 py-1 rounded-full text-sm flex items-center gap-2 ${
+                provider.healthStatus === 'healthy' ? 'bg-green-500/20 text-green-400' :
+                provider.healthStatus === 'degraded' ? 'bg-yellow-500/20 text-yellow-400' :
+                'bg-red-500/20 text-red-400'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  provider.healthStatus === 'healthy' ? 'bg-green-400 animate-pulse' :
+                  provider.healthStatus === 'degraded' ? 'bg-yellow-400' : 'bg-red-400'
+                }`} />
+                {provider.healthStatus === 'healthy' ? 'Online' : provider.healthStatus}
+              </span>
+              {isGitHub && (
+                <span className="px-3 py-1 rounded-full text-sm bg-purple-500/20 text-purple-400">
+                  ✨ Unified API - All Major Models
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Models List */}
+          <div className="p-6 overflow-y-auto max-h-[calc(85vh-200px)]">
+            {isGitHub && (
+              <div className="mb-4 p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20">
+                <p className="text-sm text-gray-300">
+                  <Sparkles className="w-4 h-4 inline mr-2 text-purple-400" />
+                  <strong>GitHub Copilot</strong> provides unified access to models from OpenAI, Anthropic, Google, and more through a single API key.
+                  Models are organized by their parent company below.
+                </p>
+              </div>
+            )}
+
+            {providerModels && Object.entries(providerModels).map(([companyKey, companyData]: [string, any]) => (
+              <div key={companyKey} className="mb-4">
+                {/* Company Header */}
+                <button
+                  onClick={() => setExpandedCompany(expandedCompany === companyKey ? null : companyKey)}
+                  className={`w-full flex items-center justify-between p-3 rounded-lg bg-gradient-to-r ${companyData.color} bg-opacity-10 hover:bg-opacity-20 transition`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg bg-gradient-to-br ${companyData.color}`}>
+                      <Bot className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="font-semibold text-lg">{companyData.company}</span>
+                    <span className="text-sm text-gray-400">({companyData.models.length} models)</span>
+                  </div>
+                  {expandedCompany === companyKey ? (
+                    <ChevronDown className="w-5 h-5" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5" />
+                  )}
+                </button>
+
+                {/* Models Grid */}
+                <AnimatePresence>
+                  {(expandedCompany === companyKey || !isGitHub) && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-4">
+                        {companyData.models.map((model: any) => (
+                          <motion.div
+                            key={model.id}
+                            whileHover={{ scale: 1.02 }}
+                            className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                              selectedModel === model.id 
+                                ? 'bg-purple-500/20 border-purple-500' 
+                                : 'bg-gray-700/50 border-gray-600 hover:border-gray-500'
+                            }`}
+                            onClick={() => setSelectedModel(model.id)}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h4 className="font-semibold">{model.name}</h4>
+                                <p className="text-xs text-gray-400">{model.id}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {model.multiplier && (
+                                  <span className={`text-xs font-bold ${getMultiplierColor(model.multiplier)}`}>
+                                    {model.multiplier}
+                                  </span>
+                                )}
+                                <span className={`px-2 py-0.5 rounded text-xs border ${getTierColor(model.tier)}`}>
+                                  {model.tier}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <p className="text-sm text-gray-400 mb-2">{model.desc}</p>
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex flex-wrap gap-1">
+                                {model.capabilities?.slice(0, 3).map((cap: string) => (
+                                  <span key={cap} className="px-1.5 py-0.5 bg-gray-600 rounded text-xs">
+                                    {cap}
+                                  </span>
+                                ))}
+                                {model.capabilities?.length > 3 && (
+                                  <span className="px-1.5 py-0.5 bg-gray-600 rounded text-xs text-gray-400">
+                                    +{model.capabilities.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                              {model.context && (
+                                <span className="text-xs text-gray-500">{model.context} ctx</span>
+                              )}
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ))}
+
+            {/* Fallback for providers without detailed models */}
+            {!providerModels && (
+              <div className="text-center text-gray-400 py-8">
+                <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Model details not available for this provider.</p>
+                <p className="text-sm mt-2">Available models: {provider.availableModels?.join(', ')}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-gray-700 bg-gray-800/50 flex items-center justify-between">
+            <div className="text-sm text-gray-400">
+              {selectedModel ? (
+                <span>Selected: <strong className="text-white">{selectedModel}</strong></span>
+              ) : (
+                <span>Click a model to select it</span>
+              )}
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedModel) {
+                    onSelectModel(provider.id, selectedModel);
+                    onClose();
+                  }
+                }}
+                disabled={!selectedModel}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition flex items-center gap-2"
+              >
+                <Zap className="w-4 h-4" />
+                Use This Model
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// ============================================
 // Providers Tab
 // ============================================
 
@@ -511,6 +886,8 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
   const [wakingUp, setWakingUp] = useState<string | null>(null);
   const [wakingUpAll, setWakingUpAll] = useState(false);
   const [testingConnection, setTestingConnection] = useState<string | null>(null);
+  const [selectedProviderModal, setSelectedProviderModal] = useState<AIProvider | null>(null);
+  const [activeModel, setActiveModel] = useState<Record<string, string>>({});
 
   const handleWakeUp = async (providerId: string) => {
     setWakingUp(providerId);
@@ -592,19 +969,27 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {providers.map((provider) => (
-          <div key={provider.id} className="bg-gray-800 rounded-lg p-6">
+          <motion.div 
+            key={provider.id} 
+            className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-750 hover:ring-2 hover:ring-purple-500/50 transition-all"
+            whileHover={{ scale: 1.02 }}
+            onClick={() => setSelectedProviderModal(provider)}
+          >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center space-x-3">
                 <div className={`p-2 rounded-lg ${
                   provider.type === 'openai' ? 'bg-green-500/20' : 
                   provider.type === 'anthropic' ? 'bg-orange-500/20' :
-                  provider.type === 'deepseek' ? 'bg-blue-500/20' : 'bg-gray-500/20'
+                  provider.type === 'deepseek' ? 'bg-blue-500/20' : 
+                  provider.type === 'github' || provider.id === 'github' ? 'bg-purple-500/20' : 'bg-gray-500/20'
                 }`}>
                   <Bot className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="font-semibold">{provider.name}</h3>
-                  <p className="text-sm text-gray-400">{provider.defaultModel}</p>
+                  <p className="text-sm text-gray-400">
+                    {activeModel[provider.id] || provider.defaultModel}
+                  </p>
                 </div>
               </div>
               <span className={`px-2 py-1 rounded text-xs flex items-center gap-1 ${
@@ -631,8 +1016,8 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
                   </span>
                 ))}
                 {provider.availableModels?.length > 3 && (
-                  <span className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-400">
-                    +{provider.availableModels.length - 3} more
+                  <span className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs cursor-pointer hover:bg-purple-500/30">
+                    +{provider.availableModels.length - 3} more →
                   </span>
                 )}
               </div>
@@ -649,7 +1034,13 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
               </div>
             </div>
 
-            <div className="flex space-x-2">
+            {/* Click hint */}
+            <div className="text-xs text-gray-500 mb-3 flex items-center gap-1">
+              <Eye className="w-3 h-3" />
+              Click to view all models
+            </div>
+
+            <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => handleWakeUp(provider.id)}
                 disabled={wakingUp === provider.id}
@@ -675,9 +1066,20 @@ function ProvidersTab({ providers, onRefresh }: { providers: AIProvider[]; onRef
                 Test
               </button>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
+
+      {/* Provider Modal */}
+      <ProviderModal
+        provider={selectedProviderModal}
+        isOpen={!!selectedProviderModal}
+        onClose={() => setSelectedProviderModal(null)}
+        onSelectModel={(providerId, modelId) => {
+          setActiveModel(prev => ({ ...prev, [providerId]: modelId }));
+          toast.success(`Selected ${modelId} for ${providerId}`);
+        }}
+      />
     </div>
   );
 }

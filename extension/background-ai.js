@@ -900,12 +900,12 @@ async function handleCookieChange(changeInfo) {
 }
 
 // ============================================
-// OAuth Flow (DEPRECATED - kept for backwards compatibility)
+// OAuth Flow (RE-ENABLED - OAuth approved)
 // ============================================
 
 /**
- * @deprecated Use captureAndSyncSession() instead
  * Initiate Facebook OAuth login
+ * OAuth is now the primary authentication method with session capture as backup
  */
 async function initiateOAuth() {
   // Ensure we have the latest Facebook config
@@ -1263,25 +1263,68 @@ async function handleMessage(message, sender) {
       return await verify2FACode(message.code);
     
     // ============================================
-    // Legacy Login (Deprecating OAuth)
+    // OAuth Login (Re-enabled with approval)
     // ============================================
     case 'LOGIN':
-      // NEW: Use session-based login instead of OAuth
-      console.log('⚠️ LOGIN via OAuth is deprecated. Use CAPTURE_SESSION instead.');
-      // Check if already logged into Facebook
-      const fbLoggedIn = await isLoggedIntoFacebook();
-      if (!fbLoggedIn) {
+      // OAuth is now re-enabled! Use it as primary method
+      console.log('🔐 LOGIN via OAuth initiated');
+      try {
+        // Ensure we have Facebook config
+        await fetchFacebookConfig();
+        
+        if (!CONFIG.FACEBOOK_APP_ID) {
+          // Fallback to session capture if OAuth not configured
+          console.log('⚠️ OAuth not configured, falling back to session capture');
+          const fbLoggedIn = await isLoggedIntoFacebook();
+          if (!fbLoggedIn) {
+            return { 
+              success: false, 
+              error: 'Please log in to Facebook first, then click "Capture Session"' 
+            };
+          }
+          const sessionResult = await captureAndSyncSession();
+          if (sessionResult.success) {
+            await startIAITaskPolling();
+          }
+          return sessionResult;
+        }
+        
+        // Use OAuth as primary authentication method
+        const oauthResult = await initiateOAuth();
+        if (oauthResult.success !== false) {
+          // OAuth successful - start IAI polling
+          await startIAITaskPolling();
+          // Also capture session for Marketplace automation
+          setTimeout(async () => {
+            try {
+              const isLoggedIn = await isLoggedIntoFacebook();
+              if (isLoggedIn) {
+                await syncSessionToServer();
+                console.log('📤 Session synced after OAuth login');
+              }
+            } catch (e) {
+              console.log('Session sync skipped:', e.message);
+            }
+          }, 2000);
+          return { success: true, ...oauthResult };
+        }
+        return oauthResult;
+      } catch (oauthError) {
+        console.error('OAuth failed, trying session capture:', oauthError);
+        // Fallback: Try session capture
+        const fbLoggedIn = await isLoggedIntoFacebook();
+        if (fbLoggedIn) {
+          const sessionResult = await captureAndSyncSession();
+          if (sessionResult.success) {
+            await startIAITaskPolling();
+          }
+          return sessionResult;
+        }
         return { 
           success: false, 
-          error: 'Please log in to Facebook first, then click "Capture Session"' 
+          error: oauthError.message || 'Login failed. Please try again.' 
         };
       }
-      // Capture session instead of OAuth
-      const sessionResult = await captureAndSyncSession();
-      if (sessionResult.success) {
-        await startIAITaskPolling();
-      }
-      return sessionResult;
       
     case 'LOGOUT':
       // Stop IAI polling on logout

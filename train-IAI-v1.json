@@ -1,0 +1,254 @@
+{
+  "sessionId": "session_1769398353278",
+  "startTime": 1769398353278,
+  "endTime": 1769398594815,
+  "duration": 241537,
+  "metadata": {
+    "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+    "screenWidth": 0,
+    "screenHeight": 0,
+    "recordingType": "iai",
+    "isMultiTab": false
+  },
+  "mode": "listing",
+  "recordingType": "iai",
+  "events": [
+    {
+      "id": "evt_1769398353279_1hw88nuku",
+      "type": "sessionStart",
+      "timestamp": 1769398353279,
+      "relativeTime": 1,
+      "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+      "tabInfo": {
+        "tabId": null,
+        "tabIndex": 0,
+        "tabType": "unknown",
+        "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+        "tabTitle": "Facebook"
+      },
+      "mode": "listing",
+      "recordingType": "iai",
+      "viewport": {
+        "width": 366,
+        "height": 240
+      }
+    },
+    {
+      "id": "evt_1769398594815_vhltabtda",
+      "type": "sessionEnd",
+      "timestamp": 1769398594815,
+      "relativeTime": 241537,
+      "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+      "tabInfo": {
+        "tabId": null,
+        "tabIndex": 0,
+        "tabType": "unknown",
+        "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+        "tabTitle": "Facebook"
+      },
+      "totalEvents": 1,
+      "markedElements": 0,
+      "duration": 241537
+    }
+  ],
+  "totalEvents": 2,
+  "tabData": {
+    "eventsByTab": {
+      "default": [
+        {
+          "id": "evt_1769398009549_wqokd3ep2",
+          "type": "sessionStart",
+          "timestamp": 1769398009549,
+          "relativeTime": 1,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "mode": "listing",
+          "recordingType": "iai",
+          "viewport": {
+            "width": 366,
+            "height": 240
+          }
+        },
+        {
+          "id": "evt_1769398015183_7fxyymvce",
+          "type": "sessionEnd",
+          "timestamp": 1769398015183,
+          "relativeTime": 5635,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "totalEvents": 1,
+          "markedElements": 0,
+          "duration": 5635
+        },
+        {
+          "id": "evt_1769398063243_tc7bhpxoq",
+          "type": "sessionStart",
+          "timestamp": 1769398063243,
+          "relativeTime": 1,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "mode": "listing",
+          "recordingType": "iai",
+          "viewport": {
+            "width": 366,
+            "height": 240
+          }
+        },
+        {
+          "id": "evt_1769398067939_mehkyo62a",
+          "type": "sessionEnd",
+          "timestamp": 1769398067939,
+          "relativeTime": 4697,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "totalEvents": 1,
+          "markedElements": 0,
+          "duration": 4697
+        },
+        {
+          "id": "evt_1769398184050_rb7zwx9tl",
+          "type": "sessionStart",
+          "timestamp": 1769398184050,
+          "relativeTime": 1,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "mode": "listing",
+          "recordingType": "iai",
+          "viewport": {
+            "width": 366,
+            "height": 240
+          }
+        },
+        {
+          "id": "evt_1769398246790_it4zk8as7",
+          "type": "sessionEnd",
+          "timestamp": 1769398246790,
+          "relativeTime": 62741,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "totalEvents": 1,
+          "markedElements": 0,
+          "duration": 62741
+        },
+        {
+          "id": "evt_1769398353279_1hw88nuku",
+          "type": "sessionStart",
+          "timestamp": 1769398353279,
+          "relativeTime": 1,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "mode": "listing",
+          "recordingType": "iai",
+          "viewport": {
+            "width": 366,
+            "height": 240
+          }
+        },
+        {
+          "id": "evt_1769398594815_vhltabtda",
+          "type": "sessionEnd",
+          "timestamp": 1769398594815,
+          "relativeTime": 241537,
+          "url": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+          "tabInfo": {
+            "tabId": null,
+            "tabIndex": 0,
+            "tabType": "unknown",
+            "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+            "tabTitle": "Facebook"
+          },
+          "totalEvents": 1,
+          "markedElements": 0,
+          "duration": 241537
+        }
+      ]
+    },
+    "tabSequence": [],
+    "tabSummary": {
+      "default": {
+        "tabId": "default",
+        "tabType": "facebook-other",
+        "tabUrl": "https://www.facebook.com/ads/ad_preview_generator_iframe/?ad_account_id=1463249740717517&ad_preview_format=MOBILE_FEED_STANDARD&app_id=1146105192114219&cag_preview_spec=%7B%7D&campaign_group_spec=%7B%7D&creative_spec=%7B%22applink_treatment%22%3A%22deeplink_with_web_fallback%22%2C%22instagram_user_id%22%3A%2217841456662072802%22%2C%22object_story_spec%22%3A%7B%22instagram_user_id%22%3A%2217841456662072802%22%2C%22link_data%22%3A%7B%22link%22%3A%22https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22picture%22%3A%22https%3A%2F%2Fscontent.fdub4-2.fna.fbcdn.net%2Fv%2Ft45.5328-4%2F622384653_2392089477924016_6201687074739734346_n.jpg%3F_nc_cat%3D109%26ccb%3D1-7%26_nc_sid%3D657aed%26_nc_ohc%3DIz8UnQHW3jgQ7kNvwHfzMB4%26_nc_oc%3DAdkP-Ahd6gmMC_vhoRAFrthJoEliuDV8abBRt2AEErh3Dtd_h6JPftrmcKWZvl2L-R2w02VqO2n8PRWpyJvrbs2Q%26_nc_zt%3D23%26_nc_ht%3Dscontent.fdub4-2.fna%26_nc_gid%3DZAAKqTovydhkfw3-V9k4eg%26oh%3D00_Afrod9cLQvaSQDeLsX5nP0KxymdZjKap3JTlemHnxWIy0w%26oe%3D697CC82B%22%2C%22message%22%3A%22this%20is%20the%20description%20box%2C%20do%20you%20understand%3F%20things%20should%20be%20automated%20with%20this%5Cn%5CnLearn%20more%20about%20this%20listing%20on%20Facebook%20Marketplace%3A%20https%3A%2F%2Ffacebook.com%2Fmarketplace%2Fitem%2F1245736937450283%2F%22%2C%22name%22%3A%222021%20Jaguar%20Super%20Dooper%22%2C%22use_flexible_image_aspect_ratio%22%3Atrue%2C%22call_to_action%22%3A%7B%22type%22%3A%22CONTACT_US%22%7D%7D%2C%22page_id%22%3A113171304486573%7D%2C%22object_type%22%3A%22SHARE%22%7D&product=boosted_post&cquick=_r_18b_&cquick_token=AUdlAnaLjrb5DpoOoLXe2pFq0F0&ctarget=https%3A%2F%2Fwww.facebook.com",
+        "tabTitle": "Facebook",
+        "eventCount": 8,
+        "firstEventTime": 1769398009549,
+        "lastEventTime": 1769398594815,
+        "duration": 241536,
+        "clicks": 0,
+        "typing": 0,
+        "scrolls": 0,
+        "navigations": 0,
+        "markedCount": 0
+      }
+    },
+    "tabCount": 1
+  },
+  "markedElements": [],
+  "patterns": {
+    "dropdowns": [],
+    "inputs": [],
+    "buttons": [],
+    "navigation": [],
+    "fileUploads": [],
+    "timing": {
+      "averageClickInterval": 0,
+      "averageTypingSpeed": 0,
+      "totalDuration": 241537
+    }
+  },
+  "fieldMappings": {},
+  "clickSequence": [],
+  "typingPatterns": [],
+  "automationCode": {
+    "version": "1.0",
+    "generatedAt": "2026-01-26T03:36:34.815Z",
+    "type": "iai",
+    "mode": "listing",
+    "steps": [],
+    "selectors": {},
+    "timing": {}
+  }
+}

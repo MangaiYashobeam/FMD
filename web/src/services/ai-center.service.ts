@@ -22,7 +22,7 @@ export interface AIProvider {
   id: string;
   name: string;
   displayName: string;
-  type: 'openai' | 'anthropic' | 'deepseek' | 'custom';
+  type: 'openai' | 'anthropic' | 'deepseek' | 'github' | 'copilot' | 'mistral' | 'xai' | 'perplexity' | 'custom';
   isActive: boolean;
   defaultModel: string;
   availableModels: string[];

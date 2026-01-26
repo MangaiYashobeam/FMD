@@ -57,12 +57,19 @@ const DEFAULT_PROVIDERS = [
     name: 'GitHub Copilot',
     displayName: 'GitHub Copilot',
     type: 'github',
-    isActive: !!process.env.GITHUB_COPILOT_TOKEN,
-    defaultModel: 'copilot-gpt-4',
-    availableModels: ['copilot-gpt-4', 'copilot-claude', 'copilot-o1'],
-    healthStatus: process.env.GITHUB_COPILOT_TOKEN ? 'healthy' : 'unknown',
-    capabilities: ['text', 'code', 'analysis'],
-    apiKey: process.env.GITHUB_COPILOT_TOKEN ? '***configured***' : null,
+    isActive: !!(process.env.GITHUB_COPILOT_API_KEY || process.env.GITHUB_COPILOT_TOKEN),
+    defaultModel: 'gpt-4o',
+    availableModels: [
+      // OpenAI models via GitHub
+      'gpt-4o', 'gpt-4', 'gpt-4-turbo', 'o1', 'o1-mini', 'o1-preview',
+      // Anthropic models via GitHub  
+      'claude-3-5-sonnet', 'claude-3-opus', 'claude-3-sonnet',
+      // Google models via GitHub
+      'gemini-1.5-pro', 'gemini-1.5-flash',
+    ],
+    healthStatus: (process.env.GITHUB_COPILOT_API_KEY || process.env.GITHUB_COPILOT_TOKEN) ? 'healthy' : 'unknown',
+    capabilities: ['text', 'code', 'analysis', 'vision', 'reasoning'],
+    apiKey: (process.env.GITHUB_COPILOT_API_KEY || process.env.GITHUB_COPILOT_TOKEN) ? '***configured***' : null,
   },
   {
     id: 'mistral',

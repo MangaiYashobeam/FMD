@@ -149,75 +149,79 @@ export default function AIOrchestratorPage() {
   const [showNewRule, setShowNewRule] = useState(false);
   const [showNewAssignment, setShowNewAssignment] = useState(false);
   const queryClient = useQueryClient();
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  // Helper to make authenticated API calls
+  const fetchWithAuth = async (url: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(error.message || `API error: ${res.status}`);
+    }
+    return res.json();
+  };
 
   // Fetch dashboard data
-  const { data: dashboard, isLoading: dashboardLoading } = useQuery<{ success: boolean; data: DashboardData }>({
+  const { data: dashboard, isLoading: dashboardLoading, error: dashboardError } = useQuery<{ success: boolean; data: DashboardData }>({
     queryKey: ['ai-orchestrator-dashboard'],
-    queryFn: async () => {
-      const res = await fetch('/api/ai-orchestrator/dashboard', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      return res.json();
-    },
+    queryFn: () => fetchWithAuth('/api/ai-orchestrator/dashboard'),
     refetchInterval: 30000,
+    retry: 2,
   });
 
   // Fetch models
-  const { data: modelsData } = useQuery<{ success: boolean; data: { models: CopilotModel[]; grouped: Record<string, CopilotModel[]> } }>({
+  const { data: modelsData, error: modelsError } = useQuery<{ success: boolean; data: { models: CopilotModel[]; grouped: Record<string, CopilotModel[]> } }>({
     queryKey: ['ai-orchestrator-models'],
-    queryFn: async () => {
-      const res = await fetch('/api/ai-orchestrator/models', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      return res.json();
-    },
+    queryFn: () => fetchWithAuth('/api/ai-orchestrator/models'),
+    retry: 2,
   });
 
   // Fetch routing rules
-  const { data: routingData } = useQuery<{ success: boolean; data: { rules: RoutingRule[] } }>({
+  const { data: routingData, error: routingError } = useQuery<{ success: boolean; data: { rules: RoutingRule[] } }>({
     queryKey: ['ai-orchestrator-routing'],
-    queryFn: async () => {
-      const res = await fetch('/api/ai-orchestrator/routing/rules', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      return res.json();
-    },
+    queryFn: () => fetchWithAuth('/api/ai-orchestrator/routing/rules'),
+    retry: 2,
   });
 
   // Fetch assignments
   const { data: assignmentsData } = useQuery<{ success: boolean; data: { assignments: TaskAssignment[]; taskTypes: string[] } }>({
     queryKey: ['ai-orchestrator-assignments'],
-    queryFn: async () => {
-      const res = await fetch('/api/ai-orchestrator/assignments', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      return res.json();
-    },
+    queryFn: () => fetchWithAuth('/api/ai-orchestrator/assignments'),
+    retry: 2,
   });
 
   // Fetch health status
   const { data: healthData } = useQuery<{ success: boolean; data: { providers: ProviderHealth[]; overall: string } }>({
     queryKey: ['ai-orchestrator-health'],
-    queryFn: async () => {
-      const res = await fetch('/api/ai-orchestrator/health', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      return res.json();
-    },
-    refetchInterval: 60000, // Refresh every minute
+    queryFn: () => fetchWithAuth('/api/ai-orchestrator/health'),
+    refetchInterval: 60000,
+    retry: 2,
   });
 
   // Fetch cost summary
   const { data: costData } = useQuery<{ success: boolean; data: CostSummary }>({
     queryKey: ['ai-orchestrator-costs'],
-    queryFn: async () => {
-      const res = await fetch('/api/ai-orchestrator/costs', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      });
-      return res.json();
-    },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    queryFn: () => fetchWithAuth('/api/ai-orchestrator/costs'),
+    refetchInterval: 30000,
+    retry: 2,
   });
+
+  // Log errors for debugging
+  useEffect(() => {
+    const errors = [dashboardError, modelsError, routingError].filter(Boolean);
+    if (errors.length > 0) {
+      console.error('[AI Orchestrator] API Errors:', errors);
+      setApiError(errors[0]?.message || 'Failed to load data');
+    } else {
+      setApiError(null);
+    }
+  }, [dashboardError, modelsError, routingError]);
 
   const models = modelsData?.data?.models || [];
   const groupedModels = modelsData?.data?.grouped || {};
@@ -227,6 +231,19 @@ export default function AIOrchestratorPage() {
   const dashboardStats = dashboard?.data;
   const providerHealth = healthData?.data?.providers || [];
   const costSummary = costData?.data;
+
+  // Debug logging for data loading
+  useEffect(() => {
+    console.log('[AI Orchestrator] Data loaded:', {
+      models: models.length,
+      rules: rules.length,
+      assignments: assignments.length,
+      dashboard: !!dashboardStats,
+      health: providerHealth.length,
+      modelsData: modelsData,
+      routingData: routingData,
+    });
+  }, [models, rules, assignments, dashboardStats, providerHealth, modelsData, routingData]);
 
   if (dashboardLoading) {
     return (
@@ -241,6 +258,22 @@ export default function AIOrchestratorPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Error Banner */}
+      {apiError && (
+        <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center gap-3 text-red-600 dark:text-red-400">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm">Error loading data: {apiError}</span>
+            <button
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['ai-orchestrator'] })}
+              className="ml-auto px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded text-xs transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 text-white">
         <div className="max-w-7xl mx-auto px-4 py-6">
@@ -255,7 +288,7 @@ export default function AIOrchestratorPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-white/10 rounded-full text-sm backdrop-blur-sm">
+              <span className={`px-3 py-1 rounded-full text-sm backdrop-blur-sm ${models.length > 0 ? 'bg-white/10' : 'bg-red-500/20'}`}>
                 {models.length} Models Available
               </span>
               <span className="px-3 py-1 bg-green-500/20 rounded-full text-sm backdrop-blur-sm flex items-center gap-1">
@@ -542,7 +575,7 @@ export default function AIOrchestratorPage() {
                                 )}
                               </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                {rule.conditions.map(c => `${c.field} ${c.operator} ${c.value}`).join(' • ') || 'Default rule'}
+                                {rule.conditions.map(c => `${c.type || c.field || 'condition'} ${c.operator} ${Array.isArray(c.value) ? c.value.join(', ') : c.value}`).join(' • ') || rule.description || 'Default rule'}
                               </div>
                             </div>
                             
