@@ -47,26 +47,26 @@ const IAI_CONFIG = {
       TYPO_RATE: 0.015,   // 1.5% typo rate
       PAUSE_RATE: 0.08,   // 8% chance of pause
       LONG_PAUSE_PROBABILITY: 0.12, // 12% like competitor
-      PAUSE_DURATION: { MIN: 800, MAX: 2500 },
+      PAUSE_DURATION: { MIN: 100, MAX: 300 },  // 5x faster
     },
     MOUSE: {
       JITTER: 12,         // Pixel jitter on clicks
       SCROLL_NOISE: 150,  // Random scroll variation
-      HOVER_TIME: { MIN: 150, MAX: 400 },
+      HOVER_TIME: { MIN: 30, MAX: 80 },  // 5x faster
     },
     TIMING: {
-      ACTION_DELAY: { MIN: 400, MAX: 1800 },
-      PAGE_LOAD_WAIT: { MIN: 1500, MAX: 3500 },
-      THINK_TIME: { MIN: 800, MAX: 3000 },
-      SESSION_BREAK: { MIN: 45000, MAX: 180000 },
+      ACTION_DELAY: { MIN: 80, MAX: 360 },  // 5x faster
+      PAGE_LOAD_WAIT: { MIN: 300, MAX: 700 },  // 5x faster
+      THINK_TIME: { MIN: 80, MAX: 300 },  // 10x faster
+      SESSION_BREAK: { MIN: 4500, MAX: 18000 },  // 10x faster
       // Dropdown specific timing
-      DROPDOWN_WAIT: 200,        // Wait between dropdown retries (like competitor)
-      DROPDOWN_MAX_ATTEMPTS: 10, // Max retries for dropdown (like competitor)
+      DROPDOWN_WAIT: 50,        // 4x faster - wait between dropdown retries
+      DROPDOWN_MAX_ATTEMPTS: 10, // Max retries for dropdown
     },
     SESSION: {
-      MAX_ACTIONS_BEFORE_BREAK: { MIN: 15, MAX: 35 },
-      BREAK_CHANCE: 0.05,
-      OCCASIONAL_LONG_PAUSE_CHANCE: 0.08, // 8% chance after clicks (like competitor)
+      MAX_ACTIONS_BEFORE_BREAK: { MIN: 50, MAX: 100 },  // More actions before break
+      BREAK_CHANCE: 0.01,  // 5x less likely to take breaks
+      OCCASIONAL_LONG_PAUSE_CHANCE: 0.02, // 4x less likely
     },
   },
   
@@ -397,7 +397,7 @@ async function selectFBDropdown(labelText, value, stealth) {
     
     // Click to open dropdown
     await stealth.click(dropdown);
-    await stealth.delay(400, 600);
+    await stealth.delay(80, 120);
     
     // Wait for options to appear and select the value
     let optionFound = false;
@@ -449,19 +449,19 @@ async function selectFBDropdown(labelText, value, stealth) {
       }
       
       if (optionFound) break;
-      await stealth.delay(100, 200);
+      await stealth.delay(20, 40);
     }
     
     if (!optionFound) {
       console.log(`[IAI] ✗ Option "${value}" not found for "${labelText}"`);
       // Press Escape to close any open dropdown
       document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      await stealth.delay(200, 300);
+      await stealth.delay(40, 60);
       return false;
     }
     
     console.log(`[IAI] ✅ "${labelText}" = "${value}" selected successfully`);
-    await stealth.delay(300, 500);
+    await stealth.delay(60, 100);
     return true;
     
   } catch (error) {
@@ -547,7 +547,7 @@ async function selectVehicleType(vehicleType, stealth) {
     
     // Click to open dropdown
     await stealth.click(dropdownTrigger);
-    await stealth.delay(400, 700);
+    await stealth.delay(80, 140);
     
     // Wait for dropdown options to appear
     let optionFound = false;
@@ -585,7 +585,7 @@ async function selectVehicleType(vehicleType, stealth) {
       }
       
       if (optionFound) break;
-      await stealth.delay(150, 250);
+      await stealth.delay(30, 50);
     }
     
     if (!optionFound) {
@@ -596,7 +596,7 @@ async function selectVehicleType(vehicleType, stealth) {
     }
     
     console.log(`[IAI] ✅ Vehicle type "${normalizedType}" selected successfully`);
-    await stealth.delay(500, 800); // Wait for form to update with new fields
+    await stealth.delay(100, 160); // Wait for form to update with new fields
     return true;
     
   } catch (error) {
@@ -636,7 +636,7 @@ async function executeInjectedWorkflow(vehicleData) {
     results.stepsExecuted++;
     filledFields.add('vehicleType');
     console.log('[IAI] ✅ Vehicle type selected, waiting for form fields to load...');
-    await stealth.delay(1000, 1500); // Give FB time to load additional fields
+    await stealth.delay(200, 300); // Give FB time to load additional fields
   } else {
     results.errors.push({ field: 'vehicleType', error: 'Failed to select vehicle type' });
     console.error('[IAI] ⚠️ Vehicle type selection failed, continuing anyway...');
@@ -672,7 +672,7 @@ async function executeInjectedWorkflow(vehicleData) {
       results.errors.push({ field, error: `Failed to select ${label}` });
     }
     
-    await stealth.delay(400, 700);
+    await stealth.delay(80, 140);
   }
   
   console.log(`[IAI] Phase 0.5 complete: ${filledFields.size} dropdowns filled`);
@@ -739,7 +739,7 @@ async function executeInjectedWorkflow(vehicleData) {
       if (inputType === 'dropdown' || inputType === 'select') {
         // Click to open dropdown
         await stealth.click(element);
-        await stealth.delay(400, 600);
+        await stealth.delay(80, 120);
         
         // Find and select option
         const options = document.querySelectorAll('[role="option"], [role="listbox"] [role="option"]');
@@ -756,21 +756,21 @@ async function executeInjectedWorkflow(vehicleData) {
           const input = element.querySelector('input') || element;
           if (input) {
             await stealth.type(input, String(value));
-            await stealth.delay(300, 500);
+            await stealth.delay(60, 100);
             // Press Enter or Tab
             input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
           }
         }
       } else if (inputType === 'contenteditable') {
         await stealth.click(element);
-        await stealth.delay(200, 400);
+        await stealth.delay(40, 80);
         element.focus();
         element.innerHTML = '';
         document.execCommand('insertText', false, String(value));
       } else {
         // Standard input
         await stealth.click(element);
-        await stealth.delay(100, 200);
+        await stealth.delay(20, 40);
         element.value = '';
         element.dispatchEvent(new Event('input', { bubbles: true }));
         await stealth.type(element, String(value));
@@ -780,7 +780,7 @@ async function executeInjectedWorkflow(vehicleData) {
       results.completed.push({ field: fieldType, value: String(value).substring(0, 50) });
       results.stepsExecuted++;
       
-      await stealth.delay(300, 600);
+      await stealth.delay(60, 120);
       
     } catch (err) {
       console.error(`[IAI] Error filling ${fieldType}:`, err);
