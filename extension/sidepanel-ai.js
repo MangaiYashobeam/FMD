@@ -147,27 +147,17 @@ function showDashboard() {
 
 async function loadDashboard() {
   try {
-    // Get account info with timeout
-    const accountPromise = sendMessage({ type: 'GET_ACCOUNT_INFO' });
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Account info timeout')), 10000)
-    );
+    // Get account info
+    const accountResponse = await sendMessage({ type: 'GET_ACCOUNT_INFO' });
+    const account = accountResponse.data;
     
-    let account = null;
-    try {
-      const accountResponse = await Promise.race([accountPromise, timeoutPromise]);
-      account = accountResponse?.data || accountResponse;
-    } catch (e) {
-      console.warn('Account info load failed:', e.message);
-    }
-    
-    // Update user info with fallbacks
-    if (account && (account.name || account.email)) {
-      elements.userName.textContent = account.name || account.dealershipName || 'Dealer Account';
+    if (account) {
+      // Update user info
+      elements.userName.textContent = account.name || 'Dealer Account';
       elements.userEmail.textContent = account.email || '';
-      elements.userAvatar.textContent = (account.name?.[0] || account.email?.[0] || 'D').toUpperCase();
+      elements.userAvatar.textContent = (account.name?.[0] || 'D').toUpperCase();
       
-      // Update stats with safe fallbacks
+      // Update stats
       elements.postsCount.textContent = formatNumber(account.stats?.listings || 0);
       elements.leadsCount.textContent = formatNumber(account.stats?.leads || 0);
       elements.responsesCount.textContent = formatNumber(account.stats?.responses || 0);
@@ -177,21 +167,6 @@ async function loadDashboard() {
       if (account.stats?.unreadMessages > 0) {
         elements.unreadBadge.textContent = account.stats.unreadMessages;
         elements.unreadBadge.style.display = 'inline';
-      }
-    } else {
-      // Try to get from storage as fallback
-      const stored = await chrome.storage.local.get(['authState', 'accountInfo']);
-      const fallbackAccount = stored.accountInfo || stored.authState;
-      
-      if (fallbackAccount) {
-        elements.userName.textContent = fallbackAccount.name || fallbackAccount.email?.split('@')[0] || 'Connected';
-        elements.userEmail.textContent = fallbackAccount.email || '';
-        elements.userAvatar.textContent = (fallbackAccount.name?.[0] || fallbackAccount.email?.[0] || '✓').toUpperCase();
-      } else {
-        // Show generic connected state
-        elements.userName.textContent = 'Connected';
-        elements.userEmail.textContent = 'Account synced';
-        elements.userAvatar.textContent = '✓';
       }
     }
     
@@ -205,11 +180,6 @@ async function loadDashboard() {
     showDashboard();
   } catch (error) {
     console.error('Dashboard loading error:', error);
-    // Still show dashboard even on error
-    elements.userName.textContent = 'Connected';
-    elements.userEmail.textContent = 'Tap to refresh';
-    elements.userAvatar.textContent = '?';
-    showDashboard();
     addActivity('error', 'Failed to load dashboard data');
   }
 }
