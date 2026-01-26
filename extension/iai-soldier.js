@@ -325,6 +325,130 @@ async function loadInjectionPattern() {
 const loadTrainingData = loadInjectionPattern;
 
 /**
+ * Upload images to Facebook Marketplace listing
+ * Finds the file input, fetches images from URLs, and triggers upload
+ */
+async function uploadImagesToFB(imageUrls, stealth) {
+  console.log(`[IAI] 📷 Uploading ${imageUrls?.length || 0} images...`);
+  
+  if (!imageUrls || imageUrls.length === 0) {
+    console.log('[IAI] ⚠️ No images to upload');
+    return { success: false, error: 'No images provided' };
+  }
+  
+  try {
+    // Strategy 1: Find file input by various methods
+    let fileInput = null;
+    
+    // Look for file input with accept="image/*" or similar
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    for (const input of fileInputs) {
+      const accept = input.getAttribute('accept') || '';
+      if (accept.includes('image') || accept.includes('video') || !accept) {
+        fileInput = input;
+        console.log('[IAI] ✓ Found file input via type="file"');
+        break;
+      }
+    }
+    
+    // Strategy 2: Look for the "Add photos" button and find associated input
+    if (!fileInput) {
+      const addPhotoButtons = document.querySelectorAll('[aria-label*="photo"], [aria-label*="Photo"], [role="button"]');
+      for (const btn of addPhotoButtons) {
+        if (btn.textContent?.toLowerCase().includes('photo') || 
+            btn.textContent?.toLowerCase().includes('add')) {
+          // Check for file input in parent or sibling
+          const container = btn.closest('div');
+          if (container) {
+            fileInput = container.querySelector('input[type="file"]');
+            if (fileInput) {
+              console.log('[IAI] ✓ Found file input near "Add photos" button');
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // Strategy 3: Look for hidden file inputs
+    if (!fileInput) {
+      const hiddenInputs = document.querySelectorAll('input[type="file"][style*="display: none"], input[type="file"][hidden]');
+      if (hiddenInputs.length > 0) {
+        fileInput = hiddenInputs[0];
+        console.log('[IAI] ✓ Found hidden file input');
+      }
+    }
+    
+    // Strategy 4: Click the "Add photos" area to potentially reveal file input
+    if (!fileInput) {
+      const photoArea = document.querySelector('[aria-label*="Add photos"], [aria-label*="photo"]');
+      if (photoArea) {
+        console.log('[IAI] 🖱️ Clicking photo upload area...');
+        await stealth.click(photoArea);
+        await stealth.delay(500, 800);
+        // Try again after click
+        fileInput = document.querySelector('input[type="file"]');
+      }
+    }
+    
+    if (!fileInput) {
+      console.log('[IAI] ✗ Could not find file input for image upload');
+      return { success: false, error: 'File input not found' };
+    }
+    
+    // Fetch and convert images to File objects
+    const files = [];
+    for (let i = 0; i < Math.min(imageUrls.length, 20); i++) { // FB limit is usually 20 images
+      const url = imageUrls[i];
+      console.log(`[IAI] 📥 Fetching image ${i + 1}: ${url.substring(0, 50)}...`);
+      
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.warn(`[IAI] ⚠️ Failed to fetch image ${i + 1}: ${response.status}`);
+          continue;
+        }
+        
+        const blob = await response.blob();
+        const fileName = `vehicle_image_${i + 1}.${blob.type.split('/')[1] || 'jpg'}`;
+        const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+        files.push(file);
+        console.log(`[IAI] ✓ Image ${i + 1} ready: ${fileName} (${(blob.size / 1024).toFixed(1)}KB)`);
+      } catch (fetchError) {
+        console.warn(`[IAI] ⚠️ Error fetching image ${i + 1}:`, fetchError.message);
+      }
+    }
+    
+    if (files.length === 0) {
+      console.log('[IAI] ✗ No images could be fetched');
+      return { success: false, error: 'No images fetched' };
+    }
+    
+    // Create DataTransfer to set files on input
+    const dataTransfer = new DataTransfer();
+    files.forEach(file => dataTransfer.items.add(file));
+    
+    // Set files on input
+    fileInput.files = dataTransfer.files;
+    
+    // Dispatch events to trigger FB's handlers
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    console.log(`[IAI] ✅ ${files.length} images uploaded successfully!`);
+    
+    // Wait for FB to process
+    await stealth.delay(1000, 1500);
+    
+    return { success: true, count: files.length };
+    
+  } catch (error) {
+    console.error('[IAI] Image upload error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Select Facebook Marketplace Make/Model typeahead fields
  * These are combobox fields - you type and suggestions appear
  */
@@ -754,9 +878,24 @@ async function executeInjectedWorkflow(vehicleData) {
   // TEST1: Original code - clean title clicked twice
   // TEST2: Added clickedAriaLabels tracking but only for step.type === 'click'
   // TEST3: Track ALL ariaLabels regardless of step type + pre-emptive marking ✅ FIXED
-  // TEST4: Make/Model as TYPEAHEAD (combobox) instead of dropdown
-  const TEST_VERSION = 'TEST4';
-  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Make/Model typeahead + Body style/Condition dropdowns`);
+  // TEST4: Make/Model as TYPEAHEAD (combobox) instead of dropdown ✅ WORKING
+  // TEST5: Add Body style, Vehicle condition dropdowns + IMAGE UPLOAD
+  const TEST_VERSION = 'TEST5';
+  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Body style/Condition + Image Upload`);
+  
+  // Log vehicleData to debug missing fields
+  console.log('[IAI] 📦 Vehicle data received:', JSON.stringify({
+    year: vehicleData.year,
+    make: vehicleData.make,
+    model: vehicleData.model,
+    bodyStyle: vehicleData.bodyStyle || vehicleData.body,
+    condition: vehicleData.condition,
+    images: vehicleData.images?.length || 0
+  }));
+  
+  // Apply defaults for missing fields
+  vehicleData.bodyStyle = vehicleData.bodyStyle || vehicleData.body || 'Sedan';
+  vehicleData.condition = vehicleData.condition || 'Good';
   
   if (!IAI_INJECTION._loaded) {
     console.error('[IAI] ❌ No injection pattern loaded - cannot execute workflow');
@@ -794,6 +933,24 @@ async function executeInjectedWorkflow(vehicleData) {
   } else {
     results.errors.push({ field: 'vehicleType', error: 'Failed to select vehicle type' });
     console.error('[IAI] ⚠️ Vehicle type selection failed, continuing anyway...');
+  }
+  
+  // === PHASE 0.1: Upload Images (do this early so they're processing while we fill fields) ===
+  if (vehicleData.images && vehicleData.images.length > 0) {
+    console.log('[IAI] 📋 Phase 0.1: Uploading images...');
+    results.stepsTotal++;
+    const imageResult = await uploadImagesToFB(vehicleData.images, stealth);
+    if (imageResult.success) {
+      results.completed.push({ field: 'images', value: `${imageResult.count} images` });
+      results.stepsExecuted++;
+      filledFields.add('images');
+      console.log(`[IAI] ✅ Images uploaded: ${imageResult.count} files`);
+    } else {
+      results.errors.push({ field: 'images', error: imageResult.error });
+      console.warn(`[IAI] ⚠️ Image upload failed: ${imageResult.error}`);
+    }
+  } else {
+    console.log('[IAI] ℹ️ No images provided, skipping upload');
   }
   
   // === PHASE 0.5: Fill key dropdowns (Year, Make, Model, Transmission, etc.) ===
@@ -871,9 +1028,15 @@ async function executeInjectedWorkflow(vehicleData) {
     { field: 'interiorColor', label: 'Interior color', value: vehicleData.interiorColor },
   ];
   
+  console.log('[IAI] 📋 Remaining dropdowns to fill:', remainingDropdowns.map(d => `${d.field}=${d.value || 'EMPTY'}`).join(', '));
+  
   for (const { field, label, value } of remainingDropdowns) {
-    if (!value) continue;
+    if (!value) {
+      console.log(`[IAI] ⏭️ Skipping ${field} - no value provided`);
+      continue;
+    }
     
+    console.log(`[IAI] 🔄 Processing dropdown: ${field} = "${value}"`);
     results.stepsTotal++;
     const success = await selectFBDropdown(label, value, stealth);
     
