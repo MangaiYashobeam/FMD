@@ -606,6 +606,13 @@ async function selectVehicleType(vehicleType, stealth) {
 }
 
 async function executeInjectedWorkflow(vehicleData) {
+  // TEST VERSION TRACKING for debugging:
+  // TEST1: Original code - clean title clicked twice
+  // TEST2: Added clickedAriaLabels tracking but only for step.type === 'click'
+  // TEST3: Track ALL ariaLabels regardless of step type + pre-emptive marking
+  const TEST_VERSION = 'TEST3';
+  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Pre-emptive ariaLabel tracking`);
+  
   if (!IAI_INJECTION._loaded) {
     console.error('[IAI] ❌ No injection pattern loaded - cannot execute workflow');
     return { success: false, error: 'No injection pattern loaded' };
@@ -617,6 +624,7 @@ async function executeInjectedWorkflow(vehicleData) {
   const stealth = new IAIStealth();
   const filledFields = new Set(); // Track filled fields across all phases
   const clickedAriaLabels = new Set(); // Track clicked ariaLabels to prevent double-clicks (clean title issue)
+  const clickedElements = new WeakSet(); // Track actual DOM elements that have been clicked
   const results = {
     success: false,
     stepsExecuted: 0,
@@ -868,15 +876,17 @@ async function executeInjectedWorkflow(vehicleData) {
         continue;
       }
       
-      // CRITICAL: Skip duplicate ariaLabel clicks to prevent checkbox double-toggle
-      // (This fixes the clean title checkbox being clicked then immediately unclicked)
+      // CRITICAL FIX (TEST3): Skip duplicate ariaLabel clicks to prevent checkbox double-toggle
+      // The clean title checkbox appears in multiple workflow steps - only click ONCE
       const stepAriaLabel = step.element?.ariaLabel || step.ariaLabel;
-      if (stepAriaLabel && step.type === 'click') {
+      if (stepAriaLabel) {
         if (clickedAriaLabels.has(stepAriaLabel)) {
-          console.log(`[IAI] ⏭ Skipping duplicate click on ariaLabel: ${stepAriaLabel}`);
+          console.log(`[IAI] ⏭ TEST3: Skipping duplicate ariaLabel: "${stepAriaLabel}"`);
           continue;
         }
+        // Pre-emptively mark this ariaLabel as clicked BEFORE attempting
         clickedAriaLabels.add(stepAriaLabel);
+        console.log(`[IAI] 🎯 TEST3: First time clicking ariaLabel: "${stepAriaLabel}"`);
       }
       
       results.stepsTotal++;
