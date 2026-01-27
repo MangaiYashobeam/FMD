@@ -17,7 +17,6 @@
  */
 
 import { Router, Response } from 'express';
-import type { ParsedQs } from 'qs';
 import { authenticate, AuthRequest } from '@middleware/auth';
 import { requireSuperAdmin } from '@middleware/rbac';
 import prisma from '@config/database';
@@ -146,10 +145,9 @@ function sanitizeText(text: string | undefined, maxLength: number = 500): string
  * Extract single string from query param (prevent array pollution)
  * Handles Express ParsedQs types properly
  */
-type QueryParam = string | string[] | ParsedQs | ParsedQs[] | undefined;
-function getSingleParam(param: QueryParam): string | undefined {
+function getSingleParam(param: unknown): string | undefined {
   if (typeof param === 'string') return param;
-  if (Array.isArray(param)) {
+  if (Array.isArray(param) && param.length > 0) {
     const first = param[0];
     return typeof first === 'string' ? first : undefined;
   }
