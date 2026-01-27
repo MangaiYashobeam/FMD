@@ -469,16 +469,16 @@ router.post('/soldiers/:id/restart', authenticate, async (req: AuthRequest, res:
 /**
  * POST /api/extension/iai/register
  * Register a new IAI soldier (called when extension starts)
+ * 
+ * SECURITY: Validates user has access to accountId before allowing registration
  */
 router.post('/register', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { 
       accountId, 
-      userId, 
       browserId,
       extensionVersion,
       userAgent,
-      ipAddress,
       locationCountry,
       locationCity,
       locationLat,
@@ -490,28 +490,76 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response) =
       return res.status(400).json({ error: 'accountId is required' });
     }
 
+    // ============================================
+    // SECURITY: Validate user has access to this account
+    // Prevents attackers from registering soldiers to accounts they don't own
+    // ============================================
+    const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+    const hasAccountAccess = req.user?.accountIds?.includes(accountId);
+    
+    if (!isSuperAdmin && !hasAccountAccess) {
+      console.warn(`[SECURITY] User ${req.user?.id} attempted to register soldier to unauthorized account ${accountId}`);
+      return res.status(403).json({ 
+        error: 'Access denied',
+        message: 'You do not have access to this account' 
+      });
+    }
+
+    // ============================================
+    // SECURITY: Sanitize and validate inputs
+    // Prevent XSS and injection attacks
+    // ============================================
+    const sanitize = (str: string | undefined, maxLen = 255): string | null => {
+      if (!str) return null;
+      // Remove potential XSS, limit length
+      return String(str)
+        .replace(/<[^>]*>/g, '') // Strip HTML tags
+        .replace(/[<>"'&]/g, '') // Remove dangerous chars
+        .substring(0, maxLen)
+        .trim() || null;
+    };
+
+    const safeExtensionVersion = sanitize(extensionVersion, 50);
+    const safeUserAgent = sanitize(userAgent, 500);
+    const safeCountry = sanitize(locationCountry, 100);
+    const safeCity = sanitize(locationCity, 100);
+    const safeTimezone = sanitize(timezone, 100);
+    const safeBrowserId = sanitize(browserId, 100);
+
+    // Validate lat/lng are numbers within valid ranges
+    const safeLat = typeof locationLat === 'number' && locationLat >= -90 && locationLat <= 90 
+      ? locationLat : null;
+    const safeLng = typeof locationLng === 'number' && locationLng >= -180 && locationLng <= 180 
+      ? locationLng : null;
+
+    // Get real IP from request (don't trust client-provided IP)
+    const realIpAddress = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() 
+      || req.headers['x-real-ip']?.toString() 
+      || req.socket.remoteAddress 
+      || null;
+
     // Check if soldier already exists for this browser/account combo
     let soldier = await prisma.iAISoldier.findFirst({
       where: {
         accountId,
-        browserId: browserId || null,
+        browserId: safeBrowserId || null,
       },
     });
 
     if (soldier) {
-      // Update existing soldier
+      // Update existing soldier with sanitized data
       soldier = await prisma.iAISoldier.update({
         where: { id: soldier.id },
         data: {
           status: 'online',
-          extensionVersion,
-          userAgent,
-          ipAddress,
-          locationCountry,
-          locationCity,
-          locationLat,
-          locationLng,
-          timezone,
+          extensionVersion: safeExtensionVersion,
+          userAgent: safeUserAgent,
+          ipAddress: realIpAddress,
+          locationCountry: safeCountry,
+          locationCity: safeCity,
+          locationLat: safeLat,
+          locationLng: safeLng,
+          timezone: safeTimezone,
           lastHeartbeatAt: new Date(),
           sessionStartAt: new Date(),
           totalSessions: { increment: 1 },
@@ -528,11 +576,11 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response) =
           eventData: {
             previousStatus: 'offline',
             newStatus: 'online',
-            extensionVersion,
+            extensionVersion: safeExtensionVersion,
           },
-          ipAddress,
-          locationLat,
-          locationLng,
+          ipAddress: realIpAddress,
+          locationLat: safeLat,
+          locationLng: safeLng,
         },
       });
     } else {
@@ -542,21 +590,22 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response) =
       });
       const nextNumber = (lastSoldier?.soldierNumber || 0) + 1;
 
-      // Create new soldier
+      // Create new soldier with sanitized data
+      // userId is derived from authenticated user, not from request body
       soldier = await prisma.iAISoldier.create({
         data: {
           soldierId: `IAI-${nextNumber - 1}`, // IAI-0, IAI-1, etc.
           accountId,
-          userId: userId || null,
-          browserId: browserId || null,
-          extensionVersion,
-          userAgent,
-          ipAddress,
-          locationCountry,
-          locationCity,
-          locationLat,
-          locationLng,
-          timezone,
+          userId: req.user?.id || null, // SECURITY: Use authenticated user ID, not body
+          browserId: safeBrowserId || null,
+          extensionVersion: safeExtensionVersion,
+          userAgent: safeUserAgent,
+          ipAddress: realIpAddress,
+          locationCountry: safeCountry,
+          locationCity: safeCity,
+          locationLat: safeLat,
+          locationLng: safeLng,
+          timezone: safeTimezone,
           status: 'online',
           lastHeartbeatAt: new Date(),
           sessionStartAt: new Date(),
@@ -572,13 +621,13 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response) =
           eventType: 'status_change',
           message: `New soldier ${soldier.soldierId} deployed`,
           eventData: {
-            extensionVersion,
-            browser: userAgent,
-            location: `${locationCity}, ${locationCountry}`,
+            extensionVersion: safeExtensionVersion,
+            browser: safeUserAgent,
+            location: `${safeCity || 'Unknown'}, ${safeCountry || 'Unknown'}`,
           },
-          ipAddress,
-          locationLat,
-          locationLng,
+          ipAddress: realIpAddress,
+          locationLat: safeLat,
+          locationLng: safeLng,
         },
       });
     }
@@ -599,6 +648,8 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response) =
 /**
  * POST /api/extension/iai/heartbeat
  * Send status update (called every 30s by extension)
+ * 
+ * SECURITY: Validates user has access to accountId
  */
 router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -608,7 +659,6 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
       status = 'online',
       currentTaskId,
       currentTaskType,
-      ipAddress,
       locationLat,
       locationLng,
       cpuUsage,
@@ -618,6 +668,33 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
     if (!soldierId || !accountId) {
       return res.status(400).json({ error: 'soldierId and accountId are required' });
     }
+
+    // ============================================
+    // SECURITY: Validate user has access to this account
+    // ============================================
+    const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+    const hasAccountAccess = req.user?.accountIds?.includes(accountId);
+    
+    if (!isSuperAdmin && !hasAccountAccess) {
+      console.warn(`[SECURITY] User ${req.user?.id} attempted heartbeat for unauthorized account ${accountId}`);
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get real IP from request headers
+    const realIpAddress = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() 
+      || req.headers['x-real-ip']?.toString() 
+      || req.socket.remoteAddress 
+      || null;
+
+    // Validate lat/lng
+    const safeLat = typeof locationLat === 'number' && locationLat >= -90 && locationLat <= 90 
+      ? locationLat : null;
+    const safeLng = typeof locationLng === 'number' && locationLng >= -180 && locationLng <= 180 
+      ? locationLng : null;
+
+    // Sanitize status (only allow known values)
+    const allowedStatuses = ['online', 'busy', 'idle', 'offline', 'error'];
+    const safeStatus = allowedStatuses.includes(status) ? status : 'online';
 
     // Find soldier by custom soldierId (IAI-0, IAI-1, etc.)
     const soldier = await prisma.iAISoldier.findFirst({
@@ -631,18 +708,19 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
       return res.status(404).json({ error: 'Soldier not found' });
     }
 
-    // Update soldier status
+    // Update soldier status with sanitized data
     const updateData: any = {
-      status,
+      status: safeStatus,
       lastHeartbeatAt: new Date(),
-      ipAddress,
-      locationLat,
-      locationLng,
+      ipAddress: realIpAddress,
+      locationLat: safeLat,
+      locationLng: safeLng,
     };
 
     if (currentTaskId) {
-      updateData.currentTaskId = currentTaskId;
-      updateData.currentTaskType = currentTaskType;
+      // Sanitize task info
+      updateData.currentTaskId = typeof currentTaskId === 'string' ? currentTaskId.substring(0, 100) : null;
+      updateData.currentTaskType = typeof currentTaskType === 'string' ? currentTaskType.substring(0, 50) : null;
       updateData.lastPollAt = new Date();
     }
 
@@ -659,13 +737,17 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
       data: updateData,
     });
 
+    // Validate CPU and memory usage values
+    const safeCpuUsage = typeof cpuUsage === 'number' && cpuUsage >= 0 && cpuUsage <= 100 ? cpuUsage : null;
+    const safeMemoryUsage = typeof memoryUsageMb === 'number' && memoryUsageMb >= 0 && memoryUsageMb <= 100000 ? memoryUsageMb : null;
+
     // Create performance snapshot every heartbeat
     await prisma.iAIPerformanceSnapshot.create({
       data: {
         soldierId: soldier.id,
-        status,
-        cpuUsage,
-        memoryUsageMb,
+        status: safeStatus,
+        cpuUsage: safeCpuUsage,
+        memoryUsageMb: safeMemoryUsage,
         tasksInPeriod: 0, // Will be calculated by aggregation job
         successCount: 0,
         failureCount: 0,
@@ -682,6 +764,8 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
 /**
  * POST /api/extension/iai/log-activity
  * Log an activity event (task start, complete, fail, error)
+ * 
+ * SECURITY: Validates user has access to accountId and sanitizes inputs
  */
 router.post('/log-activity', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -694,7 +778,6 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
       taskId,
       taskType,
       taskResult,
-      ipAddress,
       locationLat,
       locationLng,
     } = req.body;
@@ -705,6 +788,36 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
       });
     }
 
+    // ============================================
+    // SECURITY: Validate user has access to this account
+    // ============================================
+    const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
+    const hasAccountAccess = req.user?.accountIds?.includes(accountId);
+    
+    if (!isSuperAdmin && !hasAccountAccess) {
+      console.warn(`[SECURITY] User ${req.user?.id} attempted log-activity for unauthorized account ${accountId}`);
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Sanitize inputs
+    const allowedEventTypes = ['task_start', 'task_complete', 'task_fail', 'task_error', 'status_change', 'error', 'warning', 'info'];
+    const safeEventType = allowedEventTypes.includes(eventType) ? eventType : 'info';
+    const safeMessage = typeof message === 'string' ? message.substring(0, 1000).replace(/<[^>]*>/g, '') : null;
+    const safeTaskId = typeof taskId === 'string' ? taskId.substring(0, 100) : null;
+    const safeTaskType = typeof taskType === 'string' ? taskType.substring(0, 50) : null;
+
+    // Get real IP
+    const realIpAddress = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() 
+      || req.headers['x-real-ip']?.toString() 
+      || req.socket.remoteAddress 
+      || null;
+
+    // Validate lat/lng
+    const safeLat = typeof locationLat === 'number' && locationLat >= -90 && locationLat <= 90 
+      ? locationLat : null;
+    const safeLng = typeof locationLng === 'number' && locationLng >= -180 && locationLng <= 180 
+      ? locationLng : null;
+
     // Find soldier
     const soldier = await prisma.iAISoldier.findFirst({
       where: { soldierId, accountId },
@@ -714,33 +827,48 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
       return res.status(404).json({ error: 'Soldier not found' });
     }
 
-    // Create activity log
+    // Sanitize eventData (limit size, remove dangerous content)
+    let safeEventData: any = null;
+    if (eventData && typeof eventData === 'object') {
+      try {
+        const jsonStr = JSON.stringify(eventData);
+        if (jsonStr.length <= 10000) { // Max 10KB
+          safeEventData = eventData;
+        } else {
+          safeEventData = { truncated: true, originalSize: jsonStr.length };
+        }
+      } catch {
+        safeEventData = { error: 'Invalid event data' };
+      }
+    }
+
+    // Create activity log with sanitized data
     await prisma.iAIActivityLog.create({
       data: {
         soldierId: soldier.id,
         accountId,
-        eventType,
-        message,
-        eventData,
-        taskId,
-        taskType,
-        taskResult,
-        ipAddress,
-        locationLat,
-        locationLng,
+        eventType: safeEventType,
+        message: safeMessage,
+        eventData: safeEventData,
+        taskId: safeTaskId,
+        taskType: safeTaskType,
+        taskResult: typeof taskResult === 'string' ? taskResult.substring(0, 50) : null,
+        ipAddress: realIpAddress,
+        locationLat: safeLat,
+        locationLng: safeLng,
       },
     });
 
     // Update soldier stats based on event type
     const updates: any = {};
     
-    if (eventType === 'task_start') {
-      updates.currentTaskId = taskId;
-      updates.currentTaskType = taskType;
+    if (safeEventType === 'task_start') {
+      updates.currentTaskId = safeTaskId;
+      updates.currentTaskType = safeTaskType;
       updates.currentTaskStartedAt = new Date();
       updates.lastTaskAt = new Date();
       updates.status = 'working';
-    } else if (eventType === 'task_complete') {
+    } else if (safeEventType === 'task_complete') {
       updates.tasksCompleted = { increment: 1 };
       updates.currentTaskId = null;
       updates.currentTaskType = null;
@@ -759,7 +887,7 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
           (prevAvg * soldier.tasksCompleted + durationSec) / totalTasks
         );
       }
-    } else if (eventType === 'task_fail') {
+    } else if (safeEventType === 'task_fail') {
       updates.tasksFailed = { increment: 1 };
       updates.currentTaskId = null;
       updates.currentTaskType = null;
