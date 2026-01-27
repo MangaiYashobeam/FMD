@@ -447,6 +447,93 @@ class InjectionService {
   }
 
   /**
+   * Select a pattern from a container by container name (USM support)
+   * Used for Ultra Speed Mode hot-swap from specific containers
+   */
+  async selectPatternFromContainerByName(
+    containerName: string, 
+    strategy: 'random' | 'weighted' | 'priority' | 'round-robin' = 'weighted'
+  ): Promise<{ pattern: InjectionPattern | null; container: InjectionContainer | null }> {
+    const container = await this.getContainerByName(containerName, false);
+    
+    if (!container || !container.isActive) {
+      logger.warn(`[InjectionService] Container "${containerName}" not found or inactive`);
+      return { pattern: null, container: null };
+    }
+
+    const pattern = await this.selectPattern(container.id, strategy);
+    
+    if (pattern) {
+      logger.info(`[InjectionService] Selected pattern "${pattern.name}" from container "${containerName}" using ${strategy} strategy`);
+    }
+
+    return { pattern, container };
+  }
+
+  /**
+   * Get all patterns from USM (Ultra Speed Mode) container for hot-swap
+   */
+  async getUSMPatterns(): Promise<{ patterns: InjectionPattern[]; container: InjectionContainer | null }> {
+    const container = await this.getContainerByName('IAI Soldiers USM', true);
+    
+    if (!container || !container.isActive) {
+      logger.warn('[InjectionService] USM container not found or inactive');
+      return { patterns: [], container: null };
+    }
+
+    const patterns = container.patterns || [];
+    logger.info(`[InjectionService] Found ${patterns.length} USM patterns for hot-swap`);
+    
+    return { patterns: patterns as InjectionPattern[], container };
+  }
+
+  /**
+   * Select best pattern for Ultra Speed Mode using weighted random
+   * Factors in success rate, execution time, and weight
+   */
+  async selectUSMPattern(): Promise<{ pattern: InjectionPattern | null; container: InjectionContainer | null }> {
+    const { patterns, container } = await this.getUSMPatterns();
+    
+    if (patterns.length === 0) {
+      // Fallback to FBM-Official-P1 if no USM patterns exist
+      logger.warn('[InjectionService] No USM patterns found, falling back to FBM-Official-P1');
+      const fallbackPattern = await prisma.injectionPattern.findFirst({
+        where: { name: 'FBM-Official-P1', isActive: true }
+      });
+      if (fallbackPattern) {
+        const fallbackContainer = await this.getContainer(fallbackPattern.containerId, false);
+        return { pattern: fallbackPattern as InjectionPattern, container: fallbackContainer };
+      }
+      return { pattern: null, container: null };
+    }
+
+    // Weighted selection based on successCount and weight
+    const activePatterns = patterns.filter(p => p.isActive);
+    if (activePatterns.length === 0) {
+      return { pattern: null, container };
+    }
+
+    // Calculate weights: base weight + (successCount * 10) - (failureCount * 5)
+    const weightedPatterns = activePatterns.map(p => ({
+      pattern: p,
+      calculatedWeight: Math.max(1, p.weight + (p.successCount * 10) - (p.failureCount * 5))
+    }));
+
+    const totalWeight = weightedPatterns.reduce((sum, wp) => sum + wp.calculatedWeight, 0);
+    let random = Math.random() * totalWeight;
+
+    for (const wp of weightedPatterns) {
+      random -= wp.calculatedWeight;
+      if (random <= 0) {
+        logger.info(`[InjectionService] USM hot-swap selected: ${wp.pattern.name} (weight: ${wp.calculatedWeight})`);
+        return { pattern: wp.pattern, container };
+      }
+    }
+
+    return { pattern: activePatterns[0], container };
+  }
+
+  /**
    * Execute an injection
    */
   async inject(options: InjectionOptions): Promise<InjectionResult> {

@@ -560,14 +560,71 @@ export class VehicleController {
       // Create pixel event if enabled
       const pixelEvent = await createPixelEvent();
 
-      // Determine pattern to use - Ultra Speed uses exclusive fast pattern
-      let patternName = 'FBM-Official-P1'; // Default pattern
+      // =====================================================
+      // IAI HOT-SWAP PATTERN SELECTION SYSTEM
+      // Ultra Speed Mode: Select from USM container only
+      // Normal Mode: Select from all available patterns
+      // =====================================================
+      let selectedPattern: InjectionPattern | null = null;
+      let patternName = 'FBM-Official-P1'; // Default fallback
+      let containerId: string | null = null;
+      let containerName: string | null = null;
+
       if (ultraSpeed) {
-        // Ultra Speed mode - use optimized fast pattern for user browsers
-        // User browsers have fingerprints/history so need fewer delays
-        patternName = 'FBM-UltraSpeed';
-        logger.info(`IAI using Ultra Speed pattern for vehicle ${id}`);
+        // Ultra Speed Mode - Hot-swap from USM container exclusively
+        logger.info(`[IAI] Ultra Speed Mode activated for vehicle ${id} - selecting from USM container`);
+        const usmResult = await injectionService.selectUSMPattern();
+        
+        if (usmResult.pattern) {
+          selectedPattern = usmResult.pattern;
+          patternName = usmResult.pattern.name;
+          containerId = usmResult.container?.id || null;
+          containerName = 'IAI Soldiers USM';
+          logger.info(`[IAI] USM Hot-swap selected: ${patternName} (container: ${containerName})`);
+        } else {
+          // Fallback to default if USM patterns unavailable
+          logger.warn(`[IAI] No USM patterns available, falling back to FBM-Official-P1`);
+          patternName = 'FBM-Official-P1';
+        }
+      } else {
+        // Normal Mode - Hot-swap from all available patterns using weighted random
+        logger.info(`[IAI] Normal mode for vehicle ${id} - hot-swap from all patterns`);
+        const { patterns } = await injectionService.listPatterns({ isActive: true });
+        
+        if (patterns.length > 0) {
+          // Weighted random selection based on successCount
+          const weightedPatterns = patterns.map(p => ({
+            pattern: p,
+            calculatedWeight: Math.max(1, p.weight + (p.successCount * 10) - (p.failureCount * 5))
+          }));
+          
+          const totalWeight = weightedPatterns.reduce((sum, wp) => sum + wp.calculatedWeight, 0);
+          let random = Math.random() * totalWeight;
+          
+          for (const wp of weightedPatterns) {
+            random -= wp.calculatedWeight;
+            if (random <= 0) {
+              selectedPattern = wp.pattern;
+              patternName = wp.pattern.name;
+              containerId = wp.pattern.containerId;
+              break;
+            }
+          }
+          
+          // Fallback to first pattern if selection fails
+          if (!selectedPattern && patterns.length > 0) {
+            selectedPattern = patterns[0];
+            patternName = patterns[0].name;
+            containerId = patterns[0].containerId;
+          }
+          
+          logger.info(`[IAI] Hot-swap selected: ${patternName} (weight: ${selectedPattern?.weight || 0}, success: ${selectedPattern?.successCount || 0})`);
+        }
       }
+
+      // Get pattern code for the extension
+      const patternCode = selectedPattern?.code || null;
+      const patternMetadata = selectedPattern?.metadata || {};
 
       const task = await prisma.extensionTask.create({
         data: {
@@ -583,6 +640,18 @@ export class VehicleController {
             fbmLogId: fbmLog?.id,  // Include log ID for status updates
             ultraSpeed: ultraSpeed || false, // Ultra Speed flag for extension
             patternName: patternName, // Pattern to load
+            patternId: selectedPattern?.id || null,
+            containerId: containerId,
+            containerName: containerName || 'default',
+            patternCode: patternCode, // Include full pattern code for extension
+            patternMetadata: patternMetadata,
+            hotSwapInfo: {
+              enabled: true,
+              mode: ultraSpeed ? 'usm' : 'normal',
+              selectedAt: new Date().toISOString(),
+              patternWeight: selectedPattern?.weight || 100,
+              patternSuccessCount: selectedPattern?.successCount || 0,
+            },
             sessionInfo: {
               type: activeSession.type,
               facebookUserId: activeSession.facebookUserId,
@@ -631,13 +700,13 @@ export class VehicleController {
         logger.warn(`Could not create Facebook post record: ${postErr}`);
       }
 
-      logger.info(`IAI task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}${ultraSpeed ? ' (ULTRA SPEED)' : ''}`);
+      logger.info(`IAI task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}${ultraSpeed ? ' (ULTRA SPEED)' : ''} - Pattern: ${patternName}`);
 
       res.json({
         success: true,
         message: ultraSpeed 
-          ? 'Task queued for IAI Soldier with ULTRA SPEED pattern. Open Facebook in Chrome with extension active.'
-          : 'Task queued for IAI Soldier. Open Facebook in Chrome with extension active.',
+          ? `Task queued with ULTRA SPEED (${patternName}). Open Facebook in Chrome with extension active.`
+          : `Task queued for IAI Soldier (${patternName}). Open Facebook in Chrome with extension active.`,
         data: { 
           taskId: task.id, 
           fbmLogId: fbmLog?.id,
@@ -645,7 +714,16 @@ export class VehicleController {
           status: 'pending',
           pixelTracking: includePixelTracking,
           ultraSpeed: ultraSpeed || false,
-          patternName: ultraSpeed ? 'FBM-UltraSpeed' : 'FBM-Official-P1',
+          // Hot-swap pattern info
+          patternName: patternName,
+          patternId: selectedPattern?.id || null,
+          containerId: containerId,
+          containerName: containerName || 'default',
+          hotSwap: {
+            enabled: true,
+            mode: ultraSpeed ? 'usm' : 'normal',
+            container: ultraSpeed ? 'IAI Soldiers USM' : 'all',
+          },
           sessionInfo: {
             facebookUserId: activeSession.facebookUserId,
             facebookUserName: activeSession.facebookUserName,
@@ -653,11 +731,13 @@ export class VehicleController {
           },
           instructions: ultraSpeed ? [
             '⚡ ULTRA SPEED MODE ACTIVE',
+            `📦 Pattern: ${patternName} (from USM container)`,
             '1. Ensure Chrome Extension is installed and logged in',
             '2. Open Facebook.com in the same browser',
-            '3. The IAI Soldier will execute with reduced delays',
+            '3. The IAI Soldier will execute with 3x faster delays',
             '4. Your browser fingerprint enables faster posting',
           ] : [
+            `📦 Hot-swap selected: ${patternName}`,
             '1. Ensure Chrome Extension is installed and logged in',
             '2. Open Facebook.com in the same browser (logged in as ' + (activeSession.facebookUserName || activeSession.facebookUserId) + ')',
             '3. The IAI Soldier will automatically detect and execute the task',

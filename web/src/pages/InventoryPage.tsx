@@ -954,11 +954,16 @@ function FacebookAdPreviewModal({
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="font-medium text-gray-900">⚡ Ultra Speed Mode</p>
-                                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Exclusive Pattern</span>
+                                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">USM Container</span>
                               </div>
                               <p className="text-xs text-gray-500 mt-1">
-                                Uses optimized FBM-UltraSpeed pattern - faster execution since your browser has established fingerprint & history (fewer Facebook checks).
+                                Hot-swap patterns exclusively from the <strong>IAI Soldiers USM</strong> container - 3x faster execution optimized for browsers with established fingerprints.
                               </p>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">🔄 USM Hot-Swap</span>
+                                <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">⚡ 3x Speed</span>
+                                <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">✅ Verified Fast</span>
+                              </div>
                             </div>
                           </label>
                         </div>
