@@ -665,34 +665,19 @@ router.post('/conversations', authenticate, async (req: AuthRequest, res: Respon
 /**
  * POST /api/extension/sync
  * Sync data from extension (uses API key auth)
+ * 
+ * ⚠️ SECURITY: This endpoint is DEPRECATED and disabled for security.
+ * Use authenticated endpoints instead.
  */
-router.post('/sync', async (req: Request, res: Response) => {
-  try {
-    const { apiKey, data } = req.body;
-    
-    if (!apiKey) {
-      res.status(401).json({ error: 'API key required' });
-      return;
-    }
-    
-    // Find account by API key - AccountSettings doesn't have apiKey column
-    // Use a placeholder approach for now - in production this would check a real API key table
-    console.log('Extension sync request received');
-    
-    // Process sync data based on type
-    if (data?.type === 'listings') {
-      console.log(`Syncing ${data.listings?.length || 0} listings`);
-    } else if (data?.type === 'messages') {
-      console.log(`Syncing ${data.messages?.length || 0} messages`);
-    } else if (data?.type === 'stats') {
-      console.log(`Syncing stats`);
-    }
-    
-    res.json({ success: true, message: 'Data synced successfully' });
-  } catch (error) {
-    console.error('Extension sync error:', error);
-    res.status(500).json({ error: 'Failed to sync data' });
-  }
+router.post('/sync', async (_req: Request, res: Response) => {
+  // Security: Disabled endpoint - was never properly implemented
+  // and accepted any apiKey value without verification
+  logger.warn('[SECURITY] Deprecated /sync endpoint called');
+  res.status(410).json({ 
+    success: false, 
+    error: 'This endpoint has been deprecated. Use authenticated endpoints instead.',
+    code: 'ENDPOINT_DEPRECATED'
+  });
 });
 
 // ============================================
@@ -902,6 +887,70 @@ export async function imageProxyHandler(req: Request, res: Response): Promise<vo
       }
     } catch {
       res.status(400).json({ error: 'Invalid URL format' });
+      return;
+    }
+    
+    // ⚠️ SECURITY: SSRF Prevention - Allowlist of trusted domains
+    const ALLOWED_IMAGE_DOMAINS = [
+      // Facebook/Meta CDNs
+      'scontent.xx.fbcdn.net',
+      'external.xx.fbcdn.net',
+      'scontent-*.xx.fbcdn.net',
+      'lookaside.fbsbx.com',
+      'platform-lookaside.fbsbx.com',
+      'static.xx.fbcdn.net',
+      // Facebook Marketplace images
+      'marketplace.fbsbx.com',
+      // Common dealer image hosts
+      'images.dealer.com',
+      'pictures.dealer.com',
+      'www.cstatic-images.com',
+      'vehicle-photos-published.vauto.com',
+      // AWS S3 (our own buckets)
+      '.s3.amazonaws.com',
+      '.s3.us-east-1.amazonaws.com',
+      '.s3.us-west-2.amazonaws.com',
+    ];
+    
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const isAllowed = ALLOWED_IMAGE_DOMAINS.some(domain => {
+      if (domain.startsWith('.')) {
+        // Suffix match (e.g., .s3.amazonaws.com)
+        return hostname.endsWith(domain);
+      } else if (domain.includes('*')) {
+        // Wildcard match (e.g., scontent-*.xx.fbcdn.net)
+        const pattern = domain.replace(/\*/g, '[a-z0-9-]+');
+        return new RegExp(`^${pattern}$`).test(hostname);
+      } else {
+        // Exact match
+        return hostname === domain;
+      }
+    });
+    
+    if (!isAllowed) {
+      logger.warn(`[Image Proxy] SSRF blocked - untrusted domain: ${hostname}`);
+      res.status(403).json({ 
+        error: 'Domain not allowed',
+        code: 'SSRF_BLOCKED'
+      });
+      return;
+    }
+    
+    // Block internal/private IPs
+    const blockedPrefixes = [
+      '10.', '172.16.', '172.17.', '172.18.', '172.19.', 
+      '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', 
+      '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', 
+      '172.30.', '172.31.', '192.168.', '127.', '0.', '169.254.',
+      'localhost', '::1', 'fe80::', 'fd00::'
+    ];
+    
+    if (blockedPrefixes.some(prefix => hostname.startsWith(prefix) || hostname === 'localhost')) {
+      logger.warn(`[Image Proxy] SSRF blocked - internal IP: ${hostname}`);
+      res.status(403).json({ 
+        error: 'Internal addresses not allowed',
+        code: 'SSRF_BLOCKED'
+      });
       return;
     }
 

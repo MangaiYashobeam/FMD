@@ -1,18 +1,85 @@
 /**
  * IAI Injection Routes
  * API endpoints for managing injection containers, patterns, and executions.
+ * 
+ * ⚠️ SECURITY: These routes manage executable code patterns.
+ * ALL routes require SUPER_ADMIN role - no exceptions.
  */
 
 import { Router, Response, NextFunction } from 'express';
 import { injectionService } from '../services/injection.service';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { 
+  sanitizeString,
+  sanitizeUUID,
+  sanitizeInteger,
+  sanitizeBoolean,
+  sanitizeJSON,
+  getRealIP,
+  getUserAgent,
+  createAuditLog,
+  isSuperAdmin,
+} from '../utils/admin-security';
 
 const router = Router();
 
-// Helper for async route handlers
-const asyncHandler = (fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>) => 
-  (req: AuthRequest, res: Response, next: NextFunction) => {
+// ============================================
+// SECURITY: Require SUPER_ADMIN for ALL routes
+// ============================================
+router.use((req: AuthRequest, res: Response, next: NextFunction) => {
+  // Fail-closed: No user = deny
+  if (!req.user) {
+    logger.warn('[INJECTION_SECURITY] Unauthenticated access attempt', {
+      path: req.path,
+      ip: getRealIP(req),
+    });
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Authentication required',
+      code: 'AUTH_REQUIRED'
+    });
+  }
+  
+  // Fail-closed: Non-super-admin = deny
+  if (!isSuperAdmin(req)) {
+    logger.warn('[INJECTION_SECURITY] Non-admin access attempt blocked', {
+      userId: req.user.id,
+      role: req.user.role,
+      path: req.path,
+      method: req.method,
+      ip: getRealIP(req),
+    });
+    
+    // Audit this security event
+    createAuditLog({
+      userId: req.user.id,
+      action: 'UNAUTHORIZED_ACCESS_ATTEMPT',
+      resource: 'injection',
+      ipAddress: getRealIP(req),
+      userAgent: getUserAgent(req),
+      success: false,
+      errorMessage: 'Non-super-admin attempted to access injection routes',
+      metadata: {
+        path: req.path,
+        method: req.method,
+        userRole: req.user.role,
+      }
+    });
+    
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Super Admin access required',
+      code: 'FORBIDDEN'
+    });
+  }
+  
+  next();
+});
+
+// Helper for async route handlers - allows return statements for early exit
+const asyncHandler = (fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<any>) => 
+  (req: AuthRequest, res: Response, next: NextFunction): void => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 
@@ -34,16 +101,43 @@ const getInt = (value: unknown): number | undefined => {
   return str ? parseInt(str, 10) : undefined;
 };
 
+// Allowed container categories (whitelist)
+const ALLOWED_CATEGORIES = [
+  'scraping', 'posting', 'messaging', 'analytics', 
+  'automation', 'integration', 'utility', 'security', 'custom'
+] as const;
+
+// Allowed failure actions
+const ALLOWED_FAILURE_ACTIONS = ['skip', 'retry', 'abort', 'fallback'] as const;
+
 // ============================================
-// Container Routes
+// Container Routes (SUPER_ADMIN only - enforced above)
 // ============================================
 
 router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { name, description, category, icon, color, isActive, isDefault, priority, config, metadata } = req.body;
+  // Sanitize all inputs
+  const name = sanitizeString(req.body.name, 100);
+  const description = sanitizeString(req.body.description, 500);
+  const category = sanitizeString(req.body.category, 50);
+  const icon = sanitizeString(req.body.icon, 50);
+  const color = sanitizeString(req.body.color, 20);
+  const isActive = sanitizeBoolean(req.body.isActive) ?? true;
+  const isDefault = sanitizeBoolean(req.body.isDefault) ?? false;
+  const priority = sanitizeInteger(req.body.priority, 0, 1000);
+  const config = sanitizeJSON(req.body.config, 5000);
+  const metadata = sanitizeJSON(req.body.metadata, 2000);
 
+  // Validate required fields
   if (!name) {
-    res.status(400).json({ success: false, error: 'Container name is required' });
-    return;
+    return res.status(400).json({ success: false, error: 'Container name is required' });
+  }
+  
+  // Validate category if provided
+  if (category && !ALLOWED_CATEGORIES.includes(category as any)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid category. Allowed: ${ALLOWED_CATEGORIES.join(', ')}` 
+    });
   }
 
   try {
@@ -58,7 +152,19 @@ router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response) 
       priority,
       config,
       metadata,
-      createdBy: req.user?.id
+      createdBy: req.user!.id // Guaranteed by middleware
+    });
+
+    // Audit log
+    createAuditLog({
+      userId: req.user!.id,
+      action: 'CREATE_CONTAINER',
+      resource: 'injection_container',
+      resourceId: container.id,
+      newValue: { name, category, isActive },
+      ipAddress: getRealIP(req),
+      userAgent: getUserAgent(req),
+      success: true,
     });
 
     res.status(201).json({ success: true, data: container });
@@ -73,22 +179,31 @@ router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response) 
 }));
 
 router.get('/containers', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { category, isActive, includePatterns, limit, offset } = req.query;
+  // Sanitize query params
+  const category = sanitizeString(req.query.category, 50);
+  const isActive = sanitizeBoolean(req.query.isActive);
+  const includePatterns = sanitizeBoolean(req.query.includePatterns) ?? true;
+  const limit = sanitizeInteger(req.query.limit, 1, 100) ?? 50;
+  const offset = sanitizeInteger(req.query.offset, 0) ?? 0;
 
   const result = await injectionService.listContainers({
-    category: getString(category),
-    isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
-    includePatterns: includePatterns !== 'false',
-    limit: getInt(limit),
-    offset: getInt(offset)
+    category,
+    isActive,
+    includePatterns,
+    limit,
+    offset
   });
 
   res.json({ success: true, data: result.containers, total: result.total });
 }));
 
 router.get('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
-  const includePatterns = req.query.includePatterns !== 'false';
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid container ID format' });
+  }
+  
+  const includePatterns = sanitizeBoolean(req.query.includePatterns) ?? true;
 
   const container = await injectionService.getContainer(id, includePatterns);
 
@@ -102,8 +217,30 @@ router.get('/containers/:id', asyncHandler(async (req: AuthRequest, res: Respons
 }));
 
 router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
-  const { name, description, category, icon, color, isActive, isDefault, priority, config, metadata } = req.body;
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid container ID format' });
+  }
+
+  // Sanitize all inputs
+  const name = sanitizeString(req.body.name, 100);
+  const description = sanitizeString(req.body.description, 500);
+  const category = sanitizeString(req.body.category, 50);
+  const icon = sanitizeString(req.body.icon, 50);
+  const color = sanitizeString(req.body.color, 20);
+  const isActive = sanitizeBoolean(req.body.isActive);
+  const isDefault = sanitizeBoolean(req.body.isDefault);
+  const priority = sanitizeInteger(req.body.priority, 0, 1000);
+  const config = sanitizeJSON(req.body.config, 5000);
+  const metadata = sanitizeJSON(req.body.metadata, 2000);
+  
+  // Validate category if provided
+  if (category && !ALLOWED_CATEGORIES.includes(category as any)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid category. Allowed: ${ALLOWED_CATEGORIES.join(', ')}` 
+    });
+  }
 
   const existing = await injectionService.getContainer(id, false);
   if (!existing) {
@@ -115,11 +252,27 @@ router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Respons
     name, description, category, icon, color, isActive, isDefault, priority, config, metadata
   });
 
+  // Audit log
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'UPDATE_CONTAINER',
+    resource: 'injection_container',
+    resourceId: id,
+    oldValue: { name: existing.name, isActive: existing.isActive },
+    newValue: { name, isActive },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+  });
+
   res.json({ success: true, data: container });
 }));
 
 router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid container ID format' });
+  }
 
   const existing = await injectionService.getContainer(id, false);
   if (!existing) {
@@ -128,29 +281,80 @@ router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Resp
   }
 
   await injectionService.deleteContainer(id);
+  
+  // Audit log - deletion is high-risk
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'DELETE_CONTAINER',
+    resource: 'injection_container',
+    resourceId: id,
+    oldValue: { name: existing.name, category: existing.category },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+    metadata: { severity: 'high' }
+  });
+  
   res.json({ success: true, message: 'Container deleted successfully' });
 }));
 
 // ============================================
-// Pattern Routes
+// Pattern Routes (SUPER_ADMIN only - code execution capability)
 // ============================================
 
-router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { 
-    containerId, name, description, code, codeType, version,
-    isDefault, isActive, priority, weight, timeout, retryCount,
-    failureAction, preConditions, postActions, tags, metadata 
-  } = req.body;
+// Allowed code types (whitelist)
+const ALLOWED_CODE_TYPES = ['javascript', 'json', 'workflow', 'selector', 'template'] as const;
 
+router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Sanitize all inputs - patterns contain executable code so require super admin (enforced above)
+  const containerId = sanitizeUUID(req.body.containerId);
+  const name = sanitizeString(req.body.name, 100);
+  const description = sanitizeString(req.body.description, 500);
+  const code = typeof req.body.code === 'string' ? req.body.code.substring(0, 50000) : null; // Allow longer code but limit
+  const codeType = sanitizeString(req.body.codeType, 20);
+  const version = sanitizeString(req.body.version, 20) ?? '1.0.0';
+  const isDefault = sanitizeBoolean(req.body.isDefault) ?? false;
+  const isActive = sanitizeBoolean(req.body.isActive) ?? true;
+  const priority = sanitizeInteger(req.body.priority, 0, 1000) ?? 100;
+  const weight = sanitizeInteger(req.body.weight, 0, 100) ?? 50;
+  const timeout = sanitizeInteger(req.body.timeout, 1000, 300000) ?? 30000; // 1s - 5min
+  const retryCount = sanitizeInteger(req.body.retryCount, 0, 5) ?? 0;
+  const failureAction = sanitizeString(req.body.failureAction, 20);
+  // preConditions and postActions are arrays - pass through if valid
+  const preConditions = Array.isArray(req.body.preConditions) ? req.body.preConditions.slice(0, 100) : undefined;
+  const postActions = Array.isArray(req.body.postActions) ? req.body.postActions.slice(0, 100) : undefined;
+  const tags = Array.isArray(req.body.tags) 
+    ? req.body.tags.map((t: unknown) => sanitizeString(t, 50)).filter(Boolean).slice(0, 10)
+    : undefined;
+  const metadata = sanitizeJSON(req.body.metadata, 2000);
+
+  // Validate required fields
   if (!containerId || !name || !code) {
-    res.status(400).json({ success: false, error: 'containerId, name, and code are required' });
-    return;
+    return res.status(400).json({ 
+      success: false, 
+      error: 'containerId, name, and code are required' 
+    });
+  }
+  
+  // Validate code type
+  if (codeType && !ALLOWED_CODE_TYPES.includes(codeType as any)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid codeType. Allowed: ${ALLOWED_CODE_TYPES.join(', ')}` 
+    });
+  }
+  
+  // Validate failure action
+  if (failureAction && !ALLOWED_FAILURE_ACTIONS.includes(failureAction as any)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid failureAction. Allowed: ${ALLOWED_FAILURE_ACTIONS.join(', ')}` 
+    });
   }
 
   const container = await injectionService.getContainer(containerId, false);
   if (!container) {
-    res.status(404).json({ success: false, error: 'Container not found' });
-    return;
+    return res.status(404).json({ success: false, error: 'Container not found' });
   }
 
   try {
@@ -158,7 +362,20 @@ router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) =>
       containerId, name, description, code, codeType, version,
       isDefault, isActive, priority, weight, timeout, retryCount,
       failureAction, preConditions, postActions, tags, metadata,
-      createdBy: req.user?.id
+      createdBy: req.user!.id
+    });
+
+    // Audit log - pattern creation is security-sensitive
+    createAuditLog({
+      userId: req.user!.id,
+      action: 'CREATE_PATTERN',
+      resource: 'injection_pattern',
+      resourceId: pattern.id,
+      newValue: { name, containerId, codeType, isActive, codeLength: code.length },
+      ipAddress: getRealIP(req),
+      userAgent: getUserAgent(req),
+      success: true,
+      metadata: { severity: 'high', reason: 'executable_code_creation' }
     });
 
     res.status(201).json({ success: true, data: pattern });
@@ -173,22 +390,28 @@ router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) =>
 }));
 
 router.get('/patterns', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { containerId, isActive, tags, limit, offset } = req.query;
-  const tagsStr = getString(tags);
+  const containerId = sanitizeUUID(req.query.containerId);
+  const isActive = sanitizeBoolean(req.query.isActive);
+  const tagsStr = sanitizeString(req.query.tags, 200);
+  const limit = sanitizeInteger(req.query.limit, 1, 100) ?? 50;
+  const offset = sanitizeInteger(req.query.offset, 0) ?? 0;
 
   const result = await injectionService.listPatterns({
-    containerId: getString(containerId),
-    isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
-    tags: tagsStr ? tagsStr.split(',') : undefined,
-    limit: getInt(limit),
-    offset: getInt(offset)
+    containerId,
+    isActive,
+    tags: tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+    limit,
+    offset
   });
 
   res.json({ success: true, data: result.patterns, total: result.total });
 }));
 
 router.get('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+  }
 
   const pattern = await injectionService.getPattern(id);
 
@@ -205,12 +428,47 @@ router.get('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response)
 }));
 
 router.put('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
-  const {
-    name, description, code, codeType, version,
-    isDefault, isActive, priority, weight, timeout, retryCount,
-    failureAction, preConditions, postActions, tags, metadata
-  } = req.body;
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+  }
+
+  // Sanitize all inputs
+  const name = sanitizeString(req.body.name, 100);
+  const description = sanitizeString(req.body.description, 500);
+  const code = typeof req.body.code === 'string' ? req.body.code.substring(0, 50000) : undefined;
+  const codeType = sanitizeString(req.body.codeType, 20);
+  const version = sanitizeString(req.body.version, 20);
+  const isDefault = sanitizeBoolean(req.body.isDefault);
+  const isActive = sanitizeBoolean(req.body.isActive);
+  const priority = sanitizeInteger(req.body.priority, 0, 1000);
+  const weight = sanitizeInteger(req.body.weight, 0, 100);
+  const timeout = sanitizeInteger(req.body.timeout, 1000, 300000);
+  const retryCount = sanitizeInteger(req.body.retryCount, 0, 5);
+  const failureAction = sanitizeString(req.body.failureAction, 20);
+  // preConditions and postActions are arrays
+  const preConditions = Array.isArray(req.body.preConditions) ? req.body.preConditions.slice(0, 100) : undefined;
+  const postActions = Array.isArray(req.body.postActions) ? req.body.postActions.slice(0, 100) : undefined;
+  const tags = Array.isArray(req.body.tags) 
+    ? req.body.tags.map((t: unknown) => sanitizeString(t, 50)).filter(Boolean).slice(0, 10)
+    : undefined;
+  const metadata = sanitizeJSON(req.body.metadata, 2000);
+  
+  // Validate code type if provided
+  if (codeType && !ALLOWED_CODE_TYPES.includes(codeType as any)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid codeType. Allowed: ${ALLOWED_CODE_TYPES.join(', ')}` 
+    });
+  }
+  
+  // Validate failure action if provided
+  if (failureAction && !ALLOWED_FAILURE_ACTIONS.includes(failureAction as any)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid failureAction. Allowed: ${ALLOWED_FAILURE_ACTIONS.join(', ')}` 
+    });
+  }
 
   const existing = await injectionService.getPattern(id);
   if (!existing) {
@@ -224,11 +482,28 @@ router.put('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response)
     failureAction, preConditions, postActions, tags, metadata
   });
 
+  // Audit log - pattern modification is high-risk
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'UPDATE_PATTERN',
+    resource: 'injection_pattern',
+    resourceId: id,
+    oldValue: { name: existing.name, codeLength: existing.code?.length, isActive: existing.isActive },
+    newValue: { name, codeLength: code?.length, isActive },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+    metadata: { severity: 'high', codeChanged: code !== undefined }
+  });
+
   res.json({ success: true, data: pattern });
 }));
 
 router.delete('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+  }
 
   const existing = await injectionService.getPattern(id);
   if (!existing) {
@@ -237,37 +512,123 @@ router.delete('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Respon
   }
 
   await injectionService.deletePattern(id);
+  
+  // Audit log - pattern deletion is critical
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'DELETE_PATTERN',
+    resource: 'injection_pattern',
+    resourceId: id,
+    oldValue: { name: existing.name, containerId: existing.containerId, codeType: existing.codeType },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+    metadata: { severity: 'critical', reason: 'executable_code_deletion' }
+  });
+  
   res.json({ success: true, message: 'Pattern deleted successfully' });
 }));
 
 // ============================================
-// Injection Execution Routes
+// Injection Execution Routes (CRITICAL - Code Execution)
 // ============================================
 
+// Allowed selection strategies
+const ALLOWED_SELECTION_STRATEGIES = ['random', 'weighted', 'round-robin', 'priority'] as const;
+type SelectionStrategy = typeof ALLOWED_SELECTION_STRATEGIES[number];
+
 router.post('/inject', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { containerId, patternId, forceDefault, selectionStrategy, input, timeout, iaiInstanceId, missionId, taskId } = req.body;
+  // Sanitize all inputs
+  const containerId = sanitizeUUID(req.body.containerId);
+  const patternId = sanitizeUUID(req.body.patternId);
+  const forceDefault = sanitizeBoolean(req.body.forceDefault) ?? false;
+  const rawStrategy = sanitizeString(req.body.selectionStrategy, 20);
+  const selectionStrategy: SelectionStrategy | undefined = 
+    rawStrategy && ALLOWED_SELECTION_STRATEGIES.includes(rawStrategy as any) 
+      ? rawStrategy as SelectionStrategy 
+      : undefined;
+  const input = sanitizeJSON(req.body.input, 10000);
+  const timeout = sanitizeInteger(req.body.timeout, 1000, 60000) ?? 30000; // 1s - 1min
+  const iaiInstanceId = sanitizeUUID(req.body.iaiInstanceId);
+  const missionId = sanitizeUUID(req.body.missionId);
+  const taskId = sanitizeUUID(req.body.taskId);
 
   if (!containerId && !patternId) {
-    res.status(400).json({ success: false, error: 'Either containerId or patternId is required' });
-    return;
+    return res.status(400).json({ success: false, error: 'Either containerId or patternId is required' });
+  }
+  
+  // Validate selection strategy
+  if (rawStrategy && !selectionStrategy) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid selectionStrategy. Allowed: ${ALLOWED_SELECTION_STRATEGIES.join(', ')}` 
+    });
   }
 
+  // Audit log before execution
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'EXECUTE_INJECTION',
+    resource: 'injection_execution',
+    resourceId: patternId || containerId || 'unknown',
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+    metadata: { 
+      severity: 'high',
+      containerId,
+      patternId,
+      iaiInstanceId,
+      missionId,
+      taskId,
+      inputSize: JSON.stringify(input || {}).length
+    }
+  });
+
   const result = await injectionService.inject({
-    containerId, patternId, forceDefault, selectionStrategy, input, timeout, iaiInstanceId, missionId, taskId
+    containerId, 
+    patternId, 
+    forceDefault, 
+    selectionStrategy, 
+    input, 
+    timeout, 
+    iaiInstanceId, 
+    missionId, 
+    taskId
   });
 
   res.json({ success: true, data: result });
 }));
 
 router.post('/test-pattern/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
-  const { input } = req.body;
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+  }
+  
+  const input = sanitizeJSON(req.body.input, 10000);
 
   const pattern = await injectionService.getPattern(id);
   if (!pattern) {
     res.status(404).json({ success: false, error: 'Pattern not found' });
     return;
   }
+
+  // Audit log - test execution is also security-sensitive
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'TEST_PATTERN_EXECUTION',
+    resource: 'injection_pattern',
+    resourceId: id,
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+    metadata: { 
+      patternName: pattern.name,
+      codeType: pattern.codeType,
+      inputSize: JSON.stringify(input || {}).length
+    }
+  });
 
   const startTime = Date.now();
   let output: unknown;
@@ -298,7 +659,15 @@ router.post('/test-pattern/:id', asyncHandler(async (req: AuthRequest, res: Resp
     }
   } catch (err: unknown) {
     const e = err as Error;
-    error = e.message;
+    error = sanitizeString(e.message, 500) || 'Unknown error';
+    
+    // Log test failures
+    logger.warn('[INJECTION] Pattern test failed', {
+      patternId: id,
+      patternName: pattern.name,
+      error: error,
+      userId: req.user!.id
+    });
   }
 
   res.json({
@@ -588,25 +957,32 @@ router.get('/categories', asyncHandler(async (_req: AuthRequest, res: Response) 
 }));
 
 // ============================================
-// Pattern Override Routes (Root Admin Only)
-// Allows Root Admin to force specific patterns for accounts/users
+// Pattern Override Routes (SUPER_ADMIN Only)
+// Allows Super Admin to force specific patterns for accounts/users
 // ============================================
 
 router.get('/overrides', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { accountId, isActive, limit = '100', offset = '0' } = req.query;
+  // Sanitize inputs
+  const accountId = sanitizeUUID(req.query.accountId);
+  const isActive = sanitizeBoolean(req.query.isActive);
+  const limit = sanitizeInteger(req.query.limit, 1, 500) ?? 100;
+  const offset = sanitizeInteger(req.query.offset, 0) ?? 0;
   
   const overrides = await injectionService.listPatternOverrides({
-    accountId: getString(accountId),
-    isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
-    limit: parseInt(limit as string, 10),
-    offset: parseInt(offset as string, 10),
+    accountId,
+    isActive,
+    limit,
+    offset,
   });
   
   res.json({ success: true, data: overrides.overrides, total: overrides.total });
 }));
 
 router.get('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid override ID format' });
+  }
   
   const override = await injectionService.getPatternOverride(id);
   
@@ -619,16 +995,32 @@ router.get('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response
 }));
 
 router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const { accountId, userId, containerId, patternId, isActive, priority, reason, expiresAt } = req.body;
+  // Sanitize all inputs
+  const accountId = sanitizeUUID(req.body.accountId);
+  const userId = sanitizeUUID(req.body.userId);
+  const containerId = sanitizeUUID(req.body.containerId);
+  const patternId = sanitizeUUID(req.body.patternId);
+  const isActive = sanitizeBoolean(req.body.isActive) ?? true;
+  const priority = sanitizeInteger(req.body.priority, 0, 1000) ?? 100;
+  const reason = sanitizeString(req.body.reason, 500);
+  const expiresAtStr = sanitizeString(req.body.expiresAt, 30);
   
+  // Validate required fields
   if (!accountId || !containerId || !patternId) {
-    res.status(400).json({ success: false, error: 'accountId, containerId, and patternId are required' });
-    return;
+    return res.status(400).json({ 
+      success: false, 
+      error: 'accountId, containerId, and patternId are required' 
+    });
   }
   
-  if (!req.user?.id) {
-    res.status(401).json({ success: false, error: 'Authentication required' });
-    return;
+  // Validate expiresAt if provided
+  let expiresAt: Date | undefined;
+  if (expiresAtStr) {
+    const parsed = new Date(expiresAtStr);
+    if (isNaN(parsed.getTime())) {
+      return res.status(400).json({ success: false, error: 'Invalid expiresAt date format' });
+    }
+    expiresAt = parsed;
   }
   
   try {
@@ -637,11 +1029,25 @@ router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) =
       userId,
       containerId,
       patternId,
-      isActive: isActive ?? true,
-      priority: priority ?? 100,
+      isActive,
+      priority,
       reason,
-      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
-      createdBy: req.user.id,
+      expiresAt,
+      createdBy: req.user!.id,
+    });
+    
+    // Audit log
+    createAuditLog({
+      userId: req.user!.id,
+      accountId,
+      action: 'CREATE_PATTERN_OVERRIDE',
+      resource: 'pattern_override',
+      resourceId: override.id,
+      newValue: { accountId, patternId, isActive, priority, reason },
+      ipAddress: getRealIP(req),
+      userAgent: getUserAgent(req),
+      success: true,
+      metadata: { targetUserId: userId }
     });
     
     res.status(201).json({ success: true, data: override });
@@ -656,8 +1062,29 @@ router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) =
 }));
 
 router.put('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
-  const { patternId, isActive, priority, reason, expiresAt } = req.body;
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid override ID format' });
+  }
+  
+  // Sanitize inputs
+  const patternId = sanitizeUUID(req.body.patternId);
+  const isActive = sanitizeBoolean(req.body.isActive);
+  const priority = sanitizeInteger(req.body.priority, 0, 1000);
+  const reason = sanitizeString(req.body.reason, 500);
+  const expiresAtStr = req.body.expiresAt;
+  
+  // Handle expiresAt - can be date string, null (to clear), or undefined (no change)
+  let expiresAt: Date | null | undefined;
+  if (expiresAtStr === null) {
+    expiresAt = null;
+  } else if (expiresAtStr !== undefined) {
+    const parsed = new Date(sanitizeString(expiresAtStr, 30) || '');
+    if (isNaN(parsed.getTime())) {
+      return res.status(400).json({ success: false, error: 'Invalid expiresAt date format' });
+    }
+    expiresAt = parsed;
+  }
   
   const existing = await injectionService.getPatternOverride(id);
   if (!existing) {
@@ -670,14 +1097,31 @@ router.put('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response
     isActive,
     priority,
     reason,
-    expiresAt: expiresAt ? new Date(expiresAt) : expiresAt === null ? null : undefined,
+    expiresAt,
+  });
+  
+  // Audit log
+  createAuditLog({
+    userId: req.user!.id,
+    accountId: existing.accountId,
+    action: 'UPDATE_PATTERN_OVERRIDE',
+    resource: 'pattern_override',
+    resourceId: id,
+    oldValue: { patternId: existing.patternId, isActive: existing.isActive, priority: existing.priority },
+    newValue: { patternId, isActive, priority },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
   });
   
   res.json({ success: true, data: override });
 }));
 
 router.delete('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const id = getRequiredString(req.params.id);
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Invalid override ID format' });
+  }
   
   const existing = await injectionService.getPatternOverride(id);
   if (!existing) {
@@ -686,18 +1130,38 @@ router.delete('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Respo
   }
   
   await injectionService.deletePatternOverride(id);
+  
+  // Audit log
+  createAuditLog({
+    userId: req.user!.id,
+    accountId: existing.accountId,
+    action: 'DELETE_PATTERN_OVERRIDE',
+    resource: 'pattern_override',
+    resourceId: id,
+    oldValue: { accountId: existing.accountId, patternId: existing.patternId },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+    metadata: { severity: 'high' }
+  });
+  
   res.json({ success: true, message: 'Pattern override deleted successfully' });
 }));
 
 // Get effective pattern for an account (considering overrides)
 router.get('/overrides/effective/:accountId', asyncHandler(async (req: AuthRequest, res: Response) => {
-  const accountId = getRequiredString(req.params.accountId);
-  const { containerId, userId } = req.query;
+  const accountId = sanitizeUUID(req.params.accountId);
+  if (!accountId) {
+    return res.status(400).json({ success: false, error: 'Invalid account ID format' });
+  }
+  
+  const containerId = sanitizeUUID(req.query.containerId);
+  const userId = sanitizeUUID(req.query.userId);
   
   const effectivePattern = await injectionService.getEffectivePattern(
     accountId,
-    getString(containerId),
-    getString(userId)
+    containerId,
+    userId
   );
   
   res.json({ success: true, data: effectivePattern });
