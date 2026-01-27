@@ -30,6 +30,7 @@ import {
   Share2,
   RefreshCw,
   GripVertical,
+  Terminal,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -305,7 +306,7 @@ function FacebookAdPreviewModal({
     vehicle.description || generateDefaultDescription(vehicle)
   );
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>(photos.slice(0, 10));
-  const [postMethod, setPostMethod] = useState<'api' | 'iai' | 'soldier'>('iai');
+  const [postMethod, setPostMethod] = useState<'api' | 'iai' | 'soldier' | 'puppeteer'>('iai');
   const [includePixelTracking, setIncludePixelTracking] = useState(true);
   const [posting, setPosting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -763,6 +764,24 @@ function FacebookAdPreviewModal({
                     </label>
                     <label className={cn(
                       'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
+                      postMethod === 'puppeteer' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                    )}>
+                      <input
+                        type="radio"
+                        name="postMethod"
+                        checked={postMethod === 'puppeteer'}
+                        onChange={() => setPostMethod('puppeteer')}
+                        className="text-blue-600"
+                      />
+                      <Terminal className="w-5 h-5 text-emerald-600" />
+                      <div>
+                        <p className="font-medium text-gray-900">IAI Official (Puppeteer)</p>
+                        <p className="text-xs text-gray-500">Server-side Chromium with Official-P1 pattern</p>
+                      </div>
+                      <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Production</span>
+                    </label>
+                    <label className={cn(
+                      'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
                       postMethod === 'api' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                     )}>
                       <input
@@ -947,6 +966,45 @@ function FacebookAdPreviewModal({
                             Requires Facebook session setup
                           </li>
                         </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {postMethod === 'puppeteer' && (
+                  <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <Terminal className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-emerald-900">IAI Official (Puppeteer) - FBM-Official-P1</h4>
+                        <p className="text-sm text-emerald-700 mt-1">
+                          Production-verified server-side automation:
+                        </p>
+                        <ul className="text-sm text-emerald-700 mt-2 space-y-1">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Uses verified FBM-Official-P1 pattern (166 steps)
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Headless Chromium with stealth plugins
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Full form fill + image upload + wizard navigation
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            No browser extension required
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <AlertCircle className="w-3 h-3" />
+                            Requires linked Facebook session
+                          </li>
+                        </ul>
+                        <p className="text-xs text-emerald-600 mt-2 font-medium">
+                          ✅ Verified working - Last tested Jan 27, 2026
+                        </p>
                       </div>
                     </div>
                   </div>

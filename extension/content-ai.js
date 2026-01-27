@@ -1899,14 +1899,18 @@ async function clickPublishButton() {
     return { clicked: true, buttonText };
   }
   
-  // Check if "Next" is visible - means form is incomplete (like competitor)
+  // Check if "Next" is visible - click it to proceed through wizard
+  // Facebook Marketplace uses multi-step wizard, Next is valid to click
   const nextButton = C('span', 'Next') || C('div', 'Next');
   if (nextButton && isVisible(nextButton)) {
-    console.warn('⚠️ Only "Next" button found - form incomplete');
+    const clickable = nextButton.closest('[role="button"]') || nextButton.closest('button') || nextButton;
+    console.log('🚀 Found "Next" button - clicking to proceed through wizard');
+    await clickHumanlike(clickable);
+    await randomDelay(2000, 3000);
     return { 
-      clicked: false, 
-      error: 'Only found Next button - form incomplete',
-      suggestion: 'Fill all required fields first'
+      clicked: true, 
+      buttonText: 'Next',
+      isWizardStep: true
     };
   }
   

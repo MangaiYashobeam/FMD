@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "DealersFace Pro - Headless",
+  "version": "3.4.0",
+  "description": "DealersFace Headless - Server-side Facebook Marketplace automation (no GUI)",
+  "author": "Dealers Face",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://m.facebook.com/*",
+    "https://web.facebook.com/*",
+    "https://dealersface.com/*",
+    "http://localhost:5000/*"
+  ],
+  "icons": {
+    "16": "icons/icon16.svg",
+    "32": "icons/icon32.svg",
+    "48": "icons/icon48.svg",
+    "128": "icons/icon128.svg"
+  },
+  "background": {
+    "service_worker": "background-headless.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/*", "https://m.facebook.com/*", "https://web.facebook.com/*"],
+      "js": ["iai-soldier-headless.js", "content-headless.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["iai-soldier-headless.js"],
+      "matches": ["https://www.facebook.com/*", "https://web.facebook.com/*", "https://m.facebook.com/*"]
+    }
+  ]
+}
