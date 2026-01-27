@@ -1414,7 +1414,7 @@ async function handleMessage(message, sender) {
       return await generateVehicleDescription(message.vehicle);
       
     case 'RECORD_POSTING':
-      return await recordPosting(message.vehicleId, message.platform, message.status);
+      return await recordPosting(message.vehicleId, message.platform, message.status, message.ultraSpeed);
       
     case 'INJECT_CONTENT_SCRIPT':
       if (sender.tab?.id) {
@@ -1852,7 +1852,7 @@ Don't miss out on this great opportunity! Contact us today to schedule a test dr
 /**
  * Record a vehicle posting
  */
-async function recordPosting(vehicleId, platform, status) {
+async function recordPosting(vehicleId, platform, status, ultraSpeed = false) {
   const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
   
   if (!authToken) {
@@ -1871,6 +1871,7 @@ async function recordPosting(vehicleId, platform, status) {
         accountId,
         platform,
         status,
+        ultraSpeed,
         postedAt: new Date().toISOString(),
       }),
     });

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "DealersFace Pro",
-  "version": "3.5.0",
-  "description": "DealersFace - Professional Facebook Marketplace automation for auto dealers with IAI Injection System",
+  "version": "3.6.0",
+  "description": "DealersFace - Professional Facebook Marketplace automation for auto dealers with IAI Injection System and USM (Ultra Speed Mode)",
   "author": "Dealers Face",
   "permissions": [
     "storage",

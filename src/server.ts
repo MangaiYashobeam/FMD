@@ -716,56 +716,101 @@ app.get('/api/config/facebook', async (_req, res) => {
 
 // Public IAI Pattern Endpoint - For extension to load workflow patterns
 // No auth required - returns only active/default pattern for IAI soldiers
-app.get('/api/iai/pattern', async (_req, res): Promise<void> => {
+// Supports ?ultraSpeed=true to fetch from USM container
+app.get('/api/iai/pattern', async (req, res): Promise<void> => {
   try {
     const { injectionService } = require('./services/injection.service');
+    const ultraSpeed = req.query.ultraSpeed === 'true' || req.query.usm === 'true';
     
-    // Get active containers
-    const { containers } = await injectionService.listContainers({
-      isActive: true,
-      includePatterns: true,
-      limit: 10
-    });
+    let container = null;
+    let pattern = null;
     
-    if (!containers || containers.length === 0) {
-      res.status(404).json({ 
-        success: false, 
-        error: 'No active injection containers found',
-        message: 'Please configure an injection container in the admin panel'
-      });
-      return;
+    if (ultraSpeed) {
+      // Ultra Speed Mode - fetch exclusively from USM container
+      console.log('[IAI Pattern] ⚡ Ultra Speed Mode - fetching from USM container');
+      const usmResult = await injectionService.selectUSMPattern();
+      
+      if (usmResult.pattern) {
+        pattern = usmResult.pattern;
+        container = usmResult.container;
+        console.log(`[IAI Pattern] ⚡ USM Pattern selected: ${pattern.name}`);
+      } else {
+        // Fallback to normal if USM unavailable
+        console.log('[IAI Pattern] ⚠️ USM container not available, falling back to normal');
+      }
     }
     
-    // Find default or first container
-    const container = containers.find((c: any) => c.isDefault) || containers[0];
-    
-    // Get patterns from container
-    const { patterns } = await injectionService.listPatterns({
-      containerId: container.id,
-      isActive: true,
-      limit: 10
-    });
-    
-    if (!patterns || patterns.length === 0) {
-      res.status(404).json({
-        success: false,
-        error: 'No active patterns found in container',
+    // If no pattern yet (normal mode or USM fallback)
+    if (!pattern) {
+      // Get active containers
+      const { containers } = await injectionService.listContainers({
+        isActive: true,
+        includePatterns: true,
+        limit: 10
+      });
+      
+      if (!containers || containers.length === 0) {
+        res.status(404).json({ 
+          success: false, 
+          error: 'No active injection containers found',
+          message: 'Please configure an injection container in the admin panel'
+        });
+        return;
+      }
+      
+      // Find default or first container
+      container = containers.find((c: any) => c.isDefault) || containers[0];
+      
+      // Get patterns from container - use weighted random selection for hot-swap
+      const { patterns } = await injectionService.listPatterns({
         containerId: container.id,
-        containerName: container.name
+        isActive: true,
+        limit: 50
       });
-      return;
+      
+      if (!patterns || patterns.length === 0) {
+        res.status(404).json({
+          success: false,
+          error: 'No active patterns found in container',
+          containerId: container.id,
+          containerName: container.name
+        });
+        return;
+      }
+      
+      // Weighted random selection based on success count (hot-swap)
+      const weightedPatterns = patterns.map((p: any) => ({
+        pattern: p,
+        calculatedWeight: Math.max(1, p.weight + (p.successCount * 10) - (p.failureCount * 5))
+      }));
+      
+      const totalWeight = weightedPatterns.reduce((sum: number, wp: any) => sum + wp.calculatedWeight, 0);
+      let random = Math.random() * totalWeight;
+      
+      for (const wp of weightedPatterns) {
+        random -= wp.calculatedWeight;
+        if (random <= 0) {
+          pattern = wp.pattern;
+          break;
+        }
+      }
+      
+      // Fallback to first pattern if selection fails
+      if (!pattern) {
+        pattern = patterns[0];
+      }
+      
+      console.log(`[IAI Pattern] 🔄 Hot-swap selected: ${pattern.name} (weight: ${pattern.weight})`);
     }
-    
-    // Find default or first pattern
-    const pattern = patterns.find((p: any) => p.isDefault) || patterns[0];
     
     // Return pattern data for extension
     res.json({
       success: true,
+      ultraSpeed: ultraSpeed,
       container: {
-        id: container.id,
-        name: container.name,
-        category: container.category
+        id: container?.id,
+        name: container?.name,
+        category: container?.category
       },
       pattern: {
         id: pattern.id,
@@ -775,6 +820,11 @@ app.get('/api/iai/pattern', async (_req, res): Promise<void> => {
         schema: pattern.schema,
         config: pattern.config,
         tags: pattern.tags
+      },
+      hotSwap: {
+        enabled: true,
+        mode: ultraSpeed ? 'usm' : 'normal',
+        container: ultraSpeed ? 'IAI Soldiers USM' : 'all'
       },
       loadedAt: new Date().toISOString()
     });

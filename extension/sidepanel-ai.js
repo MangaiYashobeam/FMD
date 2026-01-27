@@ -61,6 +61,10 @@ const elements = {
   aiDescription: document.getElementById('aiDescription'),
   schedulePost: document.getElementById('schedulePost'),
   
+  // USM Toggle Elements
+  usmToggle: document.getElementById('usmToggle'),
+  ultraSpeedMode: document.getElementById('ultraSpeedMode'),
+  
   // Modal Views
   modalSelectView: document.getElementById('modalSelectView'),
   modalProgressView: document.getElementById('modalProgressView'),
@@ -95,6 +99,7 @@ let vehicles = [];
 let selectedVehicles = new Set();
 let postingInProgress = false;
 let abortController = null;
+let ultraSpeedEnabled = false; // USM state
 
 // ============================================
 // Initialization
@@ -104,6 +109,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   showLoading();
   
   try {
+    // Load USM state from storage
+    const { ultraSpeedMode } = await chrome.storage.local.get(['ultraSpeedMode']);
+    ultraSpeedEnabled = ultraSpeedMode || false;
+    updateUSMToggleUI();
+    
     // Check authentication state
     const response = await sendMessage({ type: 'GET_AUTH_STATE' });
     authState = response.data;
@@ -118,6 +128,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     showAuthSection();
   }
 });
+
+// ============================================
+// USM Toggle Management
+// ============================================
+
+function updateUSMToggleUI() {
+  if (elements.usmToggle) {
+    elements.usmToggle.classList.toggle('active', ultraSpeedEnabled);
+  }
+  if (elements.ultraSpeedMode) {
+    elements.ultraSpeedMode.checked = ultraSpeedEnabled;
+  }
+}
+
+function toggleUSMMode() {
+  ultraSpeedEnabled = !ultraSpeedEnabled;
+  chrome.storage.local.set({ ultraSpeedMode: ultraSpeedEnabled });
+  updateUSMToggleUI();
+  
+  // Log activity
+  if (ultraSpeedEnabled) {
+    addActivity('info', '⚡ Ultra Speed Mode ENABLED - Using USM container patterns');
+  } else {
+    addActivity('info', '🔄 Ultra Speed Mode DISABLED - Using all patterns');
+  }
+  
+  console.log('⚡ USM Mode toggled:', ultraSpeedEnabled);
+}
 
 // ============================================
 // UI State Management
@@ -887,9 +925,12 @@ async function startPosting() {
  * Post a single vehicle
  */
 async function postVehicle(vehicle, useAI) {
+  // Log USM mode status
+  console.log(`⚡ Posting vehicle ${vehicle.id} - Ultra Speed Mode: ${ultraSpeedEnabled ? 'ENABLED' : 'disabled'}`);
+  
   // Update progress steps
   setProgressStep('navigate', 'active');
-  updateProgressStatus('Opening Facebook Marketplace...', 10);
+  updateProgressStatus(ultraSpeedEnabled ? '⚡ USM: Opening Facebook Marketplace...' : 'Opening Facebook Marketplace...', 10);
   
   // Find or open Facebook tab
   let tab = await getOrCreateFacebookTab();
@@ -1096,12 +1137,13 @@ async function postVehicle(vehicle, useAI) {
   setProgressStep('publish', 'completed');
   updateProgressStatus('Complete!', 100);
   
-  // Record the posting
+  // Record the posting with USM mode info
   await sendMessage({
     type: 'RECORD_POSTING',
     vehicleId: vehicle.id,
     platform: 'facebook_marketplace',
-    status: 'completed'
+    status: 'completed',
+    ultraSpeed: ultraSpeedEnabled
   });
   
   await sleep(1000);
@@ -1230,6 +1272,9 @@ elements.closeModal?.addEventListener('click', closeVehicleModal);
 elements.cancelPost?.addEventListener('click', closeVehicleModal);
 elements.closeSuccess?.addEventListener('click', closeVehicleModal);
 elements.closeError?.addEventListener('click', closeVehicleModal);
+
+// USM Toggle click handler
+elements.usmToggle?.addEventListener('click', toggleUSMMode);
 
 // Cancel progress
 elements.cancelProgress?.addEventListener('click', () => {

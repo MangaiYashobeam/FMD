@@ -255,18 +255,35 @@ async function loadCachedPattern() {
 /**
  * Load injection pattern from server
  * Uses PUBLIC endpoint first (no auth required), falls back to authenticated endpoint
+ * Supports Ultra Speed Mode (USM) via chrome.storage
  */
 async function loadInjectionPattern() {
   try {
     console.log('[IAI] 🔄 Loading injection pattern from server...');
+    
+    // Check if Ultra Speed Mode is enabled
+    let ultraSpeedEnabled = false;
+    try {
+      const storage = await chrome.storage?.local?.get('ultraSpeedMode');
+      ultraSpeedEnabled = storage?.ultraSpeedMode === true;
+      if (ultraSpeedEnabled) {
+        console.log('[IAI] ⚡ Ultra Speed Mode ENABLED - will fetch from USM container');
+      }
+    } catch (e) {
+      console.log('[IAI] Could not check USM mode:', e);
+    }
     
     const apiUrl = window.location.hostname === 'localhost' 
       ? IAI_CONFIG.API.LOCAL 
       : IAI_CONFIG.API.PRODUCTION;
     
     // TRY PUBLIC ENDPOINT FIRST (no auth required)
-    console.log('[IAI] 📡 Trying public pattern endpoint...');
-    const publicResponse = await fetch(`${apiUrl}/iai/pattern`);
+    // Add ultraSpeed parameter if enabled
+    const patternUrl = ultraSpeedEnabled 
+      ? `${apiUrl}/iai/pattern?ultraSpeed=true` 
+      : `${apiUrl}/iai/pattern`;
+    console.log('[IAI] 📡 Trying public pattern endpoint:', patternUrl);
+    const publicResponse = await fetch(patternUrl);
     
     if (publicResponse.ok) {
       const publicData = await publicResponse.json();
