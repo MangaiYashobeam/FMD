@@ -75,10 +75,11 @@ router.use((req: AuthRequest, res: Response, next: NextFunction) => {
   }
   
   next();
+  return;
 });
 
-// Helper for async route handlers - allows return statements for early exit
-const asyncHandler = (fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<any>) => 
+// Helper for async route handlers - ensures explicit void return
+const asyncHandler = (fn: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>) => 
   (req: AuthRequest, res: Response, next: NextFunction): void => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
@@ -114,7 +115,7 @@ const ALLOWED_FAILURE_ACTIONS = ['skip', 'retry', 'abort', 'fallback'] as const;
 // Container Routes (SUPER_ADMIN only - enforced above)
 // ============================================
 
-router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize all inputs
   const name = sanitizeString(req.body.name, 100);
   const description = sanitizeString(req.body.description, 500);
@@ -129,15 +130,17 @@ router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response) 
 
   // Validate required fields
   if (!name) {
-    return res.status(400).json({ success: false, error: 'Container name is required' });
+    res.status(400).json({ success: false, error: 'Container name is required' });
+    return;
   }
   
   // Validate category if provided
   if (category && !ALLOWED_CATEGORIES.includes(category as any)) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: `Invalid category. Allowed: ${ALLOWED_CATEGORIES.join(', ')}` 
     });
+    return;
   }
 
   try {
@@ -168,6 +171,7 @@ router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response) 
     });
 
     res.status(201).json({ success: true, data: container });
+    return;
   } catch (error: unknown) {
     const err = error as { code?: string };
     if (err.code === 'P2002') {
@@ -178,7 +182,7 @@ router.post('/containers', asyncHandler(async (req: AuthRequest, res: Response) 
   }
 }));
 
-router.get('/containers', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/containers', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize query params
   const category = sanitizeString(req.query.category, 50);
   const isActive = sanitizeBoolean(req.query.isActive);
@@ -195,12 +199,14 @@ router.get('/containers', asyncHandler(async (req: AuthRequest, res: Response) =
   });
 
   res.json({ success: true, data: result.containers, total: result.total });
+  return;
 }));
 
-router.get('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid container ID format' });
+    res.status(400).json({ success: false, error: 'Invalid container ID format' });
+    return;
   }
   
   const includePatterns = sanitizeBoolean(req.query.includePatterns) ?? true;
@@ -214,12 +220,14 @@ router.get('/containers/:id', asyncHandler(async (req: AuthRequest, res: Respons
 
   const stats = await injectionService.getContainerStats(id);
   res.json({ success: true, data: { ...container, stats } });
+  return;
 }));
 
-router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid container ID format' });
+    res.status(400).json({ success: false, error: 'Invalid container ID format' });
+    return;
   }
 
   // Sanitize all inputs
@@ -236,10 +244,11 @@ router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Respons
   
   // Validate category if provided
   if (category && !ALLOWED_CATEGORIES.includes(category as any)) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: `Invalid category. Allowed: ${ALLOWED_CATEGORIES.join(', ')}` 
     });
+    return;
   }
 
   const existing = await injectionService.getContainer(id, false);
@@ -266,12 +275,14 @@ router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Respons
   });
 
   res.json({ success: true, data: container });
+  return;
 }));
 
-router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid container ID format' });
+    res.status(400).json({ success: false, error: 'Invalid container ID format' });
+    return;
   }
 
   const existing = await injectionService.getContainer(id, false);
@@ -296,6 +307,7 @@ router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Resp
   });
   
   res.json({ success: true, message: 'Container deleted successfully' });
+  return;
 }));
 
 // ============================================
@@ -305,7 +317,7 @@ router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Resp
 // Allowed code types (whitelist)
 const ALLOWED_CODE_TYPES = ['javascript', 'json', 'workflow', 'selector', 'template'] as const;
 
-router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize all inputs - patterns contain executable code so require super admin (enforced above)
   const containerId = sanitizeUUID(req.body.containerId);
   const name = sanitizeString(req.body.name, 100);
@@ -330,31 +342,35 @@ router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) =>
 
   // Validate required fields
   if (!containerId || !name || !code) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: 'containerId, name, and code are required' 
     });
+    return;
   }
   
   // Validate code type
   if (codeType && !ALLOWED_CODE_TYPES.includes(codeType as any)) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: `Invalid codeType. Allowed: ${ALLOWED_CODE_TYPES.join(', ')}` 
     });
+    return;
   }
   
   // Validate failure action
   if (failureAction && !ALLOWED_FAILURE_ACTIONS.includes(failureAction as any)) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: `Invalid failureAction. Allowed: ${ALLOWED_FAILURE_ACTIONS.join(', ')}` 
     });
+    return;
   }
 
   const container = await injectionService.getContainer(containerId, false);
   if (!container) {
-    return res.status(404).json({ success: false, error: 'Container not found' });
+    res.status(404).json({ success: false, error: 'Container not found' });
+    return;
   }
 
   try {
@@ -379,6 +395,7 @@ router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) =>
     });
 
     res.status(201).json({ success: true, data: pattern });
+    return;
   } catch (error: unknown) {
     const err = error as { code?: string };
     if (err.code === 'P2002') {
@@ -389,7 +406,7 @@ router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response) =>
   }
 }));
 
-router.get('/patterns', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/patterns', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const containerId = sanitizeUUID(req.query.containerId);
   const isActive = sanitizeBoolean(req.query.isActive);
   const tagsStr = sanitizeString(req.query.tags, 200);
@@ -405,12 +422,14 @@ router.get('/patterns', asyncHandler(async (req: AuthRequest, res: Response) => 
   });
 
   res.json({ success: true, data: result.patterns, total: result.total });
+  return;
 }));
 
-router.get('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    return;
   }
 
   const pattern = await injectionService.getPattern(id);
@@ -425,12 +444,14 @@ router.get('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response)
     : 0;
 
   res.json({ success: true, data: { ...pattern, successRate: Math.round(successRate * 100) / 100 } });
+  return;
 }));
 
-router.put('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.put('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    return;
   }
 
   // Sanitize all inputs
@@ -456,18 +477,20 @@ router.put('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response)
   
   // Validate code type if provided
   if (codeType && !ALLOWED_CODE_TYPES.includes(codeType as any)) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: `Invalid codeType. Allowed: ${ALLOWED_CODE_TYPES.join(', ')}` 
     });
+    return;
   }
   
   // Validate failure action if provided
   if (failureAction && !ALLOWED_FAILURE_ACTIONS.includes(failureAction as any)) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: `Invalid failureAction. Allowed: ${ALLOWED_FAILURE_ACTIONS.join(', ')}` 
     });
+    return;
   }
 
   const existing = await injectionService.getPattern(id);
@@ -497,12 +520,14 @@ router.put('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response)
   });
 
   res.json({ success: true, data: pattern });
+  return;
 }));
 
-router.delete('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.delete('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    return;
   }
 
   const existing = await injectionService.getPattern(id);
@@ -537,7 +562,7 @@ router.delete('/patterns/:id', asyncHandler(async (req: AuthRequest, res: Respon
 const ALLOWED_SELECTION_STRATEGIES = ['random', 'weighted', 'round-robin', 'priority'] as const;
 type SelectionStrategy = typeof ALLOWED_SELECTION_STRATEGIES[number];
 
-router.post('/inject', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/inject', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize all inputs
   const containerId = sanitizeUUID(req.body.containerId);
   const patternId = sanitizeUUID(req.body.patternId);
@@ -554,15 +579,17 @@ router.post('/inject', asyncHandler(async (req: AuthRequest, res: Response) => {
   const taskId = sanitizeUUID(req.body.taskId);
 
   if (!containerId && !patternId) {
-    return res.status(400).json({ success: false, error: 'Either containerId or patternId is required' });
+    res.status(400).json({ success: false, error: 'Either containerId or patternId is required' });
+    return;
   }
   
   // Validate selection strategy
   if (rawStrategy && !selectionStrategy) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: `Invalid selectionStrategy. Allowed: ${ALLOWED_SELECTION_STRATEGIES.join(', ')}` 
     });
+    return;
   }
 
   // Audit log before execution
@@ -598,12 +625,14 @@ router.post('/inject', asyncHandler(async (req: AuthRequest, res: Response) => {
   });
 
   res.json({ success: true, data: result });
+  return;
 }));
 
-router.post('/test-pattern/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/test-pattern/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    res.status(400).json({ success: false, error: 'Invalid pattern ID format' });
+    return;
   }
   
   const input = sanitizeJSON(req.body.input, 10000);
@@ -961,7 +990,7 @@ router.get('/categories', asyncHandler(async (_req: AuthRequest, res: Response) 
 // Allows Super Admin to force specific patterns for accounts/users
 // ============================================
 
-router.get('/overrides', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/overrides', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize inputs
   const accountId = sanitizeUUID(req.query.accountId);
   const isActive = sanitizeBoolean(req.query.isActive);
@@ -976,12 +1005,14 @@ router.get('/overrides', asyncHandler(async (req: AuthRequest, res: Response) =>
   });
   
   res.json({ success: true, data: overrides.overrides, total: overrides.total });
+  return;
 }));
 
-router.get('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid override ID format' });
+    res.status(400).json({ success: false, error: 'Invalid override ID format' });
+    return;
   }
   
   const override = await injectionService.getPatternOverride(id);
@@ -992,9 +1023,10 @@ router.get('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response
   }
   
   res.json({ success: true, data: override });
+  return;
 }));
 
-router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize all inputs
   const accountId = sanitizeUUID(req.body.accountId);
   const userId = sanitizeUUID(req.body.userId);
@@ -1007,10 +1039,11 @@ router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) =
   
   // Validate required fields
   if (!accountId || !containerId || !patternId) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       success: false, 
       error: 'accountId, containerId, and patternId are required' 
     });
+    return;
   }
   
   // Validate expiresAt if provided
@@ -1018,7 +1051,8 @@ router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) =
   if (expiresAtStr) {
     const parsed = new Date(expiresAtStr);
     if (isNaN(parsed.getTime())) {
-      return res.status(400).json({ success: false, error: 'Invalid expiresAt date format' });
+      res.status(400).json({ success: false, error: 'Invalid expiresAt date format' });
+      return;
     }
     expiresAt = parsed;
   }
@@ -1061,10 +1095,11 @@ router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) =
   }
 }));
 
-router.put('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.put('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid override ID format' });
+    res.status(400).json({ success: false, error: 'Invalid override ID format' });
+    return;
   }
   
   // Sanitize inputs
@@ -1081,7 +1116,8 @@ router.put('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response
   } else if (expiresAtStr !== undefined) {
     const parsed = new Date(sanitizeString(expiresAtStr, 30) || '');
     if (isNaN(parsed.getTime())) {
-      return res.status(400).json({ success: false, error: 'Invalid expiresAt date format' });
+      res.status(400).json({ success: false, error: 'Invalid expiresAt date format' });
+      return;
     }
     expiresAt = parsed;
   }
@@ -1115,12 +1151,14 @@ router.put('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response
   });
   
   res.json({ success: true, data: override });
+  return;
 }));
 
-router.delete('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.delete('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const id = sanitizeUUID(req.params.id);
   if (!id) {
-    return res.status(400).json({ success: false, error: 'Invalid override ID format' });
+    res.status(400).json({ success: false, error: 'Invalid override ID format' });
+    return;
   }
   
   const existing = await injectionService.getPatternOverride(id);
@@ -1146,13 +1184,15 @@ router.delete('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Respo
   });
   
   res.json({ success: true, message: 'Pattern override deleted successfully' });
+  return;
 }));
 
 // Get effective pattern for an account (considering overrides)
-router.get('/overrides/effective/:accountId', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/overrides/effective/:accountId', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const accountId = sanitizeUUID(req.params.accountId);
   if (!accountId) {
-    return res.status(400).json({ success: false, error: 'Invalid account ID format' });
+    res.status(400).json({ success: false, error: 'Invalid account ID format' });
+    return;
   }
   
   const containerId = sanitizeUUID(req.query.containerId);
@@ -1165,6 +1205,7 @@ router.get('/overrides/effective/:accountId', asyncHandler(async (req: AuthReque
   );
   
   res.json({ success: true, data: effectivePattern });
+  return;
 }));
 
 // Error handler

@@ -442,17 +442,18 @@ export function auditAdminAction(action: string, resource: string) {
  * Require SUPER_ADMIN role (fail-closed)
  */
 export function requireSuperAdmin() {
-  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
       logger.warn('[SECURITY] Unauthenticated access attempt to admin route', {
         path: req.path,
         ip: getRealIP(req),
       });
-      return res.status(401).json({ 
+      res.status(401).json({ 
         success: false, 
         error: 'Authentication required',
         code: 'AUTH_REQUIRED'
       });
+      return;
     }
     
     if (!isSuperAdmin(req)) {
@@ -461,11 +462,12 @@ export function requireSuperAdmin() {
         path: req.path,
         ip: getRealIP(req),
       });
-      return res.status(403).json({ 
+      res.status(403).json({ 
         success: false, 
         error: 'Super Admin access required',
         code: 'FORBIDDEN'
       });
+      return;
     }
     
     next();
@@ -476,27 +478,30 @@ export function requireSuperAdmin() {
  * Verify account access middleware
  */
 export function requireAccountAccess(requiredRole?: UserRole) {
-  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
-      return res.status(401).json({ 
+      res.status(401).json({ 
         success: false, 
         error: 'Authentication required',
         code: 'AUTH_REQUIRED'
       });
+      return;
     }
     
     // Super admins bypass account checks
     if (isSuperAdmin(req)) {
-      return next();
+      next();
+      return;
     }
     
     const accountId = getAccountId(req);
     if (!accountId) {
-      return res.status(400).json({ 
+      res.status(400).json({ 
         success: false, 
         error: 'Account ID required',
         code: 'MISSING_ACCOUNT'
       });
+      return;
     }
     
     const { hasAccess, error } = await verifyAccountAccess(
@@ -512,11 +517,12 @@ export function requireAccountAccess(requiredRole?: UserRole) {
         path: req.path,
         error,
       });
-      return res.status(403).json({ 
+      res.status(403).json({ 
         success: false, 
         error: error || 'Access denied',
         code: 'FORBIDDEN'
       });
+      return;
     }
     
     next();
@@ -529,25 +535,29 @@ export function requireAccountAccess(requiredRole?: UserRole) {
 export function validateResourceOwnership<T extends { accountId: string }>(
   resourceFetcher: (id: string) => Promise<T | null>
 ) {
-  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
-      return res.status(401).json({ success: false, error: 'Authentication required' });
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
     }
     
     const resourceId = sanitizeUUID(req.params.id);
     if (!resourceId) {
-      return res.status(400).json({ success: false, error: 'Invalid resource ID' });
+      res.status(400).json({ success: false, error: 'Invalid resource ID' });
+      return;
     }
     
     const resource = await resourceFetcher(resourceId);
     if (!resource) {
-      return res.status(404).json({ success: false, error: 'Resource not found' });
+      res.status(404).json({ success: false, error: 'Resource not found' });
+      return;
     }
     
     // Super admins can access any resource
     if (isSuperAdmin(req)) {
       (req as any).resource = resource;
-      return next();
+      next();
+      return;
     }
     
     // Verify user has access to resource's account
@@ -559,7 +569,8 @@ export function validateResourceOwnership<T extends { accountId: string }>(
         resourceId,
         path: req.path,
       });
-      return res.status(403).json({ success: false, error: 'Access denied' });
+      res.status(403).json({ success: false, error: 'Access denied' });
+      return;
     }
     
     (req as any).resource = resource;
@@ -575,16 +586,17 @@ export function validateResourceOwnership<T extends { accountId: string }>(
  * Check request body size
  */
 export function checkRequestSize(maxSizeBytes: number) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     const contentLength = parseInt(req.headers['content-length'] || '0');
     
     if (contentLength > maxSizeBytes) {
-      return res.status(413).json({
+      res.status(413).json({
         success: false,
         error: 'Request too large',
         code: 'PAYLOAD_TOO_LARGE',
         maxSize: maxSizeBytes,
       });
+      return;
     }
     
     next();
