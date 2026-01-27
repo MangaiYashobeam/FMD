@@ -5,12 +5,13 @@ import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import axios from 'axios';
 import crypto from 'crypto';
+import { getJwtSecret } from '@/config/security';
 
 // Sign OAuth state to prevent tampering
 function signState(data: object): string {
   const payload = JSON.stringify(data);
   const signature = crypto
-    .createHmac('sha256', process.env.JWT_SECRET || 'fallback-secret')
+    .createHmac('sha256', getJwtSecret())
     .update(payload)
     .digest('hex');
   return Buffer.from(JSON.stringify({ payload, signature })).toString('base64');
@@ -21,7 +22,7 @@ function verifyState(state: string): { accountId: string; userId: string; return
   try {
     const { payload, signature } = JSON.parse(Buffer.from(state, 'base64').toString());
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.JWT_SECRET || 'fallback-secret')
+      .createHmac('sha256', getJwtSecret())
       .update(payload)
       .digest('hex');
     

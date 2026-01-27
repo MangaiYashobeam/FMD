@@ -30,8 +30,20 @@ const SALT_LENGTH = 16;
 const IV_LENGTH = 16;
 const PBKDF2_ITERATIONS = 100000;
 
-// Master encryption key from environment
-const MASTER_KEY = process.env.SESSION_ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-insecure-key-change-in-production';
+// Master encryption key from environment - CRITICAL: must be configured in production
+function getMasterKey(): string {
+  const key = process.env.SESSION_ENCRYPTION_KEY || process.env.JWT_SECRET;
+  if (!key) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('CRITICAL: SESSION_ENCRYPTION_KEY or JWT_SECRET must be set in production!');
+    }
+    // Development fallback with warning
+    console.warn('⚠️  Using insecure default encryption key - NOT FOR PRODUCTION');
+    return 'dev-only-insecure-key-change-in-production';
+  }
+  return key;
+}
+const MASTER_KEY = getMasterKey();
 
 // Types
 export interface EncryptedData {

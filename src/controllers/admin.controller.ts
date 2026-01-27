@@ -355,6 +355,11 @@ export class AdminController {
 
   /**
    * Create new account (for onboarding clients)
+   * 
+   * SECURITY: 
+   * - Uses cryptographically secure temporary password
+   * - Explicit field allowlist prevents mass assignment
+   * - Password is NEVER logged
    */
   async createAccount(req: AuthRequest, res: Response): Promise<void> {
     const {
@@ -364,8 +369,13 @@ export class AdminController {
       ownerFirstName,
       ownerLastName,
       subscriptionPlanId,
-      ...accountData
     } = req.body;
+
+    // SECURITY: Validate required fields
+    if (!name || !dealershipName || !ownerEmail) {
+      res.status(400).json({ error: 'Missing required fields: name, dealershipName, ownerEmail' });
+      return;
+    }
 
     // Check if owner user exists
     let ownerUser = await prisma.user.findUnique({
@@ -373,33 +383,35 @@ export class AdminController {
     });
 
     // Create owner user if doesn't exist
+    let tempPassword: string | undefined;
     if (!ownerUser) {
       const bcrypt = require('bcrypt');
-      const tempPassword = Math.random().toString(36).slice(-10);
+      const crypto = require('crypto');
+      // SECURITY: Use cryptographically secure random password
+      tempPassword = crypto.randomBytes(16).toString('base64url').slice(0, 16);
 
       ownerUser = await prisma.user.create({
         data: {
           email: ownerEmail,
           firstName: ownerFirstName,
           lastName: ownerLastName,
-          passwordHash: await bcrypt.hash(tempPassword, 10),
+          passwordHash: await bcrypt.hash(tempPassword, 12), // SECURITY: Cost factor 12
           emailVerified: false,
         },
       });
 
-      // TODO: Send welcome email with temp password
-      logger.info(`Created new user ${ownerUser.id} with temp password: ${tempPassword}`);
+      // SECURITY: NEVER log the actual password
+      logger.info(`Created new user ${ownerUser.id} - temporary password generated (not logged for security)`);
     }
 
-    // Create account
+    // SECURITY: Create account with explicit fields only - prevents mass assignment
     const account = await prisma.account.create({
       data: {
         name,
         dealershipName,
-        subscriptionPlanId,
+        subscriptionPlanId: subscriptionPlanId || undefined,
         subscriptionStatus: 'trial',
         trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14-day trial
-        ...accountData,
       },
     });
 

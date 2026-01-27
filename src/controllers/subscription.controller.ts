@@ -5,6 +5,33 @@ import { AppError } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { stripeService } from '@/services/stripe.service';
 import Stripe from 'stripe';
+import { UserRole } from '@/middleware/rbac';
+
+/**
+ * SECURITY: Verify user has access to the specified account
+ * Prevents IDOR attacks on subscription endpoints
+ */
+async function verifyAccountAccess(
+  userId: string, 
+  accountId: string, 
+  requiredRoles: UserRole[] = [UserRole.ACCOUNT_OWNER, UserRole.ADMIN, UserRole.SUPER_ADMIN]
+): Promise<boolean> {
+  // Check if user is a Super Admin (has access to all accounts)
+  const superAdminCheck = await prisma.accountUser.findFirst({
+    where: { userId, role: UserRole.SUPER_ADMIN },
+  });
+  if (superAdminCheck) return true;
+
+  // Check if user has required role in the specified account
+  const accountUser = await prisma.accountUser.findFirst({
+    where: { 
+      userId, 
+      accountId,
+      role: { in: requiredRoles },
+    },
+  });
+  return !!accountUser;
+}
 
 export class SubscriptionController {
   /**
@@ -21,9 +48,15 @@ export class SubscriptionController {
 
   /**
    * Get current subscription details for account
+   * SECURITY: Ownership check prevents IDOR
    */
   async getCurrentSubscription(req: AuthRequest, res: Response): Promise<void> {
     const accountId = req.params.accountId as string;
+    
+    // SECURITY: Verify user has access to this account
+    if (!await verifyAccountAccess(req.user!.id, accountId, [UserRole.ACCOUNT_OWNER, UserRole.ADMIN, UserRole.SALES_REP, UserRole.VIEWER, UserRole.SUPER_ADMIN])) {
+      throw new AppError('Access denied to this account', 403);
+    }
 
     const account = await prisma.account.findUnique({
       where: { id: accountId },
@@ -68,10 +101,16 @@ export class SubscriptionController {
 
   /**
    * Subscribe to a plan
+   * SECURITY: Ownership check prevents IDOR, requires admin role
    */
   async subscribe(req: AuthRequest, res: Response): Promise<void> {
     const accountId = req.params.accountId as string;
     const { planId } = req.body;
+
+    // SECURITY: Only account owners and admins can change subscription
+    if (!await verifyAccountAccess(req.user!.id, accountId, [UserRole.ACCOUNT_OWNER, UserRole.ADMIN, UserRole.SUPER_ADMIN])) {
+      throw new AppError('Access denied - admin role required', 403);
+    }
 
     if (!planId) {
       throw new AppError('Plan ID is required', 400);

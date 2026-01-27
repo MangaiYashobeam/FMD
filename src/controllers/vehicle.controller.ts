@@ -258,10 +258,43 @@ export class VehicleController {
 
   /**
    * Update vehicle
+   * SECURITY: Uses explicit field allowlist to prevent mass assignment attacks
    */
   async updateVehicle(req: AuthRequest, res: Response) {
     const { id } = req.params;
-    const updates = req.body;
+    
+    // SECURITY: Explicit field allowlist - prevents mass assignment of sensitive fields
+    const ALLOWED_UPDATE_FIELDS = [
+      'vin', 'stockNumber', 'year', 'make', 'model', 'trim', 'bodyType',
+      'extColor', 'intColor', 'mileage', 'price', 'costPrice', 'marketPrice',
+      'description', 'features', 'photos', 'status', 'condition',
+      'engine', 'transmission', 'drivetrain', 'fuelType', 'mpgCity', 'mpgHighway',
+      'doors', 'passengers', 'titleStatus', 'warranty', 'carfaxUrl',
+      'marketplaceNotes', 'internalNotes', 'priority', 'tags',
+      'scheduledPostDate', 'lastPostedAt', 'postingStatus',
+    ] as const;
+    
+    // Filter to only allowed fields
+    const updates: Record<string, unknown> = {};
+    for (const field of ALLOWED_UPDATE_FIELDS) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+    
+    // SECURITY: Warn if client tried to update disallowed fields
+    const attemptedFields = Object.keys(req.body);
+    const disallowedFields = attemptedFields.filter(f => 
+      !ALLOWED_UPDATE_FIELDS.includes(f as typeof ALLOWED_UPDATE_FIELDS[number]) && 
+      f !== 'updatedAt'
+    );
+    if (disallowedFields.length > 0) {
+      logger.warn('Vehicle update: Attempted to update disallowed fields', {
+        vehicleId: id,
+        userId: req.user!.id,
+        disallowedFields,
+      });
+    }
 
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: id as string },

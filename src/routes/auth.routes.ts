@@ -196,7 +196,8 @@ router.get('/extension-login', async (req: Request, res: Response) => {
     
     // Verify the token is valid (don't need to decode fully, just check it works)
     const jwt = require('jsonwebtoken');
-    const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-for-dev';
+    const { getJwtSecret } = require('@/config/security');
+    const jwtSecret = getJwtSecret();
     
     try {
       const decoded = jwt.verify(token, jwtSecret);

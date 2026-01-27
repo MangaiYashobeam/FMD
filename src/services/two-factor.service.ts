@@ -337,9 +337,12 @@ class TwoFactorService {
    * Encrypt 2FA secret for storage
    */
   private encryptSecret(secret: string): string {
-    const key = Buffer.from(process.env.JWT_SECRET || 'default-key').slice(0, 32).toString('hex').slice(0, 32);
+    const { getJwtSecret } = require('@/config/security');
+    const rawKey = getJwtSecret();
+    // Create a proper 32-byte key using SHA-256
+    const key = crypto.createHash('sha256').update(rawKey).digest();
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key), iv);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     let encrypted = cipher.update(secret, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     return iv.toString('hex') + ':' + encrypted;
@@ -349,10 +352,13 @@ class TwoFactorService {
    * Decrypt 2FA secret from storage
    */
   private decryptSecret(encryptedSecret: string): string {
-    const key = Buffer.from(process.env.JWT_SECRET || 'default-key').slice(0, 32).toString('hex').slice(0, 32);
+    const { getJwtSecret } = require('@/config/security');
+    const rawKey = getJwtSecret();
+    // Create a proper 32-byte key using SHA-256
+    const key = crypto.createHash('sha256').update(rawKey).digest();
     const [ivHex, encrypted] = encryptedSecret.split(':');
     const iv = Buffer.from(ivHex, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key), iv);
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;

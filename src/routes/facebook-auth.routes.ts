@@ -170,20 +170,21 @@ router.post('/callback', async (req: Request, res: Response): Promise<void> => {
     });
 
     // Generate server JWT token for API calls
+    const { getJwtSecret, getJwtRefreshSecret } = require('@/config/security');
     const serverToken = jwt.sign(
       { 
         id: user.id, 
         email: user.email,
         accountIds: [accountUser.accountId],
       },
-      process.env.JWT_SECRET || 'fallback-secret',
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
     // Generate refresh token
     const refreshToken = jwt.sign(
       { id: user.id, type: 'refresh' },
-      process.env.JWT_SECRET || 'fallback-secret',
+      getJwtRefreshSecret(),
       { expiresIn: '30d' }
     );
 

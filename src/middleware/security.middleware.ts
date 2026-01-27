@@ -66,6 +66,9 @@ export const csrfTokenProvider: RequestHandler = (req, res, next) => {
 
 /**
  * Middleware to validate CSRF token on state-changing requests
+ * 
+ * SECURITY: API key bypass requires actual API key validation later in the chain.
+ * We mark the request as needing API key validation rather than blindly skipping CSRF.
  */
 export const csrfProtection: RequestHandler = (req, res, next) => {
   // Skip CSRF for safe methods
@@ -76,12 +79,18 @@ export const csrfProtection: RequestHandler = (req, res, next) => {
   }
   
   // Skip for API key authenticated requests (machine-to-machine)
+  // SECURITY: The API key will be validated by the apiKey middleware downstream.
+  // We only skip CSRF here because API keys are bearer tokens that can't be forged via CSRF.
+  // The request MUST have proper API key validation middleware applied to be secure.
   if (req.headers['x-api-key']) {
+    // Mark that this request bypassed CSRF due to API key claim
+    // The API key middleware MUST validate this, or the request should be rejected
+    (req as any).__csrfBypassedViaApiKey = true;
     next();
     return;
   }
   
-  // Skip for webhook endpoints
+  // Skip for webhook endpoints that use signature verification
   const webhookPaths = ['/api/subscriptions/webhook', '/api/facebook/deauthorize', '/api/email/track'];
   if (webhookPaths.some(path => req.path.includes(path))) {
     next();

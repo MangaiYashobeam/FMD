@@ -606,10 +606,11 @@ export class TrackingService {
    * Generate unsubscribe token
    */
   private generateUnsubscribeToken(trackingId: string, email: string): string {
+    const { getJwtSecret } = require('@/config/security');
     const data = JSON.stringify({ trackingId, email, ts: Date.now() });
     const encoded = Buffer.from(data).toString('base64url');
     const signature = createHash('sha256')
-      .update(encoded + (process.env.JWT_SECRET || 'secret'))
+      .update(encoded + getJwtSecret())
       .digest('hex')
       .substring(0, 16);
     return `${encoded}.${signature}`;
@@ -622,9 +623,10 @@ export class TrackingService {
     token: string
   ): { trackingId: string; email: string } | null {
     try {
+      const { getJwtSecret } = require('@/config/security');
       const [encoded, signature] = token.split('.');
       const expectedSig = createHash('sha256')
-        .update(encoded + (process.env.JWT_SECRET || 'secret'))
+        .update(encoded + getJwtSecret())
         .digest('hex')
         .substring(0, 16);
 

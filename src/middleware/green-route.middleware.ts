@@ -324,7 +324,8 @@ export const greenRouteVerify = async (
     if (authHeader?.startsWith('Bearer ')) {
       try {
         const token = authHeader.substring(7);
-        const jwtSecret = process.env.JWT_SECRET || 'fallback-secret';
+        const { getJwtSecret } = require('@/config/security');
+        const jwtSecret = getJwtSecret();
         const decoded = jwt.verify(token, jwtSecret) as { id: string; accountId?: string };
         req.greenRoute.userId = decoded.id;
         

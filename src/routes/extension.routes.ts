@@ -343,10 +343,39 @@ router.get('/tasks/:accountId/pending', authenticate, async (req: AuthRequest, r
 /**
  * POST /api/extension/tasks/:taskId/complete
  * Mark task as completed
+ * SECURITY: Verifies user owns the task before allowing update
  */
 router.post('/tasks/:taskId/complete', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const taskId = req.params.taskId as string;
+    
+    // SECURITY: Verify user has access to this task's account
+    const task = await prisma.extensionTask.findUnique({
+      where: { id: taskId },
+      select: { accountId: true },
+    });
+    
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' });
+      return;
+    }
+    
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: task.accountId,
+      },
+    });
+    
+    if (!accountUser) {
+      logger.warn('Task complete: Access denied', { 
+        taskId, 
+        userId: req.user!.id, 
+        taskAccountId: task.accountId 
+      });
+      res.status(403).json({ error: 'Access denied to this task' });
+      return;
+    }
     
     await prisma.extensionTask.update({
       where: { id: taskId },
@@ -368,21 +397,54 @@ router.post('/tasks/:taskId/complete', authenticate, async (req: AuthRequest, re
 /**
  * POST /api/extension/tasks/:taskId/failed
  * Mark task as failed
+ * SECURITY: Verifies user owns the task before allowing update
  */
 router.post('/tasks/:taskId/failed', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const taskId = req.params.taskId as string;
+    
+    // SECURITY: Verify user has access to this task's account
+    const task = await prisma.extensionTask.findUnique({
+      where: { id: taskId },
+      select: { accountId: true },
+    });
+    
+    if (!task) {
+      res.status(404).json({ error: 'Task not found' });
+      return;
+    }
+    
+    const accountUser = await prisma.accountUser.findFirst({
+      where: {
+        userId: req.user!.id,
+        accountId: task.accountId,
+      },
+    });
+    
+    if (!accountUser) {
+      logger.warn('Task failed: Access denied', { 
+        taskId, 
+        userId: req.user!.id, 
+        taskAccountId: task.accountId 
+      });
+      res.status(403).json({ error: 'Access denied to this task' });
+      return;
+    }
+    
+    // SECURITY: Sanitize error message for logging
+    const { sanitizeForLog } = require('@/utils/admin-security');
+    const sanitizedError = sanitizeForLog(req.body.error, 200);
     
     await prisma.extensionTask.update({
       where: { id: taskId },
       data: { 
         status: 'failed',
         updatedAt: new Date(),
-        result: { error: req.body.error || 'Unknown error', failedAt: new Date().toISOString() },
+        result: { error: sanitizedError || 'Unknown error', failedAt: new Date().toISOString() },
       },
     });
     
-    logger.info(`❌ Task ${taskId} marked as failed: ${req.body.error}`);
+    logger.info(`❌ Task ${taskId} marked as failed: ${sanitizedError}`);
     res.json({ success: true });
   } catch (error) {
     logger.error('Fail task error:', error);

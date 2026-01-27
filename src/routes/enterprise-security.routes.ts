@@ -380,9 +380,17 @@ router.put('/ssrf/domains/:id', async (req: AuthRequest, res: Response): Promise
     }
     
     if (matchType) {
-      const validMatchTypes = ['exact', 'suffix', 'wildcard', 'regex'];
+      // SECURITY: Disallow 'regex' matchType to prevent ReDoS attacks
+      // Regex patterns can cause catastrophic backtracking with malicious input
+      const validMatchTypes = ['exact', 'suffix', 'wildcard'];
       if (validMatchTypes.includes(matchType.toLowerCase())) {
         updateData.matchType = matchType.toLowerCase();
+      } else {
+        res.status(400).json({ 
+          success: false, 
+          error: 'Invalid matchType. Allowed values: exact, suffix, wildcard' 
+        });
+        return;
       }
     }
     

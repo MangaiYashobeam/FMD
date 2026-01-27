@@ -167,13 +167,34 @@ router.post('/cleanup', requireSuperAdmin, async (req: Request, res: Response) =
  * Receive task results from Python workers
  * POST /api/workers/task-result
  * (Called by Python workers)
+ * 
+ * SECURITY: Uses timing-safe comparison to prevent timing attacks on the worker secret
  */
 router.post('/task-result', async (req: Request, res: Response) => {
   try {
-    const workerSecret = req.headers['x-worker-secret'];
+    const workerSecret = req.headers['x-worker-secret'] as string | undefined;
+    const expectedSecret = process.env.WORKER_SECRET;
     
-    // Verify worker authentication
-    if (workerSecret !== process.env.WORKER_SECRET) {
+    // SECURITY: Fail if worker secret is not configured
+    if (!expectedSecret) {
+      logger.error('WORKER_SECRET not configured - rejecting worker result');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+    
+    // SECURITY: Timing-safe comparison prevents timing attacks
+    const crypto = require('crypto');
+    const isValid = workerSecret && 
+      workerSecret.length === expectedSecret.length &&
+      crypto.timingSafeEqual(
+        Buffer.from(workerSecret),
+        Buffer.from(expectedSecret)
+      );
+    
+    if (!isValid) {
+      logger.warn('Worker task-result: Invalid worker secret', {
+        ip: req.ip,
+        hasSecret: !!workerSecret,
+      });
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
