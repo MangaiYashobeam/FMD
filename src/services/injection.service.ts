@@ -885,6 +885,250 @@ class InjectionService {
       avgExecutionTime: Math.round(avgExecutionTime)
     };
   }
+
+  // ============================================
+  // Pattern Override Methods
+  // Root Admin can force specific patterns for accounts
+  // ============================================
+
+  async listPatternOverrides(options: {
+    accountId?: string;
+    isActive?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{ overrides: any[]; total: number }> {
+    const where: any = {};
+    if (options.accountId) where.accountId = options.accountId;
+    if (options.isActive !== undefined) where.isActive = options.isActive;
+    
+    // Filter out expired overrides
+    where.OR = [
+      { expiresAt: null },
+      { expiresAt: { gt: new Date() } }
+    ];
+
+    const [overrides, total] = await Promise.all([
+      prisma.patternOverride.findMany({
+        where,
+        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+        take: options.limit || 100,
+        skip: options.offset || 0,
+      }),
+      prisma.patternOverride.count({ where }),
+    ]);
+
+    // Enrich with container and pattern names
+    const enrichedOverrides = await Promise.all(
+      overrides.map(async (override: any) => {
+        const [container, pattern, account] = await Promise.all([
+          prisma.injectionContainer.findUnique({ where: { id: override.containerId }, select: { name: true } }),
+          prisma.injectionPattern.findUnique({ where: { id: override.patternId }, select: { name: true, version: true } }),
+          prisma.account.findUnique({ where: { id: override.accountId }, select: { name: true, dealershipName: true } }),
+        ]);
+        return {
+          ...override,
+          containerName: container?.name,
+          patternName: pattern?.name,
+          patternVersion: pattern?.version,
+          accountName: account?.dealershipName || account?.name,
+        };
+      })
+    );
+
+    return { overrides: enrichedOverrides, total };
+  }
+
+  async getPatternOverride(id: string): Promise<any> {
+    const override = await prisma.patternOverride.findUnique({ where: { id } });
+    if (!override) return null;
+
+    const [container, pattern, account] = await Promise.all([
+      prisma.injectionContainer.findUnique({ where: { id: override.containerId }, select: { name: true } }),
+      prisma.injectionPattern.findUnique({ where: { id: override.patternId }, select: { name: true, version: true } }),
+      prisma.account.findUnique({ where: { id: override.accountId }, select: { name: true, dealershipName: true } }),
+    ]);
+
+    return {
+      ...override,
+      containerName: container?.name,
+      patternName: pattern?.name,
+      patternVersion: pattern?.version,
+      accountName: account?.dealershipName || account?.name,
+    };
+  }
+
+  async createPatternOverride(data: {
+    accountId: string;
+    userId?: string;
+    containerId: string;
+    patternId: string;
+    isActive?: boolean;
+    priority?: number;
+    reason?: string;
+    expiresAt?: Date;
+    createdBy: string;
+  }): Promise<any> {
+    // Validate container and pattern exist
+    const [container, pattern] = await Promise.all([
+      prisma.injectionContainer.findUnique({ where: { id: data.containerId } }),
+      prisma.injectionPattern.findUnique({ where: { id: data.patternId } }),
+    ]);
+
+    if (!container) throw new Error('Container not found');
+    if (!pattern) throw new Error('Pattern not found');
+    if (pattern.containerId !== data.containerId) {
+      throw new Error('Pattern does not belong to the specified container');
+    }
+
+    const override = await prisma.patternOverride.create({
+      data: {
+        accountId: data.accountId,
+        userId: data.userId || null,
+        containerId: data.containerId,
+        patternId: data.patternId,
+        isActive: data.isActive ?? true,
+        priority: data.priority ?? 100,
+        reason: data.reason,
+        expiresAt: data.expiresAt,
+        createdBy: data.createdBy,
+      },
+    });
+
+    logger.info('[InjectionService] Created pattern override', {
+      overrideId: override.id,
+      accountId: data.accountId,
+      containerId: data.containerId,
+      patternId: data.patternId,
+      createdBy: data.createdBy,
+    });
+
+    return override;
+  }
+
+  async updatePatternOverride(id: string, data: {
+    patternId?: string;
+    isActive?: boolean;
+    priority?: number;
+    reason?: string;
+    expiresAt?: Date | null;
+  }): Promise<any> {
+    const updateData: any = {};
+    if (data.patternId !== undefined) updateData.patternId = data.patternId;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.priority !== undefined) updateData.priority = data.priority;
+    if (data.reason !== undefined) updateData.reason = data.reason;
+    if (data.expiresAt !== undefined) updateData.expiresAt = data.expiresAt;
+
+    const override = await prisma.patternOverride.update({
+      where: { id },
+      data: updateData,
+    });
+
+    logger.info('[InjectionService] Updated pattern override', { overrideId: id, updates: data });
+    return override;
+  }
+
+  async deletePatternOverride(id: string): Promise<void> {
+    await prisma.patternOverride.delete({ where: { id } });
+    logger.info('[InjectionService] Deleted pattern override', { overrideId: id });
+  }
+
+  async getEffectivePattern(
+    accountId: string,
+    containerId?: string,
+    userId?: string
+  ): Promise<{
+    override?: any;
+    pattern?: InjectionPattern;
+    source: 'override' | 'default' | 'none';
+  }> {
+    // Check for active override for this account (and optionally user)
+    const overrideWhere: any = {
+      accountId,
+      isActive: true,
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } }
+      ]
+    };
+    
+    if (containerId) overrideWhere.containerId = containerId;
+    
+    // If userId provided, try user-specific override first
+    if (userId) {
+      const userOverride = await prisma.patternOverride.findFirst({
+        where: { ...overrideWhere, userId },
+        orderBy: { priority: 'desc' },
+      });
+      
+      if (userOverride) {
+        const pattern = await prisma.injectionPattern.findUnique({
+          where: { id: userOverride.patternId },
+        }) as InjectionPattern | null;
+        
+        return {
+          override: userOverride,
+          pattern: pattern || undefined,
+          source: 'override',
+        };
+      }
+    }
+    
+    // Try account-level override (where userId is null)
+    const accountOverride = await prisma.patternOverride.findFirst({
+      where: { ...overrideWhere, userId: null },
+      orderBy: { priority: 'desc' },
+    });
+    
+    if (accountOverride) {
+      const pattern = await prisma.injectionPattern.findUnique({
+        where: { id: accountOverride.patternId },
+      }) as InjectionPattern | null;
+      
+      return {
+        override: accountOverride,
+        pattern: pattern || undefined,
+        source: 'override',
+      };
+    }
+    
+    // No override found, get default pattern from container
+    if (containerId) {
+      const defaultPattern = await prisma.injectionPattern.findFirst({
+        where: { containerId, isDefault: true, isActive: true },
+      }) as InjectionPattern | null;
+      
+      if (defaultPattern) {
+        return { pattern: defaultPattern, source: 'default' };
+      }
+    }
+    
+    return { source: 'none' };
+  }
+
+  // Modified selectPattern method to check for overrides first
+  async selectPatternWithOverride(
+    accountId: string,
+    options: InjectionOptions = {}
+  ): Promise<InjectionPattern | null> {
+    // Check for override first
+    const effectiveResult = await this.getEffectivePattern(
+      accountId,
+      options.containerId
+    );
+    
+    if (effectiveResult.pattern) {
+      logger.info('[InjectionService] Using pattern from override/default', {
+        accountId,
+        patternId: effectiveResult.pattern.id,
+        source: effectiveResult.source,
+      });
+      return effectiveResult.pattern;
+    }
+    
+    // Fall back to normal selection
+    return this.selectPattern(options);
+  }
 }
 
 // Export singleton instance

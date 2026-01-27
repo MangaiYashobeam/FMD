@@ -23,6 +23,7 @@ import {
   Terminal,
   Boxes,
   Target,
+  Cpu,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import IAIPrototypePanel from './IAIPrototypePanel';
@@ -47,6 +48,12 @@ interface IAISoldier {
   locationCountry: string | null;
   locationLat: number | null;
   locationLng: number | null;
+  // Pattern tracking
+  currentPatternId: string | null;
+  currentPatternName: string | null;
+  patternLoadedAt: string | null;
+  patternSource: 'override' | 'default' | 'weighted' | 'usm' | null;
+  // Performance
   tasksCompleted: number;
   tasksFailed: number;
   successRate: number | null;
@@ -217,6 +224,17 @@ function SoldierCard({
     ? new Date().getTime() - new Date(soldier.lastHeartbeatAt).getTime() < 120000
     : false;
 
+  // Get pattern source badge color
+  const getPatternSourceBadge = (source: string | null) => {
+    const styles: Record<string, string> = {
+      override: 'bg-purple-900/30 text-purple-400 border-purple-500/30',
+      usm: 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30',
+      weighted: 'bg-blue-900/30 text-blue-400 border-blue-500/30',
+      default: 'bg-slate-700 text-slate-400 border-slate-600',
+    };
+    return styles[source || 'default'] || styles.default;
+  };
+
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 hover:shadow-lg hover:border-blue-500 transition-all group">
       <div className="flex items-start justify-between">
@@ -252,6 +270,17 @@ function SoldierCard({
                 <MapPin className="w-4 h-4" />
                 <span>
                   {soldier.locationCity}, {soldier.locationCountry}
+                </span>
+              </div>
+            )}
+
+            {/* Current Pattern */}
+            {soldier.currentPatternName && (
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-purple-400" />
+                <span className="text-purple-300 font-medium">{soldier.currentPatternName}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getPatternSourceBadge(soldier.patternSource)}`}>
+                  {soldier.patternSource?.toUpperCase() || 'DEFAULT'}
                 </span>
               </div>
             )}

@@ -23,9 +23,9 @@
 // ============================================
 // IAI VERSION & BUILD INFO
 // ============================================
-const IAI_VERSION = '3.4.0';
-const IAI_BUILD = 'TEST11-2026012702';  // Format: TEST{N}-YYYYMMDDHH
-const IAI_COMMIT = 'T11-MODEL-TYPEAHEAD';    // Model as typeahead, Image proxy, longer waits
+const IAI_VERSION = '3.7.0';
+const IAI_BUILD = 'PROD12-2026012801';  // Format: TEST{N}-YYYYMMDDHH
+const IAI_COMMIT = 'PATTERN-OVERRIDES';    // Pattern overrides, soldier tracking, green route fix
 
 console.log(`%c[IAI SOLDIER] v${IAI_VERSION} | Build: ${IAI_BUILD} | Commit: ${IAI_COMMIT}`, 
   'background: linear-gradient(90deg, #0066ff, #00ccff); color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 14px;');
@@ -263,9 +263,15 @@ async function loadInjectionPattern() {
     
     // Check if Ultra Speed Mode is enabled
     let ultraSpeedEnabled = false;
+    let soldierId = null;
+    let accountId = null;
+    
     try {
-      const storage = await chrome.storage?.local?.get('ultraSpeedMode');
+      const storage = await chrome.storage?.local?.get(['ultraSpeedMode', 'soldierInfo', 'authState']);
       ultraSpeedEnabled = storage?.ultraSpeedMode === true;
+      soldierId = storage?.soldierInfo?.soldierId;
+      accountId = storage?.authState?.dealerAccountId || storage?.authState?.accountId;
+      
       if (ultraSpeedEnabled) {
         console.log('[IAI] ⚡ Ultra Speed Mode ENABLED - will fetch from USM container');
       }
@@ -278,10 +284,13 @@ async function loadInjectionPattern() {
       : IAI_CONFIG.API.PRODUCTION;
     
     // TRY PUBLIC ENDPOINT FIRST (no auth required)
-    // Add ultraSpeed parameter if enabled
-    const patternUrl = ultraSpeedEnabled 
-      ? `${apiUrl}/iai/pattern?ultraSpeed=true` 
-      : `${apiUrl}/iai/pattern`;
+    // Add ultraSpeed, soldierId, and accountId parameters
+    const queryParams = new URLSearchParams();
+    if (ultraSpeedEnabled) queryParams.set('ultraSpeed', 'true');
+    if (soldierId) queryParams.set('soldierId', soldierId);
+    if (accountId) queryParams.set('accountId', accountId);
+    
+    const patternUrl = `${apiUrl}/iai/pattern${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     console.log('[IAI] 📡 Trying public pattern endpoint:', patternUrl);
     const publicResponse = await fetch(patternUrl);
     
@@ -289,6 +298,7 @@ async function loadInjectionPattern() {
       const publicData = await publicResponse.json();
       if (publicData.success && publicData.pattern) {
         console.log('[IAI] ✅ Loaded pattern from public endpoint');
+        console.log(`[IAI] 🎯 Pattern: ${publicData.pattern.name} (source: ${publicData.hotSwap?.mode || 'unknown'})`);
         return processPatternData(publicData.pattern, publicData.container);
       }
     }

@@ -717,15 +717,33 @@ app.get('/api/config/facebook', async (_req, res) => {
 // Public IAI Pattern Endpoint - For extension to load workflow patterns
 // No auth required - returns only active/default pattern for IAI soldiers
 // Supports ?ultraSpeed=true to fetch from USM container
+// Supports ?soldierId=xxx to update soldier's current pattern tracking
 app.get('/api/iai/pattern', async (req, res): Promise<void> => {
   try {
     const { injectionService } = require('./services/injection.service');
+    const prisma = require('./config/database').default;
+    
     const ultraSpeed = req.query.ultraSpeed === 'true' || req.query.usm === 'true';
+    const soldierId = req.query.soldierId as string | undefined;
+    const accountId = req.query.accountId as string | undefined;
     
     let container = null;
     let pattern = null;
+    let patternSource = ultraSpeed ? 'usm' : 'weighted';
     
-    if (ultraSpeed) {
+    // Check for pattern override first if we have accountId
+    if (accountId) {
+      const effectiveResult = await injectionService.getEffectivePattern(accountId);
+      if (effectiveResult.pattern && effectiveResult.source === 'override') {
+        pattern = effectiveResult.pattern;
+        patternSource = 'override';
+        // Get container info
+        container = await injectionService.getContainer(pattern.containerId, false);
+        console.log(`[IAI Pattern] 🎯 Using override pattern: ${pattern.name} for account ${accountId}`);
+      }
+    }
+    
+    if (!pattern && ultraSpeed) {
       // Ultra Speed Mode - fetch exclusively from USM container
       console.log('[IAI Pattern] ⚡ Ultra Speed Mode - fetching from USM container');
       const usmResult = await injectionService.selectUSMPattern();
@@ -733,6 +751,7 @@ app.get('/api/iai/pattern', async (req, res): Promise<void> => {
       if (usmResult.pattern) {
         pattern = usmResult.pattern;
         container = usmResult.container;
+        patternSource = 'usm';
         console.log(`[IAI Pattern] ⚡ USM Pattern selected: ${pattern.name}`);
       } else {
         // Fallback to normal if USM unavailable
@@ -800,7 +819,26 @@ app.get('/api/iai/pattern', async (req, res): Promise<void> => {
         pattern = patterns[0];
       }
       
+      patternSource = 'weighted';
       console.log(`[IAI Pattern] 🔄 Hot-swap selected: ${pattern.name} (weight: ${pattern.weight})`);
+    }
+    
+    // Update soldier's current pattern if soldierId provided
+    if (soldierId && pattern) {
+      try {
+        await prisma.iAISoldier.updateMany({
+          where: { soldierId },
+          data: {
+            currentPatternId: pattern.id,
+            currentPatternName: pattern.name,
+            patternLoadedAt: new Date(),
+            patternSource,
+          },
+        });
+        console.log(`[IAI Pattern] 📝 Updated soldier ${soldierId} pattern: ${pattern.name} (source: ${patternSource})`);
+      } catch (err) {
+        console.error(`[IAI Pattern] Failed to update soldier pattern:`, err);
+      }
     }
     
     // Return pattern data for extension
@@ -823,7 +861,7 @@ app.get('/api/iai/pattern', async (req, res): Promise<void> => {
       },
       hotSwap: {
         enabled: true,
-        mode: ultraSpeed ? 'usm' : 'normal',
+        mode: patternSource,
         container: ultraSpeed ? 'IAI Soldiers USM' : 'all'
       },
       loadedAt: new Date().toISOString()

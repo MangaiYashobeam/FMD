@@ -3028,6 +3028,12 @@ model IAISoldier {
   locationLng     Decimal? @map("location_lng") @db.Decimal(11, 8)
   timezone        String?
 
+  // Current Pattern - Tracks which pattern this soldier is using
+  currentPatternId   String? @map("current_pattern_id")
+  currentPatternName String? @map("current_pattern_name")
+  patternLoadedAt    DateTime? @map("pattern_loaded_at")
+  patternSource      String?  @map("pattern_source") // 'override' | 'default' | 'weighted' | 'usm'
+
   // Performance Stats
   tasksCompleted      Int      @default(0) @map("tasks_completed")
   tasksFailed         Int      @default(0) @map("tasks_failed")
@@ -3066,6 +3072,7 @@ model IAISoldier {
   @@index([status])
   @@index([soldierId])
   @@index([lastHeartbeatAt])
+  @@index([currentPatternId])
   @@map("iai_soldiers")
 }
 
@@ -4267,6 +4274,37 @@ model InjectionLog {
   @@index([status])
   @@index([startedAt])
   @@map("injection_logs")
+}
+
+// Pattern Override - Root Admin assigns specific patterns to accounts/users
+// This allows forcing a specific pattern for an account instead of random/weighted selection
+model PatternOverride {
+  id          String  @id @default(uuid())
+  accountId   String  @map("account_id")
+  userId      String? @map("user_id") // Optional: override for specific user
+
+  // Pattern assignment
+  containerId String  @map("container_id")
+  patternId   String  @map("pattern_id")
+
+  // Override settings
+  isActive    Boolean @default(true) @map("is_active")
+  priority    Int     @default(100) // Higher priority overrides take precedence
+  reason      String? @db.Text // Admin notes for why this override exists
+  expiresAt   DateTime? @map("expires_at") // Optional expiration
+
+  // Admin tracking
+  createdBy   String  @map("created_by") // Admin who created this override
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([accountId, userId, containerId]) // One override per account/user/container combo
+  @@index([accountId])
+  @@index([userId])
+  @@index([containerId])
+  @@index([patternId])
+  @@index([isActive])
+  @@map("pattern_overrides")
 }
 
 // ============================================

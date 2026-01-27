@@ -55,21 +55,94 @@ function getClientIP(req: Request): string {
  * Monitors all incoming requests and blocks malicious traffic
  */
 
-// Paths that should bypass Intelliceil blocking (critical infrastructure)
+// Paths that should bypass Intelliceil blocking (critical infrastructure & GREEN ROUTE)
+// This MUST match GREEN_ROUTE_SKIP_PATHS in security.ts to prevent blocking extension/dashboard APIs
 const BYPASS_PATHS = [
-  '/api/training/console/heartbeat',
-  '/api/training/console/status',
+  // ============ HEALTH & AUTH ============
   '/api/health',
   '/health',
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/refresh-token',
+  '/api/auth/facebook/callback',
+  '/api/facebook/callback',
+  '/api/config/facebook',
+  
+  // ============ TRAINING CONSOLE (ROOT) ============
+  '/api/training/console/heartbeat',
+  '/api/training/console/status',
+  '/api/training/console/health-ping',
+  '/api/training/console/log',
+  '/api/training/',
+  
+  // ============ EXTENSION GREEN ROUTE ============
+  '/api/extension/status',
+  '/api/extension/heartbeat',
+  '/api/extension/tasks',
+  '/api/extension/account',
+  '/api/extension/sync',
+  '/api/extension/health',
+  '/api/extension/ai-provider',
+  '/api/extension/conversations',
+  '/api/extension/stats',
+  '/api/extension/generate-response',
+  '/api/extension/generate-description',
+  '/api/extension/analyze-conversation',
+  '/api/extension/find-element',
+  '/api/extension/detect-ui-changes',
+  '/api/extension/iai/',  // Extension IAI soldier registration/heartbeat
+  
+  // ============ IAI GREEN ROUTE ============
+  '/api/iai/pattern',
+  '/api/iai/metrics',
+  '/api/iai/register',
+  '/api/iai/heartbeat',
+  '/api/iai/log-activity',
+  '/api/admin/iai/',
+  
+  // ============ INJECTION GREEN ROUTE ============
+  '/api/injection/stats',
+  '/api/injection/containers',
+  '/api/injection/metrics',
+  '/api/injection/slot/',
+  '/api/injection/patterns',
+  '/api/injection/overrides',  // Pattern overrides for Root Admin
+  
+  // ============ ADMIN DASHBOARD GREEN ROUTE ============
+  '/api/admin/stats',
+  '/api/admin/accounts',
+  '/api/ai-center/dashboard',
+  '/api/ai-center/chat',
+  '/api/messages/conversations',
+  '/api/notifications/stream',
+  '/api/api-dashboard',
+  
+  // ============ INTELLICEIL SELF (Prevent recursion) ============
+  '/api/intelliceil/',
 ];
+
+/**
+ * Check if path matches GREEN ROUTE bypass patterns
+ * Supports exact match, endsWith, and startsWith (for wildcard paths ending in /)
+ */
+function isGreenRoute(path: string): boolean {
+  return BYPASS_PATHS.some(p => {
+    // Exact match
+    if (path === p) return true;
+    // EndsWith match (e.g., /api/health)
+    if (path.endsWith(p)) return true;
+    // StartsWith match for wildcard paths (ending in /)
+    if (p.endsWith('/') && path.startsWith(p)) return true;
+    // Also check if path starts with the bypass path (e.g., /api/extension/tasks/123)
+    if (path.startsWith(p)) return true;
+    return false;
+  });
+}
 
 export function intelliceilMiddleware(req: Request, res: Response, next: NextFunction): void {
   try {
-    // Skip blocking for critical paths
-    if (BYPASS_PATHS.some(p => req.path === p || req.path.endsWith(p))) {
+    // Skip blocking for GREEN ROUTE paths (critical infrastructure)
+    if (isGreenRoute(req.path)) {
       next();
       return;
     }

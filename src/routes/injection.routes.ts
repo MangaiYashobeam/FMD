@@ -587,6 +587,122 @@ router.get('/categories', asyncHandler(async (_req: AuthRequest, res: Response) 
   res.json({ success: true, data: categories });
 }));
 
+// ============================================
+// Pattern Override Routes (Root Admin Only)
+// Allows Root Admin to force specific patterns for accounts/users
+// ============================================
+
+router.get('/overrides', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { accountId, isActive, limit = '100', offset = '0' } = req.query;
+  
+  const overrides = await injectionService.listPatternOverrides({
+    accountId: getString(accountId),
+    isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+    limit: parseInt(limit as string, 10),
+    offset: parseInt(offset as string, 10),
+  });
+  
+  res.json({ success: true, data: overrides.overrides, total: overrides.total });
+}));
+
+router.get('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = getRequiredString(req.params.id);
+  
+  const override = await injectionService.getPatternOverride(id);
+  
+  if (!override) {
+    res.status(404).json({ success: false, error: 'Pattern override not found' });
+    return;
+  }
+  
+  res.json({ success: true, data: override });
+}));
+
+router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { accountId, userId, containerId, patternId, isActive, priority, reason, expiresAt } = req.body;
+  
+  if (!accountId || !containerId || !patternId) {
+    res.status(400).json({ success: false, error: 'accountId, containerId, and patternId are required' });
+    return;
+  }
+  
+  if (!req.user?.id) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
+  }
+  
+  try {
+    const override = await injectionService.createPatternOverride({
+      accountId,
+      userId,
+      containerId,
+      patternId,
+      isActive: isActive ?? true,
+      priority: priority ?? 100,
+      reason,
+      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+      createdBy: req.user.id,
+    });
+    
+    res.status(201).json({ success: true, data: override });
+  } catch (error: unknown) {
+    const err = error as { code?: string };
+    if (err.code === 'P2002') {
+      res.status(409).json({ success: false, error: 'Override already exists for this account/user/container combination' });
+      return;
+    }
+    throw error;
+  }
+}));
+
+router.put('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = getRequiredString(req.params.id);
+  const { patternId, isActive, priority, reason, expiresAt } = req.body;
+  
+  const existing = await injectionService.getPatternOverride(id);
+  if (!existing) {
+    res.status(404).json({ success: false, error: 'Pattern override not found' });
+    return;
+  }
+  
+  const override = await injectionService.updatePatternOverride(id, {
+    patternId,
+    isActive,
+    priority,
+    reason,
+    expiresAt: expiresAt ? new Date(expiresAt) : expiresAt === null ? null : undefined,
+  });
+  
+  res.json({ success: true, data: override });
+}));
+
+router.delete('/overrides/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = getRequiredString(req.params.id);
+  
+  const existing = await injectionService.getPatternOverride(id);
+  if (!existing) {
+    res.status(404).json({ success: false, error: 'Pattern override not found' });
+    return;
+  }
+  
+  await injectionService.deletePatternOverride(id);
+  res.json({ success: true, message: 'Pattern override deleted successfully' });
+}));
+
+// Get effective pattern for an account (considering overrides)
+router.get('/overrides/effective/:accountId', asyncHandler(async (req: AuthRequest, res: Response) => {
+  const accountId = getRequiredString(req.params.accountId);
+  const { containerId, userId } = req.query;
+  
+  const effectivePattern = await injectionService.getEffectivePattern(
+    accountId,
+    getString(containerId),
+    getString(userId)
+  );
+  
+  res.json({ success: true, data: effectivePattern });
+}));
+
 // Error handler
 router.use((error: Error, _req: AuthRequest, res: Response, _next: NextFunction) => {
   logger.error('[InjectionRoutes] Error:', error);
