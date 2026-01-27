@@ -916,6 +916,8 @@ app.use('/api/fb-session', ring5AuthBarrier, require('./routes/fb-session.routes
 // Chrome Extension AI Hybrid System
 // DEPRECATED: OAuth routes kept for backwards compatibility - will return 410 Gone
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (DEPRECATED)
+
+// Extension routes - all require JWT auth (extension has user's token)
 app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
 
 // ============================================

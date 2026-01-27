@@ -7,6 +7,7 @@ import { FTPService } from '@/services/ftp.service';
 import { CSVParserService } from '@/services/csvParser.service';
 import { getRedisConnection } from '@/config/redis';
 import { FBMPostLogService } from '@/routes/fbm-posts.routes';
+import { injectionService, InjectionPattern } from '@/services/injection.service';
 
 /**
  * Helper to check if account has active session for Facebook posting
@@ -391,7 +392,7 @@ export class VehicleController {
    */
   async postToFacebook(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
-    const { title, price, description, photos, method, includePixelTracking } = req.body;
+    const { title, price, description, photos, method, ultraSpeed, includePixelTracking } = req.body;
 
     // Get the vehicle with account
     const vehicle = await prisma.vehicle.findUnique({
@@ -559,18 +560,29 @@ export class VehicleController {
       // Create pixel event if enabled
       const pixelEvent = await createPixelEvent();
 
+      // Determine pattern to use - Ultra Speed uses exclusive fast pattern
+      let patternName = 'FBM-Official-P1'; // Default pattern
+      if (ultraSpeed) {
+        // Ultra Speed mode - use optimized fast pattern for user browsers
+        // User browsers have fingerprints/history so need fewer delays
+        patternName = 'FBM-UltraSpeed';
+        logger.info(`IAI using Ultra Speed pattern for vehicle ${id}`);
+      }
+
       const task = await prisma.extensionTask.create({
         data: {
           accountId: vehicle.accountId,
           type: 'POST_TO_MARKETPLACE',
           status: 'pending',
-          priority: 5,
+          priority: ultraSpeed ? 10 : 5, // Higher priority for ultra speed
           vehicleId: vehicle.id,
           data: {
             action: 'create_listing',
             vehicle: vehicleData,
             pixelTracking: includePixelTracking ? pixelEvent : null,
             fbmLogId: fbmLog?.id,  // Include log ID for status updates
+            ultraSpeed: ultraSpeed || false, // Ultra Speed flag for extension
+            patternName: patternName, // Pattern to load
             sessionInfo: {
               type: activeSession.type,
               facebookUserId: activeSession.facebookUserId,
@@ -581,6 +593,7 @@ export class VehicleController {
               fillForm: true,
               uploadPhotos: true,
               submit: false, // Require manual review before publish
+              useUltraSpeed: ultraSpeed || false,
             },
           },
         },
@@ -618,23 +631,33 @@ export class VehicleController {
         logger.warn(`Could not create Facebook post record: ${postErr}`);
       }
 
-      logger.info(`IAI task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}`);
+      logger.info(`IAI task created for vehicle ${id}: ${task.id}${includePixelTracking ? ' (with pixel tracking)' : ''}${ultraSpeed ? ' (ULTRA SPEED)' : ''}`);
 
       res.json({
         success: true,
-        message: 'Task queued for IAI Soldier. Open Facebook in Chrome with extension active.',
+        message: ultraSpeed 
+          ? 'Task queued for IAI Soldier with ULTRA SPEED pattern. Open Facebook in Chrome with extension active.'
+          : 'Task queued for IAI Soldier. Open Facebook in Chrome with extension active.',
         data: { 
           taskId: task.id, 
           fbmLogId: fbmLog?.id,
           method: 'iai',
           status: 'pending',
           pixelTracking: includePixelTracking,
+          ultraSpeed: ultraSpeed || false,
+          patternName: ultraSpeed ? 'FBM-UltraSpeed' : 'FBM-Official-P1',
           sessionInfo: {
             facebookUserId: activeSession.facebookUserId,
             facebookUserName: activeSession.facebookUserName,
             hasTotp: activeSession.type === 'session' ? activeSession.hasTotp : false,
           },
-          instructions: [
+          instructions: ultraSpeed ? [
+            '⚡ ULTRA SPEED MODE ACTIVE',
+            '1. Ensure Chrome Extension is installed and logged in',
+            '2. Open Facebook.com in the same browser',
+            '3. The IAI Soldier will execute with reduced delays',
+            '4. Your browser fingerprint enables faster posting',
+          ] : [
             '1. Ensure Chrome Extension is installed and logged in',
             '2. Open Facebook.com in the same browser (logged in as ' + (activeSession.facebookUserName || activeSession.facebookUserId) + ')',
             '3. The IAI Soldier will automatically detect and execute the task',
@@ -864,7 +887,305 @@ export class VehicleController {
     }
 
     // =====================================================
-    // METHOD 3: API (Facebook Graph API - DEPRECATED)
+    // METHOD 3: PUPPETEER (IAI Stealth Soldiers - Headless Chromium)
+    // Server-side automation with random hot-swap patterns
+    // Maximum stealth for headless browsers that lack user fingerprints
+    // =====================================================
+    if (method === 'puppeteer') {
+      // Check if account has an active session for posting
+      const activeSession = await getActiveSession(vehicle.accountId);
+      
+      if (!activeSession) {
+        res.json({
+          success: false,
+          message: 'No active Facebook session. Please capture a session via the Chrome extension first.',
+          data: {
+            method: 'puppeteer',
+            status: 'no_session',
+            instructions: [
+              '1. Install the Dealers Face Chrome extension',
+              '2. Log into Facebook in Chrome',
+              '3. Click the extension icon and select "Capture Session"',
+              '4. Session cookies will be synced for IAI Stealth Soldiers',
+              '5. Return here to post your vehicle',
+            ],
+          },
+        });
+        return;
+      }
+
+      // For puppeteer soldiers, TOTP is recommended for recovery
+      const hasTotp = activeSession.type === 'session' ? activeSession.hasTotp : false;
+      if (!hasTotp) {
+        logger.warn(`Account ${vehicle.accountId} using Puppeteer without 2FA - session recovery may fail`);
+      }
+
+      // Create FBM Post Log entry for tracking
+      let fbmLog: any = null;
+      try {
+        fbmLog = await FBMPostLogService.createLog({
+          accountId: vehicle.accountId,
+          vehicleId: vehicle.id,
+          userId: req.user!.id,
+          method: 'soldier', // Log as soldier type (headless)
+          triggerType: 'manual',
+          vehicleData: vehicleData,
+          requestData: { title, price, description, photos, method: 'puppeteer', includePixelTracking },
+        });
+        logger.info(`FBM Post Log created: ${fbmLog.id} for vehicle ${id} (puppeteer/stealth soldier method)`);
+        await FBMPostLogService.notifyAI(fbmLog.id, 'post_initiated');
+      } catch (logError) {
+        logger.error(`Failed to create FBM Post Log: ${logError}`);
+      }
+
+      // Create pixel event if enabled
+      const pixelEvent = await createPixelEvent();
+
+      // =====================================================
+      // HOT-SWAP PATTERN SYSTEM FOR STEALTH SOLDIERS
+      // Random pattern selection is CRUCIAL for headless browsers
+      // They need more variation as they lack user fingerprints/history
+      // =====================================================
+      let selectedPattern: InjectionPattern | null = null;
+      let patternSource = 'fallback';
+      
+      try {
+        // Use injection service for pattern selection
+        // Get active patterns from containers with FBM-related patterns
+        const { patterns: activePatterns } = await injectionService.listPatterns({
+          limit: 100,
+          isActive: true,
+        });
+
+        // Filter for FBM/Marketplace patterns
+        const fbmPatterns = activePatterns.filter((p: InjectionPattern) => 
+          p.name.toLowerCase().includes('fbm') ||
+          p.name.toLowerCase().includes('marketplace') ||
+          p.name.toLowerCase().includes('official') ||
+          p.tags?.includes('verified') ||
+          p.tags?.includes('production')
+        );
+
+        if (fbmPatterns.length > 0) {
+          // Weighted random selection - prefer patterns with higher success
+          const totalWeight = fbmPatterns.reduce((sum: number, p: InjectionPattern) => sum + (p.successCount + 1), 0);
+          let random = Math.random() * totalWeight;
+          
+          for (const pattern of fbmPatterns) {
+            random -= (pattern.successCount + 1);
+            if (random <= 0) {
+              selectedPattern = pattern;
+              patternSource = 'hot-swap';
+              break;
+            }
+          }
+          
+          // Fallback to first if random selection failed
+          if (!selectedPattern) {
+            selectedPattern = fbmPatterns[0];
+            patternSource = 'first-available';
+          }
+
+          if (selectedPattern) {
+            logger.info(`[PUPPETEER HOT-SWAP] Selected pattern: ${selectedPattern.name} (${selectedPattern.id}) from ${fbmPatterns.length} available patterns`);
+          }
+        } else if (activePatterns.length > 0) {
+          // No FBM-specific patterns, try to find Official-P1
+          const officialPattern = activePatterns.find((p: InjectionPattern) => 
+            p.name.toLowerCase().includes('official-p1')
+          );
+          if (officialPattern) {
+            selectedPattern = officialPattern;
+            patternSource = 'official-fallback';
+            logger.info(`[PUPPETEER] Using Official-P1 pattern: ${selectedPattern.name}`);
+          } else {
+            // Use first available active pattern
+            selectedPattern = activePatterns[0];
+            patternSource = 'any-active';
+            logger.warn(`[PUPPETEER] No FBM patterns found, using first available: ${selectedPattern.name}`);
+          }
+        } else {
+          logger.warn(`[PUPPETEER] No patterns found at all`);
+          patternSource = 'none';
+        }
+      } catch (patternError) {
+        logger.error(`[PUPPETEER] Pattern fetch failed: ${patternError}`);
+        patternSource = 'error-fallback';
+      }
+
+      try {
+        // Get workflow from pattern metadata if available
+        const patternWorkflow = selectedPattern?.metadata?.workflow || selectedPattern?.code || null;
+        const patternStepCount = Array.isArray(patternWorkflow) ? patternWorkflow.length : 0;
+
+        // Create task in database for tracking
+        const task = await prisma.extensionTask.create({
+          data: {
+            accountId: vehicle.accountId,
+            type: 'PUPPETEER_POST_TO_MARKETPLACE',
+            status: 'pending',
+            priority: 8, // Higher priority for stealth soldiers
+            vehicleId: vehicle.id,
+            data: {
+              action: 'stealth_soldier_create_listing',
+              vehicle: vehicleData,
+              pixelTracking: includePixelTracking ? pixelEvent : null,
+              fbmLogId: fbmLog?.id,
+              targetPlatform: 'facebook_marketplace',
+              useHeadlessBrowser: true,
+              workerType: 'puppeteer_stealth',
+              // Hot-swap pattern info
+              patternId: selectedPattern?.id || null,
+              patternName: selectedPattern?.name || 'FBM-Official-P1',
+              patternSource: patternSource,
+              patternCode: selectedPattern?.code || null, // The actual pattern code/workflow
+              patternStepCount: patternStepCount,
+              sessionInfo: {
+                type: activeSession.type,
+                sessionId: activeSession.type === 'session' ? activeSession.id : null,
+                facebookUserId: activeSession.facebookUserId,
+                facebookUserName: activeSession.facebookUserName,
+                hasTotp: hasTotp,
+              },
+              stealthConfig: {
+                randomDelays: true,
+                humanLikeTyping: true,
+                mouseMovement: true,
+                viewportJitter: true,
+                cookieWarming: true,
+              },
+              instructions: {
+                navigateTo: 'marketplace_create_vehicle',
+                fillForm: true,
+                uploadPhotos: true,
+                handleCaptcha: true,
+                submit: false, // Require approval
+              },
+            },
+          },
+        });
+
+        // Update FBM log with task ID
+        if (fbmLog) {
+          try {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              status: 'queued',
+              stage: 'task_created',
+              extensionTaskId: task.id,
+            });
+          } catch (e) {
+            logger.error(`Failed to update FBM log with task ID: ${e}`);
+          }
+        }
+
+        // Push to Redis queue for Puppeteer Workers to pick up
+        const redisQueue = getRedisConnection();
+        if (redisQueue) {
+          await redisQueue.lpush('fmd:tasks:puppeteer:pending', JSON.stringify({
+            taskId: task.id,
+            fbmLogId: fbmLog?.id,
+            type: 'PUPPETEER_POST_TO_MARKETPLACE',
+            accountId: vehicle.accountId,
+            vehicleId: vehicle.id,
+            vehicle: vehicleData,
+            createdAt: new Date().toISOString(),
+            priority: 8,
+            // Pattern hot-swap info for worker
+            patternId: selectedPattern?.id,
+            patternName: selectedPattern?.name || 'FBM-Official-P1',
+            patternCode: selectedPattern?.code, // The pattern code to execute
+            patternStepCount: patternStepCount,
+            // Session info for workers to fetch cookies
+            sessionInfo: {
+              type: activeSession.type,
+              sessionId: activeSession.type === 'session' ? activeSession.id : null,
+              facebookUserId: activeSession.facebookUserId,
+              hasTotp: hasTotp,
+            },
+          }));
+          
+          logger.info(`[PUPPETEER] Task queued to Redis: ${task.id} with pattern: ${selectedPattern?.name || 'FBM-Official-P1'}`);
+        } else {
+          logger.warn('[PUPPETEER] Redis not available - task created but not queued');
+          if (fbmLog) {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              riskLevel: 'medium',
+              riskFactors: [{ message: 'Redis not available - task may not be processed automatically', severity: 'medium' }],
+            });
+          }
+        }
+
+        // Track pattern usage - just log, don't update totalExecutions as updatePattern doesn't support it
+        if (selectedPattern?.id) {
+          logger.info(`[PUPPETEER] Pattern ${selectedPattern.name} selected for use (total executions: ${selectedPattern.totalExecutions})`);
+        }
+
+        logger.info(`[PUPPETEER STEALTH SOLDIER] Task created for vehicle ${id}: ${task.id} using pattern: ${selectedPattern?.name || 'FBM-Official-P1'} (source: ${patternSource})`);
+
+        res.json({
+          success: true,
+          message: 'Task queued for IAI Stealth Soldier. Server-side Chromium will execute automatically.',
+          data: { 
+            taskId: task.id,
+            fbmLogId: fbmLog?.id,
+            method: 'puppeteer',
+            status: 'queued',
+            pixelTracking: includePixelTracking,
+            // Hot-swap pattern info
+            pattern: {
+              id: selectedPattern?.id,
+              name: selectedPattern?.name || 'FBM-Official-P1',
+              source: patternSource,
+              stepCount: patternStepCount,
+            },
+            estimatedProcessingTime: '2-5 minutes',
+            sessionInfo: {
+              facebookUserId: activeSession.facebookUserId,
+              facebookUserName: activeSession.facebookUserName,
+              hasTotp: hasTotp,
+            },
+            features: [
+              '🥷 IAI Stealth Soldier - Maximum stealth mode',
+              '🔄 Hot-swap pattern: ' + (selectedPattern?.name || 'FBM-Official-P1'),
+              '🎭 Puppeteer-stealth with anti-detection',
+              '🖥️ Fully server-side - no browser required',
+              '🔒 Secure green route API',
+              hasTotp ? '🔐 2FA enabled for session recovery' : '⚠️ No 2FA - manual recovery if session expires',
+            ],
+            instructions: [
+              '✅ Task submitted to IAI Stealth Soldiers',
+              `🔄 Using hot-swap pattern: ${selectedPattern?.name || 'FBM-Official-P1'}`,
+              'Server-side Chromium will execute the posting workflow',
+              'Check posting status in Settings > Posting History',
+            ],
+          },
+        });
+        return;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(`[PUPPETEER] Stealth Soldier post failed for vehicle ${id}: ${errorMessage}`);
+        
+        if (fbmLog) {
+          try {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              status: 'failed',
+              stage: 'task_created',
+              errorCode: 'PUPPETEER_INIT_ERROR',
+              errorMessage: errorMessage,
+              errorDetails: { stack: error instanceof Error ? error.stack : null },
+              completedAt: new Date(),
+            });
+          } catch (e) {
+            logger.error(`Failed to update FBM log with error: ${e}`);
+          }
+        }
+        
+        throw new AppError(`IAI Stealth Soldier error: ${errorMessage}`, 500);
+      }
+    }
+
+    // =====================================================
+    // METHOD 4: API (Facebook Graph API - DEPRECATED)
     // ⚠️ DEPRECATED: Facebook does NOT have a public Marketplace API
     // This method is kept for historical reference only
     // =====================================================
@@ -903,16 +1224,18 @@ export class VehicleController {
     // Unknown method
     res.json({
       success: false,
-      message: `Unknown posting method: ${method}. Use 'iai' or 'soldier'.`,
+      message: `Unknown posting method: ${method}. Use 'iai', 'soldier', or 'puppeteer'.`,
       data: { 
         availableMethods: {
-          iai: 'Browser automation via Chrome Extension - Uses your logged-in browser session',
-          soldier: 'Headless browser automation via Soldier Workers - Uses synced session cookies',
+          iai: 'Browser automation via Chrome Extension - Uses your logged-in browser session. Supports Ultra Speed mode.',
+          soldier: 'Headless Playwright automation via Soldier Workers - Uses synced session cookies.',
+          puppeteer: 'IAI Stealth Soldiers (Headless Chromium) - Maximum stealth with hot-swap patterns.',
         },
         deprecatedMethods: {
           api: 'DEPRECATED - Facebook does not have a public Marketplace API',
         },
-        note: 'Both methods require capturing a Facebook session via the Chrome extension first.',
+        recommended: 'puppeteer',
+        note: 'All methods require capturing a Facebook session via the Chrome extension first.',
         sessionSetup: [
           '1. Install the Dealers Face Chrome extension',
           '2. Log into Facebook in Chrome',

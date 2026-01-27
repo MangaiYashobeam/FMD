@@ -880,6 +880,86 @@ router.get('/health', (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/extension/image-proxy
+ * Proxy for fetching images from external URLs (CORS bypass for FB)
+ * Used by IAI soldier to upload dealer vehicle images
+ */
+export async function imageProxyHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const imageUrl = req.query.url as string;
+    
+    if (!imageUrl) {
+      res.status(400).json({ error: 'url parameter required' });
+      return;
+    }
+
+    // Validate URL format
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(imageUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        throw new Error('Invalid protocol');
+      }
+    } catch {
+      res.status(400).json({ error: 'Invalid URL format' });
+      return;
+    }
+
+    // Fetch the image
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'image/*,*/*;q=0.8',
+      },
+    });
+
+    if (!response.ok) {
+      res.status(response.status).json({ 
+        error: `Failed to fetch image: ${response.statusText}` 
+      });
+      return;
+    }
+
+    // Get content type
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    // Validate it's an image
+    if (!contentType.startsWith('image/')) {
+      res.status(400).json({ error: 'URL does not point to an image' });
+      return;
+    }
+
+    // Get the image data as buffer
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+
+    // Set CORS and caching headers
+    res.set({
+      'Content-Type': contentType,
+      'Content-Length': imageBuffer.length.toString(),
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+      'X-Proxied-From': parsedUrl.hostname,
+    });
+
+    res.send(imageBuffer);
+    
+    logger.info(`[Image Proxy] Served image from ${parsedUrl.hostname}, ${imageBuffer.length} bytes`);
+    
+  } catch (error) {
+    logger.error('[Image Proxy] Error:', error);
+    res.status(500).json({ 
+      error: 'Failed to proxy image',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+// Also register on router for backwards compatibility
+router.get('/image-proxy', imageProxyHandler);
+
+/**
  * POST /api/extension/posting
  * Record a vehicle posting from extension
  */

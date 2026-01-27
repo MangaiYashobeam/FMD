@@ -386,7 +386,7 @@ export default function GreenRoutesPage() {
             <Shield className="w-6 h-6 text-green-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Enterprise Security v3.1.0</h3>
+            <h3 className="font-semibold text-gray-900 mb-2">Enterprise Security v3.4.0</h3>
             <p className="text-gray-600 text-sm mb-3">
               Green Routes bypass rate limiting but maintain full security through:
             </p>

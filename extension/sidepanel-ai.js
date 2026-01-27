@@ -731,7 +731,11 @@ async function fetchVehicles() {
 function renderVehicleList(vehiclesToRender) {
   elements.vehicleList.innerHTML = vehiclesToRender.map(vehicle => {
     const isSelected = selectedVehicles.has(vehicle.id);
-    const thumbUrl = vehicle.images?.[0]?.url || vehicle.imageUrl || '';
+    // Support multiple image formats:
+    // - imageUrls: String[] from database (most common)
+    // - images: Array of { url: string } objects or strings
+    // - imageUrl: single string fallback
+    const thumbUrl = vehicle.imageUrls?.[0] || vehicle.images?.[0]?.url || vehicle.images?.[0] || vehicle.imageUrl || '';
     const stockNum = vehicle.stockNumber || vehicle.stock || vehicle.stockNum || '';
     const vinLast6 = vehicle.vin ? vehicle.vin.slice(-6) : '';
     
@@ -972,57 +976,122 @@ async function postVehicle(vehicle, useAI) {
   setProgressStep('images', 'active');
   updateProgressStatus('Uploading photos...', 60);
   
-  if (vehicle.images?.length > 0 || vehicle.imageUrl) {
-    const images = vehicle.images?.map(i => i.url) || [vehicle.imageUrl];
-    const validImages = images.filter(Boolean);
-    
-    if (validImages.length > 0) {
-      console.log('📷 Sending IAI_UPLOAD_IMAGES with', validImages.length, 'images');
-      try {
-        const uploadResult = await sendToTab(tab.id, {
-          type: 'IAI_UPLOAD_IMAGES',
-          images: validImages
-        });
-        console.log('📷 Upload result:', uploadResult);
-        
-        if (uploadResult?.result?.uploaded > 0 || uploadResult?.uploaded > 0) {
-          console.log('✅ Images uploaded successfully');
-        } else {
-          console.warn('⚠️ No images were uploaded');
-        }
-      } catch (e) {
-        console.warn('📷 Image upload error (continuing):', e);
-        // Don't fail the whole posting for image issues
+  // Support multiple image formats:
+  // - imageUrls: String[] from database (most common)
+  // - images: Array of { url: string } objects
+  // - imageUrl: single string fallback
+  const imageUrls = vehicle.imageUrls || [];
+  const imagesFromObjects = vehicle.images?.map(i => typeof i === 'string' ? i : i.url) || [];
+  const fallbackUrl = vehicle.imageUrl ? [vehicle.imageUrl] : [];
+  
+  const allImages = [...imageUrls, ...imagesFromObjects, ...fallbackUrl];
+  const validImages = allImages.filter(Boolean);
+  
+  console.log('📷 Image sources:', {
+    imageUrls: imageUrls.length,
+    imagesFromObjects: imagesFromObjects.length,
+    fallbackUrl: fallbackUrl.length,
+    total: validImages.length
+  });
+  
+  if (validImages.length > 0) {
+    console.log('📷 Sending IAI_UPLOAD_IMAGES with', validImages.length, 'images');
+    try {
+      const uploadResult = await sendToTab(tab.id, {
+        type: 'IAI_UPLOAD_IMAGES',
+        images: validImages
+      });
+      console.log('📷 Upload result:', uploadResult);
+      
+      if (uploadResult?.result?.uploaded > 0 || uploadResult?.uploaded > 0) {
+        console.log('✅ Images uploaded successfully');
+      } else {
+        console.warn('⚠️ No images were uploaded');
       }
+    } catch (e) {
+      console.warn('📷 Image upload error (continuing):', e);
+      // Don't fail the whole posting for image issues
     }
     await sleep(3000);
   }
   
   setProgressStep('images', 'completed');
   
-  // Publish
+  // Publish - Facebook Marketplace is a multi-step wizard
+  // We need to click Next/Publish multiple times until complete
   setProgressStep('publish', 'active');
-  updateProgressStatus('Publishing listing...', 85);
+  updateProgressStatus('Proceeding through wizard...', 85);
   
-  console.log('🚀 Sending IAI_PUBLISH_LISTING');
-  let publishResult;
-  try {
-    publishResult = await sendToTab(tab.id, { type: 'IAI_PUBLISH_LISTING' });
-    console.log('🚀 Publish result:', publishResult);
-  } catch (e) {
-    console.error('🚀 Publish error:', e);
-    throw new Error(`Failed to publish: ${e.message}`);
+  console.log('🚀 Starting publish sequence (multi-step wizard)');
+  
+  const maxWizardSteps = 5; // Safety limit
+  let wizardStep = 0;
+  let finalPublished = false;
+  
+  while (wizardStep < maxWizardSteps && !finalPublished) {
+    wizardStep++;
+    console.log(`🚀 Wizard step ${wizardStep}: Sending IAI_PUBLISH_LISTING`);
+    updateProgressStatus(`Step ${wizardStep}: Clicking Next/Publish...`, 85 + wizardStep * 3);
+    
+    let publishResult;
+    try {
+      publishResult = await sendToTab(tab.id, { type: 'IAI_PUBLISH_LISTING' });
+      console.log(`🚀 Step ${wizardStep} result:`, publishResult);
+    } catch (e) {
+      console.error(`🚀 Step ${wizardStep} error:`, e);
+      // If we already clicked at least once, don't fail completely
+      if (wizardStep > 1) {
+        console.log('🚀 Partial success - at least one wizard step completed');
+        break;
+      }
+      throw new Error(`Failed to publish: ${e.message}`);
+    }
+    
+    if (!publishResult || publishResult.success === false) {
+      // No button found - either we're done or something's wrong
+      if (wizardStep > 1) {
+        console.log('🚀 No more buttons found - wizard likely complete');
+        finalPublished = true;
+      } else {
+        throw new Error(publishResult?.error || 'Publish button not clicked');
+      }
+      break;
+    }
+    
+    if (!publishResult.result?.clicked && !publishResult.clicked) {
+      if (wizardStep > 1) {
+        console.log('🚀 No button clicked - wizard likely complete');
+        finalPublished = true;
+      } else {
+        throw new Error('Could not find or click publish button');
+      }
+      break;
+    }
+    
+    // Check if this was a Publish/Post button (final step) vs Next
+    const buttonText = publishResult.result?.buttonText || publishResult.buttonText || '';
+    const isWizardStep = publishResult.result?.isWizardStep || publishResult.isWizardStep;
+    
+    console.log(`🚀 Button clicked: "${buttonText}", isWizardStep: ${isWizardStep}`);
+    
+    if (!isWizardStep && ['Publish', 'Post', 'List item', 'List vehicle', 'Submit'].some(t => 
+      buttonText.toLowerCase().includes(t.toLowerCase())
+    )) {
+      console.log('🚀 ✅ Final publish button clicked!');
+      finalPublished = true;
+      break;
+    }
+    
+    // Wait for next page to load
+    console.log('🚀 Waiting for next wizard step to load...');
+    await sleep(3000);
   }
   
-  if (!publishResult || publishResult.success === false) {
-    throw new Error(publishResult?.error || 'Publish button not clicked');
+  if (wizardStep >= maxWizardSteps) {
+    console.warn('🚀 ⚠️ Max wizard steps reached - may not be fully published');
   }
   
-  if (!publishResult.result?.clicked && !publishResult.clicked) {
-    throw new Error('Could not find or click publish button');
-  }
-  
-  await sleep(3000);
+  await sleep(2000);
   
   setProgressStep('publish', 'completed');
   updateProgressStatus('Complete!', 100);

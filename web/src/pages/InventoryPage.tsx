@@ -295,6 +295,7 @@ function FacebookAdPreviewModal({
     description: string;
     photos: string[];
     method: string;
+    ultraSpeed?: boolean;
     includePixelTracking?: boolean;
   }) => void;
   onRefresh?: () => void;
@@ -307,6 +308,7 @@ function FacebookAdPreviewModal({
   );
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>(photos.slice(0, 10));
   const [postMethod, setPostMethod] = useState<'api' | 'iai' | 'soldier' | 'puppeteer'>('iai');
+  const [ultraSpeed, setUltraSpeed] = useState(false); // Ultra Speed mode for IAI (Chrome Extension)
   const [includePixelTracking, setIncludePixelTracking] = useState(true);
   const [posting, setPosting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -354,6 +356,7 @@ function FacebookAdPreviewModal({
         description,
         photos: selectedPhotos,
         method: postMethod,
+        ultraSpeed: postMethod === 'iai' ? ultraSpeed : false, // Only for IAI method
         includePixelTracking,
       });
     } finally {
@@ -911,8 +914,8 @@ function FacebookAdPreviewModal({
                   <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
                     <div className="flex items-start gap-3">
                       <Bot className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="font-semibold text-purple-900">IAI Automated Posting</h4>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-purple-900">IAI Automated Posting (Chrome Extension)</h4>
                         <p className="text-sm text-purple-700 mt-1">
                           The extension will automatically:
                         </p>
@@ -934,6 +937,31 @@ function FacebookAdPreviewModal({
                             Submit the listing for you
                           </li>
                         </ul>
+                        
+                        {/* Ultra Speed Toggle */}
+                        <div className="mt-4 pt-3 border-t border-purple-200">
+                          <label className={cn(
+                            'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
+                            ultraSpeed ? 'border-yellow-500 bg-yellow-50' : 'border-purple-200 hover:border-purple-300'
+                          )}>
+                            <input
+                              type="checkbox"
+                              checked={ultraSpeed}
+                              onChange={(e) => setUltraSpeed(e.target.checked)}
+                              className="text-yellow-600 rounded"
+                            />
+                            <Zap className="w-5 h-5 text-yellow-600" />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-900">⚡ Ultra Speed Mode</p>
+                                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Exclusive Pattern</span>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Uses optimized FBM-UltraSpeed pattern - faster execution since your browser has established fingerprint & history (fewer Facebook checks).
+                              </p>
+                            </div>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -944,9 +972,9 @@ function FacebookAdPreviewModal({
                     <div className="flex items-start gap-3">
                       <Send className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="font-semibold text-orange-900">Soldier Workers (Headless)</h4>
+                        <h4 className="font-semibold text-orange-900">Soldier Workers (Headless Playwright)</h4>
                         <p className="text-sm text-orange-700 mt-1">
-                          Server-side automated posting:
+                          Server-side automated posting with stealth:
                         </p>
                         <ul className="text-sm text-orange-700 mt-2 space-y-1">
                           <li className="flex items-center gap-2">
@@ -966,6 +994,9 @@ function FacebookAdPreviewModal({
                             Requires Facebook session setup
                           </li>
                         </ul>
+                        <p className="text-xs text-orange-600 mt-2">
+                          ⚠️ Note: Uses single verified pattern. For enhanced stealth, use IAI Stealth Soldiers (Puppeteer) below.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -976,18 +1007,18 @@ function FacebookAdPreviewModal({
                     <div className="flex items-start gap-3">
                       <Terminal className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="font-semibold text-emerald-900">IAI Official (Puppeteer) - FBM-Official-P1</h4>
+                        <h4 className="font-semibold text-emerald-900">🥷 IAI Stealth Soldiers (Chromium) - Hot-Swap Patterns</h4>
                         <p className="text-sm text-emerald-700 mt-1">
-                          Production-verified server-side automation:
+                          Maximum stealth server-side automation:
                         </p>
                         <ul className="text-sm text-emerald-700 mt-2 space-y-1">
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Uses verified FBM-Official-P1 pattern (166 steps)
+                            <strong>Random hot-swap patterns</strong> - varies execution each run
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Headless Chromium with stealth plugins
+                            Headless Chromium with puppeteer-stealth plugins
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
@@ -995,13 +1026,22 @@ function FacebookAdPreviewModal({
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            No browser extension required
+                            No browser extension required - fully server-side
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            Secure green route API - all requests authenticated
                           </li>
                           <li className="flex items-center gap-2">
                             <AlertCircle className="w-3 h-3" />
-                            Requires linked Facebook session
+                            Requires synced Facebook session (cookies)
                           </li>
                         </ul>
+                        <div className="mt-3 p-2 bg-emerald-100 rounded-lg">
+                          <p className="text-xs text-emerald-800 font-medium">
+                            🔄 Pattern Hot-Swap: Soldiers randomly select from verified patterns to avoid detection. Crucial for headless browsers that lack user fingerprints/history.
+                          </p>
+                        </div>
                         <p className="text-xs text-emerald-600 mt-2 font-medium">
                           ✅ Verified working - Last tested Jan 27, 2026
                         </p>

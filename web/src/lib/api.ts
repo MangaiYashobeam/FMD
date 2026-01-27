@@ -216,6 +216,7 @@ export const vehiclesApi = {
     description: string;
     photos: string[];
     method: string;
+    ultraSpeed?: boolean; // Ultra Speed mode for IAI (Chrome Extension only)
     includePixelTracking?: boolean;
   }) => api.post(`/api/vehicles/${id}/post-to-facebook`, data),
 };
