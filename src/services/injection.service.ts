@@ -1127,7 +1127,11 @@ class InjectionService {
     }
     
     // Fall back to normal selection
-    return this.selectPattern(options);
+    if (options.containerId) {
+      return this.selectPattern(options.containerId, options.selectionStrategy);
+    }
+    
+    return null;
   }
 }
 

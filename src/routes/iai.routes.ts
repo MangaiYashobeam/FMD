@@ -852,7 +852,7 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
         eventData: safeEventData,
         taskId: safeTaskId,
         taskType: safeTaskType,
-        taskResult: typeof taskResult === 'string' ? taskResult.substring(0, 50) : null,
+        taskResult: typeof taskResult === 'string' ? taskResult.substring(0, 50) : undefined,
         ipAddress: realIpAddress,
         locationLat: safeLat,
         locationLng: safeLng,
