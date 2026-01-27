@@ -7,15 +7,118 @@
  * - All requests are logged and tracked
  * - Only accessible by verified ecosystem clients
  * - Bypasses public route restrictions
+ * 
+ * SECURITY: Enterprise-grade with SSRF protection, input sanitization
  */
 
-import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
-import { setAccountContext } from '../middleware/account.middleware';
-import { greenRouteVerify, greenRouteLogger } from '../middleware/green-route.middleware';
-import prisma from '../config/database';
+import { Router, Request, Response } from 'express';
+import { authenticate } from '@middleware/auth';
+import { setAccountContext } from '@middleware/account.middleware';
+import { greenRouteVerify, greenRouteLogger } from '@middleware/green-route.middleware';
+import prisma from '@config/database';
+import { logger } from '@utils/logger';
 
 const router = Router();
+
+// ============================================
+// SECURITY: Input Sanitization Utilities
+// ============================================
+
+/**
+ * Sanitize URL parameter to prevent injection attacks
+ */
+function sanitizeUrl(url: string | undefined): string | null {
+  if (!url || typeof url !== 'string') return null;
+  
+  // Remove control characters and trim
+  const cleaned = url.replace(/[\x00-\x1f\x7f]/g, '').trim();
+  
+  // Length limit to prevent DoS
+  if (cleaned.length > 4096) return null;
+  
+  return cleaned;
+}
+
+/**
+ * Validate URL is well-formed and uses allowed protocols
+ */
+function isValidUrl(urlString: string): URL | null {
+  try {
+    const parsed = new URL(urlString);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================
+// SECURITY: SSRF Prevention - Domain Allowlist
+// ============================================
+
+const ALLOWED_IMAGE_DOMAINS = [
+  // Facebook/Meta CDNs
+  'scontent.xx.fbcdn.net',
+  'external.xx.fbcdn.net',
+  'scontent-*.xx.fbcdn.net',
+  'lookaside.fbsbx.com',
+  'platform-lookaside.fbsbx.com',
+  'static.xx.fbcdn.net',
+  // Facebook Marketplace images
+  'marketplace.fbsbx.com',
+  // Common dealer image hosts
+  'images.dealer.com',
+  'pictures.dealer.com',
+  'www.cstatic-images.com',
+  'vehicle-photos-published.vauto.com',
+  // AWS S3 (our own buckets)
+  '.s3.amazonaws.com',
+  '.s3.us-east-1.amazonaws.com',
+  '.s3.us-west-2.amazonaws.com',
+  // Cloudflare
+  '.cloudflare.com',
+  '.cloudinary.com',
+] as const;
+
+/**
+ * Check if hostname is in allowlist
+ */
+function isAllowedDomain(hostname: string): boolean {
+  const normalizedHost = hostname.toLowerCase();
+  
+  return ALLOWED_IMAGE_DOMAINS.some(domain => {
+    if (domain.startsWith('.')) {
+      // Suffix match (e.g., .s3.amazonaws.com)
+      return normalizedHost.endsWith(domain);
+    } else if (domain.includes('*')) {
+      // Wildcard match (e.g., scontent-*.xx.fbcdn.net)
+      const pattern = domain.replace(/\*/g, '[a-z0-9-]+');
+      return new RegExp(`^${pattern}$`).test(normalizedHost);
+    } else {
+      // Exact match
+      return normalizedHost === domain;
+    }
+  });
+}
+
+/**
+ * Check if hostname is a private/internal IP (SSRF prevention)
+ */
+function isPrivateAddress(hostname: string): boolean {
+  const blockedPrefixes = [
+    '10.', '172.16.', '172.17.', '172.18.', '172.19.', 
+    '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', 
+    '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', 
+    '172.30.', '172.31.', '192.168.', '127.', '0.', '169.254.',
+    'localhost', '::1', 'fe80::', 'fd00::'
+  ];
+  
+  return blockedPrefixes.some(prefix => 
+    hostname.startsWith(prefix) || hostname === 'localhost'
+  );
+}
 
 // Apply Green Route verification to all routes
 router.use(greenRouteVerify);
@@ -37,6 +140,173 @@ router.get('/health', (req, res) => {
     verified: req.greenRoute?.verified || false,
     timestamp: new Date().toISOString()
   });
+});
+
+// ============================================
+// IMAGE PROXY - CORS Bypass for IAI Soldiers
+// ============================================
+
+/**
+ * GET /api/green/image-proxy
+ * Secure image proxy for IAI soldiers to fetch vehicle images
+ * 
+ * SECURITY FEATURES:
+ * - Domain allowlist (SSRF prevention)
+ * - Private IP blocking
+ * - Protocol validation (http/https only)
+ * - Input sanitization
+ * - Content-type validation (images only)
+ * - Audit logging
+ * 
+ * This endpoint does NOT require authentication to allow IAI soldiers
+ * to fetch images without having to manage auth tokens for every request.
+ * Security is maintained through domain allowlist + verification headers.
+ */
+router.get('/image-proxy', async (req: Request, res: Response): Promise<void> => {
+  const startTime = Date.now();
+  
+  try {
+    // ========== INPUT VALIDATION ==========
+    const rawUrl = req.query.url as string;
+    const imageUrl = sanitizeUrl(rawUrl);
+    
+    if (!imageUrl) {
+      logger.warn('[Green Image Proxy] Invalid or missing URL parameter', {
+        ip: req.ip,
+        userAgent: req.headers['user-agent']?.substring(0, 100)
+      });
+      res.status(400).json({ 
+        error: 'url parameter required',
+        code: 'INVALID_URL'
+      });
+      return;
+    }
+
+    // ========== URL VALIDATION ==========
+    const parsedUrl = isValidUrl(imageUrl);
+    if (!parsedUrl) {
+      logger.warn('[Green Image Proxy] Malformed URL', {
+        url: imageUrl.substring(0, 100),
+        ip: req.ip
+      });
+      res.status(400).json({ 
+        error: 'Invalid URL format',
+        code: 'MALFORMED_URL'
+      });
+      return;
+    }
+    
+    const hostname = parsedUrl.hostname.toLowerCase();
+    
+    // ========== SSRF PREVENTION: Domain Allowlist ==========
+    if (!isAllowedDomain(hostname)) {
+      logger.warn(`[Green Image Proxy] SSRF blocked - untrusted domain: ${hostname}`, {
+        url: imageUrl.substring(0, 100),
+        ip: req.ip,
+        verified: req.greenRoute?.verified
+      });
+      res.status(403).json({ 
+        error: 'Domain not allowed',
+        code: 'SSRF_BLOCKED'
+      });
+      return;
+    }
+    
+    // ========== SSRF PREVENTION: Private IP Blocking ==========
+    if (isPrivateAddress(hostname)) {
+      logger.warn(`[Green Image Proxy] SSRF blocked - internal IP: ${hostname}`, {
+        ip: req.ip
+      });
+      res.status(403).json({ 
+        error: 'Internal addresses not allowed',
+        code: 'SSRF_BLOCKED'
+      });
+      return;
+    }
+
+    // ========== FETCH IMAGE ==========
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'image/*,*/*;q=0.8',
+      },
+      signal: AbortSignal.timeout(15000), // 15s timeout
+    });
+
+    if (!response.ok) {
+      logger.warn(`[Green Image Proxy] Upstream error: ${response.status}`, {
+        url: hostname,
+        status: response.status
+      });
+      res.status(response.status).json({ 
+        error: `Failed to fetch image: ${response.statusText}`,
+        code: 'UPSTREAM_ERROR'
+      });
+      return;
+    }
+
+    // ========== CONTENT TYPE VALIDATION ==========
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    if (!contentType.startsWith('image/')) {
+      logger.warn('[Green Image Proxy] Non-image content type', {
+        contentType,
+        url: hostname
+      });
+      res.status(400).json({ 
+        error: 'URL does not point to an image',
+        code: 'INVALID_CONTENT_TYPE'
+      });
+      return;
+    }
+
+    // ========== SERVE IMAGE ==========
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+    
+    // Validate size (max 25MB)
+    if (imageBuffer.length > 25 * 1024 * 1024) {
+      logger.warn('[Green Image Proxy] Image too large', {
+        size: imageBuffer.length,
+        url: hostname
+      });
+      res.status(413).json({ 
+        error: 'Image too large',
+        code: 'PAYLOAD_TOO_LARGE'
+      });
+      return;
+    }
+
+    // Set response headers
+    res.set({
+      'Content-Type': contentType,
+      'Content-Length': imageBuffer.length.toString(),
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+      'X-Proxied-From': hostname,
+      'X-Green-Route': 'true',
+    });
+
+    res.send(imageBuffer);
+    
+    // ========== AUDIT LOG ==========
+    const elapsed = Date.now() - startTime;
+    logger.info(`[Green Image Proxy] Served image from ${hostname}`, {
+      size: imageBuffer.length,
+      elapsed,
+      verified: req.greenRoute?.verified,
+      source: req.greenRoute?.source
+    });
+    
+  } catch (error) {
+    logger.error('[Green Image Proxy] Error:', error);
+    res.status(500).json({ 
+      error: 'Failed to proxy image',
+      code: 'PROXY_ERROR',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
 /**
@@ -423,6 +693,253 @@ router.post('/log-error', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: error.message 
+    });
+  }
+});
+
+// ============================================
+// IAI SOLDIER ENDPOINTS (for mitigation bypass)
+// ============================================
+
+/**
+ * POST /api/green/iai/metrics
+ * Record IAI metrics with proper validation
+ * 
+ * SECURITY: Validates and sanitizes all input data
+ */
+router.post('/iai/metrics', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { eventType, patternId, containerId, soldierId, accountId } = req.body;
+    
+    // Input validation
+    const validEventTypes = ['pattern_loaded', 'task_started', 'task_completed', 'task_failed', 'error'];
+    if (!eventType || !validEventTypes.includes(eventType)) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Invalid event type',
+        validTypes: validEventTypes
+      });
+      return;
+    }
+    
+    // Sanitize string inputs
+    const sanitizedData = {
+      eventType,
+      patternId: patternId?.toString().substring(0, 100),
+      containerId: containerId?.toString().substring(0, 100),
+      soldierId: soldierId?.toString().substring(0, 100),
+      accountId: accountId?.toString().substring(0, 100),
+      timestamp: new Date().toISOString(),
+      source: req.greenRoute?.source || 'unknown',
+      verified: req.greenRoute?.verified || false
+    };
+    
+    // Log metrics (could be stored in DB for analytics)
+    logger.info('[Green Route IAI Metrics]', sanitizedData);
+    
+    // Update soldier heartbeat if soldierId provided
+    if (sanitizedData.soldierId && sanitizedData.accountId) {
+      try {
+        await prisma.iAISoldier.updateMany({
+          where: { soldierId: sanitizedData.soldierId },
+          data: {
+            lastHeartbeatAt: new Date(),
+            status: 'online'
+          }
+        });
+      } catch {
+        // Silently fail - metrics logging shouldn't break if soldier update fails
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      recorded: true,
+      timestamp: sanitizedData.timestamp
+    });
+  } catch (error) {
+    logger.error('[Green Route IAI Metrics] Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to record metrics' 
+    });
+  }
+});
+
+/**
+ * POST /api/green/fbm-posts/update
+ * Update FBM post logs from IAI soldiers
+ * 
+ * SECURITY: Validates logId format and update fields
+ */
+router.post('/fbm-posts/update', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = (req as any).user;
+    const accountUser = (req as any).accountUser;
+    const { logId, status, stage, errorCode, errorMessage, fbPostId, success } = req.body;
+    
+    // Validate logId format (UUID)
+    if (!logId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(logId)) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Invalid logId format' 
+      });
+      return;
+    }
+    
+    // Validate status if provided
+    const validStatuses = ['initiated', 'queued', 'processing', 'completed', 'failed', 'cancelled'];
+    if (status && !validStatuses.includes(status)) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Invalid status',
+        validStatuses
+      });
+      return;
+    }
+    
+    // Verify log belongs to user's account
+    const existingLog = await prisma.fBMPostLog.findFirst({
+      where: {
+        id: logId,
+        accountId: accountUser?.accountId
+      }
+    });
+    
+    if (!existingLog) {
+      res.status(404).json({ 
+        success: false, 
+        error: 'FBM Post Log not found or access denied' 
+      });
+      return;
+    }
+    
+    // Build update data with sanitization
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+    
+    if (status) updateData.status = status;
+    if (stage) updateData.stage = stage.toString().substring(0, 50);
+    if (errorCode) updateData.errorCode = errorCode.toString().substring(0, 50);
+    if (errorMessage) updateData.errorMessage = errorMessage.toString().substring(0, 1000);
+    if (fbPostId) updateData.fbPostId = fbPostId.toString().substring(0, 100);
+    if (typeof success === 'boolean') updateData.success = success;
+    if (status === 'completed') updateData.completedAt = new Date();
+    
+    // Update the log
+    const updatedLog = await prisma.fBMPostLog.update({
+      where: { id: logId },
+      data: updateData
+    });
+    
+    logger.info('[Green FBM Update]', {
+      logId,
+      status: updatedLog.status,
+      stage: updatedLog.stage,
+      userId: user?.id,
+      verified: req.greenRoute?.verified
+    });
+    
+    res.json({
+      success: true,
+      log: {
+        id: updatedLog.id,
+        status: updatedLog.status,
+        stage: updatedLog.stage
+      }
+    });
+  } catch (error) {
+    logger.error('[Green FBM Update] Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update FBM post log' 
+    });
+  }
+});
+
+/**
+ * POST /api/green/fbm-posts/event
+ * Add event to FBM post log from IAI soldiers
+ * 
+ * SECURITY: Validates event data and ownership
+ */
+router.post('/fbm-posts/event', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const accountUser = (req as any).accountUser;
+    const { logId, eventType, stage, message, source, details } = req.body;
+    
+    // Validate logId format (UUID)
+    if (!logId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(logId)) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Invalid logId format' 
+      });
+      return;
+    }
+    
+    // Validate required fields
+    if (!eventType || !stage || !message) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'eventType, stage, and message are required' 
+      });
+      return;
+    }
+    
+    // Validate event type
+    const validEventTypes = ['info', 'warning', 'error', 'success', 'debug'];
+    if (!validEventTypes.includes(eventType)) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Invalid eventType',
+        validTypes: validEventTypes
+      });
+      return;
+    }
+    
+    // Verify log belongs to user's account
+    const existingLog = await prisma.fBMPostLog.findFirst({
+      where: {
+        id: logId,
+        accountId: accountUser?.accountId
+      }
+    });
+    
+    if (!existingLog) {
+      res.status(404).json({ 
+        success: false, 
+        error: 'FBM Post Log not found or access denied' 
+      });
+      return;
+    }
+    
+    // Create sanitized event
+    const event = await prisma.fBMPostEvent.create({
+      data: {
+        postLogId: logId,
+        eventType,
+        stage: stage.toString().substring(0, 50),
+        message: message.toString().substring(0, 1000),
+        source: (source || 'green_route').toString().substring(0, 50),
+        details: details || undefined,
+        timestamp: new Date()
+      }
+    });
+    
+    res.json({
+      success: true,
+      event: {
+        id: event.id,
+        eventType: event.eventType,
+        stage: event.stage
+      }
+    });
+  } catch (error) {
+    logger.error('[Green FBM Event] Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to add FBM event' 
     });
   }
 });

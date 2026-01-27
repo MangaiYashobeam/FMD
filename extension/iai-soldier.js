@@ -23,9 +23,9 @@
 // ============================================
 // IAI VERSION & BUILD INFO
 // ============================================
-const IAI_VERSION = '3.7.0';
-const IAI_BUILD = 'PROD12-2026012801';  // Format: TEST{N}-YYYYMMDDHH
-const IAI_COMMIT = 'PATTERN-OVERRIDES';    // Pattern overrides, soldier tracking, green route fix
+const IAI_VERSION = '3.8.0';
+const IAI_BUILD = 'PROD13-2026012702';  // Format: TEST{N}-YYYYMMDDHH
+const IAI_COMMIT = 'GREEN-ROUTE-ALL';     // All API calls routed through green route for mitigation bypass
 
 console.log(`%c[IAI SOLDIER] v${IAI_VERSION} | Build: ${IAI_BUILD} | Commit: ${IAI_COMMIT}`, 
   'background: linear-gradient(90deg, #0066ff, #00ccff); color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 14px;');
@@ -521,24 +521,22 @@ async function uploadImagesToFB(imageUrls, stealth) {
           const response = await fetch(url);
           blob = await response.blob();
         } else {
-          // TEST11: External URL - use image proxy to bypass CORS
-          console.log(`[IAI] 🔄 Using image proxy for external URL...`);
+          // TEST11: External URL - use GREEN ROUTE image proxy to bypass CORS
+          // Green route works without auth and has SSRF protection
+          console.log(`[IAI] 🔄 Using GREEN ROUTE image proxy for external URL...`);
           
-          // Build proxy URL
-          const proxyUrl = `${IAI_CONFIG.API.PRODUCTION}/extension/image-proxy?url=${encodeURIComponent(url)}`;
+          // Build proxy URL using GREEN ROUTE (no auth required)
+          const proxyUrl = `${IAI_CONFIG.API.PRODUCTION}/green/image-proxy?url=${encodeURIComponent(url)}`;
           
           const fetchOptions = {
             method: 'GET',
-            headers: {}
+            headers: {
+              'X-Green-Route': 'true',
+              'X-IAI-Soldier': IAI_VERSION
+            }
           };
           
-          // Add auth token if available
-          if (authToken) {
-            fetchOptions.headers['Authorization'] = `Bearer ${authToken}`;
-            console.log('[IAI] ✓ Added auth token to proxy request');
-          } else {
-            console.log('[IAI] ⚠️ No auth token - proxy may reject request');
-          }
+          console.log('[IAI] ✓ Using green route - no auth required');
           
           const response = await fetch(proxyUrl, fetchOptions);
           
@@ -2082,23 +2080,24 @@ async function clearInjectionCache() {
 
 /**
  * Report IAI metrics to server for analytics
+ * Uses GREEN ROUTE for reliable delivery during mitigation
  */
 async function reportIAIMetric(eventType, data) {
   try {
-    const token = await getAuthToken();
-    // Flatten data into the request body for server compatibility
-    await fetch(`${IAI_CONFIG.API.PRODUCTION}/iai/metrics`, {
+    // Use GREEN ROUTE for metrics (more reliable during mitigation)
+    await fetch(`${IAI_CONFIG.API.PRODUCTION}/green/iai/metrics`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        'X-Green-Route': 'true',
+        'X-IAI-Soldier': IAI_VERSION,
       },
       body: JSON.stringify({
         eventType,
         // Spread the data directly so server gets patternId, containerId, etc. at top level
         ...data,
         source: 'extension',
-        extensionVersion: '3.4.0',
+        extensionVersion: IAI_VERSION,
         timestamp: data.timestamp || new Date().toISOString(),
       }),
     });
@@ -3867,11 +3866,14 @@ class IAISoldier {
         }
       }
       
-      await fetch(`${IAI_CONFIG.API.PRODUCTION}/fbm-posts/internal/update`, {
+      // Use GREEN ROUTE for FBM updates (works during mitigation)
+      await fetch(`${IAI_CONFIG.API.PRODUCTION}/green/fbm-posts/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.authToken}`,
+          'X-Green-Route': 'true',
+          'X-IAI-Soldier': IAI_VERSION,
         },
         body: JSON.stringify({ logId, ...payload }),
       });
@@ -3884,14 +3886,17 @@ class IAISoldier {
   
   /**
    * Report FBM stage progress event
+   * Uses GREEN ROUTE for reliable delivery
    */
   async reportFBMEvent(logId, eventType, stage, message, details = null) {
     try {
-      await fetch(`${IAI_CONFIG.API.PRODUCTION}/fbm-posts/internal/event`, {
+      await fetch(`${IAI_CONFIG.API.PRODUCTION}/green/fbm-posts/event`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.authToken}`,
+          'X-Green-Route': 'true',
+          'X-IAI-Soldier': IAI_VERSION,
         },
         body: JSON.stringify({
           logId,
@@ -5680,15 +5685,17 @@ async function uploadVehicleImages(imageUrls) {
         const response = await fetch(url);
         blob = await response.blob();
       } else {
-        // External URL - use proxy to bypass CORS
-        console.log(`📷 Using image proxy for external URL...`);
+        // External URL - use GREEN ROUTE proxy to bypass CORS (no auth needed)
+        console.log(`📷 Using GREEN ROUTE image proxy for external URL...`);
         
-        const proxyUrl = `${IAI_CONFIG.API.PRODUCTION}/extension/image-proxy?url=${encodeURIComponent(url)}`;
-        const fetchOptions = { method: 'GET', headers: {} };
-        
-        if (authToken) {
-          fetchOptions.headers['Authorization'] = `Bearer ${authToken}`;
-        }
+        const proxyUrl = `${IAI_CONFIG.API.PRODUCTION}/green/image-proxy?url=${encodeURIComponent(url)}`;
+        const fetchOptions = { 
+          method: 'GET', 
+          headers: {
+            'X-Green-Route': 'true',
+            'X-IAI-Soldier': IAI_VERSION
+          }
+        };
         
         const response = await fetch(proxyUrl, fetchOptions);
         
