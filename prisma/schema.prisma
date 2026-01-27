@@ -4671,3 +4671,119 @@ model AccountWhitelist {
 
   @@map("account_whitelists")
 }
+
+// ============================================
+// Enterprise Security - SSRF Prevention
+// ============================================
+
+// SSRF Domain Allowlist - Authorized external domains
+model SsrfAllowlistDomain {
+  id          String   @id @default(uuid())
+  domain      String   @unique // e.g., "scontent.fphx1-1.fna.fbcdn.net"
+  category    String   @default("other") // facebook, aws, cloudflare, dealer, cdn, internal, other
+  matchType   String   @default("exact") // exact, suffix, wildcard, regex
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  addedBy     String?  @map("added_by") // User ID who added
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime? @map("updated_at")
+
+  // Relations
+  proxyRequests SsrfProxyLog[] @relation("DomainLogs")
+
+  @@index([category])
+  @@index([isActive])
+  @@index([domain])
+  @@map("ssrf_allowlist_domains")
+}
+
+// SSRF Blocked IP Prefixes - Private IPs and dangerous ranges
+model SsrfBlockedIP {
+  id        String   @id @default(uuid())
+  ipPrefix  String   @unique // e.g., "10.", "192.168.", "127.", "169.254."
+  category  String   @default("custom") // private, loopback, linklocal, cloud_metadata, custom
+  reason    String   @db.Text
+  isActive  Boolean  @default(true) @map("is_active")
+  addedBy   String?  @map("added_by")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime? @map("updated_at")
+
+  // Relations
+  blockEvents SsrfBlockEvent[] @relation("IPBlockEvents")
+
+  @@index([category])
+  @@index([isActive])
+  @@map("ssrf_blocked_ips")
+}
+
+// SSRF Proxy Request Logs - All image proxy requests
+model SsrfProxyLog {
+  id           String   @id @default(uuid())
+  requestUrl   String   @map("request_url") @db.Text
+  domain       String?
+  ip           String?
+  blocked      Boolean  @default(false)
+  reason       String?
+  statusCode   Int?     @map("status_code")
+  responseTime Int?     @map("response_time") // milliseconds
+  userId       String?  @map("user_id")
+  accountId    String?  @map("account_id")
+  userAgent    String?  @map("user_agent")
+  referer      String?
+  timestamp    DateTime @default(now())
+
+  // Relations
+  domainRef SsrfAllowlistDomain? @relation("DomainLogs", fields: [domain], references: [domain], onDelete: SetNull)
+
+  @@index([blocked])
+  @@index([domain])
+  @@index([timestamp])
+  @@index([userId])
+  @@map("ssrf_proxy_logs")
+}
+
+// SSRF Block Events - Detailed logs when private IPs are blocked
+model SsrfBlockEvent {
+  id           String   @id @default(uuid())
+  ipPrefix     String   @map("ip_prefix")
+  attemptedUrl String   @map("attempted_url") @db.Text
+  resolvedIP   String?  @map("resolved_ip")
+  userId       String?  @map("user_id")
+  accountId    String?  @map("account_id")
+  userAgent    String?  @map("user_agent")
+  referer      String?
+  timestamp    DateTime @default(now())
+
+  // Relations
+  blockedIPRef SsrfBlockedIP? @relation("IPBlockEvents", fields: [ipPrefix], references: [ipPrefix], onDelete: SetNull)
+
+  @@index([ipPrefix])
+  @@index([timestamp])
+  @@map("ssrf_block_events")
+}
+
+// Enterprise Security Configuration
+model EnterpriseSecurityConfig {
+  id                      String   @id @default(uuid())
+  
+  // SSRF Protection
+  ssrfProtectionEnabled   Boolean  @default(true) @map("ssrf_protection_enabled")
+  privateIPBlockingEnabled Boolean @default(true) @map("private_ip_blocking_enabled")
+  domainAllowlistEnabled  Boolean  @default(true) @map("domain_allowlist_enabled")
+  strictModeEnabled       Boolean  @default(false) @map("strict_mode_enabled")
+  
+  // Logging & Monitoring
+  auditLoggingEnabled     Boolean  @default(true) @map("audit_logging_enabled")
+  realTimeAlertsEnabled   Boolean  @default(true) @map("real_time_alerts_enabled")
+  
+  // Rate Limiting
+  maxRequestsPerMinute    Int      @default(1000) @map("max_requests_per_minute")
+  blockDuration           Int      @default(3600) @map("block_duration") // seconds
+  
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("enterprise_security_config")
+}

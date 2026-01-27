@@ -29,12 +29,16 @@ import {
   Skull,
   Repeat,
   MousePointerClick,
+  ShieldCheck,
 } from 'lucide-react';
 import { intelliceilApi } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
 
 // Lazy load the map component to avoid SSR issues
 const TrafficMap = lazy(() => import('../../components/TrafficMap'));
+
+// Lazy load Enterprise Security tab
+const EnterpriseSecurityTab = lazy(() => import('../../components/admin/EnterpriseSecurityTab'));
 
 // Types
 interface ThreatLevel {
@@ -272,7 +276,7 @@ function IPDetailsCard({ location, onBlock, isExpanded, onToggle }: IPDetailsCar
 export default function IntelliceilPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'config' | 'logs' | 'security'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'config' | 'logs' | 'security' | 'enterprise'>('overview');
   const [newBlockIP, setNewBlockIP] = useState('');
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
   
@@ -461,6 +465,7 @@ export default function IntelliceilPage() {
             { id: 'overview' as const, label: 'Overview', icon: Activity },
             { id: 'map' as const, label: 'Traffic Map', icon: Globe },
             { id: 'security' as const, label: 'Security Metrics', icon: ShieldAlert },
+            { id: 'enterprise' as const, label: 'Enterprise Security', icon: ShieldCheck },
             { id: 'config' as const, label: 'Configuration', icon: Settings },
             { id: 'logs' as const, label: 'Blocked IPs', icon: Ban },
           ].map((tab) => (
@@ -1309,6 +1314,17 @@ export default function IntelliceilPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Enterprise Security Tab */}
+      {activeTab === 'enterprise' && (
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+          </div>
+        }>
+          <EnterpriseSecurityTab />
+        </Suspense>
       )}
 
       {/* ============================================ */}
