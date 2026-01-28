@@ -606,18 +606,42 @@ export class VehicleController {
       if (ultraSpeed) {
         // Ultra Speed Mode - Hot-swap from USM container exclusively
         logger.info(`[IAI] Ultra Speed Mode activated for vehicle ${id} - selecting from USM container`);
-        const usmResult = await injectionService.selectUSMPattern();
+        // Try standard selection first
+        let usmPattern: InjectionPattern | null = null;
+        let usmContainer: any = null;
         
+        const usmResult = await injectionService.selectUSMPattern();
         if (usmResult.pattern) {
-          selectedPattern = usmResult.pattern;
-          patternName = usmResult.pattern.name;
-          containerId = usmResult.container?.id || null;
+          usmPattern = usmResult.pattern;
+          usmContainer = usmResult.container;
+        } else {
+          // RECOVERY: If USM selection failed, try explicit lookup of the V1 Gemini3 pattern
+          logger.warn(`[IAI] Standard USM selection failed, attempting direct lookup for 'FBM-UltraSPEED v1 Gemini3'`);
+          const explicitPattern = await injectionService.getPatternByName('FBM-UltraSPEED v1 Gemini3');
+          if (explicitPattern) {
+            usmPattern = explicitPattern;
+            usmContainer = await injectionService.getContainer(explicitPattern.containerId, false);
+            logger.info(`[IAI] Recovered USM pattern via direct lookup: ${explicitPattern.name}`);
+          }
+        }
+        
+        if (usmPattern) {
+          selectedPattern = usmPattern;
+          patternName = usmPattern.name;
+          containerId = usmContainer?.id || null;
           containerName = 'IAI Soldiers USM';
           logger.info(`[IAI] USM Hot-swap selected: ${patternName} (container: ${containerName})`);
         } else {
           // Fallback to default if USM patterns unavailable
-          logger.warn(`[IAI] No USM patterns available, falling back to FBM-Official-P1`);
+          logger.error(`[IAI] CRITICAL: No USM patterns available anywhere. Using FBM-Official-P1 fallback.`);
           patternName = 'FBM-Official-P1';
+          
+          // Try to get P1 object to ensure consistent state
+          const p1Pattern = await injectionService.getPatternByName('FBM-Official-P1');
+          if (p1Pattern) {
+            selectedPattern = p1Pattern;
+            containerId = p1Pattern.containerId;
+          }
         }
       } else {
         // Normal Mode - Hot-swap from all available patterns using weighted random

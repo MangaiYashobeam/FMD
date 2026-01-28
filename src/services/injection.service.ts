@@ -317,6 +317,13 @@ class InjectionService {
     return pattern as InjectionPattern | null;
   }
 
+  async getPatternByName(name: string): Promise<InjectionPattern | null> {
+    const pattern = await prisma.injectionPattern.findFirst({
+      where: { name }
+    });
+    return pattern as InjectionPattern | null;
+  }
+
   async listPatterns(options?: {
     containerId?: string;
     isActive?: boolean;
