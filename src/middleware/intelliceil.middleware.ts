@@ -41,13 +41,59 @@ declare global {
  * Main Intelliceil enterprise security middleware
  * Performs comprehensive security checks on all incoming requests
  */
+/**
+ * Extract real client IP from proxy headers
+ * Priority: CF-Connecting-IP > X-Real-IP > X-Forwarded-For > req.ip
+ */
+function getRealClientIP(req: Request): string {
+  // Cloudflare header (most reliable when using CF)
+  const cfIP = req.headers['cf-connecting-ip'];
+  if (cfIP && typeof cfIP === 'string') return cfIP;
+  
+  // X-Real-IP (set by nginx/traefik)
+  const realIP = req.headers['x-real-ip'];
+  if (realIP && typeof realIP === 'string') return realIP;
+  
+  // X-Forwarded-For (can be comma-separated list, take first)
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    const ips = (typeof forwardedFor === 'string' ? forwardedFor : forwardedFor[0]).split(',');
+    return ips[0].trim();
+  }
+  
+  // Fallback to Express req.ip or socket address
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+/**
+ * Check if IP is an internal Docker/proxy IP that should be skipped for blocking
+ */
+function isInternalProxyIP(ip: string): boolean {
+  // Docker default bridge networks
+  if (ip.startsWith('172.') || ip.startsWith('::ffff:172.')) return true;
+  // Docker internal
+  if (ip.startsWith('10.') || ip.startsWith('::ffff:10.')) return true;
+  // Localhost
+  if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  return false;
+}
+
 export const intelliceilEnterpriseMiddleware = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const rawIP = req.ip || req.socket.remoteAddress || 'unknown';
+    const ip = getRealClientIP(req);
+    
+    // Skip security checks for internal proxy IPs (Traefik, Docker internal)
+    if (isInternalProxyIP(rawIP) && ip === rawIP) {
+      // No real client IP found, this is an internal request - allow it
+      next();
+      return;
+    }
+    
     const userAgent = req.headers['user-agent'] || '';
     const endpoint = req.path;
     const method = req.method;

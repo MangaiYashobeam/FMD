@@ -203,6 +203,11 @@ const TRUSTED_IP_RANGES = [
   '190.93.240.0/20',
   '197.234.240.0/22',
   '198.41.128.0/17',
+  // Docker internal networks (reverse proxies like Traefik)
+  '172.16.0.0/12',  // Docker default bridge range
+  '10.0.0.0/8',     // Docker overlay networks
+  '192.168.0.0/16', // Local networks
+  '127.0.0.0/8',    // Localhost
 ];
 
 // ============================================
