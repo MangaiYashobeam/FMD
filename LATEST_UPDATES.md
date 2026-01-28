@@ -1,3 +1,17 @@
+# Latest Updates - January 28, 2026 13:50 UTC
+
+## ✅ UltraSpeed & UI Fixes Deployed
+
+### IAI System
+- **New Pattern**: `FBM-UltraSPEED v1 Gemini3` (Dump/Paste Mode)
+- **Extension**: Added `dump()` logic for instant text injection.
+
+### Command Center
+- **UI Fix**: Anchored heartbeat animation to card (fixed floating issue).
+- **Fix**: Resolved TypeScript build errors.
+
+---
+
 # Latest Updates - January 22, 2026 23:00 UTC
 
 ## ✅ All Changes Deployed and Verified
