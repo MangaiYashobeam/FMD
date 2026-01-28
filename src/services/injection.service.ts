@@ -393,6 +393,19 @@ class InjectionService {
   async deletePattern(id: string): Promise<void> {
     const pattern = await this.getPattern(id);
     if (pattern) {
+      // First, unlink from mission_tasks (SET NULL on delete)
+      await prisma.missionTask.updateMany({
+        where: { patternId: id },
+        data: { patternId: null }
+      });
+      
+      // Delete any injection_logs referencing this pattern
+      // Note: This should be restricted by FK, but we clean up first
+      await prisma.injectionLog.deleteMany({
+        where: { patternId: id }
+      });
+      
+      // Now safe to delete the pattern
       await prisma.injectionPattern.delete({ where: { id } });
       logger.info(`[InjectionService] Deleted pattern: ${pattern.name}`);
       injectionEvents.emit('pattern:deleted', pattern);

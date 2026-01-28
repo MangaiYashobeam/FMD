@@ -78,12 +78,55 @@ function isInternalProxyIP(ip: string): boolean {
   return false;
 }
 
+// GREEN ROUTE bypass paths - critical infrastructure that should NOT be blocked
+const GREEN_ROUTE_BYPASS = [
+  // Health & Auth
+  '/api/health', '/health',
+  '/api/auth/login', '/api/auth/register', '/api/auth/refresh-token',
+  '/api/auth/facebook/callback', '/api/facebook/callback',
+  '/api/config/facebook',
+  
+  // Extension GREEN ROUTE
+  '/api/extension/', '/extension/',
+  
+  // IAI GREEN ROUTE - Critical for soldiers
+  '/api/iai/pattern', '/api/iai/metrics', '/api/iai/register',
+  '/api/iai/heartbeat', '/api/iai/log-activity', '/api/iai/',
+  
+  // Injection GREEN ROUTE
+  '/api/injection/',
+  
+  // Admin GREEN ROUTE
+  '/api/admin/',
+  
+  // Training console
+  '/api/training/',
+];
+
+/**
+ * Check if path is a GREEN ROUTE bypass
+ */
+function isGreenRoutePath(path: string): boolean {
+  return GREEN_ROUTE_BYPASS.some(bypass => {
+    if (path === bypass) return true;
+    if (bypass.endsWith('/') && path.startsWith(bypass)) return true;
+    if (path.startsWith(bypass)) return true;
+    return false;
+  });
+}
+
 export const intelliceilEnterpriseMiddleware = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    // GREEN ROUTE BYPASS - Skip ALL security checks for critical infrastructure
+    if (isGreenRoutePath(req.path)) {
+      next();
+      return;
+    }
+    
     const rawIP = req.ip || req.socket.remoteAddress || 'unknown';
     const ip = getRealClientIP(req);
     
