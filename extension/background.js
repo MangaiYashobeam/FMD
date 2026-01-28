@@ -574,14 +574,133 @@ async function handleApiRequest(endpoint, method = 'GET', data = null, isRetry =
 }
 
 // ============================================
-// TASK POLLING SYSTEM
+// IAI SOLDIER REGISTRATION & HEARTBEAT SYSTEM
 // ============================================
 
-async function sendHeartbeat() {
+// Store soldier info locally
+let currentSoldierId = null;
+
+/**
+ * Register this extension as an IAI Soldier
+ * Called once when extension starts with credentials
+ */
+async function registerAsSoldier() {
   try {
     const { authToken, accountId } = await chrome.storage.local.get(['authToken', 'accountId']);
+    if (!authToken || !accountId) {
+      console.log('❌ Cannot register soldier: Missing credentials');
+      return null;
+    }
+    
+    // Generate a unique browser ID based on extension instance
+    const browserId = await getBrowserId();
+    
+    // Get location info (if available)
+    let locationData = {};
+    try {
+      const geoResponse = await fetch('https://ipapi.co/json/');
+      if (geoResponse.ok) {
+        const geo = await geoResponse.json();
+        locationData = {
+          locationCountry: geo.country_name,
+          locationCity: geo.city,
+          locationLat: geo.latitude,
+          locationLng: geo.longitude,
+          timezone: geo.timezone,
+        };
+      }
+    } catch (geoError) {
+      console.warn('Could not get location:', geoError);
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/extension/iai/register`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        accountId,
+        browserId,
+        extensionVersion: chrome.runtime.getManifest().version,
+        userAgent: navigator.userAgent,
+        ...locationData,
+      }),
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      currentSoldierId = data.soldier?.soldierId;
+      // Store in local storage for persistence
+      await chrome.storage.local.set({ soldierId: currentSoldierId });
+      console.log(`🎖️ IAI Soldier registered: ${currentSoldierId}`);
+      return currentSoldierId;
+    } else {
+      console.error('❌ Failed to register soldier:', response.status);
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error registering soldier:', error);
+    return null;
+  }
+}
+
+/**
+ * Get or generate a unique browser ID for this extension instance
+ */
+async function getBrowserId() {
+  const { browserId } = await chrome.storage.local.get(['browserId']);
+  if (browserId) return browserId;
+  
+  // Generate a new unique ID
+  const newId = 'browser_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  await chrome.storage.local.set({ browserId: newId });
+  return newId;
+}
+
+/**
+ * Send heartbeat to IAI Command Center
+ * This keeps the soldier status online and tracks activity
+ */
+async function sendHeartbeat() {
+  try {
+    const { authToken, accountId, soldierId } = await chrome.storage.local.get(['authToken', 'accountId', 'soldierId']);
     if (!authToken || !accountId) return;
     
+    // If we don't have a soldier ID yet, register first
+    if (!soldierId && !currentSoldierId) {
+      console.log('📝 No soldier ID, registering...');
+      await registerAsSoldier();
+      return;
+    }
+    
+    const activeSoldierId = soldierId || currentSoldierId;
+    
+    // Send heartbeat to IAI system
+    const response = await fetch(`${API_BASE_URL}/api/extension/iai/heartbeat`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        soldierId: activeSoldierId,
+        accountId,
+        status: 'online',
+      }),
+    });
+    
+    if (response.ok) {
+      console.log(`💓 IAI Heartbeat sent (${activeSoldierId})`);
+    } else if (response.status === 404) {
+      // Soldier not found, re-register
+      console.log('⚠️ Soldier not found, re-registering...');
+      await chrome.storage.local.remove(['soldierId']);
+      currentSoldierId = null;
+      await registerAsSoldier();
+    }
+    
+    // Also send to legacy heartbeat endpoint for backwards compatibility
     await fetch(`${API_BASE_URL}/api/extension/heartbeat`, {
       method: 'POST',
       headers: {
@@ -590,8 +709,6 @@ async function sendHeartbeat() {
       },
       body: JSON.stringify({ accountId }),
     });
-    
-    console.log('💓 Heartbeat sent');
   } catch (error) {
     console.error('Heartbeat error:', error);
   }
@@ -600,7 +717,7 @@ async function sendHeartbeat() {
 function startHeartbeat() {
   if (heartbeatInterval) return; // Already sending heartbeats
   
-  console.log('💓 Starting heartbeat...');
+  console.log('💓 Starting IAI heartbeat...');
   sendHeartbeat(); // Send initial heartbeat
   heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
 }
@@ -624,6 +741,9 @@ async function startTaskPolling() {
   
   console.log('🎖️ Starting IAI Task Polling...');
   isPolling = true;
+  
+  // Register as IAI Soldier first
+  await registerAsSoldier();
   
   // Start heartbeat
   startHeartbeat();
