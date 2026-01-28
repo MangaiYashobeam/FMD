@@ -959,7 +959,7 @@ export class VehicleController {
                 genre: 'STEALTH',
                 executionSource: 'CHROMIUM',
                 mode: 'STEALTH',
-                missionProfile: 'STEALTH_POST',
+                missionProfile: 'FBM_LISTING', // Use valid enum value
                 // Status
                 status: 'WORKING',
                 currentTaskType: 'POST_TO_MARKETPLACE',

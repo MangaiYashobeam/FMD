@@ -44,7 +44,8 @@ type SoldierGenre = 'SOLDIER' | 'STEALTH' | 'NOVA';
 type ExecutionSource = 'EXTENSION' | 'CHROMIUM';
 type SoldierMode = 'USM' | 'STEALTH' | 'HYBRID' | 'NOVA_AI';
 type SoldierStatus = 'ONLINE' | 'OFFLINE' | 'WORKING' | 'IDLE' | 'ERROR' | 'SUSPENDED';
-type MissionProfile = 'FAST_POST' | 'STEALTH_POST' | 'ENGAGEMENT' | 'MONITORING' | 'FULL_CYCLE' | 'CUSTOM';
+// Match database enum: FBM_LISTING, FBM_MESSAGES, FBM_FULL, TRAINING, INTELLIGENCE, CUSTOM
+type MissionProfile = 'FBM_LISTING' | 'FBM_MESSAGES' | 'FBM_FULL' | 'TRAINING' | 'INTELLIGENCE' | 'CUSTOM';
 
 // ============================================
 // Types
@@ -691,11 +692,11 @@ function SoldierEditModal({ soldier, onClose, onSave }: SoldierEditModalProps) {
               onChange={(e) => setFormData({ ...formData, missionProfile: e.target.value as MissionProfile })}
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="FAST_POST">🚀 Fast Post</option>
-              <option value="STEALTH_POST">🥷 Stealth Post</option>
-              <option value="ENGAGEMENT">💬 Engagement</option>
-              <option value="MONITORING">👁️ Monitoring</option>
-              <option value="FULL_CYCLE">🔄 Full Cycle</option>
+              <option value="FBM_LISTING">🚗 FBM Listing</option>
+              <option value="FBM_MESSAGES">💬 FBM Messages</option>
+              <option value="FBM_FULL">🔄 FBM Full</option>
+              <option value="TRAINING">📚 Training</option>
+              <option value="INTELLIGENCE">🔍 Intelligence</option>
               <option value="CUSTOM">⚙️ Custom</option>
             </select>
           </div>
@@ -1482,7 +1483,7 @@ export default function IAICommandCenterV2() {
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-medium text-slate-300 w-20">Mission:</span>
                     <div className="flex gap-2 flex-wrap">
-                      {(['all', 'FAST_POST', 'STEALTH_POST', 'ENGAGEMENT', 'MONITORING', 'FULL_CYCLE', 'CUSTOM'] as const).map((mission) => (
+                      {(['all', 'FBM_LISTING', 'FBM_MESSAGES', 'FBM_FULL', 'TRAINING', 'INTELLIGENCE', 'CUSTOM'] as (MissionProfile | 'all')[]).map((mission) => (
                         <button
                           key={mission}
                           onClick={() => setMissionFilter(mission)}
