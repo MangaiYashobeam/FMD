@@ -42,6 +42,7 @@ const router = Router();
 const VALID_GENRES: SoldierGenre[] = ['SOLDIER', 'STEALTH', 'NOVA'];
 const VALID_SOURCES: ExecutionSource[] = ['EXTENSION', 'CHROMIUM'];
 const VALID_MODES: SoldierMode[] = ['USM', 'STEALTH', 'HYBRID', 'NOVA_AI'];
+const ALLOWED_BLUEPRINT_TYPES = ['STANDARD', 'USM', 'STEALTH', 'HYBRID', 'NOVA', 'CUSTOM'] as const;
 
 // ============================================
 // SECURITY: Authenticate ALL requests first

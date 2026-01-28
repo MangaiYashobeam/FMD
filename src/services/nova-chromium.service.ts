@@ -532,7 +532,7 @@ class NovaChromiumService {
         where: { accountId },
         data: {
           currentTaskId: sessionId,
-          status: 'online',
+          status: 'ONLINE',
           lastHeartbeatAt: new Date(),
         },
       });

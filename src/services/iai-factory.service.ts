@@ -190,8 +190,8 @@ interface PredefinedTemplate {
   displayName: string;
   description: string | null;
   category: string;
-  nodes: Record<string, unknown>;
-  connections: Record<string, unknown>;
+  nodes: unknown[]; // Array of node definitions
+  connections: unknown[]; // Array of connection definitions
   baseConfig: Record<string, unknown>;
   targetGenre: SoldierGenre;
   targetSource: ExecutionSource;
@@ -407,16 +407,16 @@ function selectContainer(blueprint: Blueprint): string | null {
 }
 
 function selectTarget(blueprint: Blueprint): { companyId: string | null; userId: string | null } {
-  const targeting = blueprint.targeting;
+  const targeting = blueprint.targeting as { companyIds?: string[]; userIds?: string[] };
   let companyId: string | null = null;
   let userId: string | null = null;
 
-  if (targeting.companyIds && targeting.companyIds.length > 0) {
+  if (targeting.companyIds && Array.isArray(targeting.companyIds) && targeting.companyIds.length > 0) {
     const randomIndex = Math.floor(Math.random() * targeting.companyIds.length);
     companyId = targeting.companyIds[randomIndex];
   }
 
-  if (targeting.userIds && targeting.userIds.length > 0) {
+  if (targeting.userIds && Array.isArray(targeting.userIds) && targeting.userIds.length > 0) {
     const randomIndex = Math.floor(Math.random() * targeting.userIds.length);
     userId = targeting.userIds[randomIndex];
   }
@@ -703,7 +703,7 @@ class IAIFactoryService {
         id: instanceId,
         blueprintId,
         blueprintName: blueprint.name,
-        status: 'spawning',
+        status: 'SPAWNING',
         currentPattern,
         assignedCompany: companyId,
         assignedUser: userId,
@@ -727,8 +727,8 @@ class IAIFactoryService {
       // Update to active after short delay (simulating spawn process)
       setTimeout(() => {
         const inst = instances.get(instanceId);
-        if (inst && inst.status === 'spawning') {
-          inst.status = 'active';
+        if (inst && inst.status === 'SPAWNING') {
+          inst.status = 'ACTIVE';
           inst.lastActiveAt = new Date().toISOString();
           instances.set(instanceId, inst);
         }
@@ -738,7 +738,7 @@ class IAIFactoryService {
     // Update blueprint stats
     blueprint.stats.totalCreated += spawnedInstances.length;
     blueprint.stats.activeCount = Array.from(instances.values())
-      .filter(i => i.blueprintId === blueprintId && !['terminated', 'error'].includes(i.status))
+      .filter(i => i.blueprintId === blueprintId && !['TERMINATED', 'ERROR'].includes(i.status))
       .length;
     blueprints.set(blueprintId, blueprint);
 

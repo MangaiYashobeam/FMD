@@ -744,7 +744,7 @@ router.post('/iai/metrics', async (req: Request, res: Response): Promise<void> =
           where: { soldierId: sanitizedData.soldierId },
           data: {
             lastHeartbeatAt: new Date(),
-            status: 'online'
+            status: 'ONLINE'
           }
         });
       } catch {

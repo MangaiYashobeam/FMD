@@ -529,7 +529,7 @@ router.post('/soldiers/:id/restart', authenticate, async (req: AuthRequest, res:
     const soldier = await prisma.iAISoldier.update({
       where: { id: soldierId },
       data: {
-        status: 'offline',
+        status: 'OFFLINE',
         lastError: 'Manual restart requested',
         lastErrorAt: new Date(),
       },
@@ -641,7 +641,7 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response) =
       soldier = await prisma.iAISoldier.update({
         where: { id: soldier.id },
         data: {
-          status: 'online',
+          status: 'ONLINE',
           extensionVersion: safeExtensionVersion,
           userAgent: safeUserAgent,
           ipAddress: realIpAddress,
@@ -696,7 +696,7 @@ router.post('/register', authenticate, async (req: AuthRequest, res: Response) =
           locationLat: safeLat,
           locationLng: safeLng,
           timezone: safeTimezone,
-          status: 'online',
+          status: 'ONLINE',
           lastHeartbeatAt: new Date(),
           sessionStartAt: new Date(),
           totalSessions: 1,
