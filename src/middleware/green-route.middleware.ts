@@ -134,7 +134,8 @@ function validateOrigin(req: Request): {
   // const userAgent = req.headers['user-agent'] || '';
   
   // Check for internal worker requests (Docker network)
-  const clientIP = req.ip || req.headers['x-forwarded-for'] || '';
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const clientIP = req.ip || (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor) || '';
   const workerSecret = req.headers['x-worker-secret'];
   const isInternalNetwork = 
     clientIP.startsWith('172.') || 
