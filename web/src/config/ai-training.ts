@@ -13,7 +13,7 @@
  */
 
 // Import autonomous tooling system
-import { AI_AUTONOMOUS_TOOLING_PROMPT, LAYER_TOOL_ACCESS } from './ai-autonomous-tooling';
+import { AI_AUTONOMOUS_TOOLING_PROMPT } from './ai-autonomous-tooling';
 
 // ============================================
 // BOOT SEQUENCE - Deep Learning on Wake
