@@ -984,6 +984,15 @@ router.post('/fbm-posts/event', async (req: Request, res: Response): Promise<voi
 const WORKER_API_BASE = process.env.WORKER_API_BASE || 'http://worker-api:8000';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
+// Type for worker API responses
+interface WorkerResponse {
+  success?: boolean;
+  browser_id?: string;
+  message?: string;
+  error?: string;
+  [key: string]: any;
+}
+
 /**
  * POST /api/green/stealth/create
  * Create a new stealth browser session
@@ -1003,7 +1012,7 @@ router.post('/stealth/create', async (req: Request, res: Response): Promise<void
       body: JSON.stringify({ headless, proxy, user_agent: userAgent, load_session: loadSession }),
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       success: data.success || false,
@@ -1037,7 +1046,7 @@ router.post('/stealth/:id/action', async (req: Request, res: Response): Promise<
       body: JSON.stringify(action),
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       ...data,
@@ -1061,7 +1070,7 @@ router.get('/stealth/:id/state', async (req: Request, res: Response): Promise<vo
       headers: { 'X-Worker-Secret': WORKER_SECRET },
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       ...data,
@@ -1085,7 +1094,7 @@ router.get('/stealth/:id/screenshot', async (req: Request, res: Response): Promi
       headers: { 'X-Worker-Secret': WORKER_SECRET },
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       ...data,
@@ -1109,7 +1118,7 @@ router.get('/stealth/:id/html', async (req: Request, res: Response): Promise<voi
       headers: { 'X-Worker-Secret': WORKER_SECRET },
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       ...data,
@@ -1139,7 +1148,7 @@ router.post('/stealth/:id/vision', async (req: Request, res: Response): Promise<
       body: JSON.stringify({ prompt }),
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       ...data,
@@ -1164,7 +1173,7 @@ router.delete('/stealth/:id', async (req: Request, res: Response): Promise<void>
       headers: { 'X-Worker-Secret': WORKER_SECRET },
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       ...data,
@@ -1180,13 +1189,13 @@ router.delete('/stealth/:id', async (req: Request, res: Response): Promise<void>
  * GET /api/green/stealth/pool
  * Get stealth browser pool status
  */
-router.get('/stealth/pool', async (req: Request, res: Response): Promise<void> => {
+router.get('/stealth/pool', async (_req: Request, res: Response): Promise<void> => {
   try {
     const response = await fetch(`${WORKER_API_BASE}/api/browser/pool`, {
       headers: { 'X-Worker-Secret': WORKER_SECRET },
     });
     
-    const data = await response.json();
+    const data = await response.json() as WorkerResponse;
     
     res.json({
       ...data,
