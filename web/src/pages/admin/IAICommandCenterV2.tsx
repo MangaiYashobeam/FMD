@@ -697,9 +697,9 @@ export default function IAICommandCenterV2() {
   } = useQuery({
     queryKey: ['soldiers', filterParams],
     queryFn: () => fetchSoldiers(filterParams),
-    refetchInterval: 30000, // 30 seconds - much more reasonable
+    refetchInterval: 5000, // 5 seconds - Optimized for monitoring
     retry: 1,
-    staleTime: 10000,
+    staleTime: 2000,
   });
 
   const {
