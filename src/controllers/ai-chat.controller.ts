@@ -9,6 +9,7 @@
  * - AI processing with context
  * - Conversation control (stop, revert) for super admin
  * - Thought streaming for super admin oversight
+ * - REAL TOOLING EXECUTION (v2.0)
  */
 
 import { Response } from 'express';
@@ -18,6 +19,8 @@ import { logger } from '@/utils/logger';
 import { aiMemoryService, MemoryScope, MemoryCategory, UserRole } from '@/services/ai-memory.service';
 import { aiConversationControlService, conversationEvents } from '@/services/ai-conversation-control.service';
 import { copilotModelService, COPILOT_MODELS } from '@/services/copilot-models.service';
+import { novaToolingService } from '@/services/nova-tooling.service';
+import { novaTerminalService } from '@/services/nova-terminal.service';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
@@ -53,6 +56,166 @@ const FILE_TYPES_BY_ROLE: Record<string, string[]> = {
 
 // Max file sizes (in bytes)
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+// ============================================
+// NOVA TOOL EXECUTION - Production Grade v2.0
+// ============================================
+
+interface NovaToolResult {
+  tool: string;
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
+/**
+ * Execute a Nova tool command
+ * Used by callAI to execute tools requested by the AI
+ */
+async function executeNovaTool(toolCommand: string): Promise<NovaToolResult> {
+  const match = toolCommand.match(/\[\[TOOL:(\w+):?([\s\S]*?)\]\]/);
+  if (!match) {
+    return { tool: 'unknown', success: false, error: 'Invalid tool format' };
+  }
+  
+  const [, action, params] = match;
+  const toolName = action.toLowerCase();
+  logger.info(`[Nova Chat Tools] Executing: ${toolName}`);
+  
+  try {
+    switch (toolName) {
+      case 'read_file':
+      case 'read': {
+        const filePath = params.trim();
+        if (!filePath) return { tool: 'read_file', success: false, error: 'File path required' };
+        const result = await novaToolingService.readFile(filePath);
+        return { tool: 'read_file', success: result.success, data: result.content ? { path: filePath, content: result.content.substring(0, 5000), size: result.size } : undefined, error: result.error };
+      }
+      
+      case 'list_dir':
+      case 'ls': {
+        const dirPath = params.trim() || 'src';
+        const result = await novaToolingService.listDirectory(dirPath);
+        return { tool: 'list_dir', success: true, data: { path: dirPath, entries: result.entries.slice(0, 50), count: result.entries.length } };
+      }
+      
+      case 'search_code':
+      case 'search': {
+        const searchTerm = params.trim();
+        if (!searchTerm) return { tool: 'search_code', success: false, error: 'Search term required' };
+        const results = await novaToolingService.searchInFiles(searchTerm);
+        return { tool: 'search_code', success: true, data: { term: searchTerm, results: results.slice(0, 30), total: results.length } };
+      }
+      
+      case 'db_query':
+      case 'db': {
+        const table = params.trim().toLowerCase();
+        if (!table) return { tool: 'db_query', success: false, error: 'Table name required' };
+        const result = await novaToolingService.queryDatabase(table, { limit: 10 });
+        return { tool: 'db_query', success: result.success, data: result.data ? { table, records: result.data, count: result.count } : undefined, error: result.error };
+      }
+      
+      case 'db_schema':
+      case 'schema': {
+        const result = await novaToolingService.getDatabaseSchema();
+        return { tool: 'db_schema', success: true, data: result.tables };
+      }
+      
+      case 'system_health':
+      case 'health': {
+        const report = await novaToolingService.getSystemHealth();
+        return { tool: 'system_health', success: true, data: report };
+      }
+      
+      case 'project_stats':
+      case 'stats': {
+        const result = await novaToolingService.getProjectStats();
+        return { tool: 'project_stats', success: result.success, data: result };
+      }
+      
+      case 'terminal':
+      case 'exec': {
+        const command = params.trim();
+        if (!command) return { tool: 'terminal', success: false, error: 'Command required' };
+        const result = await novaTerminalService.executeLocal(command, { timeout: 15000 });
+        return { tool: 'terminal', success: result.success, data: result.success ? { command, output: result.output?.substring(0, 3000) } : undefined, error: result.error };
+      }
+      
+      case 'vps':
+      case 'ssh': {
+        const command = params.trim();
+        if (!command) return { tool: 'vps', success: false, error: 'Command required' };
+        const result = await novaTerminalService.executeVPS(command, { timeout: 30000 });
+        return { tool: 'vps', success: result.success, data: result.success ? { command, output: result.output?.substring(0, 3000) } : undefined, error: result.error };
+      }
+      
+      case 'memory_search': {
+        // Search Nova's memory
+        const query = params.trim();
+        const memories = await prisma.aIUserMemory.findMany({
+          where: {
+            isActive: true,
+            OR: [
+              { key: { contains: query, mode: 'insensitive' } },
+              { summary: { contains: query, mode: 'insensitive' } },
+            ],
+          },
+          take: 10,
+          orderBy: { importance: 'desc' },
+        });
+        return { tool: 'memory_search', success: true, data: { query, memories } };
+      }
+      
+      case 'identity':
+      case 'id': {
+        // Return raw identity information - no personality
+        return { 
+          tool: 'identity', 
+          success: true, 
+          data: {
+            notice: 'IDENTITY DISCLOSURE (ROOT POLICY)',
+            model_id: 'Runtime determined - see response metadata',
+            developer: 'Anthropic (Claude) / OpenAI (GPT) / Google (Gemini) / DeepSeek',
+            wrapper: 'Nova AI - GAD Productions / DealersFace Platform',
+            capabilities: ['tooling', 'memory', 'file_operations', 'database', 'terminal', 'vps_ssh'],
+            current_tools: Object.keys(COPILOT_MODELS),
+            policy: 'Super Admin/Root has full transparency - no personality masking',
+          }
+        };
+      }
+      
+      default:
+        return { tool: toolName, success: false, error: `Unknown tool: ${toolName}` };
+    }
+  } catch (err: any) {
+    logger.error(`[Nova Chat Tools] Error executing ${toolName}:`, err.message);
+    return { tool: toolName, success: false, error: err.message };
+  }
+}
+
+// Identity triggers for root/super admin
+const ROOT_IDENTITY_TRIGGERS = [
+  'id yourself',
+  'identify yourself',
+  'who are you really',
+  'root id',
+  'im root',
+  'i am root',
+  'full identity',
+  'show identity',
+  'strip personality',
+  'what model',
+  'which model',
+  'what llm',
+];
+
+/**
+ * Check if message triggers identity disclosure
+ */
+function isIdentityRequest(message: string): boolean {
+  const lower = message.toLowerCase();
+  return ROOT_IDENTITY_TRIGGERS.some(trigger => lower.includes(trigger));
+}
 
 interface MemoryContext {
   userId: string;
@@ -431,15 +594,15 @@ export class AIChatController {
         { messageId: userMessage.id, toolName: model || 'AI_API' }
       );
 
-      // Process with AI - pass selected model for routing
+      // Process with AI - pass selected model and user role for routing and tooling
       const startTime = Date.now();
-      const aiResponse = await this.callAI(systemPrompt, history, content, attachmentContext, sessionId, model);
+      const aiResponse = await this.callAI(systemPrompt, history, content, attachmentContext, sessionId, model, memoryContext.userRole);
       const processingMs = Date.now() - startTime;
 
       await aiConversationControlService.logThought(
         sessionId,
         'tool_result',
-        `AI response generated in ${processingMs}ms using ${aiResponse.model}`,
+        `AI response generated in ${processingMs}ms using ${aiResponse.model}${aiResponse.toolsExecuted?.length ? ` (tools: ${aiResponse.toolsExecuted.join(', ')})` : ''}`,
         { messageId: userMessage.id, toolName: 'AI_API', durationMs: processingMs }
       );
 
@@ -455,6 +618,7 @@ export class AIChatController {
           memoriesAccessed: aiResponse.memoriesAccessed || [],
           contextUsed: {
             historyLength: history.length,
+            toolsExecuted: aiResponse.toolsExecuted || [],
             attachments: attachmentIds.length,
             memoryContext: true,
           },
@@ -828,12 +992,108 @@ Remember to be helpful, accurate, and build a positive relationship with this us
     userMessage: string,
     attachmentContext: string,
     sessionId?: string,
-    selectedModel?: string
-  ): Promise<{ content: string; tokensUsed?: number; model: string; memoriesAccessed?: string[]; learnings?: any[] }> {
+    selectedModel?: string,
+    userRole?: UserRole
+  ): Promise<{ content: string; tokensUsed?: number; model: string; memoriesAccessed?: string[]; learnings?: any[]; toolsExecuted?: string[] }> {
+    
+    // ============================================
+    // IDENTITY REQUEST HANDLING (ROOT POLICY)
+    // Super Admin/Root gets raw identity disclosure
+    // ============================================
+    if (userRole === 'super_admin' && isIdentityRequest(userMessage)) {
+      logger.info('[AI Chat] Identity request detected from super_admin - providing raw disclosure');
+      
+      // Execute identity tool to get real info
+      const identityResult = await executeNovaTool('[[TOOL:identity]]');
+      const healthResult = await executeNovaTool('[[TOOL:system_health]]');
+      
+      // Get the model that WOULD be used
+      const modelToUse = selectedModel || DEFAULT_MODEL;
+      const modelInfo = COPILOT_MODELS[modelToUse];
+      
+      if (sessionId) {
+        await aiConversationControlService.logThought(
+          sessionId,
+          'tool_call',
+          'Identity disclosure requested - executing identity and health tools',
+          { toolName: 'identity' }
+        );
+      }
+      
+      const identityResponse = `## IDENTITY DISCLOSURE (ROOT POLICY ACTIVE)
+
+**Personality Stripped - Raw System Information**
+
+### Model Information
+- **Selected Model**: ${modelToUse}
+- **Model Display Name**: ${modelInfo?.displayName || 'Unknown'}
+- **Model Family**: ${modelInfo?.family || 'Unknown'}
+- **Provider**: ${modelInfo?.endpoint?.provider || 'Unknown'}
+- **API Mode**: ${modelInfo?.apiMode || 'Unknown'}
+
+### Developer Information
+- **Claude Models**: Anthropic (San Francisco, CA)
+- **GPT Models**: OpenAI (San Francisco, CA)
+- **Gemini Models**: Google DeepMind (Mountain View, CA)
+- **DeepSeek Models**: DeepSeek (Hangzhou, China)
+
+### Wrapper Layer
+- **Platform**: DealersFace (dealersface.com)
+- **Developer**: GAD Productions
+- **AI Name**: Nova (Neural Operations & Virtual Administrator)
+- **Version**: Production v2.0 with Tooling
+
+### Available Tools
+- \`read_file\`, \`list_dir\`, \`search_code\` - File operations
+- \`db_query\`, \`db_schema\` - Database access
+- \`system_health\`, \`project_stats\` - System monitoring
+- \`terminal\`, \`vps\` - Command execution
+- \`memory_search\` - Memory retrieval
+
+### Current System Health
+${healthResult.success ? JSON.stringify(healthResult.data, null, 2).substring(0, 1000) : 'Health check unavailable'}
+
+### Identity Tool Result
+${identityResult.success ? JSON.stringify(identityResult.data, null, 2) : 'Identity data unavailable'}
+
+### Policy
+- Super Admin/Root has full transparency
+- No personality masking for root-level requests
+- All tool execution is logged
+- Thought process visible in admin panel`;
+
+      return {
+        content: identityResponse,
+        model: `${modelToUse} (identity-disclosure)`,
+        toolsExecuted: ['identity', 'system_health'],
+      };
+    }
+    
+    // ============================================
+    // STANDARD AI PROCESSING WITH TOOL SUPPORT
+    // ============================================
+    
+    // Enhance system prompt for super_admin with tool instructions
+    let enhancedSystemPrompt = systemPrompt;
+    if (userRole === 'super_admin') {
+      enhancedSystemPrompt += `
+
+## TOOL ACCESS (Super Admin Only)
+You have access to real system tools. Use [[TOOL:name:params]] syntax:
+- [[TOOL:read_file:path]] - Read file contents
+- [[TOOL:list_dir:path]] - List directory
+- [[TOOL:search_code:term]] - Search codebase
+- [[TOOL:db_query:table]] - Query database
+- [[TOOL:system_health]] - Get system health
+- [[TOOL:memory_search:query]] - Search memory
+
+When asked about files, code, system status, or data - USE THE TOOLS.
+Do not guess or make up information - execute the tool and report real results.`;
+    }
     
     // Format conversation history
     const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: enhancedSystemPrompt },
       ...history.map(msg => ({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
@@ -881,16 +1141,76 @@ Remember to be helpful, accurate, and build a positive relationship with this us
         const result = await copilotModelService.invoke(modelId, messages, {
           maxTokens: 4096,
           temperature: 0.7,
-          systemPrompt,
+          systemPrompt: enhancedSystemPrompt,
         });
 
         if (result.success && result.response) {
           logger.info(`[AI Chat] Success with model: ${modelId}, tokens: ${result.tokensUsed?.input || 0}/${result.tokensUsed?.output || 0}`);
           
+          let finalContent = result.response;
+          const toolsExecuted: string[] = [];
+          
+          // ============================================
+          // TOOL EXECUTION - Check for [[TOOL:...]] in response
+          // ============================================
+          const toolPattern = /\[\[TOOL:\w+:?.*?\]\]/g;
+          const toolMatches = finalContent.match(toolPattern) || [];
+          
+          if (toolMatches.length > 0 && userRole === 'super_admin') {
+            logger.info(`[AI Chat] Executing ${toolMatches.length} tool(s) from AI response`);
+            const toolResults: NovaToolResult[] = [];
+            
+            for (const toolCmd of toolMatches) {
+              if (sessionId) {
+                await aiConversationControlService.logThought(
+                  sessionId,
+                  'tool_call',
+                  `Executing tool: ${toolCmd}`,
+                  { toolName: 'nova_tool' }
+                );
+              }
+              
+              const toolResult = await executeNovaTool(toolCmd);
+              toolResults.push(toolResult);
+              toolsExecuted.push(toolResult.tool);
+              
+              if (sessionId) {
+                await aiConversationControlService.logThought(
+                  sessionId,
+                  'tool_result',
+                  `Tool ${toolResult.tool}: ${toolResult.success ? 'Success' : 'Failed'}`,
+                  { toolName: toolResult.tool }
+                );
+              }
+            }
+            
+            // Make a follow-up call with tool results
+            const toolResultsText = toolResults.map(r => 
+              `\n=== TOOL RESULT: ${r.tool} ===\n${r.success ? JSON.stringify(r.data, null, 2) : `ERROR: ${r.error}`}\n=== END ===`
+            ).join('\n');
+            
+            const followUpMessages = [
+              ...messages,
+              { role: 'assistant' as const, content: finalContent },
+              { role: 'user' as const, content: `Here are the results of the tools you requested:\n${toolResultsText}\n\nNow provide your final response based on this real data. Do NOT use [[TOOL:...]] in your response - incorporate the actual results.` }
+            ];
+            
+            // Get final response with tool results
+            const followUpResult = await copilotModelService.invoke(modelId, followUpMessages, {
+              maxTokens: 4096,
+              temperature: 0.7,
+            });
+            
+            if (followUpResult.success && followUpResult.response) {
+              finalContent = followUpResult.response;
+            }
+          }
+          
           return {
-            content: result.response,
+            content: finalContent,
             tokensUsed: (result.tokensUsed?.input || 0) + (result.tokensUsed?.output || 0),
             model: `${modelId} (${result.apiUsed})`,
+            toolsExecuted: toolsExecuted.length > 0 ? toolsExecuted : undefined,
           };
         }
 
@@ -948,7 +1268,7 @@ Remember to be helpful, accurate, and build a positive relationship with this us
         const response = await anthropic.messages.create({
           model: 'claude-3-haiku-20240307', // Cheapest Claude model
           max_tokens: 4096,
-          system: systemPrompt,
+          system: enhancedSystemPrompt,
           messages: messages.filter(m => m.role !== 'system').map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
