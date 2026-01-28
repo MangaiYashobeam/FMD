@@ -475,18 +475,21 @@ router.get('/system-info', authenticate, async (_req: AuthRequest, res: Response
 
 /**
  * PATCH /api/admin/iai/soldiers/:id
- * Update soldier information
+ * Update soldier information (v2.3.0 - Full edit support)
  */
 router.patch('/soldiers/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const soldierId = req.params.id as string;
-    const { status, isActive } = req.body;
+    const { status, isActive, genre, mode, missionProfile } = req.body;
 
     const soldier = await prisma.iAISoldier.update({
       where: { id: soldierId },
       data: {
         ...(status && { status }),
         ...(typeof isActive !== 'undefined' && { isActive }),
+        ...(genre && { genre }),
+        ...(mode && { mode }),
+        ...(missionProfile && { missionProfile }),
         updatedAt: new Date(),
       },
     });

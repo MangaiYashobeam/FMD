@@ -939,6 +939,58 @@ export class VehicleController {
               queuedAt: new Date(),
             });
           }
+
+          // Register a "Stealth Soldier" in IAI Command Center for visibility
+          try {
+            // Get next soldier number with STEALTH prefix
+            const lastStealthSoldier = await prisma.iAISoldier.findFirst({
+              where: { genre: 'STEALTH' },
+              orderBy: { soldierNumber: 'desc' },
+            });
+            const nextStealthNumber = (lastStealthSoldier?.soldierNumber || 0) + 1;
+
+            const stealthSoldier = await prisma.iAISoldier.create({
+              data: {
+                soldierId: `STEALTH-${nextStealthNumber}`,
+                soldierNumber: nextStealthNumber,
+                accountId: vehicle.accountId,
+                userId: req.user?.id || null,
+                // v2.3.0 Classification - Stealth Soldier
+                genre: 'STEALTH',
+                executionSource: 'CHROMIUM',
+                mode: 'STEALTH',
+                missionProfile: 'STEALTH_POST',
+                // Status
+                status: 'WORKING',
+                currentTaskType: 'POST_TO_MARKETPLACE',
+                lastHeartbeatAt: new Date(),
+                sessionStartAt: new Date(),
+                totalSessions: 1,
+                // Task info
+                extensionVersion: 'server-worker',
+              },
+            });
+
+            // Log the birth
+            await prisma.iAIActivityLog.create({
+              data: {
+                soldierId: stealthSoldier.id,
+                accountId: vehicle.accountId,
+                eventType: 'status_change',
+                message: `🥷 Stealth Soldier ${stealthSoldier.soldierId} deployed for vehicle ${vehicleData.title || vehicle.id}`,
+                eventData: {
+                  taskId: task.id,
+                  vehicleId: vehicle.id,
+                  method: 'soldier',
+                  facebookUserId: activeSession.facebookUserId,
+                },
+              },
+            });
+
+            logger.info(`Stealth Soldier ${stealthSoldier.soldierId} registered for task ${task.id}`);
+          } catch (soldierErr) {
+            logger.warn(`Could not register Stealth Soldier: ${soldierErr}`);
+          }
         } else {
           logger.warn('Redis not available - Soldier Worker task created but not queued');
           if (fbmLog) {

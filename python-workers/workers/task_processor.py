@@ -19,13 +19,18 @@ logger = structlog.get_logger()
 
 
 class TaskType(str, Enum):
-    """Supported task types"""
+    """Supported task types - handles both old and new formats"""
+    # Original formats
     POST_VEHICLE = 'post_vehicle'
     POST_ITEM = 'post_item'
     VALIDATE_SESSION = 'validate_session'
     REFRESH_SESSION = 'refresh_session'
     DELETE_LISTING = 'delete_listing'
     UPDATE_LISTING = 'update_listing'
+    # Node.js API formats (uppercase)
+    POST_TO_MARKETPLACE = 'POST_TO_MARKETPLACE'
+    SOLDIER_POST_TO_MARKETPLACE = 'SOLDIER_POST_TO_MARKETPLACE'
+    PUPPETEER_POST_TO_MARKETPLACE = 'PUPPETEER_POST_TO_MARKETPLACE'
 
 
 class TaskStatus(str, Enum):
@@ -59,12 +64,17 @@ class TaskProcessor:
         self._session_manager = SessionManager()
         self._http_client: Optional[httpx.AsyncClient] = None
         
-        # Task handlers registry
+        # Task handlers registry - handle all task type formats
         self._handlers: Dict[TaskType, Callable] = {
+            # Original formats
             TaskType.POST_VEHICLE: self._handle_post_vehicle,
             TaskType.POST_ITEM: self._handle_post_item,
             TaskType.VALIDATE_SESSION: self._handle_validate_session,
             TaskType.REFRESH_SESSION: self._handle_refresh_session,
+            # Node.js API formats - map to same handlers
+            TaskType.POST_TO_MARKETPLACE: self._handle_post_vehicle,
+            TaskType.SOLDIER_POST_TO_MARKETPLACE: self._handle_post_vehicle,
+            TaskType.PUPPETEER_POST_TO_MARKETPLACE: self._handle_post_vehicle,
         }
     
     async def start(self):

@@ -209,6 +209,11 @@ async function restartSoldier(id: string) {
   return response.data;
 }
 
+async function updateSoldier(id: string, data: Partial<IAISoldier>) {
+  const response = await api.patch(`/api/admin/iai/soldiers/${id}`, data);
+  return response.data;
+}
+
 // ============================================
 // Utility Functions
 // ============================================
@@ -488,6 +493,32 @@ function SoldierCard({
         </div>
       </div>
 
+      {/* Minimalistic Progress Indicator */}
+      <div className="mt-3 flex items-center gap-2 text-xs">
+        <span className="text-slate-500">Progress:</span>
+        <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+          <div 
+            className={`h-full rounded-full ${
+              soldier.currentTaskType ? 'bg-blue-500 animate-pulse' :
+              soldier.status === 'ERROR' ? 'bg-red-500' :
+              soldier.tasksCompleted > 0 ? 'bg-green-500' : 'bg-slate-600'
+            }`}
+            style={{ 
+              width: `${soldier.currentTaskType ? 60 : soldier.status === 'ERROR' ? 0 : soldier.tasksCompleted > 0 ? 100 : 20}%` 
+            }}
+          />
+        </div>
+        <span className={`font-medium ${
+          soldier.currentTaskType ? 'text-blue-400' :
+          soldier.status === 'ERROR' ? 'text-red-400' :
+          soldier.tasksCompleted > 0 ? 'text-green-400' : 'text-slate-400'
+        }`}>
+          {soldier.currentTaskType ? 'Working' :
+           soldier.status === 'ERROR' ? 'Error' :
+           soldier.tasksCompleted > 0 ? 'Complete' : 'Ready'}
+        </span>
+      </div>
+
       <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-3 gap-4 text-center">
         <div>
           <p className="text-xs text-slate-500">Completed</p>
@@ -507,6 +538,203 @@ function SoldierCard({
 
       <div className="mt-2 text-xs text-slate-500 text-center">
         Last seen: {formatTimeAgo(soldier.lastHeartbeatAt)}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Soldier Edit Modal - Minimalistic Design
+// ============================================
+
+interface SoldierEditModalProps {
+  soldier: IAISoldier;
+  onClose: () => void;
+  onSave: (data: Partial<IAISoldier>) => void;
+}
+
+function SoldierEditModal({ soldier, onClose, onSave }: SoldierEditModalProps) {
+  const [formData, setFormData] = useState({
+    status: soldier.status,
+    genre: soldier.genre,
+    mode: soldier.mode,
+    missionProfile: soldier.missionProfile,
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Calculate completion percentage based on soldier progress
+  const getCompletionStatus = () => {
+    if (soldier.currentTaskType) return { pct: 50, label: 'Working' };
+    if (soldier.status === 'ERROR') return { pct: 0, label: 'Error' };
+    if (soldier.status === 'OFFLINE') return { pct: 0, label: 'Offline' };
+    if (soldier.tasksCompleted > 0) return { pct: 100, label: 'Complete' };
+    return { pct: 25, label: 'Ready' };
+  };
+
+  const completion = getCompletionStatus();
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(formData);
+      onClose();
+    } catch (err) {
+      console.error('Failed to save:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-md shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-700">
+          <div className="flex items-center gap-3">
+            {getGenreIcon(soldier.genre)}
+            <div>
+              <h3 className="text-lg font-bold text-white">{soldier.soldierId}</h3>
+              <p className="text-xs text-slate-400">{soldier.account?.dealershipName || 'Unknown Account'}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Completion Status - Minimalistic */}
+        <div className="p-4 border-b border-slate-700">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-slate-400">Progress</span>
+            <span className={`text-sm font-medium ${
+              completion.pct === 100 ? 'text-green-400' :
+              completion.pct >= 50 ? 'text-blue-400' :
+              completion.pct > 0 ? 'text-yellow-400' : 'text-red-400'
+            }`}>
+              {completion.label} ({completion.pct}%)
+            </span>
+          </div>
+          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${
+                completion.pct === 100 ? 'bg-green-500' :
+                completion.pct >= 50 ? 'bg-blue-500' :
+                completion.pct > 0 ? 'bg-yellow-500' : 'bg-red-500'
+              }`}
+              style={{ width: `${completion.pct}%` }}
+            />
+          </div>
+          {soldier.currentTaskType && (
+            <p className="text-xs text-blue-400 mt-2 flex items-center gap-1">
+              <Activity className="w-3 h-3" />
+              Currently: {soldier.currentTaskType}
+            </p>
+          )}
+        </div>
+
+        {/* Edit Form - Minimalistic */}
+        <div className="p-4 space-y-4">
+          {/* Status */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">Status</label>
+            <select
+              value={formData.status}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as SoldierStatus })}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="ONLINE">🟢 Online</option>
+              <option value="WORKING">🔵 Working</option>
+              <option value="IDLE">🟡 Idle</option>
+              <option value="OFFLINE">⚫ Offline</option>
+              <option value="ERROR">🔴 Error</option>
+              <option value="SUSPENDED">🟠 Suspended</option>
+            </select>
+          </div>
+
+          {/* Genre */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">Type</label>
+            <select
+              value={formData.genre}
+              onChange={(e) => setFormData({ ...formData, genre: e.target.value as SoldierGenre })}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="SOLDIER">⚡ IAI Soldier</option>
+              <option value="STEALTH">👻 Stealth Soldier</option>
+              <option value="NOVA">🧠 NOVA Soldier</option>
+            </select>
+          </div>
+
+          {/* Mode */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">Mode</label>
+            <select
+              value={formData.mode}
+              onChange={(e) => setFormData({ ...formData, mode: e.target.value as SoldierMode })}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="USM">⚡ USM (Ultra Speed)</option>
+              <option value="STEALTH">🥷 Stealth</option>
+              <option value="HYBRID">🔄 Hybrid</option>
+              <option value="NOVA_AI">🤖 NOVA AI</option>
+            </select>
+          </div>
+
+          {/* Mission Profile */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">Mission</label>
+            <select
+              value={formData.missionProfile}
+              onChange={(e) => setFormData({ ...formData, missionProfile: e.target.value as MissionProfile })}
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="FAST_POST">🚀 Fast Post</option>
+              <option value="STEALTH_POST">🥷 Stealth Post</option>
+              <option value="ENGAGEMENT">💬 Engagement</option>
+              <option value="MONITORING">👁️ Monitoring</option>
+              <option value="FULL_CYCLE">🔄 Full Cycle</option>
+              <option value="CUSTOM">⚙️ Custom</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="px-4 pb-4">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="bg-slate-700/50 rounded-lg p-2">
+              <p className="text-xs text-slate-500">Tasks</p>
+              <p className="text-sm font-bold text-green-400">{soldier.tasksCompleted}</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-2">
+              <p className="text-xs text-slate-500">Failed</p>
+              <p className="text-sm font-bold text-red-400">{soldier.tasksFailed}</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-2">
+              <p className="text-xs text-slate-500">Rate</p>
+              <p className="text-sm font-bold text-white">{soldier.successRate?.toFixed(0) || 0}%</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-slate-700">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -738,6 +966,27 @@ export default function IAICommandCenterV2() {
       queryClient.invalidateQueries({ queryKey: ['soldiers'] });
     },
   });
+
+  // Edit Soldier State & Mutation
+  const [editingSoldier, setEditingSoldier] = useState<IAISoldier | null>(null);
+  
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<IAISoldier> }) => updateSoldier(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['soldiers'] });
+      queryClient.invalidateQueries({ queryKey: ['iaiStats'] });
+      setEditingSoldier(null);
+    },
+    onError: (error) => {
+      console.error('Failed to update soldier:', error);
+    },
+  });
+
+  const handleEditSave = (data: Partial<IAISoldier>) => {
+    if (editingSoldier) {
+      updateMutation.mutate({ id: editingSoldier.id, data });
+    }
+  };
 
   const soldiers = soldiersData?.soldiers || [];
   // Client-side filtering no longer needed - server handles it
@@ -1252,6 +1501,15 @@ export default function IAICommandCenterV2() {
               )}
             </div>
 
+            {/* Edit Soldier Modal */}
+            {editingSoldier && (
+              <SoldierEditModal
+                soldier={editingSoldier}
+                onClose={() => setEditingSoldier(null)}
+                onSave={handleEditSave}
+              />
+            )}
+
             {/* Soldiers Grid */}
             {filteredSoldiers.length > 0 ? (
               <div className="grid grid-cols-3 gap-4">
@@ -1260,7 +1518,7 @@ export default function IAICommandCenterV2() {
                     key={soldier.id}
                     soldier={soldier}
                     onClick={() => {/* View soldier details */}}
-                    onEdit={() => alert('Edit functionality coming soon')}
+                    onEdit={() => setEditingSoldier(soldier)}
                     onDelete={() => handleDelete(soldier)}
                     onRestart={() => handleRestart(soldier)}
                   />
