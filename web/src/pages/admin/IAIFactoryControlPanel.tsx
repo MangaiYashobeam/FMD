@@ -169,12 +169,6 @@ interface Company {
   userCount: number;
 }
 
-interface User {
-  id: string;
-  email: string;
-  companyId: string | null;
-}
-
 // ============================================
 // API Functions
 // ============================================
