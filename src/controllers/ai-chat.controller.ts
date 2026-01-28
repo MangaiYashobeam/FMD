@@ -17,10 +17,11 @@ import prisma from '@/config/database';
 import { logger } from '@/utils/logger';
 import { aiMemoryService, MemoryScope, MemoryCategory, UserRole } from '@/services/ai-memory.service';
 import { aiConversationControlService, conversationEvents } from '@/services/ai-conversation-control.service';
+import { copilotModelService, COPILOT_MODELS } from '@/services/copilot-models.service';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
-// Initialize AI clients
+// Initialize AI clients (as fallbacks - primary uses copilotModelService)
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 }) : null;
@@ -28,6 +29,19 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 }) : null;
+
+// Default model if none selected
+const DEFAULT_MODEL = 'claude-sonnet-4';
+
+// Model fallback order for rate limits
+const MODEL_FALLBACK_ORDER = [
+  'claude-sonnet-4',      // Primary Claude
+  'gpt-4o',               // OpenAI fallback
+  'gemini-2.0-flash',     // Google fallback (fast, cheap)
+  'deepseek-chat',        // DeepSeek fallback (very cheap)
+  'claude-haiku-4.5',     // Cheap Claude fallback
+  'gpt-4o-mini',          // Cheap OpenAI fallback
+];
 
 // Allowed file types by role
 const FILE_TYPES_BY_ROLE: Record<string, string[]> = {
@@ -284,12 +298,18 @@ export class AIChatController {
 
   /**
    * Send a message and get AI response
+   * @param model - Optional model ID to use (e.g., 'gpt-4o', 'claude-sonnet-4', 'gemini-2.0-flash')
    */
   async sendMessage(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.id;
       const sessionId = req.params.sessionId as string;
-      const { content, attachmentIds = [] } = req.body;
+      const { content, attachmentIds = [], model } = req.body;
+
+      // Log model selection for debugging
+      if (model) {
+        logger.info(`[AI Chat] Model explicitly selected: ${model}`);
+      }
 
       if (!content?.trim() && attachmentIds.length === 0) {
         res.status(400).json({ success: false, error: 'Message content or attachment required' });
@@ -407,13 +427,13 @@ export class AIChatController {
       await aiConversationControlService.logThought(
         sessionId,
         'tool_call',
-        'Calling AI model for response generation',
-        { messageId: userMessage.id, toolName: 'AI_API' }
+        `Calling AI model for response generation${model ? ` (selected: ${model})` : ''}`,
+        { messageId: userMessage.id, toolName: model || 'AI_API' }
       );
 
-      // Process with AI
+      // Process with AI - pass selected model for routing
       const startTime = Date.now();
-      const aiResponse = await this.callAI(systemPrompt, history, content, attachmentContext, sessionId);
+      const aiResponse = await this.callAI(systemPrompt, history, content, attachmentContext, sessionId, model);
       const processingMs = Date.now() - startTime;
 
       await aiConversationControlService.logThought(
@@ -807,14 +827,18 @@ Remember to be helpful, accurate, and build a positive relationship with this us
     history: any[],
     userMessage: string,
     attachmentContext: string,
-    sessionId?: string
+    sessionId?: string,
+    selectedModel?: string
   ): Promise<{ content: string; tokensUsed?: number; model: string; memoriesAccessed?: string[]; learnings?: any[] }> {
     
     // Format conversation history
-    const messages = history.map(msg => ({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
-    }));
+    const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+      ...history.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      })),
+    ];
 
     // Add current message with attachment context if any
     const currentContent = attachmentContext 
@@ -831,87 +855,142 @@ Remember to be helpful, accurate, and build a positive relationship with this us
       };
     }
 
-    // Try Anthropic first, fall back to OpenAI
-    if (anthropic) {
+    // Get the model to use (from selection, session, or default)
+    const modelToUse = selectedModel || DEFAULT_MODEL;
+    
+    // Build fallback order starting with selected model
+    const fallbackModels = [modelToUse, ...MODEL_FALLBACK_ORDER.filter(m => m !== modelToUse)];
+    
+    // Try each model in fallback order
+    for (const modelId of fallbackModels) {
+      const model = COPILOT_MODELS[modelId];
+      if (!model) continue;
+      
       try {
         if (sessionId) {
           await aiConversationControlService.logThought(
             sessionId,
             'tool_call',
-            'Sending request to Claude API',
-            { toolName: 'anthropic' }
+            `Sending request to ${model.displayName} (${model.family}) - Model: ${modelId}`,
+            { toolName: model.endpoint.provider }
           );
         }
 
-        const response = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: messages,
+        logger.info(`[AI Chat] Attempting model: ${modelId} (${model.displayName})`);
+        
+        const result = await copilotModelService.invoke(modelId, messages, {
+          maxTokens: 4096,
+          temperature: 0.7,
+          systemPrompt,
         });
 
-        const content = response.content[0].type === 'text' ? response.content[0].text : '';
+        if (result.success && result.response) {
+          logger.info(`[AI Chat] Success with model: ${modelId}, tokens: ${result.tokensUsed?.input || 0}/${result.tokensUsed?.output || 0}`);
+          
+          return {
+            content: result.response,
+            tokensUsed: (result.tokensUsed?.input || 0) + (result.tokensUsed?.output || 0),
+            model: `${modelId} (${result.apiUsed})`,
+          };
+        }
+
+        // If we got here, result wasn't successful - check for rate limit
+        if (result.error?.includes('rate limit') || result.error?.includes('429')) {
+          logger.warn(`[AI Chat] Rate limit hit on ${modelId}, trying fallback...`);
+          if (sessionId) {
+            await aiConversationControlService.logThought(
+              sessionId,
+              'reflection',
+              `Rate limit on ${model.displayName}, trying fallback model...`,
+              { toolName: 'fallback' }
+            );
+          }
+          continue; // Try next model in fallback order
+        }
+
+        // Other error - still try fallback
+        logger.warn(`[AI Chat] Error on ${modelId}: ${result.error}, trying fallback...`);
         
-        return {
-          content,
-          tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
-          model: 'claude-sonnet-4-20250514',
-        };
       } catch (err: any) {
-        logger.error('Anthropic API error:', err);
+        logger.error(`[AI Chat] Exception on ${modelId}:`, err.message);
+        
+        // Check if it's a rate limit error
+        if (err.message?.includes('rate limit') || err.message?.includes('429') || err.status === 429) {
+          logger.warn(`[AI Chat] Rate limit exception on ${modelId}, trying fallback...`);
+          if (sessionId) {
+            await aiConversationControlService.logThought(
+              sessionId,
+              'reflection',
+              `Rate limit on ${model?.displayName || modelId}: ${err.message}`,
+              { toolName: 'fallback' }
+            );
+          }
+          continue; // Try next model
+        }
+        
+        // Other exception - log and try fallback
         if (sessionId) {
           await aiConversationControlService.logThought(
             sessionId,
             'reflection',
-            `Anthropic API error: ${err.message}, falling back to OpenAI`,
-            { toolName: 'anthropic' }
+            `Error on ${model?.displayName || modelId}: ${err.message}`,
+            { toolName: 'fallback' }
           );
         }
       }
     }
 
+    // All models failed - try legacy direct API call as last resort
+    logger.warn('[AI Chat] All Copilot models failed, trying legacy direct API...');
+    
+    if (anthropic) {
+      try {
+        const response = await anthropic.messages.create({
+          model: 'claude-3-haiku-20240307', // Cheapest Claude model
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: messages.filter(m => m.role !== 'system').map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+        });
+
+        const content = response.content[0].type === 'text' ? response.content[0].text : '';
+        return {
+          content,
+          tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+          model: 'claude-3-haiku-20240307 (legacy-fallback)',
+        };
+      } catch (err: any) {
+        logger.error('[AI Chat] Legacy Anthropic fallback failed:', err.message);
+      }
+    }
+
     if (openai) {
       try {
-        if (sessionId) {
-          await aiConversationControlService.logThought(
-            sessionId,
-            'tool_call',
-            'Sending request to OpenAI API',
-            { toolName: 'openai' }
-          );
-        }
-
         const response = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages,
-          ],
+          model: 'gpt-4o-mini', // Cheapest GPT model
+          messages: messages.map(m => ({
+            role: m.role,
+            content: m.content,
+          })),
           max_tokens: 4096,
         });
 
         return {
           content: response.choices[0]?.message?.content || 'I apologize, I could not generate a response.',
           tokensUsed: response.usage?.total_tokens,
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o-mini (legacy-fallback)',
         };
       } catch (err: any) {
-        logger.error('OpenAI API error:', err);
-        if (sessionId) {
-          await aiConversationControlService.logThought(
-            sessionId,
-            'reflection',
-            `OpenAI API error: ${err.message}`,
-            { toolName: 'openai' }
-          );
-        }
+        logger.error('[AI Chat] Legacy OpenAI fallback failed:', err.message);
       }
     }
 
-    // Fallback if no API available
+    // Absolute last resort
     return {
-      content: 'I apologize, but I am currently unable to process requests. Please try again later or contact support.',
-      model: 'fallback',
+      content: 'I apologize, but all AI services are currently experiencing high demand. Please try again in a few minutes. If this persists, the system will automatically use a backup provider.',
+      model: 'fallback-unavailable',
     };
   }
 

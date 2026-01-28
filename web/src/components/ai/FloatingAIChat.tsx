@@ -83,6 +83,16 @@ interface FloatingAIChatProps {
 // Allowed file types (gets refined by backend based on role)
 const ACCEPTED_FILE_TYPES = 'image/jpeg,image/png,image/webp,image/gif,text/csv,application/xml,text/xml,application/pdf';
 
+// Available AI models for selection
+const AVAILABLE_MODELS = [
+  { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic', icon: '🟣' },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', icon: '🟢' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', icon: '🔵' },
+  { id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5', provider: 'anthropic', icon: '🟣' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', icon: '🟢' },
+  { id: 'deepseek-chat', name: 'DeepSeek Chat', provider: 'deepseek', icon: '🔶' },
+];
+
 export default function FloatingAIChat({ 
   userRole = 'super_admin', 
   isAICenterTab = false,
@@ -97,6 +107,7 @@ export default function FloatingAIChat({
   const [isMinimized, setIsMinimized] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showModelSelector, setShowModelSelector] = useState(false);
   
   // Chat State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -106,6 +117,7 @@ export default function FloatingAIChat({
   const [loading, setLoading] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('claude-sonnet-4');
   
   // Position State
   const [position, setPosition] = useState({ x: window.innerWidth - 420, y: window.innerHeight - 600 });
@@ -119,6 +131,7 @@ export default function FloatingAIChat({
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const roleConfig = AI_ROLES[userRole];
+  const currentModelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel) || AVAILABLE_MODELS[0];
   
   // Nova follows Super Admin even in impersonation mode
   const isNovaFollowing = userRole === 'super_admin' && isImpersonating;
@@ -309,6 +322,7 @@ export default function FloatingAIChat({
       const response = await api.post(`/api/ai/sessions/${sessionId}/messages`, { 
         content: userMessage, 
         attachmentIds,
+        model: selectedModel, // Pass selected model for routing
       });
 
       const data = response.data;
@@ -644,6 +658,58 @@ export default function FloatingAIChat({
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Model Selector Bar */}
+              <div className="px-3 py-2 bg-gray-800/30 border-b border-white/5 flex items-center justify-between">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowModelSelector(!showModelSelector)}
+                    className="flex items-center gap-2 px-2 py-1 bg-gray-700/50 hover:bg-gray-600/50 rounded-lg text-xs transition"
+                  >
+                    <span>{currentModelInfo.icon}</span>
+                    <span className="text-gray-300">{currentModelInfo.name}</span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showModelSelector ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* Model Dropdown */}
+                  <AnimatePresence>
+                    {showModelSelector && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        className="absolute top-full left-0 mt-1 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
+                      >
+                        {AVAILABLE_MODELS.map((model) => (
+                          <button
+                            key={model.id}
+                            onClick={() => {
+                              setSelectedModel(model.id);
+                              setShowModelSelector(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-700/50 transition text-left ${
+                              selectedModel === model.id ? 'bg-purple-600/20 text-purple-300' : 'text-gray-300'
+                            }`}
+                          >
+                            <span>{model.icon}</span>
+                            <div>
+                              <div className="font-medium">{model.name}</div>
+                              <div className="text-[10px] text-gray-500">{model.provider}</div>
+                            </div>
+                            {selectedModel === model.id && (
+                              <span className="ml-auto text-purple-400">✓</span>
+                            )}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                
+                <span className="text-[10px] text-gray-500">
+                  {loading ? 'Processing...' : 'Ready'}
+                </span>
+              </div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
