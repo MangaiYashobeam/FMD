@@ -8,7 +8,7 @@
 
 import { Router, Response, NextFunction } from 'express';
 import { injectionService } from '../services/injection.service';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, authenticate } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { 
   sanitizeString,
@@ -23,6 +23,11 @@ import {
 } from '../utils/admin-security';
 
 const router = Router();
+
+// ============================================
+// SECURITY: Authenticate ALL requests first
+// ============================================
+router.use(authenticate);
 
 // ============================================
 // SECURITY: Require SUPER_ADMIN for ALL routes
