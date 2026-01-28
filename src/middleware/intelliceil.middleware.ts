@@ -85,6 +85,9 @@ const GREEN_ROUTE_BYPASS = [
   '/api/auth/login', '/api/auth/register', '/api/auth/refresh-token',
   '/api/auth/facebook/callback', '/api/facebook/callback',
   '/api/config/facebook',
+  '/auth/login', '/auth/register', '/auth/refresh-token',
+  '/auth/facebook/callback', '/facebook/callback',
+  '/config/facebook',
   
   // Extension GREEN ROUTE
   '/api/extension/', '/extension/',
@@ -92,15 +95,17 @@ const GREEN_ROUTE_BYPASS = [
   // IAI GREEN ROUTE - Critical for soldiers
   '/api/iai/pattern', '/api/iai/metrics', '/api/iai/register',
   '/api/iai/heartbeat', '/api/iai/log-activity', '/api/iai/',
+  '/iai/pattern', '/iai/metrics', '/iai/register',
+  '/iai/heartbeat', '/iai/log-activity', '/iai/',
   
   // Injection GREEN ROUTE
-  '/api/injection/',
+  '/api/injection/', '/injection/',
   
   // Admin GREEN ROUTE
-  '/api/admin/',
+  '/api/admin/', '/admin/',
   
   // Training console
-  '/api/training/',
+  '/api/training/', '/training/',
 ];
 
 /**
