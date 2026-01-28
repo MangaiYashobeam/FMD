@@ -30,6 +30,7 @@ import {
   Repeat,
   MousePointerClick,
   ShieldCheck,
+  Network,
 } from 'lucide-react';
 import { intelliceilApi } from '../../lib/api';
 import { useToast } from '../../contexts/ToastContext';
@@ -39,6 +40,9 @@ const TrafficMap = lazy(() => import('../../components/TrafficMap'));
 
 // Lazy load Enterprise Security tab
 const EnterpriseSecurityTab = lazy(() => import('../../components/admin/EnterpriseSecurityTab'));
+
+// Lazy load Routing Visualization tab
+const RoutingVisualization = lazy(() => import('../../components/admin/RoutingVisualization'));
 
 // Types
 interface ThreatLevel {
@@ -276,7 +280,7 @@ function IPDetailsCard({ location, onBlock, isExpanded, onToggle }: IPDetailsCar
 export default function IntelliceilPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'config' | 'logs' | 'security' | 'enterprise'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'config' | 'logs' | 'security' | 'enterprise' | 'routing'>('overview');
   const [newBlockIP, setNewBlockIP] = useState('');
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
   
@@ -460,19 +464,20 @@ export default function IntelliceilPage() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="flex gap-4">
+        <nav className="flex gap-4 overflow-x-auto">
           {[
             { id: 'overview' as const, label: 'Overview', icon: Activity },
             { id: 'map' as const, label: 'Traffic Map', icon: Globe },
             { id: 'security' as const, label: 'Security Metrics', icon: ShieldAlert },
             { id: 'enterprise' as const, label: 'Enterprise Security', icon: ShieldCheck },
+            { id: 'routing' as const, label: 'Routing', icon: Network },
             { id: 'config' as const, label: 'Configuration', icon: Settings },
             { id: 'logs' as const, label: 'Blocked IPs', icon: Ban },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium ${
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -1324,6 +1329,17 @@ export default function IntelliceilPage() {
           </div>
         }>
           <EnterpriseSecurityTab />
+        </Suspense>
+      )}
+
+      {/* Routing Visualization Tab */}
+      {activeTab === 'routing' && (
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600"></div>
+          </div>
+        }>
+          <RoutingVisualization />
         </Suspense>
       )}
 

@@ -59,6 +59,7 @@ import { schedulerService } from '@/services/scheduler.service';
 import { shutdownEmailQueue } from '@/queues/email.queue';
 import { intelliceilService } from '@/services/intelliceil.service';
 import { intelliceilMiddleware, intelliceilMonitor } from '@/middleware/intelliceil';
+import { intelliceilEnterpriseMiddleware, validateInput, honeypotTrap } from '@/middleware/intelliceil.middleware';
 import intelliceilRoutes from '@/routes/intelliceil.routes';
 import { iipcService } from '@/services/iipc.service';
 import { iipcCheck } from '@/middleware/iipc';
@@ -175,6 +176,16 @@ app.use(trackVisitorSession);
 
 // API-specific Intelliceil protection (blocks malicious traffic)
 app.use('/api', intelliceilMiddleware);
+
+// Honeypot trap endpoints (catch scanners and attackers)
+app.use(honeypotTrap);
+
+// Enterprise Security Middleware - SQL Injection, XSS, Bot Detection, IP Reputation
+// This performs comprehensive security checks on ALL API requests
+app.use('/api', intelliceilEnterpriseMiddleware);
+
+// Input validation middleware - Additional SQL/XSS scanning for request bodies
+app.use('/api', validateInput);
 
 // IP Filtering and suspicious activity tracking (first line of defense for API)
 app.use('/api', ipFilter);
