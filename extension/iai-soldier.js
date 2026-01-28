@@ -2798,6 +2798,39 @@ class IAIStealth {
     });
   }
   
+  /**
+   * ULTRA SPEED DUMP (Paste approach)
+   * Instantly sets value and fires required events for React/FB validation
+   */
+  async dump(element, text) {
+    if (!text && text !== 0) return;
+    const strText = String(text);
+    
+    // Focus
+    element.focus();
+    if (element.click) element.click();
+    
+    // Set value directly
+    try {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+        if (nativeInputValueSetter) {
+            nativeInputValueSetter.call(element, strText);
+        } else {
+            element.value = strText;
+        }
+    } catch(e) {
+        element.value = strText;
+    }
+    
+    // Fire events sequence for validation
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste' }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    element.dispatchEvent(new Event('blur', { bubbles: true }));
+    
+    return true;
+  }
+  
   async typeChar(element, char, currentText) {
     // Key events
     const keydown = new KeyboardEvent('keydown', { key: char, bubbles: true });
@@ -4208,27 +4241,33 @@ async function executeRecordedClick(step) {
 async function executeRecordedType(step) {
   const stealth = new IAIStealth();
   const element = findElementByRecordedData(step.element || step);
-  
-  if (!element) {
-    return { success: false, error: 'Element not found' };
+    
+    if (!element) {
+      return { success: false, error: 'Element not found' };
+    }
+    
+    // Get the text to type (use value from training data or placeholder)
+    const text = step.value || step.text || step.exampleValue || '';
+    
+    if (!text && text !== 0) {
+      return { success: false, error: 'No text to type' };
+    }
+    
+    // Check for dump mode (UltraSpeed or explicit action)
+    if (step.action === 'dump' || step.type === 'dump' || IAI_INJECTION.METADATA?.speedMultiplier >= 3) {
+      await stealth.dump(element, text);
+      return { success: true };
+    }
+    
+    // Focus the element
+    element.focus();
+    await stealth.delay(100, 200);
+    
+    // Type with human-like delays
+    await stealth.type(element, text);
+    
+    return { success: true };
   }
-  
-  // Focus the element
-  element.focus();
-  await stealth.delay(100, 200);
-  
-  // Get the text to type (use value from training data or placeholder)
-  const text = step.value || step.text || step.exampleValue || '';
-  
-  if (!text) {
-    return { success: false, error: 'No text to type' };
-  }
-  
-  // Type with human-like delays
-  await stealth.typeWithHumanBehavior(element, text);
-  
-  return { success: true, action: 'type', length: text.length };
-}
 
 /**
  * Execute a recorded scroll action
