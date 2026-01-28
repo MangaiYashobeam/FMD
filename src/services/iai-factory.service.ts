@@ -701,8 +701,10 @@ class IAIFactoryService {
 
       const instance: Instance = {
         id: instanceId,
+        instanceId,
         blueprintId,
         blueprintName: blueprint.name,
+        soldierId: null,
         status: 'SPAWNING',
         currentPattern,
         assignedCompany: companyId,
@@ -711,6 +713,7 @@ class IAIFactoryService {
         spawnedAt: now.toISOString(),
         lastActiveAt: null,
         expiresAt,
+        terminatedAt: null,
         executionCount: 0,
         successCount: 0,
         errorCount: 0,

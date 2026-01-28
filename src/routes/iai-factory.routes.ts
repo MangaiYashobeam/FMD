@@ -319,7 +319,7 @@ router.put('/blueprints/:id', asyncHandler(async (req: AuthRequest, res: Respons
   }
 
   const blueprint = await iaiFactoryService.updateBlueprint(id, {
-    name, description, type, baseConfig, containerIds, patternIds,
+    name, description, type: type as typeof ALLOWED_BLUEPRINT_TYPES[number] | undefined, baseConfig, containerIds, patternIds,
     hotSwapEnabled, hotSwapPatterns, creationRate, maxConcurrent,
     lifespan, autoRespawn, targeting, schedule, isActive, priority, tags
   });
