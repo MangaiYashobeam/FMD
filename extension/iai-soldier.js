@@ -43,41 +43,41 @@ const IAI_CONFIG = {
     AI_SERVICE: 'https://sag.gemquery.com/api/v1',
   },
   
-  // Human Behavior Simulation - TEST9: 3X FASTER
+  // Human Behavior Simulation - ULTRA SPEED 9X FASTER
   HUMAN: {
     TYPING: {
-      // 3X faster typing for dropdowns
-      DROPDOWN_MIN_DELAY: 3,
-      DROPDOWN_MAX_DELAY: 10,
-      // 3X faster normal typing
-      MIN_DELAY: 12,
-      MAX_DELAY: 40,
-      // 3X faster for descriptions
-      DESC_MIN_DELAY: 2,
-      DESC_MAX_DELAY: 6,
-      TYPO_RATE: 0.005,   // Reduce typos for speed
-      PAUSE_RATE: 0.02,   // Less pauses
-      LONG_PAUSE_PROBABILITY: 0.04,
-      PAUSE_DURATION: { MIN: 30, MAX: 100 },  // 3x faster
+      // 9X faster typing for dropdowns (was 3x, now 3x more)
+      DROPDOWN_MIN_DELAY: 1,
+      DROPDOWN_MAX_DELAY: 3,
+      // 9X faster normal typing
+      MIN_DELAY: 4,
+      MAX_DELAY: 13,
+      // 9X faster for descriptions
+      DESC_MIN_DELAY: 1,
+      DESC_MAX_DELAY: 2,
+      TYPO_RATE: 0,         // No typos for max speed
+      PAUSE_RATE: 0,        // No pauses
+      LONG_PAUSE_PROBABILITY: 0,
+      PAUSE_DURATION: { MIN: 10, MAX: 30 },
     },
     MOUSE: {
-      JITTER: 5,          // Less jitter
-      SCROLL_NOISE: 50,   // Less noise
-      HOVER_TIME: { MIN: 10, MAX: 30 },  // 3x faster
+      JITTER: 2,            // Minimal jitter
+      SCROLL_NOISE: 20,     // Minimal noise
+      HOVER_TIME: { MIN: 3, MAX: 10 },
     },
     TIMING: {
-      ACTION_DELAY: { MIN: 25, MAX: 120 },  // 3x faster
-      PAGE_LOAD_WAIT: { MIN: 300, MAX: 500 },  // 3x faster
-      THINK_TIME: { MIN: 25, MAX: 80 },  // 3x faster
-      SESSION_BREAK: { MIN: 1500, MAX: 6000 },  // 3x faster
-      // Dropdown specific timing - 3X FASTER
-      DROPDOWN_WAIT: 15,        // 3x faster
-      DROPDOWN_MAX_ATTEMPTS: 8, // Fewer retries needed
+      ACTION_DELAY: { MIN: 8, MAX: 40 },    // 9x faster
+      PAGE_LOAD_WAIT: { MIN: 100, MAX: 200 },
+      THINK_TIME: { MIN: 8, MAX: 25 },
+      SESSION_BREAK: { MIN: 500, MAX: 2000 },
+      // Dropdown specific timing - ULTRA FAST
+      DROPDOWN_WAIT: 5,
+      DROPDOWN_MAX_ATTEMPTS: 5,
     },
     SESSION: {
-      MAX_ACTIONS_BEFORE_BREAK: { MIN: 50, MAX: 100 },  // More actions before break
-      BREAK_CHANCE: 0.01,  // 5x less likely to take breaks
-      OCCASIONAL_LONG_PAUSE_CHANCE: 0.02, // 4x less likely
+      MAX_ACTIONS_BEFORE_BREAK: { MIN: 100, MAX: 200 },
+      BREAK_CHANCE: 0,       // No breaks
+      OCCASIONAL_LONG_PAUSE_CHANCE: 0,
     },
   },
   
@@ -212,6 +212,9 @@ function processPatternData(pattern, container) {
         isDefault: pattern.isDefault,
         errorRecovery: patternCode?.errorRecovery || {},
         actions: patternCode?.actions || {},
+        // Pass through pattern metadata for speed/dump mode
+        speedMultiplier: pattern.metadata?.speedMultiplier || patternCode?.speedMultiplier || 100,
+        dumpMode: pattern.metadata?.dumpMode || patternCode?.dumpMode || true,
       },
     };
     
@@ -2799,82 +2802,83 @@ class IAIStealth {
   }
   
   /**
-   * ULTRA SPEED DUMP (Paste approach) - Gemini3 Optimized
-   * Instantly sets value and fires required events for React/FB validation
-   * Handles: input, textarea, contentEditable, React controlled components
+   * ULTRA SPEED DUMP (True Copy/Paste) - Gemini3 Ultra
+   * Uses actual clipboard API for real paste behavior
+   * Falls back to native setter if clipboard fails
    */
   async dump(element, text) {
     if (!text && text !== 0) return false;
     const strText = String(text);
     
-    // Step 1: Focus + Click sequence
+    console.log(`[IAI Dump] ⚡ Starting instant injection of ${strText.length} chars...`);
+    
+    // Step 1: Focus element
     element.focus();
     element.click && element.click();
-    await this.delay(5, 15); // Minimal delay for FB to register focus
     
-    // Step 2: Clear existing content
-    if (element.isContentEditable) {
-      element.textContent = '';
-    } else if (element.value !== undefined) {
-      element.value = '';
-    }
-    
-    // Step 3: Set value using native setter (bypasses React's synthetic events)
+    // Step 2: Try clipboard-based paste (most natural)
+    let pasteSuccess = false;
     try {
-      // For input elements
-      if (element.tagName === 'INPUT' || element.type) {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(element, strText);
-        } else {
-          element.value = strText;
-        }
-      }
-      // For textarea elements  
-      else if (element.tagName === 'TEXTAREA') {
-        const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-        if (nativeTextAreaValueSetter) {
-          nativeTextAreaValueSetter.call(element, strText);
-        } else {
-          element.value = strText;
-        }
-      }
-      // For contentEditable (Facebook's rich text editors)
-      else if (element.isContentEditable) {
-        // Use execCommand for better FB compatibility
-        document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, strText);
-      }
-      // Fallback
-      else {
-        element.value = strText;
-      }
-    } catch(e) {
-      console.warn('[IAI Dump] Native setter failed, using fallback:', e.message);
+      // Write to clipboard
+      await navigator.clipboard.writeText(strText);
+      
+      // Clear any existing content
       if (element.isContentEditable) {
-        element.textContent = strText;
-      } else {
+        document.execCommand('selectAll', false, null);
+      } else if (element.select) {
+        element.select();
+      }
+      
+      // Trigger paste via execCommand (works on most sites)
+      pasteSuccess = document.execCommand('paste');
+      
+      if (!pasteSuccess) {
+        // Try programmatic paste event
+        const pasteEvent = new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: new DataTransfer()
+        });
+        pasteEvent.clipboardData.setData('text/plain', strText);
+        element.dispatchEvent(pasteEvent);
+        pasteSuccess = true;
+      }
+      
+      console.log(`[IAI Dump] ✅ Clipboard paste ${pasteSuccess ? 'succeeded' : 'attempted'}`);
+    } catch (clipboardError) {
+      console.log('[IAI Dump] Clipboard API unavailable, using native setter');
+    }
+    
+    // Step 3: Fallback - Direct value injection (always reliable)
+    if (!pasteSuccess) {
+      try {
+        if (element.tagName === 'INPUT' || element.type) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+          setter ? setter.call(element, strText) : (element.value = strText);
+        } else if (element.tagName === 'TEXTAREA') {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+          setter ? setter.call(element, strText) : (element.value = strText);
+        } else if (element.isContentEditable) {
+          element.textContent = '';
+          document.execCommand('insertText', false, strText);
+        } else {
+          element.value = strText;
+        }
+      } catch (e) {
         element.value = strText;
       }
     }
     
-    // Step 4: Fire comprehensive event sequence for React/FB validation
-    // Order matters: input → change → blur
-    element.dispatchEvent(new Event('focus', { bubbles: true }));
+    // Step 4: Fire events for React/FB validation (minimal set)
     element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-    element.dispatchEvent(new InputEvent('input', { 
-      bubbles: true, 
-      composed: true,
-      inputType: 'insertFromPaste',
-      data: strText 
-    }));
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: strText }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
     
-    // Tiny delay before blur to let FB process
-    await this.delay(10, 25);
+    // Tiny delay then blur
+    await this.delay(5, 10);
     element.dispatchEvent(new Event('blur', { bubbles: true }));
     
-    console.log(`[IAI Dump] ⚡ Injected ${strText.length} chars instantly`);
+    console.log(`[IAI Dump] ⚡ DONE - ${strText.length} chars injected instantly`);
     return true;
   }
   
@@ -4300,20 +4304,22 @@ async function executeRecordedType(step) {
       return { success: false, error: 'No text to type' };
     }
     
-    // Check for dump mode (UltraSpeed or explicit action)
-    if (step.action === 'dump' || step.type === 'dump' || IAI_INJECTION.METADATA?.speedMultiplier >= 3) {
+    // ALWAYS USE DUMP MODE - Instant paste for maximum speed
+    // Dump mode is superior: instant injection vs character-by-character typing
+    const useDump = true; // Force dump mode always
+    
+    if (useDump || step.action === 'dump' || step.type === 'dump' || IAI_INJECTION.METADATA?.dumpMode || IAI_INJECTION.METADATA?.speedMultiplier >= 1) {
+      console.log(`[IAI] ⚡ DUMP MODE: Injecting "${text.substring(0, 30)}..." instantly`);
       await stealth.dump(element, text);
-      return { success: true };
+      return { success: true, mode: 'dump' };
     }
     
-    // Focus the element
+    // Fallback to typing (should never reach here with useDump = true)
     element.focus();
-    await stealth.delay(100, 200);
-    
-    // Type with human-like delays
+    await stealth.delay(30, 60);
     await stealth.type(element, text);
     
-    return { success: true };
+    return { success: true, mode: 'type' };
   }
 
 /**
