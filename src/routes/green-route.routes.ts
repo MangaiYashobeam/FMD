@@ -125,6 +125,38 @@ router.use(greenRouteVerify);
 router.use(greenRouteLogger);
 
 // ============================================
+// CORS Headers for Extension Content Scripts
+// Green routes are mounted BEFORE global CORS middleware,
+// so we need explicit CORS headers for cross-origin requests
+// ============================================
+router.use((req, res, next) => {
+  // Allow cross-origin requests from Facebook and our domains
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://www.facebook.com',
+    'https://facebook.com',
+    'https://m.facebook.com',
+    'https://dealersface.com',
+    'https://www.dealersface.com',
+  ];
+  
+  if (!origin || allowedOrigins.includes(origin) || origin.startsWith('chrome-extension://')) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  // Handle preflight OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  
+  next();
+});
+
+// ============================================
 // HEALTH & STATUS
 // ============================================
 

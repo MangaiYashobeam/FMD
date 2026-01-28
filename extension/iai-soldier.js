@@ -1619,7 +1619,14 @@ async function executeInjectedWorkflow(vehicleData) {
     // Only process steps for fields not yet filled
     for (let i = 0; i < IAI_INJECTION.WORKFLOW.length; i++) {
       const step = IAI_INJECTION.WORKFLOW[i];
+      const stepType = step.type || step.action;
       const fieldType = step.fieldType || step.field;
+      
+      // SKIP navigation and wait steps in Phase 2 - we're already on the page
+      if (stepType === 'navigate' || stepType === 'wait') {
+        console.log(`[IAI] ⏭ Skipping ${stepType} step in Phase 2`);
+        continue;
+      }
       
       // Skip if already filled in Phase 1
       if (fieldType && filledFields.has(fieldType)) {
@@ -1778,7 +1785,14 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
       return { success: true };
       
     case 'navigate':
-      window.location.href = step.url || step.destination;
+      // SKIP navigation if we're already on the target page
+      const targetUrl = step.url || step.destination;
+      if (targetUrl && window.location.href.includes('marketplace/create/vehicle')) {
+        console.log('[IAI] ⏭ Skipping navigate step - already on vehicle listing page');
+        return { success: true, skipped: true };
+      }
+      console.log(`[IAI] 🔗 Navigating to: ${targetUrl}`);
+      window.location.href = targetUrl;
       return { success: true };
       
     default:
