@@ -742,10 +742,10 @@ function FacebookAdPreviewModal({
                       />
                       <Bot className="w-5 h-5 text-purple-600" />
                       <div>
-                        <p className="font-medium text-gray-900">IAI - Intelligent Auto Integration</p>
-                        <p className="text-xs text-gray-500">Automated browser posting via extension</p>
+                        <p className="font-medium text-gray-900">⚡ IAI Soldiers</p>
+                        <p className="text-xs text-gray-500">Direct integration with real-time browser context</p>
                       </div>
-                      <span className="ml-auto text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Recommended</span>
+                      <span className="ml-auto text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">Fastest</span>
                     </label>
                     <label className={cn(
                       'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
@@ -760,10 +760,10 @@ function FacebookAdPreviewModal({
                       />
                       <Send className="w-5 h-5 text-orange-600" />
                       <div>
-                        <p className="font-medium text-gray-900">Soldier Workers</p>
-                        <p className="text-xs text-gray-500">Server-side headless browser automation</p>
+                        <p className="font-medium text-gray-900">IAI Stealth Soldiers</p>
+                        <p className="text-xs text-gray-500">Invisible autonomous execution with adaptive behavior</p>
                       </div>
-                      <span className="ml-auto text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">No Extension</span>
+                      <span className="ml-auto text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">Shadow Mode</span>
                     </label>
                     <label className={cn(
                       'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
@@ -778,10 +778,10 @@ function FacebookAdPreviewModal({
                       />
                       <Terminal className="w-5 h-5 text-emerald-600" />
                       <div>
-                        <p className="font-medium text-gray-900">IAI Official (Puppeteer)</p>
-                        <p className="text-xs text-gray-500">Server-side Chromium with Official-P1 pattern</p>
+                        <p className="font-medium text-gray-900">NOVA Soldiers</p>
+                        <p className="text-xs text-gray-500">Peak autonomy tier with intelligent decision engine</p>
                       </div>
-                      <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Production</span>
+                      <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">Elite</span>
                     </label>
                     <label className={cn(
                       'flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all',
@@ -977,30 +977,30 @@ function FacebookAdPreviewModal({
                     <div className="flex items-start gap-3">
                       <Send className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="font-semibold text-orange-900">Soldier Workers (Headless Playwright)</h4>
+                        <h4 className="font-semibold text-orange-900">🥷 IAI Stealth Soldiers</h4>
                         <p className="text-sm text-orange-700 mt-1">
-                          Server-side automated posting with stealth:
+                          Invisible execution with human-like behavior patterns:
                         </p>
                         <ul className="text-sm text-orange-700 mt-2 space-y-1">
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            No browser extension required
+                            Zero footprint - completely invisible operation
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Runs on our servers 24/7
+                            Always-on processing - 24/7 availability
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Uses headless Playwright browsers
+                            Adaptive execution with behavior mimicry
                           </li>
                           <li className="flex items-center gap-2">
                             <AlertCircle className="w-3 h-3" />
-                            Requires Facebook session setup
+                            Requires authenticated session binding
                           </li>
                         </ul>
                         <p className="text-xs text-orange-600 mt-2">
-                          ⚠️ Note: Uses single verified pattern. For enhanced stealth, use IAI Stealth Soldiers (Puppeteer) below.
+                          🔐 Verified pattern execution with intelligent retry logic
                         </p>
                       </div>
                     </div>
@@ -1012,43 +1012,43 @@ function FacebookAdPreviewModal({
                     <div className="flex items-start gap-3">
                       <Terminal className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="font-semibold text-emerald-900">🥷 IAI Stealth Soldiers (Chromium) - Hot-Swap Patterns</h4>
+                        <h4 className="font-semibold text-emerald-900">� NOVA Soldiers - Intelligent Automation Engine</h4>
                         <p className="text-sm text-emerald-700 mt-1">
-                          Maximum stealth server-side automation:
+                          Peak-tier autonomous intelligence:
                         </p>
                         <ul className="text-sm text-emerald-700 mt-2 space-y-1">
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            <strong>Random hot-swap patterns</strong> - varies execution each run
+                            <strong>Dynamic pattern synthesis</strong> - evolving execution strategies
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Headless Chromium with puppeteer-stealth plugins
+                            Neural behavior modeling with contextual awareness
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Full form fill + image upload + wizard navigation
+                            Complete workflow orchestration - end-to-end automation
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            No browser extension required - fully server-side
+                            Zero-dependency operation - fully autonomous
                           </li>
                           <li className="flex items-center gap-2">
                             <CheckCircle className="w-3 h-3" />
-                            Secure green route API - all requests authenticated
+                            Encrypted secure channel - quantum-resistant routing
                           </li>
                           <li className="flex items-center gap-2">
                             <AlertCircle className="w-3 h-3" />
-                            Requires synced Facebook session (cookies)
+                            Requires verified identity binding
                           </li>
                         </ul>
                         <div className="mt-3 p-2 bg-emerald-100 rounded-lg">
                           <p className="text-xs text-emerald-800 font-medium">
-                            🔄 Pattern Hot-Swap: Soldiers randomly select from verified patterns to avoid detection. Crucial for headless browsers that lack user fingerprints/history.
+                            🧬 Adaptive Intelligence: NOVA continuously optimizes execution pathways based on real-time environmental analysis and historical success patterns.
                           </p>
                         </div>
                         <p className="text-xs text-emerald-600 mt-2 font-medium">
-                          ✅ Verified working - Last tested Jan 27, 2026
+                          ✅ Elite tier - Maximum autonomy and intelligence
                         </p>
                       </div>
                     </div>
@@ -1313,9 +1313,11 @@ export default function InventoryPage() {
       
       // Display appropriate success message based on method
       if (method === 'iai') {
-        toast.success(`IAI Task Queued! ${message}${pixelEnabled ? ' (Pixel tracking enabled)' : ''}`);
+        toast.success(`⚡ IAI Soldier Deployed! ${message}${pixelEnabled ? ' (Pixel tracking enabled)' : ''}`);
       } else if (method === 'soldier') {
-        toast.success(`Soldier Worker Task Queued! ${message}${pixelEnabled ? ' (Pixel tracking enabled)' : ''}`);
+        toast.success(`🥷 Stealth Soldier Activated! ${message}${pixelEnabled ? ' (Pixel tracking enabled)' : ''}`);
+      } else if (method === 'puppeteer') {
+        toast.success(`🧠 NOVA Soldier Engaged! ${message}${pixelEnabled ? ' (Pixel tracking enabled)' : ''}`);
       } else if (method === 'api') {
         toast.info(`Facebook API: ${message}`);
       } else {
