@@ -126,14 +126,8 @@ export const intelliceilEnterpriseMiddleware = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // DEBUG: Log path checking
-    const isGreen = isGreenRoutePath(req.path);
-    if (req.path.includes('iai') || req.path.includes('pattern')) {
-      logger.info(`[Intelliceil] Path check: ${req.path} -> GREEN: ${isGreen}`);
-    }
-    
     // GREEN ROUTE BYPASS - Skip ALL security checks for critical infrastructure
-    if (isGreen) {
+    if (isGreenRoutePath(req.path)) {
       next();
       return;
     }
