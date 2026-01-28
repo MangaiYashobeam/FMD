@@ -168,50 +168,6 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
       lastPing: new Date(),
       userEmail: req.user!.email,
     });
-
-    // Ensure an IAI Soldier record exists for this extension
-    // This provides a fallback for extensions that only call /api/extension/heartbeat
-    try {
-      const existingSoldier = await prisma.iAISoldier.findFirst({
-        where: {
-          accountId,
-          userId: req.user!.id,
-          executionSource: 'EXTENSION',
-        },
-      });
-
-      if (existingSoldier) {
-        await prisma.iAISoldier.update({
-          where: { id: existingSoldier.id },
-          data: {
-            status: 'ONLINE',
-            lastHeartbeatAt: new Date(),
-          },
-        });
-      } else {
-        const lastSoldier = await prisma.iAISoldier.findFirst({
-          orderBy: { soldierNumber: 'desc' },
-        });
-        const nextNumber = (lastSoldier?.soldierNumber || 0) + 1;
-
-        await prisma.iAISoldier.create({
-          data: {
-            soldierId: `IAI-${nextNumber - 1}`,
-            accountId,
-            userId: req.user!.id,
-            status: 'ONLINE',
-            executionSource: 'EXTENSION',
-            genre: 'SOLDIER',
-            mode: 'USM',
-            lastHeartbeatAt: new Date(),
-            sessionStartAt: new Date(),
-            totalSessions: 1,
-          },
-        });
-      }
-    } catch (soldierError) {
-      logger.warn('Failed to ensure IAI Soldier record during extension heartbeat', { error: soldierError });
-    }
     
     res.json({ success: true, timestamp: new Date() });
   } catch (error) {

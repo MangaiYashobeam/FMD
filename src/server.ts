@@ -174,6 +174,28 @@ app.use(async (req, res, next) => {
 // This enables full session analytics for non-authenticated visitors
 app.use(trackVisitorSession);
 
+// ============================================
+// VITAL ORGANS - GREEN ROUTE & IAI BYPASS
+// ============================================
+// These routes MUST be defined before security middleware to prevent lockout
+// They implement their own strict security (signatures/tokens)
+
+// 1. Green Route - Encrypted Tunnel (Bypasses WAF/IP Filter)
+// Uses its own body parsing and signature verification
+app.use('/api/green', express.json({limit: '50mb'}), require('./routes/green-route.routes').default);
+
+// 2. IAI Soldier Heartbeat & Registration (Critical for automation)
+// We hoist this to ensure soldiers can report in even under high security mode/attack
+// Note: We use express.json() here because global parser is applied later to /api
+app.use('/api/extension/iai', express.json({limit: '50mb'}), ring5AuthBarrier, require('./routes/iai.routes').default);
+
+// 3. Extension Token Exchange (Critical for auth recovery)
+app.use('/api/extension/token', express.json(), require('./routes/extension-token.routes').default);
+
+// ============================================
+// END VITAL ORGANS
+// ============================================
+
 // API-specific Intelliceil protection (blocks malicious traffic)
 app.use('/api', intelliceilMiddleware);
 
