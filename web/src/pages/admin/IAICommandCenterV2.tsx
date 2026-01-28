@@ -825,11 +825,29 @@ export default function IAICommandCenterV2() {
               <div className="bg-slate-800 rounded-xl border border-slate-700 p-12 text-center">
                 <Eye className="w-16 h-16 text-slate-600 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-white mb-2">No Soldiers Found</h3>
-                <p className="text-slate-400">
+                <p className="text-slate-400 mb-4">
                   {statusFilter === 'all'
                     ? 'No IAI soldiers registered yet. Install and authenticate the extension to see soldiers here.'
                     : `No soldiers with status "${statusFilter}"`}
                 </p>
+                {statusFilter === 'all' && (
+                  <div className="bg-slate-700/50 rounded-lg p-4 mt-4 border border-slate-600">
+                    <p className="text-slate-300 text-sm mb-3">
+                      <strong>💡 Using USM (Ultra Speed Mode)?</strong>
+                    </p>
+                    <p className="text-slate-400 text-sm mb-3">
+                      USM instances run through the <strong>IAI Factory</strong> panel, not here.
+                      The Soldiers tab is for browser extension-based automation.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('factory')}
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Cpu className="w-4 h-4 inline mr-2" />
+                      Go to IAI Factory
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </>

@@ -155,9 +155,9 @@ class NovaController:
         self.last_screenshot: Optional[str] = None
         self.last_action_time = 0
         
-        # Rate limiting
-        self.min_action_delay_ms = 100  # Minimum delay between actions
-        self.human_delay_range = (50, 200)  # Random human-like delay
+        # Rate limiting - 3X FASTER (USM Speed Mode)
+        self.min_action_delay_ms = 33  # Minimum delay between actions (was 100ms, now ~33ms)
+        self.human_delay_range = (16, 66)  # Random human-like delay (was 50-200ms, now ~16-66ms)
         
         # Facebook-specific selectors (can be updated via learning)
         self.fb_selectors = {
@@ -337,7 +337,7 @@ class NovaController:
         selector = req.get("selector", "")
         value = req.get("value", "")
         clear_first = req.get("clear_first", True)
-        delay = req.get("delay", 30)  # ms between keystrokes
+        delay = req.get("delay", 10)  # ms between keystrokes - 3X FASTER (was 30ms)
         
         if not selector:
             return ActionResult(success=False, action="type", error="Selector required")
@@ -626,7 +626,7 @@ class NovaController:
         try:
             await self.page.wait_for_selector(input_selector, timeout=10000)
             await self.page.click(input_selector)
-            await self.page.type(input_selector, message, delay=30)
+            await self.page.type(input_selector, message, delay=10)  # 3X FASTER (was 30ms)
             
             # Press Enter to send
             await self.page.keyboard.press("Enter")
