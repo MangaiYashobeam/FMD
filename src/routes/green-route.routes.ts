@@ -374,6 +374,250 @@ router.get('/status', async (_req, res) => {
 });
 
 // ============================================
+// IAI STEALTH SOLDIERS - VPS Browser Automation
+// Green Route proxy to Python workers
+// Placed BEFORE authenticate middleware for internal worker access
+// ============================================
+
+const WORKER_API_BASE = process.env.WORKER_API_BASE || 'http://worker-api:8000';
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
+
+// Type for worker API responses
+interface WorkerResponse {
+  success?: boolean;
+  session_id?: string;
+  browser_id?: string;
+  status?: string;
+  has_saved_session?: boolean;
+  message?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * POST /api/green/stealth/create
+ * Create a new stealth browser session
+ */
+router.post('/stealth/create', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { headless = true, proxy = null, userAgent = null, loadSession = false, accountId } = req.body;
+    
+    logger.info('[Green Stealth] Creating browser session...');
+    
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Worker-Secret': WORKER_SECRET,
+      },
+      body: JSON.stringify({ 
+        headless, 
+        proxy, 
+        user_agent: userAgent, 
+        load_session: loadSession,
+        account_id: accountId || 'default'
+      }),
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      success: data.success || false,
+      sessionId: data.session_id,  // Use session_id - this is the correct ID for all operations
+      browserId: data.browser_id,  // Keep for backwards compatibility
+      status: data.status,
+      hasSavedSession: data.has_saved_session,
+      message: data.message,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] Create browser error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create stealth browser' });
+  }
+});
+
+/**
+ * POST /api/green/stealth/:id/action
+ * Execute action in stealth browser
+ */
+router.post('/stealth/:id/action', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const action = req.body;
+    
+    logger.info(`[Green Stealth] Action on ${id}:`, action.action);
+    
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Worker-Secret': WORKER_SECRET,
+      },
+      body: JSON.stringify(action),
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      ...data,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] Action error:', error);
+    res.status(500).json({ success: false, error: 'Failed to execute stealth action' });
+  }
+});
+
+/**
+ * GET /api/green/stealth/:id/state
+ * Get stealth browser state
+ */
+router.get('/stealth/:id/state', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/state`, {
+      headers: { 'X-Worker-Secret': WORKER_SECRET },
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      ...data,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] State error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get stealth state' });
+  }
+});
+
+/**
+ * GET /api/green/stealth/:id/screenshot
+ * Get stealth browser screenshot
+ */
+router.get('/stealth/:id/screenshot', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/screenshot`, {
+      headers: { 'X-Worker-Secret': WORKER_SECRET },
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      ...data,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] Screenshot error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get screenshot' });
+  }
+});
+
+/**
+ * GET /api/green/stealth/:id/html
+ * Get stealth browser HTML
+ */
+router.get('/stealth/:id/html', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/html`, {
+      headers: { 'X-Worker-Secret': WORKER_SECRET },
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      ...data,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] HTML error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get HTML' });
+  }
+});
+
+/**
+ * POST /api/green/stealth/:id/vision
+ * AI vision analysis of stealth browser
+ */
+router.post('/stealth/:id/vision', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { prompt } = req.body;
+    
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/vision`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Worker-Secret': WORKER_SECRET,
+      },
+      body: JSON.stringify({ prompt }),
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      ...data,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] Vision error:', error);
+    res.status(500).json({ success: false, error: 'Failed to analyze with vision' });
+  }
+});
+
+/**
+ * DELETE /api/green/stealth/:id
+ * Close stealth browser session
+ */
+router.delete('/stealth/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}`, {
+      method: 'DELETE',
+      headers: { 'X-Worker-Secret': WORKER_SECRET },
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      ...data,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] Delete error:', error);
+    res.status(500).json({ success: false, error: 'Failed to close browser' });
+  }
+});
+
+/**
+ * GET /api/green/stealth/pool
+ * Get stealth browser pool status
+ */
+router.get('/stealth/pool', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const response = await fetch(`${WORKER_API_BASE}/api/browser/pool`, {
+      headers: { 'X-Worker-Secret': WORKER_SECRET },
+    });
+    
+    const data = await response.json() as WorkerResponse;
+    
+    res.json({
+      ...data,
+      greenRoute: true,
+    });
+  } catch (error) {
+    logger.error('[Green Stealth] Pool status error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get pool status' });
+  }
+});
+
+// ============================================
 // AUTHENTICATED ROUTES
 // ============================================
 
@@ -973,246 +1217,6 @@ router.post('/fbm-posts/event', async (req: Request, res: Response): Promise<voi
       success: false, 
       error: 'Failed to add FBM event' 
     });
-  }
-});
-
-// ============================================
-// IAI STEALTH SOLDIERS - VPS Browser Automation
-// Green Route proxy to Python workers
-// ============================================
-
-const WORKER_API_BASE = process.env.WORKER_API_BASE || 'http://worker-api:8000';
-const WORKER_SECRET = process.env.WORKER_SECRET || '';
-
-// Type for worker API responses
-interface WorkerResponse {
-  success?: boolean;
-  browser_id?: string;
-  message?: string;
-  error?: string;
-  [key: string]: any;
-}
-
-/**
- * POST /api/green/stealth/create
- * Create a new stealth browser session
- */
-router.post('/stealth/create', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { headless = true, proxy = null, userAgent = null, loadSession = false, accountId } = req.body;
-    
-    logger.info('[Green Stealth] Creating browser session...');
-    
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Worker-Secret': WORKER_SECRET,
-      },
-      body: JSON.stringify({ 
-        headless, 
-        proxy, 
-        user_agent: userAgent, 
-        load_session: loadSession,
-        account_id: accountId || 'default'
-      }),
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      success: data.success || false,
-      sessionId: data.session_id,  // Use session_id - this is the correct ID for all operations
-      browserId: data.browser_id,  // Keep for backwards compatibility
-      status: data.status,
-      hasSavedSession: data.has_saved_session,
-      message: data.message,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] Create browser error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create stealth browser' });
-  }
-});
-
-/**
- * POST /api/green/stealth/:id/action
- * Execute action in stealth browser
- */
-router.post('/stealth/:id/action', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const action = req.body;
-    
-    logger.info(`[Green Stealth] Action on ${id}:`, action.action);
-    
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/action`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Worker-Secret': WORKER_SECRET,
-      },
-      body: JSON.stringify(action),
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      ...data,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] Action error:', error);
-    res.status(500).json({ success: false, error: 'Failed to execute stealth action' });
-  }
-});
-
-/**
- * GET /api/green/stealth/:id/state
- * Get stealth browser state
- */
-router.get('/stealth/:id/state', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/state`, {
-      headers: { 'X-Worker-Secret': WORKER_SECRET },
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      ...data,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] State error:', error);
-    res.status(500).json({ success: false, error: 'Failed to get stealth state' });
-  }
-});
-
-/**
- * GET /api/green/stealth/:id/screenshot
- * Get stealth browser screenshot
- */
-router.get('/stealth/:id/screenshot', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/screenshot`, {
-      headers: { 'X-Worker-Secret': WORKER_SECRET },
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      ...data,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] Screenshot error:', error);
-    res.status(500).json({ success: false, error: 'Failed to get screenshot' });
-  }
-});
-
-/**
- * GET /api/green/stealth/:id/html
- * Get stealth browser HTML
- */
-router.get('/stealth/:id/html', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/html`, {
-      headers: { 'X-Worker-Secret': WORKER_SECRET },
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      ...data,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] HTML error:', error);
-    res.status(500).json({ success: false, error: 'Failed to get HTML' });
-  }
-});
-
-/**
- * POST /api/green/stealth/:id/vision
- * AI vision analysis of stealth browser
- */
-router.post('/stealth/:id/vision', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const { prompt } = req.body;
-    
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}/vision`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Worker-Secret': WORKER_SECRET,
-      },
-      body: JSON.stringify({ prompt }),
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      ...data,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] Vision error:', error);
-    res.status(500).json({ success: false, error: 'Failed to analyze with vision' });
-  }
-});
-
-/**
- * DELETE /api/green/stealth/:id
- * Close stealth browser session
- */
-router.delete('/stealth/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/${id}`, {
-      method: 'DELETE',
-      headers: { 'X-Worker-Secret': WORKER_SECRET },
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      ...data,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] Delete error:', error);
-    res.status(500).json({ success: false, error: 'Failed to close browser' });
-  }
-});
-
-/**
- * GET /api/green/stealth/pool
- * Get stealth browser pool status
- */
-router.get('/stealth/pool', async (_req: Request, res: Response): Promise<void> => {
-  try {
-    const response = await fetch(`${WORKER_API_BASE}/api/browser/pool`, {
-      headers: { 'X-Worker-Secret': WORKER_SECRET },
-    });
-    
-    const data = await response.json() as WorkerResponse;
-    
-    res.json({
-      ...data,
-      greenRoute: true,
-    });
-  } catch (error) {
-    logger.error('[Green Stealth] Pool status error:', error);
-    res.status(500).json({ success: false, error: 'Failed to get pool status' });
   }
 });
 
