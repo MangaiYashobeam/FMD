@@ -927,22 +927,76 @@ class NovaToolingService {
   } = {}): Promise<{ success: boolean; data?: any[]; error?: string; count?: number }> {
     const { limit = 20, where, select, orderBy } = options;
 
-    // Whitelist of allowed tables
-    const allowedTables = [
-      'users', 'accounts', 'account_users', 'vehicles', 'leads', 'messages',
-      'fb_accounts', 'fb_marketplace_posts', 'ai_user_memories', 'ai_chat_sessions',
-      'iai_soldiers', 'iai_tasks', 'api_keys', 'subscriptions', 'error_logs'
-    ];
+    // Map of allowed table names to Prisma model names
+    const tableToModel: Record<string, string> = {
+      // User tables
+      'users': 'user',
+      'user': 'user',
+      'accounts': 'account',
+      'account': 'account',
+      'account_users': 'accountUser',
+      'accountuser': 'accountUser',
+      'accountusers': 'accountUser',
+      
+      // Vehicle & Listings
+      'vehicles': 'vehicle',
+      'vehicle': 'vehicle',
+      'leads': 'lead',
+      'lead': 'lead',
+      
+      // Facebook
+      'fb_accounts': 'fBAccount',
+      'fbaccount': 'fBAccount',
+      'fbaccounts': 'fBAccount',
+      'fb_marketplace_posts': 'fBMarketplacePost',
+      'fbmarketplacepost': 'fBMarketplacePost',
+      
+      // AI System
+      'ai_user_memories': 'aIUserMemory',
+      'aiusermemory': 'aIUserMemory',
+      'ai_chat_sessions': 'aIChatSession',
+      'aichatsession': 'aIChatSession',
+      'ai_thought_logs': 'aIThoughtLog',
+      
+      // IAI System
+      'iai_soldiers': 'iAISoldier',
+      'iaisoldier': 'iAISoldier',
+      'iai_tasks': 'iAITask',
+      'iaitask': 'iAITask',
+      'iai_activity_logs': 'iAIActivityLog',
+      
+      // System
+      'api_keys': 'aPIKey',
+      'apikey': 'aPIKey',
+      'subscriptions': 'subscription',
+      'subscription': 'subscription',
+      'visitors': 'visitor',
+      'visitor': 'visitor',
+      'refresh_tokens': 'refreshToken',
+      'refreshtoken': 'refreshToken',
+      'email_logs': 'emailLog',
+      'emaillog': 'emailLog',
+      'audit_logs': 'auditLog',
+      'auditlog': 'auditLog',
+    };
 
-    if (!allowedTables.includes(tableName.toLowerCase())) {
-      return { success: false, error: `Table '${tableName}' is not accessible` };
+    const normalizedTable = tableName.toLowerCase().replace(/[_-]/g, '');
+    const modelName = tableToModel[tableName.toLowerCase()] || tableToModel[normalizedTable];
+    
+    if (!modelName) {
+      // List available tables for user
+      const availableTables = Object.keys(tableToModel).filter(k => !k.includes('_') || k.includes('_')).slice(0, 20);
+      return { 
+        success: false, 
+        error: `Table '${tableName}' is not accessible. Available tables: ${availableTables.join(', ')}` 
+      };
     }
 
     try {
       // Use Prisma's model-based querying for safety
-      const model = (prisma as any)[tableName];
+      const model = (prisma as any)[modelName];
       if (!model) {
-        return { success: false, error: `Table '${tableName}' not found in schema` };
+        return { success: false, error: `Prisma model '${modelName}' not found for table '${tableName}'` };
       }
 
       const query: any = {
@@ -956,12 +1010,24 @@ class NovaToolingService {
       const data = await model.findMany(query);
       const count = await model.count(where ? { where } : undefined);
 
-      logger.info(`[Nova Tools] Database query on ${tableName}: ${data.length} rows`);
+      logger.info(`[Nova Tools] Database query on ${tableName} (model: ${modelName}): ${data.length} rows, total: ${count}`);
 
-      return { success: true, data, count };
+      // Sanitize sensitive fields
+      const sanitizedData = data.map((row: any) => {
+        const clean = { ...row };
+        // Remove sensitive fields
+        delete clean.passwordHash;
+        delete clean.password_hash;
+        delete clean.twoFactorSecret;
+        delete clean.accessToken;
+        delete clean.refreshToken;
+        return clean;
+      });
+
+      return { success: true, data: sanitizedData, count };
     } catch (error: any) {
-      logger.error(`[Nova Tools] Database query failed:`, error);
-      return { success: false, error: error.message };
+      logger.error(`[Nova Tools] Database query failed on ${tableName}:`, error);
+      return { success: false, error: `Database error: ${error.message}` };
     }
   }
 

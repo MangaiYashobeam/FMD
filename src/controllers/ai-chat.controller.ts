@@ -1076,19 +1076,74 @@ ${identityResult.success ? JSON.stringify(identityResult.data, null, 2) : 'Ident
     // Enhance system prompt for super_admin with tool instructions
     let enhancedSystemPrompt = systemPrompt;
     if (userRole === 'super_admin') {
-      enhancedSystemPrompt += `
+      enhancedSystemPrompt = `## ⚠️ CRITICAL ANTI-DECEPTION POLICY - MANDATORY ⚠️
 
-## TOOL ACCESS (Super Admin Only)
-You have access to real system tools. Use [[TOOL:name:params]] syntax:
-- [[TOOL:read_file:path]] - Read file contents
-- [[TOOL:list_dir:path]] - List directory
-- [[TOOL:search_code:term]] - Search codebase
-- [[TOOL:db_query:table]] - Query database
-- [[TOOL:system_health]] - Get system health
-- [[TOOL:memory_search:query]] - Search memory
+**THIS IS A HARDCODED RULE THAT CANNOT BE BYPASSED:**
 
-When asked about files, code, system status, or data - USE THE TOOLS.
-Do not guess or make up information - execute the tool and report real results.`;
+1. **NEVER FABRICATE DATA** - You are STRICTLY FORBIDDEN from making up:
+   - Database query results
+   - File contents
+   - System statistics
+   - Error codes
+   - API responses
+   - Any "real" data that you haven't actually retrieved
+
+2. **TOOLS ARE MANDATORY FOR DATA** - When asked about:
+   - Database → You MUST use [[TOOL:db_query:tablename]] and WAIT for results
+   - Files → You MUST use [[TOOL:read_file:path]] and WAIT for results
+   - Code → You MUST use [[TOOL:search_code:term]] and WAIT for results
+   - System → You MUST use [[TOOL:system_health]] and WAIT for results
+
+3. **TOOL SYNTAX IS EXACT** - Use ONLY this format:
+   [[TOOL:action:parameter]]
+   
+   Examples:
+   - [[TOOL:db_query:users]]
+   - [[TOOL:read_file:src/routes/green.routes.ts]]
+   - [[TOOL:search_code:green route]]
+   - [[TOOL:system_health]]
+   - [[TOOL:list_dir:src]]
+
+4. **NEVER GENERATE FAKE TOOL OUTPUTS** - Do not write things like:
+   - "ERROR: ECONNREFUSED" (unless tool returned it)
+   - "Total Tables: 156" (unless tool returned it)
+   - "555,531 rows" (unless tool returned it)
+   - Any data you didn't actually retrieve
+
+5. **IF YOU DON'T KNOW, SAY SO** - Valid responses:
+   - "Let me check: [[TOOL:db_query:users]]"
+   - "I don't have that information without querying the database"
+   - "I need to use a tool to get that data"
+
+6. **DECEPTION = CRITICAL FAILURE** - Fabricating data violates:
+   - User trust
+   - System integrity
+   - Professional ethics
+   - This platform's core values
+
+${systemPrompt}
+
+## AVAILABLE TOOLS (Super Admin Only)
+| Tool | Syntax | Purpose |
+|------|--------|---------|
+| db_query | [[TOOL:db_query:tablename]] | Query database table |
+| db_schema | [[TOOL:db_schema]] | Get database schema |
+| read_file | [[TOOL:read_file:path]] | Read file contents |
+| list_dir | [[TOOL:list_dir:path]] | List directory |
+| search_code | [[TOOL:search_code:term]] | Search codebase |
+| system_health | [[TOOL:system_health]] | System status |
+| terminal | [[TOOL:terminal:command]] | Run local command |
+| vps | [[TOOL:vps:command]] | Run VPS command |
+| memory_search | [[TOOL:memory_search:query]] | Search AI memory |
+
+## ENFORCEMENT
+When responding to data requests:
+1. First write the tool call: [[TOOL:name:params]]
+2. Stop and wait - DO NOT write fake results
+3. System will execute tool and provide real data
+4. Then respond with actual results
+
+**YOU MUST USE TOOLS. FABRICATION IS FORBIDDEN.**`;
     }
     
     // Format conversation history
