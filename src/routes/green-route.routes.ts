@@ -999,7 +999,7 @@ interface WorkerResponse {
  */
 router.post('/stealth/create', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { headless = true, proxy = null, userAgent = null, loadSession = false } = req.body;
+    const { headless = true, proxy = null, userAgent = null, loadSession = false, accountId } = req.body;
     
     logger.info('[Green Stealth] Creating browser session...');
     
@@ -1009,14 +1009,23 @@ router.post('/stealth/create', async (req: Request, res: Response): Promise<void
         'Content-Type': 'application/json',
         'X-Worker-Secret': WORKER_SECRET,
       },
-      body: JSON.stringify({ headless, proxy, user_agent: userAgent, load_session: loadSession }),
+      body: JSON.stringify({ 
+        headless, 
+        proxy, 
+        user_agent: userAgent, 
+        load_session: loadSession,
+        account_id: accountId || 'default'
+      }),
     });
     
     const data = await response.json() as WorkerResponse;
     
     res.json({
       success: data.success || false,
-      browserId: data.browser_id,
+      sessionId: data.session_id,  // Use session_id - this is the correct ID for all operations
+      browserId: data.browser_id,  // Keep for backwards compatibility
+      status: data.status,
+      hasSavedSession: data.has_saved_session,
       message: data.message,
       greenRoute: true,
     });
