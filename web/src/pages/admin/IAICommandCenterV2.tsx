@@ -30,6 +30,7 @@ import IAIPrototypePanel from './IAIPrototypePanel';
 import IAITrainingPanel from './IAITrainingPanel';
 import IAIInjectionPanel from './IAIInjectionPanel';
 import IAIMissionControlPanel from './IAIMissionControlPanel';
+import IAIFactoryControlPanel from './IAIFactoryControlPanel';
 
 // ============================================
 // Types
@@ -509,7 +510,7 @@ function SystemDashboard({ systemInfo }: { systemInfo: SystemInfo | undefined })
 
 export default function IAICommandCenterV2() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'soldiers' | 'system' | 'prototype' | 'training' | 'injection' | 'mission-control'>('soldiers');
+  const [activeTab, setActiveTab] = useState<'soldiers' | 'system' | 'prototype' | 'training' | 'injection' | 'mission-control' | 'factory'>('soldiers');
   const queryClient = useQueryClient();
 
   const {
@@ -729,6 +730,17 @@ export default function IAICommandCenterV2() {
               <Target className="w-4 h-4 inline mr-2" />
               Mission Control
             </button>
+            <button
+              onClick={() => setActiveTab('factory')}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
+                activeTab === 'factory'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+              }`}
+            >
+              <Cpu className="w-4 h-4 inline mr-2" />
+              IAI Factory
+            </button>
           </div>
         </div>
       </div>
@@ -829,6 +841,8 @@ export default function IAICommandCenterV2() {
           <IAIInjectionPanel />
         ) : activeTab === 'mission-control' ? (
           <IAIMissionControlPanel />
+        ) : activeTab === 'factory' ? (
+          <IAIFactoryControlPanel />
         ) : (
           <IAIPrototypePanel />
         )}

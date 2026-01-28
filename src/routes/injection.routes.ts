@@ -320,7 +320,7 @@ router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Resp
 // ============================================
 
 // Allowed code types (whitelist)
-const ALLOWED_CODE_TYPES = ['javascript', 'json', 'workflow', 'selector', 'template'] as const;
+const ALLOWED_CODE_TYPES = ['javascript', 'json', 'workflow', 'selector', 'template', 'injection', 'action', 'extractor', 'transformer', 'hybrid'] as const;
 
 router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize all inputs - patterns contain executable code so require super admin (enforced above)

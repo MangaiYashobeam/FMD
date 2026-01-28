@@ -1059,6 +1059,9 @@ app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default)
 // IAI Injection System - Pattern/Container management (requires admin)
 app.use('/api/injection', ring5AuthBarrier, require('./routes/injection.routes').default); // Injection containers & patterns
 
+// IAI Factory - Blueprint management, instance spawning, orchestration (requires admin)
+app.use('/api/iai-factory', ring5AuthBarrier, require('./routes/iai-factory.routes').default); // IAI Factory Control
+
 // Mission Control - Mission planning and execution (requires admin)
 app.use('/api/mission-control', ring5AuthBarrier, require('./routes/mission-control.routes').default); // Mission Control system
 

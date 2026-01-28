@@ -482,9 +482,9 @@ function PatternModal({
   const [formData, setFormData] = useState({
     name: pattern?.name || '',
     description: pattern?.description || '',
-    code: pattern?.code || '// Your pattern code here\nasync function execute(input) {\n  // Implementation\n  return { success: true };\n}',
-    codeType: pattern?.codeType || 'injection',
-    language: pattern?.language || 'javascript',
+    code: pattern?.code || '{\n  "workflow": [],\n  "fieldMappings": {},\n  "timing": { "averageDelay": 100 },\n  "metadata": {}\n}',
+    codeType: pattern?.codeType || 'workflow',
+    language: pattern?.language || 'JSON',
     version: pattern?.version || '1.0.0',
     isActive: pattern?.isActive ?? true,
     weight: pattern?.weight ?? 100,
@@ -548,9 +548,13 @@ function PatternModal({
                 onChange={(e) => setFormData({ ...formData, codeType: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
               >
+                <option value="workflow">Workflow (IAI Soldier)</option>
+                <option value="json">JSON Pattern</option>
+                <option value="javascript">JavaScript</option>
                 <option value="injection">Injection</option>
-                <option value="action">Action</option>
                 <option value="selector">Selector</option>
+                <option value="template">Template</option>
+                <option value="action">Action</option>
                 <option value="extractor">Extractor</option>
                 <option value="transformer">Transformer</option>
               </select>
