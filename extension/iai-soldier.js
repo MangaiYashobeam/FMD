@@ -2799,35 +2799,82 @@ class IAIStealth {
   }
   
   /**
-   * ULTRA SPEED DUMP (Paste approach)
+   * ULTRA SPEED DUMP (Paste approach) - Gemini3 Optimized
    * Instantly sets value and fires required events for React/FB validation
+   * Handles: input, textarea, contentEditable, React controlled components
    */
   async dump(element, text) {
-    if (!text && text !== 0) return;
+    if (!text && text !== 0) return false;
     const strText = String(text);
     
-    // Focus
+    // Step 1: Focus + Click sequence
     element.focus();
-    if (element.click) element.click();
+    element.click && element.click();
+    await this.delay(5, 15); // Minimal delay for FB to register focus
     
-    // Set value directly
-    try {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-        if (nativeInputValueSetter) {
-            nativeInputValueSetter.call(element, strText);
-        } else {
-            element.value = strText;
-        }
-    } catch(e) {
-        element.value = strText;
+    // Step 2: Clear existing content
+    if (element.isContentEditable) {
+      element.textContent = '';
+    } else if (element.value !== undefined) {
+      element.value = '';
     }
     
-    // Fire events sequence for validation
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste' }));
+    // Step 3: Set value using native setter (bypasses React's synthetic events)
+    try {
+      // For input elements
+      if (element.tagName === 'INPUT' || element.type) {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        if (nativeInputValueSetter) {
+          nativeInputValueSetter.call(element, strText);
+        } else {
+          element.value = strText;
+        }
+      }
+      // For textarea elements  
+      else if (element.tagName === 'TEXTAREA') {
+        const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+        if (nativeTextAreaValueSetter) {
+          nativeTextAreaValueSetter.call(element, strText);
+        } else {
+          element.value = strText;
+        }
+      }
+      // For contentEditable (Facebook's rich text editors)
+      else if (element.isContentEditable) {
+        // Use execCommand for better FB compatibility
+        document.execCommand('selectAll', false, null);
+        document.execCommand('insertText', false, strText);
+      }
+      // Fallback
+      else {
+        element.value = strText;
+      }
+    } catch(e) {
+      console.warn('[IAI Dump] Native setter failed, using fallback:', e.message);
+      if (element.isContentEditable) {
+        element.textContent = strText;
+      } else {
+        element.value = strText;
+      }
+    }
+    
+    // Step 4: Fire comprehensive event sequence for React/FB validation
+    // Order matters: input → change → blur
+    element.dispatchEvent(new Event('focus', { bubbles: true }));
+    element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    element.dispatchEvent(new InputEvent('input', { 
+      bubbles: true, 
+      composed: true,
+      inputType: 'insertFromPaste',
+      data: strText 
+    }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // Tiny delay before blur to let FB process
+    await this.delay(10, 25);
     element.dispatchEvent(new Event('blur', { bubbles: true }));
     
+    console.log(`[IAI Dump] ⚡ Injected ${strText.length} chars instantly`);
     return true;
   }
   

@@ -697,9 +697,10 @@ export default function IAICommandCenterV2() {
   } = useQuery({
     queryKey: ['soldiers', filterParams],
     queryFn: () => fetchSoldiers(filterParams),
-    refetchInterval: 5000, // 5 seconds - Optimized for monitoring
-    retry: 1,
+    refetchInterval: 5000, // 5 seconds for faster soldier visibility
+    retry: 2,
     staleTime: 2000,
+    refetchOnWindowFocus: true,
   });
 
   const {
@@ -708,9 +709,9 @@ export default function IAICommandCenterV2() {
   } = useQuery({
     queryKey: ['iaiStats'],
     queryFn: fetchStats,
-    refetchInterval: 30000,
-    retry: 1,
-    staleTime: 10000,
+    refetchInterval: 5000, // Match soldiers refresh
+    retry: 2,
+    staleTime: 2000,
   });
 
   const {

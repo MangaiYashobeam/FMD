@@ -1889,4 +1889,237 @@ function generateSampleHTML(url: string): string {
 </html>`;
 }
 
+// ============================================
+// PRODUCTION TEST ENDPOINTS
+// For testing soldier creation, heartbeat, and analytics
+// ============================================
+
+/**
+ * POST /api/admin/iai/test/create-soldier
+ * Creates a test soldier for dashboard verification
+ */
+router.post('/test/create-soldier', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { accountId } = req.body;
+    
+    if (!accountId) {
+      return res.status(400).json({ error: 'accountId is required' });
+    }
+
+    // Verify account exists
+    const account = await prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Get next soldier number
+    const lastSoldier = await prisma.iAISoldier.findFirst({
+      orderBy: { soldierNumber: 'desc' },
+    });
+    const nextNumber = (lastSoldier?.soldierNumber || 0) + 1;
+
+    // Create test soldier
+    const testSoldier = await prisma.iAISoldier.create({
+      data: {
+        soldierId: `IAI-TEST-${nextNumber}`,
+        soldierNumber: nextNumber,
+        accountId,
+        userId: req.user?.id || null,
+        browserId: `test-browser-${Date.now()}`,
+        extensionVersion: '3.8.0-test',
+        userAgent: 'TestAgent/1.0 (Production Test)',
+        ipAddress: req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || '127.0.0.1',
+        locationCountry: 'US',
+        locationCity: 'Test City',
+        timezone: 'America/New_York',
+        status: 'ONLINE',
+        genre: 'SOLDIER',
+        executionSource: 'EXTENSION',
+        mode: 'USM',
+        missionProfile: 'FBM_LISTING',
+        lastHeartbeatAt: new Date(),
+        sessionStartAt: new Date(),
+        totalSessions: 1,
+      },
+      include: {
+        account: { select: { name: true, dealershipName: true } },
+      },
+    });
+
+    // Log the test creation
+    await prisma.iAIActivityLog.create({
+      data: {
+        soldierId: testSoldier.id,
+        accountId,
+        eventType: 'test_creation',
+        message: `Test soldier ${testSoldier.soldierId} created via API`,
+        eventData: { trigger: 'production_test', userId: req.user?.id },
+        ipAddress: req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || null,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Test soldier created',
+      soldier: {
+        id: testSoldier.id,
+        soldierId: testSoldier.soldierId,
+        status: testSoldier.status,
+        account: testSoldier.account,
+        createdAt: testSoldier.createdAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('[IAI Test] Error creating test soldier:', error);
+    return res.status(500).json({ error: 'Failed to create test soldier', details: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/iai/test/heartbeat
+ * Simulates a heartbeat for a soldier
+ */
+router.post('/test/heartbeat', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { soldierId, status = 'ONLINE' } = req.body;
+    
+    if (!soldierId) {
+      return res.status(400).json({ error: 'soldierId is required' });
+    }
+
+    const soldier = await prisma.iAISoldier.findFirst({
+      where: { soldierId },
+    });
+
+    if (!soldier) {
+      return res.status(404).json({ error: 'Soldier not found' });
+    }
+
+    // Update heartbeat
+    const updated = await prisma.iAISoldier.update({
+      where: { id: soldier.id },
+      data: {
+        status: status as any,
+        lastHeartbeatAt: new Date(),
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Heartbeat recorded',
+      soldier: {
+        id: updated.id,
+        soldierId: updated.soldierId,
+        status: updated.status,
+        lastHeartbeatAt: updated.lastHeartbeatAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('[IAI Test] Error recording heartbeat:', error);
+    return res.status(500).json({ error: 'Failed to record heartbeat', details: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/iai/test/analytics
+ * Get analytics summary including login status
+ */
+router.get('/test/analytics', authenticate, async (_req: AuthRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    // Get soldier counts
+    const [totalSoldiers, onlineSoldiers, recentlyActive, usmSoldiers] = await Promise.all([
+      prisma.iAISoldier.count(),
+      prisma.iAISoldier.count({ where: { status: 'ONLINE' } }),
+      prisma.iAISoldier.count({ where: { lastHeartbeatAt: { gte: fiveMinutesAgo } } }),
+      prisma.iAISoldier.count({ where: { mode: 'USM' } }),
+    ]);
+
+    // Get recent activity logs
+    const recentLogs = await prisma.iAIActivityLog.findMany({
+      where: { createdAt: { gte: oneHourAgo } },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        eventType: true,
+        message: true,
+        createdAt: true,
+      },
+    });
+
+    // Get USM pattern status
+    const usmContainer = await prisma.injectionContainer.findFirst({
+      where: { name: 'IAI Soldiers USM' },
+      include: {
+        patterns: {
+          where: { isActive: true },
+          select: { name: true, isDefault: true, priority: true, successCount: true, failureCount: true },
+        },
+      },
+    });
+
+    return res.json({
+      success: true,
+      analytics: {
+        soldiers: {
+          total: totalSoldiers,
+          online: onlineSoldiers,
+          recentlyActive,
+          usmEnabled: usmSoldiers,
+        },
+        usm: {
+          containerActive: usmContainer?.isActive || false,
+          patternCount: usmContainer?.patterns?.length || 0,
+          defaultPattern: usmContainer?.patterns?.find(p => p.isDefault)?.name || null,
+          patterns: usmContainer?.patterns || [],
+        },
+        recentActivity: recentLogs,
+        timestamp: now.toISOString(),
+      },
+    });
+  } catch (error: any) {
+    console.error('[IAI Test] Error getting analytics:', error);
+    return res.status(500).json({ error: 'Failed to get analytics', details: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/iai/test/cleanup
+ * Remove test soldiers (soldiers with 'TEST' in soldierId)
+ */
+router.delete('/test/cleanup', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    // Delete activity logs for test soldiers first
+    const testSoldiers = await prisma.iAISoldier.findMany({
+      where: { soldierId: { contains: 'TEST' } },
+      select: { id: true },
+    });
+
+    const testSoldierIds = testSoldiers.map(s => s.id);
+
+    if (testSoldierIds.length > 0) {
+      await prisma.iAIActivityLog.deleteMany({
+        where: { soldierId: { in: testSoldierIds } },
+      });
+    }
+
+    // Delete test soldiers
+    const deleted = await prisma.iAISoldier.deleteMany({
+      where: { soldierId: { contains: 'TEST' } },
+    });
+
+    return res.json({
+      success: true,
+      message: `Cleaned up ${deleted.count} test soldiers`,
+      deletedCount: deleted.count,
+    });
+  } catch (error: any) {
+    console.error('[IAI Test] Error cleaning up test soldiers:', error);
+    return res.status(500).json({ error: 'Failed to cleanup', details: error.message });
+  }
+});
+
 export default router;
