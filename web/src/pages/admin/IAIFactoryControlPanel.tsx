@@ -13,7 +13,7 @@
  * - Real-time creation monitoring
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Factory,
@@ -32,11 +32,8 @@ import {
   Trash2,
   Edit,
   Eye,
-  CheckCircle2,
   XCircle,
-  AlertTriangle,
   Activity,
-  Layers,
   Target,
   Shuffle,
   Timer,
@@ -44,18 +41,8 @@ import {
   Box,
   Cpu,
   Network,
-  ArrowRight,
-  ArrowDown,
-  ChevronDown,
-  ChevronRight,
   MoreVertical,
   Save,
-  Copy,
-  Download,
-  Upload,
-  Search,
-  Filter,
-  SortAsc,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 
@@ -219,15 +206,8 @@ async function deleteBlueprint(id: string): Promise<void> {
   await api.delete(`/api/iai-factory/blueprints/${id}`);
 }
 
-async function activateBlueprint(id: string): Promise<IAIBlueprint> {
-  const response = await api.post(`/api/iai-factory/blueprints/${id}/activate`);
-  return response.data.blueprint;
-}
-
-async function deactivateBlueprint(id: string): Promise<IAIBlueprint> {
-  const response = await api.post(`/api/iai-factory/blueprints/${id}/deactivate`);
-  return response.data.blueprint;
-}
+// activateBlueprint and deactivateBlueprint are available but currently
+// using updateBlueprint with isActive flag instead
 
 async function spawnInstances(blueprintId: string, count: number): Promise<IAIInstance[]> {
   const response = await api.post(`/api/iai-factory/blueprints/${blueprintId}/spawn`, { count });
@@ -267,11 +247,8 @@ async function fetchCompanies(): Promise<Company[]> {
   return response.data.companies || [];
 }
 
-async function fetchUsers(companyId?: string): Promise<User[]> {
-  const params = companyId ? `?companyId=${companyId}` : '';
-  const response = await api.get(`/api/admin/users${params}`);
-  return response.data.users || [];
-}
+// fetchUsers available for future use when implementing user targeting
+// async function fetchUsers(companyId?: string): Promise<User[]> { ... }
 
 // ============================================
 // Sub-Components
@@ -769,7 +746,7 @@ function BlueprintModal({
   onClose,
   onSave,
   containers,
-  patterns,
+  patterns: _patterns, // Reserved for future pattern selection
   companies,
 }: BlueprintModalProps) {
   const [formData, setFormData] = useState<Partial<IAIBlueprint>>({
