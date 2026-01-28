@@ -779,9 +779,9 @@ function renderVehicleList(vehiclesToRender) {
     
     return `
       <div class="vehicle-item ${isSelected ? 'selected' : ''}" data-id="${vehicle.id}">
-        <div class="vehicle-thumb">
+        <div class="vehicle-thumb" data-thumb-url="${escapeHtml(thumbUrl || '')}">
           ${thumbUrl 
-            ? `<img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(vehicle.title || '')}" onerror="this.parentElement.innerHTML='<div class=vehicle-thumb-placeholder>🚗</div>'">`
+            ? `<img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(vehicle.title || '')}" class="vehicle-thumb-img">`
             : '<div class="vehicle-thumb-placeholder">🚗</div>'
           }
         </div>
@@ -803,9 +803,16 @@ function renderVehicleList(vehiclesToRender) {
     `;
   }).join('');
   
-  // Add click handlers
+  // Add click handlers for vehicle items
   elements.vehicleList.querySelectorAll('.vehicle-item').forEach(item => {
     item.addEventListener('click', () => toggleVehicleSelection(item.dataset.id));
+  });
+  
+  // Add error handlers for images (CSP-compliant - no inline handlers)
+  elements.vehicleList.querySelectorAll('.vehicle-thumb-img').forEach(img => {
+    img.addEventListener('error', function() {
+      this.parentElement.innerHTML = '<div class="vehicle-thumb-placeholder">🚗</div>';
+    });
   });
   
   updateStartButton();

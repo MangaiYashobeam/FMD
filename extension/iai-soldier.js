@@ -186,14 +186,25 @@ function processPatternData(pattern, container) {
       }
     }
     
-    // Extract workflow steps
-    if (patternCode?.workflow) {
+    // Extract workflow steps - check multiple possible field names
+    if (patternCode?.sequence) {
+      workflow = patternCode.sequence;
+      console.log('[IAI] 📋 Found workflow in "sequence" field');
+    } else if (patternCode?.workflow) {
       workflow = patternCode.workflow;
+      console.log('[IAI] 📋 Found workflow in "workflow" field');
     } else if (patternCode?.steps) {
       workflow = patternCode.steps;
+      console.log('[IAI] 📋 Found workflow in "steps" field');
     } else if (patternCode?.STEPS) {
       workflow = patternCode.STEPS;
+      console.log('[IAI] 📋 Found workflow in "STEPS" field');
+    } else {
+      console.warn('[IAI] ⚠️ No workflow found in pattern - checked: sequence, workflow, steps, STEPS');
     }
+    
+    // Extract config for timing/speed settings
+    const config = patternCode?.config || {};
     
     IAI_INJECTION = {
       _loaded: true,
@@ -205,7 +216,8 @@ function processPatternData(pattern, container) {
       _loadedAt: new Date(),
       WORKFLOW: workflow,
       FIELD_SELECTORS: patternCode?.fieldMappings || patternCode?.fieldSelectors || {},
-      TIMING: patternCode?.timing || { averageDelay: 500, recommendedDelay: 400 },
+      TIMING: patternCode?.timing || config || { averageDelay: 500, recommendedDelay: 400 },
+      CONFIG: config,
       METADATA: {
         tags: pattern.tags,
         codeType: pattern.codeType || 'workflow',
@@ -213,8 +225,13 @@ function processPatternData(pattern, container) {
         errorRecovery: patternCode?.errorRecovery || {},
         actions: patternCode?.actions || {},
         // Pass through pattern metadata for speed/dump mode
-        speedMultiplier: pattern.metadata?.speedMultiplier || patternCode?.speedMultiplier || 100,
-        dumpMode: pattern.metadata?.dumpMode || patternCode?.dumpMode || true,
+        mode: patternCode?.mode || 'STANDARD',
+        speedMultiplier: config?.speedMultiplier || pattern.metadata?.speedMultiplier || patternCode?.speedMultiplier || 1,
+        dumpMode: config?.dumpMode ?? pattern.metadata?.dumpMode ?? patternCode?.dumpMode ?? false,
+        minDelay: config?.minDelay || 50,
+        maxDelay: config?.maxDelay || 200,
+        clickDelay: config?.clickDelay || 100,
+        typeDelay: config?.typeDelay || 50,
       },
     };
     
@@ -323,48 +340,8 @@ async function loadInjectionPattern() {
       const data = await response.json();
       if (data.success && data.data) {
         const { pattern, container } = data.data;
-        
-        // Parse workflow from pattern code
-        let workflow = [];
-        try {
-          if (typeof pattern.code === 'string') {
-            const parsed = JSON.parse(pattern.code);
-            workflow = parsed.steps || parsed.workflow || parsed.STEPS || [];
-          } else if (pattern.code?.steps || pattern.code?.workflow) {
-            workflow = pattern.code.steps || pattern.code.workflow;
-          }
-        } catch (parseErr) {
-          console.error('[IAI] Failed to parse pattern code:', parseErr);
-        }
-        
-        IAI_INJECTION = {
-          _loaded: true,
-          _patternId: pattern.id,
-          _patternName: pattern.name,
-          _patternVersion: pattern.version,
-          _containerId: container?.id,
-          _containerName: container?.name,
-          _loadedAt: new Date(),
-          WORKFLOW: workflow,
-          FIELD_SELECTORS: pattern.code?.fieldSelectors || {},
-          TIMING: pattern.code?.timing || { averageDelay: 500, recommendedDelay: 400 },
-          METADATA: {
-            tags: pattern.tags,
-            codeType: pattern.codeType,
-            isDefault: pattern.isDefault,
-          },
-        };
-        
-        // Update legacy alias
-        IAI_TRAINING = IAI_INJECTION;
-        
-        // Cache for offline use
-        await chrome.storage?.local?.set({ iaiInjection: IAI_INJECTION });
-        
-        console.log(`[IAI] ✅ Injection pattern loaded: ${pattern.name} v${pattern.version}`);
-        console.log(`[IAI] 📋 Workflow steps: ${workflow.length}`);
-        console.log(`[IAI] 📦 Container: ${container?.name || 'default'}`);
-        return true;
+        // Use processPatternData for consistent handling
+        return processPatternData(pattern, container);
       }
     }
     
