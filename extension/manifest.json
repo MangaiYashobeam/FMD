@@ -46,7 +46,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.facebook.com/*", "https://m.facebook.com/*", "https://web.facebook.com/*"],
-      "js": ["iai-soldier.js", "content-ai.js"],
+      "js": ["green-route-service.js", "iai-soldier.js", "content-ai.js"],
       "run_at": "document_idle"
     }
   ],
@@ -55,7 +55,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["injected.js", "iai-soldier.js"],
+      "resources": ["injected.js", "iai-soldier.js", "green-route-service.js"],
       "matches": ["https://www.facebook.com/*", "https://web.facebook.com/*", "https://m.facebook.com/*"]
     }
   ]

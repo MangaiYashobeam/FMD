@@ -23,12 +23,13 @@
 // ============================================
 // IAI VERSION & BUILD INFO
 // ============================================
-const IAI_VERSION = '3.8.0';
-const IAI_BUILD = 'PROD13-2026012702';  // Format: TEST{N}-YYYYMMDDHH
-const IAI_COMMIT = 'GREEN-ROUTE-ALL';     // All API calls routed through green route for mitigation bypass
+const IAI_VERSION = '3.9.0';
+const IAI_BUILD = 'GREEN-01-2026012800';  // Format: BUILD-YYYYMMDDHH
+const IAI_COMMIT = 'GREEN-ROUTE-UNIFIED';  // ALL API calls through GreenRouteService
 
 console.log(`%c[IAI SOLDIER] v${IAI_VERSION} | Build: ${IAI_BUILD} | Commit: ${IAI_COMMIT}`, 
-  'background: linear-gradient(90deg, #0066ff, #00ccff); color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 14px;');
+  'background: linear-gradient(90deg, #059669, #10b981); color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 14px;');
+console.log(`%c[IAI] 🟢 GREEN ROUTE UNIFIED - All internal, no external calls`, 'color: #10b981; font-weight: bold;');
 console.log(`%c[IAI] 🚀 Loaded at ${new Date().toISOString()}`, 'color: #10b981; font-weight: bold;');
 
 // ============================================
@@ -36,9 +37,10 @@ console.log(`%c[IAI] 🚀 Loaded at ${new Date().toISOString()}`, 'color: #10b98
 // ============================================
 
 const IAI_CONFIG = {
-  // API Endpoints
+  // API Endpoints - ALL ROUTED THROUGH GREEN ROUTE
   API: {
     PRODUCTION: 'https://dealersface.com/api', // Production via Cloudflare
+    GREEN: 'https://dealersface.com/api/green', // Green Route (bypass mitigation)
     LOCAL: 'http://localhost:5000/api',
     AI_SERVICE: 'https://sag.gemquery.com/api/v1',
   },
@@ -2074,12 +2076,22 @@ async function clearInjectionCache() {
 
 /**
  * Report IAI metrics to server for analytics
- * Uses GREEN ROUTE for reliable delivery during mitigation
+ * Uses GreenRouteService for reliable delivery during mitigation
  */
 async function reportIAIMetric(eventType, data) {
   try {
-    // Use GREEN ROUTE for metrics (more reliable during mitigation)
-    await fetch(`${IAI_CONFIG.API.PRODUCTION}/green/iai/metrics`, {
+    // Use GreenRouteService if available (loaded before iai-soldier.js)
+    if (typeof greenRoute !== 'undefined' && greenRoute.reportMetrics) {
+      await greenRoute.reportMetrics(eventType, {
+        ...data,
+        extensionVersion: IAI_VERSION,
+      });
+      console.log(`[IAI] 📊 Metric via GreenRoute: ${eventType}`);
+      return;
+    }
+    
+    // Fallback to direct call if GreenRouteService not loaded
+    await fetch(`${IAI_CONFIG.API.GREEN}/iai/metrics`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2088,7 +2100,6 @@ async function reportIAIMetric(eventType, data) {
       },
       body: JSON.stringify({
         eventType,
-        // Spread the data directly so server gets patternId, containerId, etc. at top level
         ...data,
         source: 'extension',
         extensionVersion: IAI_VERSION,
@@ -3917,19 +3928,24 @@ class IAISoldier {
         }
       }
       
-      // Use GREEN ROUTE for FBM updates (works during mitigation)
-      await fetch(`${IAI_CONFIG.API.PRODUCTION}/green/fbm-posts/update`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.authToken}`,
-          'X-Green-Route': 'true',
-          'X-IAI-Soldier': IAI_VERSION,
-        },
-        body: JSON.stringify({ logId, ...payload }),
-      });
+      // Use GreenRouteService for FBM updates (works during mitigation)
+      if (typeof greenRoute !== 'undefined' && greenRoute.updateFBMPost) {
+        await greenRoute.updateFBMPost(logId, payload);
+      } else {
+        // Fallback to direct call
+        await fetch(`${IAI_CONFIG.API.GREEN}/fbm-posts/update`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.authToken}`,
+            'X-Green-Route': 'true',
+            'X-IAI-Soldier': IAI_VERSION,
+          },
+          body: JSON.stringify({ logId, ...payload }),
+        });
+      }
       
-      console.debug('FBM log updated:', logId, payload);
+      console.debug('FBM log updated via GreenRoute:', logId, payload);
     } catch (e) {
       console.debug('Failed to update FBM log:', e);
     }
@@ -3937,27 +3953,34 @@ class IAISoldier {
   
   /**
    * Report FBM stage progress event
-   * Uses GREEN ROUTE for reliable delivery
+   * Uses GreenRouteService for reliable delivery
    */
   async reportFBMEvent(logId, eventType, stage, message, details = null) {
     try {
-      await fetch(`${IAI_CONFIG.API.PRODUCTION}/green/fbm-posts/event`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.authToken}`,
-          'X-Green-Route': 'true',
-          'X-IAI-Soldier': IAI_VERSION,
-        },
-        body: JSON.stringify({
-          logId,
-          eventType,  // stage_change, error, warning, info, debug
-          stage,
-          message,
-          details,
-          source: 'extension',
-        }),
-      });
+      const eventData = {
+        eventType,  // stage_change, error, warning, info, debug
+        stage,
+        message,
+        details,
+        source: 'extension',
+      };
+      
+      // Use GreenRouteService if available
+      if (typeof greenRoute !== 'undefined' && greenRoute.addFBMEvent) {
+        await greenRoute.addFBMEvent(logId, eventData);
+      } else {
+        // Fallback to direct call
+        await fetch(`${IAI_CONFIG.API.GREEN}/fbm-posts/event`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.authToken}`,
+            'X-Green-Route': 'true',
+            'X-IAI-Soldier': IAI_VERSION,
+          },
+          body: JSON.stringify({ logId, ...eventData }),
+        });
+      }
     } catch (e) {
       console.debug('Failed to report FBM event:', e);
     }

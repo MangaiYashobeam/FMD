@@ -6,7 +6,14 @@
  * 2. Task polling and distribution
  * 3. Message routing between content scripts and server
  * 4. Session management
+ * 
+ * ALL API CALLS ROUTED THROUGH GREEN ROUTE (internal only)
  */
+
+// ============================================
+// Import GreenRouteService
+// ============================================
+importScripts('green-route-service.js');
 
 // ============================================
 // Configuration
@@ -14,6 +21,7 @@
 
 const CONFIG = {
   API_URL: 'https://dealersface.com/api', // Production via Cloudflare
+  GREEN_URL: 'https://dealersface.com/api/green', // Green Route (bypass mitigation)
   // API_URL: 'http://localhost:5000/api', // Development
   FACEBOOK_APP_ID: null, // Fetched from server - not hardcoded
   POLL_INTERVAL_MS: 10000,
@@ -22,6 +30,8 @@ const CONFIG = {
   HEARTBEAT_CHECK_INTERVAL: 30000, // 30 seconds - Verify we're alive
 };
 
+console.log('%c[Background] 🟢 GREEN ROUTE UNIFIED - All internal, no external calls', 
+  'background: linear-gradient(90deg, #059669, #10b981); color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold;');
 console.log('OAuth Redirect URI:', CONFIG.OAUTH_REDIRECT_URI);
 
 // ============================================
@@ -186,7 +196,7 @@ async function registerIAISoldier() {
 }
 
 /**
- * Send IAI heartbeat + regular extension heartbeat
+ * Send IAI heartbeat + regular extension heartbeat via GreenRouteService
  * Both are needed: IAI heartbeat for the IAI Command Center, regular heartbeat for the Extension Status indicator
  */
 async function sendIAIHeartbeat() {
@@ -201,48 +211,61 @@ async function sendIAIHeartbeat() {
     
     const status = isPolling ? (isAwake ? 'working' : 'online') : 'idle';
     
-    // Send IAI heartbeat (for IAI Command Center)
-    if (soldierInfo) {
+    // Use GreenRouteService for heartbeats (bypass mitigation)
+    if (typeof greenRoute !== 'undefined') {
+      // Send IAI heartbeat (for IAI Command Center)
+      if (soldierInfo) {
+        await greenRoute.iaiHeartbeat(soldierInfo.soldierId, status);
+      }
+      
+      // Send regular heartbeat via Green Route
+      await greenRoute.heartbeat({ userAgent: navigator.userAgent });
+      
+      console.log(`💓 GreenRoute heartbeat sent for account ${accountId}`);
+    } else {
+      // Fallback to direct calls
+      if (soldierInfo) {
+        await fetch(
+          `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/heartbeat`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'X-Green-Route': 'true',
+            },
+            body: JSON.stringify({
+              soldierId: soldierInfo.soldierId,
+              accountId,
+              status,
+            }),
+          }
+        );
+      }
+      
+      // Regular extension heartbeat
       await fetch(
-        `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/heartbeat`,
+        `${CONFIG.GREEN_URL}/heartbeat`,
         {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
+            'X-Green-Route': 'true',
           },
-          body: JSON.stringify({
-            soldierId: soldierInfo.soldierId,
-            accountId,
-            status,
-          }),
+          body: JSON.stringify({ browserInfo: { userAgent: navigator.userAgent } }),
         }
       );
+      
+      console.log(`💓 Heartbeat sent for account ${accountId}`);
     }
-    
-    // Also send regular extension heartbeat (for ExtensionStatus component in web app)
-    await fetch(
-      `${CONFIG.API_URL.replace('/api', '')}/api/extension/heartbeat`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accountId,
-        }),
-      }
-    );
-    
-    console.log(`💓 Heartbeat sent for account ${accountId}`);
   } catch (error) {
     console.error('Heartbeat error:', error);
   }
 }
 
 /**
- * Log IAI activity
+ * Log IAI activity via GreenRouteService
  */
 async function logIAIActivity(eventType, data) {
   if (!soldierInfo) {
@@ -250,6 +273,13 @@ async function logIAIActivity(eventType, data) {
   }
   
   try {
+    // Use GreenRouteService if available
+    if (typeof greenRoute !== 'undefined') {
+      await greenRoute.logActivity(eventType, data);
+      return;
+    }
+    
+    // Fallback to direct call with Green Route headers
     const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
     const token = authToken || savedAuth?.accessToken;
     const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
@@ -265,6 +295,7 @@ async function logIAIActivity(eventType, data) {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'X-Green-Route': 'true',
         },
         body: JSON.stringify({
           soldierId: soldierInfo.soldierId,
