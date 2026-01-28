@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SoldierGenre, ExecutionSource, SoldierMode, MissionProfile } from '@prisma/client';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { novaChromiumService } from '../services/nova-chromium.service';
 
@@ -7,12 +7,25 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // ============================================
+// v2.3.0 - Three-Class Soldier Architecture
+// SOLDIER: User-side Chrome extension, includes USM
+// STEALTH: Chromium-based, invisible, human-like patterns  
+// NOVA: Peak automation, full AI integration
+// ============================================
+
+// Valid filter values for v2.3.0
+const VALID_GENRES: SoldierGenre[] = ['SOLDIER', 'STEALTH', 'NOVA'];
+const VALID_SOURCES: ExecutionSource[] = ['EXTENSION', 'CHROMIUM'];
+const VALID_MODES: SoldierMode[] = ['USM', 'STEALTH', 'HYBRID', 'NOVA_AI'];
+const VALID_MISSIONS: MissionProfile[] = ['FBM_LISTING', 'FBM_MESSAGES', 'FBM_FULL', 'TRAINING', 'INTELLIGENCE', 'CUSTOM'];
+
+// ============================================
 // Admin Routes - Get all IAI soldiers and stats
 // ============================================
 
 /**
  * GET /api/admin/iai/soldiers
- * List all IAI soldiers with pagination and filtering
+ * List all IAI soldiers with pagination and v2.3.0 classification filtering
  */
 router.get('/soldiers', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -20,16 +33,47 @@ router.get('/soldiers', authenticate, async (req: AuthRequest, res: Response) =>
       page = '1', 
       limit = '50', 
       status, 
-      accountId 
+      accountId,
+      // v2.3.0 Classification filters
+      genre,
+      executionSource,
+      mode,
+      missionProfile,
+      // Search
+      search,
     } = req.query;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = {};
+    // Build where clause with v2.3.0 filters
+    const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (accountId) where.accountId = accountId;
+    
+    // v2.3.0 Classification filters
+    if (genre && VALID_GENRES.includes(genre as SoldierGenre)) {
+      where.genre = genre;
+    }
+    if (executionSource && VALID_SOURCES.includes(executionSource as ExecutionSource)) {
+      where.executionSource = executionSource;
+    }
+    if (mode && VALID_MODES.includes(mode as SoldierMode)) {
+      where.mode = mode;
+    }
+    if (missionProfile && VALID_MISSIONS.includes(missionProfile as MissionProfile)) {
+      where.missionProfile = missionProfile;
+    }
+    
+    // Search by soldierId or account name
+    if (search) {
+      where.OR = [
+        { soldierId: { contains: search as string, mode: 'insensitive' } },
+        { account: { name: { contains: search as string, mode: 'insensitive' } } },
+        { account: { dealershipName: { contains: search as string, mode: 'insensitive' } } },
+      ];
+    }
 
     const [soldiers, total] = await Promise.all([
       prisma.iAISoldier.findMany({
@@ -61,6 +105,7 @@ router.get('/soldiers', authenticate, async (req: AuthRequest, res: Response) =>
       prisma.iAISoldier.count({ where }),
     ]);
 
+    // v2.3.0: Return classification metadata
     res.json({
       soldiers,
       pagination: {
@@ -68,6 +113,13 @@ router.get('/soldiers', authenticate, async (req: AuthRequest, res: Response) =>
         limit: limitNum,
         total,
         pages: Math.ceil(total / limitNum),
+      },
+      // v2.3.0 Filter options
+      filters: {
+        genres: VALID_GENRES,
+        sources: VALID_SOURCES,
+        modes: VALID_MODES,
+        missions: VALID_MISSIONS,
       },
     });
   } catch (error) {
@@ -246,7 +298,7 @@ router.get('/map-data', authenticate, async (_req: AuthRequest, res: Response) =
 
 /**
  * GET /api/admin/iai/stats
- * Get overall IAI system statistics
+ * Get overall IAI system statistics with v2.3.0 classification breakdown
  */
 router.get('/stats', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
@@ -259,12 +311,22 @@ router.get('/stats', authenticate, async (_req: AuthRequest, res: Response) => {
       recentActivity,
       totalTasksCompleted,
       totalTasksFailed,
+      // v2.3.0 Classification counts
+      soldierGenreCount,
+      stealthGenreCount,
+      novaGenreCount,
+      extensionSourceCount,
+      chromiumSourceCount,
+      usmModeCount,
+      stealthModeCount,
+      hybridModeCount,
+      novaModeCount,
     ] = await Promise.all([
       prisma.iAISoldier.count({ where: { isActive: true } }),
-      prisma.iAISoldier.count({ where: { status: 'online' } }),
-      prisma.iAISoldier.count({ where: { status: 'working' } }),
-      prisma.iAISoldier.count({ where: { status: 'offline' } }),
-      prisma.iAISoldier.count({ where: { status: 'error' } }),
+      prisma.iAISoldier.count({ where: { status: 'ONLINE' } }),
+      prisma.iAISoldier.count({ where: { status: 'WORKING' } }),
+      prisma.iAISoldier.count({ where: { status: 'OFFLINE' } }),
+      prisma.iAISoldier.count({ where: { status: 'ERROR' } }),
       prisma.iAIActivityLog.count({
         where: {
           createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) }, // Last hour
@@ -276,6 +338,18 @@ router.get('/stats', authenticate, async (_req: AuthRequest, res: Response) => {
       prisma.iAISoldier.aggregate({
         _sum: { tasksFailed: true },
       }),
+      // v2.3.0 Genre counts
+      prisma.iAISoldier.count({ where: { genre: 'SOLDIER', isActive: true } }),
+      prisma.iAISoldier.count({ where: { genre: 'STEALTH', isActive: true } }),
+      prisma.iAISoldier.count({ where: { genre: 'NOVA', isActive: true } }),
+      // v2.3.0 Source counts
+      prisma.iAISoldier.count({ where: { executionSource: 'EXTENSION', isActive: true } }),
+      prisma.iAISoldier.count({ where: { executionSource: 'CHROMIUM', isActive: true } }),
+      // v2.3.0 Mode counts
+      prisma.iAISoldier.count({ where: { mode: 'USM', isActive: true } }),
+      prisma.iAISoldier.count({ where: { mode: 'STEALTH', isActive: true } }),
+      prisma.iAISoldier.count({ where: { mode: 'HYBRID', isActive: true } }),
+      prisma.iAISoldier.count({ where: { mode: 'NOVA_AI', isActive: true } }),
     ]);
 
     res.json({
@@ -287,6 +361,22 @@ router.get('/stats', authenticate, async (_req: AuthRequest, res: Response) => {
       recentActivity,
       totalTasksCompleted: totalTasksCompleted._sum.tasksCompleted || 0,
       totalTasksFailed: totalTasksFailed._sum.tasksFailed || 0,
+      // v2.3.0 Classification stats
+      byGenre: {
+        SOLDIER: soldierGenreCount,
+        STEALTH: stealthGenreCount,
+        NOVA: novaGenreCount,
+      },
+      bySource: {
+        EXTENSION: extensionSourceCount,
+        CHROMIUM: chromiumSourceCount,
+      },
+      byMode: {
+        USM: usmModeCount,
+        STEALTH: stealthModeCount,
+        HYBRID: hybridModeCount,
+        NOVA_AI: novaModeCount,
+      },
     });
   } catch (error) {
     console.error('Error fetching IAI stats:', error);

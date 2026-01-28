@@ -57,24 +57,27 @@ model User {
   // facebookId, facebookAccessToken, facebookTokenExpiry
 
   // Relations
-  accountUsers        AccountUser[]
-  facebookProfiles    FacebookProfile[]
-  auditLogs           AuditLog[]
-  notifications       Notification[]
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  apiKeys             ApiKey[]
-  assignedLeads       Lead[]               @relation("AssignedLeads")
-  salesRepMappings    SalesRepMapping[]
-  leadActivities      LeadActivity[]
-  dealerAccount       DealerAccount?
-  sentInvitations     TeamInvitation[]     @relation("InvitedBy")
-  fbmPostLogs         FBMPostLog[]
-  iaiSoldiers         IAISoldier[]
-  trainingSessions    TrainingSession[]
-  userSessions        UserSession[]
-  iaiInstances        IAIInstance[]
-  oauthLinks          OAuthLink[]
+  accountUsers         AccountUser[]
+  facebookProfiles     FacebookProfile[]
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
+  apiKeys              ApiKey[]
+  assignedLeads        Lead[]                @relation("AssignedLeads")
+  salesRepMappings     SalesRepMapping[]
+  leadActivities       LeadActivity[]
+  dealerAccount        DealerAccount?
+  sentInvitations      TeamInvitation[]      @relation("InvitedBy")
+  fbmPostLogs          FBMPostLog[]
+  iaiSoldiers          IAISoldier[]
+  trainingSessions     TrainingSession[]
+  userSessions         UserSession[]
+  iaiInstances         IAIInstance[]
+  oauthLinks           OAuthLink[]
+  // IAI Factory v2.3.0 Relations
+  iaiFactoryBlueprints IAIFactoryBlueprint[]
+  iaiConnectionMaps    IAIConnectionMap[]
 
   @@map("users")
 }
@@ -116,30 +119,33 @@ model Account {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  accountUsers      AccountUser[]
-  vehicles          Vehicle[]
-  ftpConfigurations FtpConfiguration[]
-  syncJobs          SyncJob[]
-  facebookProfiles  FacebookProfile[]
-  facebookGroups    FacebookGroup[]
-  settings          AccountSettings?
-  subscriptionPlan  SubscriptionPlan?  @relation(fields: [subscriptionPlanId], references: [id])
-  payments          Payment[]
-  invoices          Invoice[]
-  apiKeys           ApiKey[]
-  adfConfiguration  ADFConfiguration?
-  leads             Lead[]
-  teamInvitations   TeamInvitation[]
-  pixelEvents       PixelEvent[]
-  fbmPostLogs       FBMPostLog[]
-  iaiSoldiers       IAISoldier[]
-  iaiActivityLogs   IAIActivityLog[]
+  accountUsers         AccountUser[]
+  vehicles             Vehicle[]
+  ftpConfigurations    FtpConfiguration[]
+  syncJobs             SyncJob[]
+  facebookProfiles     FacebookProfile[]
+  facebookGroups       FacebookGroup[]
+  settings             AccountSettings?
+  subscriptionPlan     SubscriptionPlan?     @relation(fields: [subscriptionPlanId], references: [id])
+  payments             Payment[]
+  invoices             Invoice[]
+  apiKeys              ApiKey[]
+  adfConfiguration     ADFConfiguration?
+  leads                Lead[]
+  teamInvitations      TeamInvitation[]
+  pixelEvents          PixelEvent[]
+  fbmPostLogs          FBMPostLog[]
+  iaiSoldiers          IAISoldier[]
+  iaiActivityLogs      IAIActivityLog[]
   // New Session-Based Auth Relations
-  fbSessions        FbSession[]
-  fbTotpSecret      FbTotpSecret?
-  scheduledTasks    ScheduledTask[]
-  iaiInstances      IAIInstance[]
-  whitelist         AccountWhitelist?
+  fbSessions           FbSession[]
+  fbTotpSecret         FbTotpSecret?
+  scheduledTasks       ScheduledTask[]
+  iaiInstances         IAIInstance[]
+  whitelist            AccountWhitelist?
+  // IAI Factory v2.3.0 Relations
+  iaiFactoryBlueprints IAIFactoryBlueprint[]
+  iaiConnectionMaps    IAIConnectionMap[]
 
   @@map("accounts")
 }
@@ -3001,24 +3007,76 @@ model AIInterventionSummary {
 }
 
 // ============================================
+// IAI Soldier Classification Enums (v2.3.0 - Official Architecture)
+// ============================================
+
+// Three official IAI soldier classes - DO NOT MODIFY without architecture review
+enum SoldierGenre {
+  SOLDIER // IAI Soldiers - User-side Chrome extension, includes USM (Ultra Speed Mode)
+  STEALTH // IAI Stealth Soldiers - Chromium-based, invisible, human-like patterns
+  NOVA // NOVA Soldiers - Peak automation, full AI integration, intelligent
+}
+
+// Where the soldier executes - Extension vs Server-Side
+enum ExecutionSource {
+  EXTENSION // Runs in user's Chrome browser via extension
+  CHROMIUM // Runs on server-side headless Chromium (VPS)
+}
+
+// Operational modes - How the soldier behaves
+enum SoldierMode {
+  USM // Ultra Speed Mode - Fast execution in user browser (Extension only)
+  STEALTH // Stealth mode - Human-like patterns, anti-detection
+  HYBRID // Hybrid - Balanced between speed and stealth
+  NOVA_AI // NOVA AI integration - Full intelligent automation
+}
+
+// Soldier operational status
+enum SoldierStatus {
+  ONLINE // Active and connected
+  OFFLINE // Disconnected
+  WORKING // Currently executing a task
+  IDLE // Connected but not working
+  ERROR // In error state
+  SUSPENDED // Administratively suspended
+}
+
+// Mission profiles for targeting
+enum MissionProfile {
+  FBM_LISTING // Facebook Marketplace vehicle listing
+  FBM_MESSAGES // Facebook Marketplace message handling
+  FBM_FULL // Full FBM automation (listing + messages)
+  TRAINING // Training mode - learning patterns
+  INTELLIGENCE // Intelligence gathering
+  CUSTOM // Custom mission profile
+}
+
+// ============================================
 // IAI Soldier Command Center
 // ============================================
 
 model IAISoldier {
   id            String  @id @default(uuid())
   soldierNumber Int     @default(autoincrement()) @map("soldier_number")
-  soldierId     String  @unique @map("soldier_id") // IAI-0, IAI-1, etc.
+  soldierId     String  @unique @map("soldier_id") // IAI-0, IAI-1, STEALTH-0, NOVA-0, etc.
   accountId     String  @map("account_id")
   userId        String? @map("user_id")
 
+  // === SOLDIER CLASSIFICATION (v2.3.0) ===
+  genre           SoldierGenre    @default(SOLDIER) @map("genre")
+  executionSource ExecutionSource @default(EXTENSION) @map("execution_source")
+  mode            SoldierMode     @default(USM) @map("mode")
+  missionProfile  MissionProfile  @default(FBM_LISTING) @map("mission_profile")
+
   // Status
-  status   String  @default("offline") // online, offline, working, idle, error
-  isActive Boolean @default(true) @map("is_active")
+  status   SoldierStatus @default(OFFLINE) @map("status")
+  isActive Boolean       @default(true) @map("is_active")
 
   // Identity
   browserId        String? @map("browser_id")
   extensionVersion String? @map("extension_version")
   userAgent        String? @map("user_agent")
+  chromiumVersion  String? @map("chromium_version") // For STEALTH/NOVA - server Chromium version
 
   // Location & Network
   ipAddress       String?  @map("ip_address")
@@ -3029,10 +3087,10 @@ model IAISoldier {
   timezone        String?
 
   // Current Pattern - Tracks which pattern this soldier is using
-  currentPatternId   String? @map("current_pattern_id")
-  currentPatternName String? @map("current_pattern_name")
+  currentPatternId   String?   @map("current_pattern_id")
+  currentPatternName String?   @map("current_pattern_name")
   patternLoadedAt    DateTime? @map("pattern_loaded_at")
-  patternSource      String?  @map("pattern_source") // 'override' | 'default' | 'weighted' | 'usm'
+  patternSource      String?   @map("pattern_source") // 'override' | 'default' | 'weighted' | 'usm' | 'nova'
 
   // Performance Stats
   tasksCompleted      Int      @default(0) @map("tasks_completed")
@@ -3040,6 +3098,11 @@ model IAISoldier {
   totalRuntimeMinutes Int      @default(0) @map("total_runtime_minutes")
   avgTaskDurationSec  Int?     @map("avg_task_duration_sec")
   successRate         Decimal? @map("success_rate") @db.Decimal(5, 2)
+
+  // NOVA-specific metrics
+  novaIntelligenceScore Int? @map("nova_intelligence_score") // 0-100 AI capability score
+  novaDecisionsMade     Int? @map("nova_decisions_made")
+  novaLearningCycles    Int? @map("nova_learning_cycles")
 
   // Current Work
   currentTaskId        String?   @map("current_task_id")
@@ -3073,6 +3136,10 @@ model IAISoldier {
   @@index([soldierId])
   @@index([lastHeartbeatAt])
   @@index([currentPatternId])
+  @@index([genre])
+  @@index([executionSource])
+  @@index([mode])
+  @@index([missionProfile])
   @@map("iai_soldiers")
 }
 
@@ -3135,6 +3202,192 @@ model IAIPerformanceSnapshot {
   @@index([soldierId])
   @@index([snapshotAt])
   @@map("iai_performance_snapshots")
+}
+
+// ============================================
+// IAI Factory Connection Builder (v2.3.0)
+// Server-side configuration persistence for visual connection builder
+// ============================================
+
+model IAIFactoryBlueprint {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Blueprint Identity
+  name        String
+  description String? @db.Text
+  version     String  @default("1.0.0")
+
+  // Blueprint Classification
+  blueprintType String          @default("STANDARD") @map("blueprint_type") // STANDARD, USM, STEALTH, NOVA, HYBRID, CUSTOM
+  targetGenre   SoldierGenre    @default(SOLDIER) @map("target_genre")
+  targetSource  ExecutionSource @default(EXTENSION) @map("target_source")
+  targetMode    SoldierMode     @default(USM) @map("target_mode")
+
+  // Configuration
+  baseConfig   Json     @map("base_config") // Core configuration object
+  containerIds String[] @default([]) @map("container_ids")
+  patternIds   String[] @default([]) @map("pattern_ids")
+
+  // Hot-Swap Mechanics
+  hotSwapEnabled  Boolean  @default(false) @map("hot_swap_enabled")
+  hotSwapPatterns String[] @default([]) @map("hot_swap_patterns")
+
+  // Spawn Control
+  creationRate  Int     @default(1) @map("creation_rate") // Soldiers per minute
+  maxConcurrent Int     @default(5) @map("max_concurrent")
+  lifespan      Int     @default(3600) @map("lifespan") // Seconds
+  autoRespawn   Boolean @default(false) @map("auto_respawn")
+
+  // Targeting
+  targeting Json @default("{}") @map("targeting") // Company/User targeting rules
+  schedule  Json @default("{}") @map("schedule") // Scheduling rules
+
+  // Status
+  isActive Boolean  @default(true) @map("is_active")
+  priority Int      @default(0) @map("priority")
+  tags     String[] @default([]) @map("tags")
+
+  // Statistics
+  totalCreated Int      @default(0) @map("total_created")
+  activeCount  Int      @default(0) @map("active_count")
+  successRate  Decimal? @map("success_rate") @db.Decimal(5, 2)
+  avgLifespan  Int?     @map("avg_lifespan")
+
+  // Audit
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account   Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdBy User                 @relation(fields: [createdById], references: [id])
+  instances IAIFactoryInstance[]
+
+  @@index([accountId])
+  @@index([blueprintType])
+  @@index([targetGenre])
+  @@index([isActive])
+  @@map("iai_factory_blueprints")
+}
+
+model IAIFactoryInstance {
+  id          String @id @default(uuid())
+  blueprintId String @map("blueprint_id")
+
+  // Instance Identity
+  instanceId String  @unique @map("instance_id") // Auto-generated unique ID
+  soldierId  String? @map("soldier_id") // Link to actual IAISoldier when spawned
+
+  // Status
+  status          String  @default("PENDING") @map("status") // PENDING, SPAWNING, ACTIVE, TERMINATING, TERMINATED, ERROR
+  currentPattern  String? @map("current_pattern")
+  assignedCompany String? @map("assigned_company")
+  assignedUser    String? @map("assigned_user")
+  containerId     String? @map("container_id")
+
+  // Lifecycle
+  spawnedAt    DateTime? @map("spawned_at")
+  lastActiveAt DateTime? @map("last_active_at")
+  expiresAt    DateTime? @map("expires_at")
+  terminatedAt DateTime? @map("terminated_at")
+
+  // Metrics
+  executionCount Int @default(0) @map("execution_count")
+  successCount   Int @default(0) @map("success_count")
+  errorCount     Int @default(0) @map("error_count")
+
+  // Runtime Config (merged from blueprint + overrides)
+  config Json @default("{}") @map("config")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  blueprint IAIFactoryBlueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@index([blueprintId])
+  @@index([status])
+  @@index([spawnedAt])
+  @@map("iai_factory_instances")
+}
+
+// Connection Map - Visual builder configuration persistence
+model IAIConnectionMap {
+  id        String @id @default(uuid())
+  accountId String @map("account_id")
+
+  // Map Identity
+  name        String
+  description String? @db.Text
+
+  // Visual Builder Data
+  nodes       Json @map("nodes") // Array of ConnectionNode objects
+  connections Json @map("connections") // Array of Connection objects
+  viewport    Json @default("{}") @map("viewport") // Pan/zoom state
+
+  // Template Classification
+  isTemplate   Boolean  @default(false) @map("is_template")
+  templateType String?  @map("template_type") // PREDEFINED, CUSTOM
+  templateTags String[] @default([]) @map("template_tags")
+
+  // Status
+  isActive Boolean @default(true) @map("is_active")
+
+  // Audit
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@index([accountId])
+  @@index([isTemplate])
+  @@map("iai_connection_maps")
+}
+
+// Predefined Templates - System-defined templates for common configurations
+model IAIPredefinedTemplate {
+  id String @id @default(uuid())
+
+  // Template Identity
+  name        String  @unique
+  displayName String  @map("display_name")
+  description String? @db.Text
+  category    String  @default("general") @map("category") // fbm, messaging, intelligence, custom
+
+  // Template Data
+  nodes       Json @map("nodes")
+  connections Json @map("connections")
+  baseConfig  Json @default("{}") @map("base_config")
+
+  // Target Configuration
+  targetGenre   SoldierGenre    @default(SOLDIER) @map("target_genre")
+  targetSource  ExecutionSource @default(EXTENSION) @map("target_source")
+  targetMode    SoldierMode     @default(USM) @map("target_mode")
+  targetMission MissionProfile  @default(FBM_LISTING) @map("target_mission")
+
+  // Metadata
+  icon       String?  @map("icon") // Lucide icon name
+  color      String?  @map("color") // Hex color
+  tags       String[] @default([]) @map("tags")
+  popularity Int      @default(0) @map("popularity") // Usage count
+
+  // Status
+  isActive Boolean @default(true) @map("is_active")
+  version  String  @default("1.0.0")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([targetGenre])
+  @@index([isActive])
+  @@map("iai_predefined_templates")
 }
 
 // ============================================
@@ -4279,24 +4532,24 @@ model InjectionLog {
 // Pattern Override - Root Admin assigns specific patterns to accounts/users
 // This allows forcing a specific pattern for an account instead of random/weighted selection
 model PatternOverride {
-  id          String  @id @default(uuid())
-  accountId   String  @map("account_id")
-  userId      String? @map("user_id") // Optional: override for specific user
+  id        String  @id @default(uuid())
+  accountId String  @map("account_id")
+  userId    String? @map("user_id") // Optional: override for specific user
 
   // Pattern assignment
-  containerId String  @map("container_id")
-  patternId   String  @map("pattern_id")
+  containerId String @map("container_id")
+  patternId   String @map("pattern_id")
 
   // Override settings
-  isActive    Boolean @default(true) @map("is_active")
-  priority    Int     @default(100) // Higher priority overrides take precedence
-  reason      String? @db.Text // Admin notes for why this override exists
-  expiresAt   DateTime? @map("expires_at") // Optional expiration
+  isActive  Boolean   @default(true) @map("is_active")
+  priority  Int       @default(100) // Higher priority overrides take precedence
+  reason    String?   @db.Text // Admin notes for why this override exists
+  expiresAt DateTime? @map("expires_at") // Optional expiration
 
   // Admin tracking
-  createdBy   String  @map("created_by") // Admin who created this override
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy String   @map("created_by") // Admin who created this override
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([accountId, userId, containerId]) // One override per account/user/container combo
   @@index([accountId])
@@ -4474,36 +4727,36 @@ model MissionTaskRun {
 
 // Registration Invitation Codes
 model RegistrationInvitation {
-  id            String   @id @default(uuid())
-  code          String   @unique // 8-char alphanumeric code
-  email         String   // Target email
-  inviterType   String   @default("admin") @map("inviter_type") // admin, super_admin, root_admin
-  inviterId     String?  @map("inviter_id")
-  inviterEmail  String?  @map("inviter_email")
-  
+  id           String  @id @default(uuid())
+  code         String  @unique // 8-char alphanumeric code
+  email        String // Target email
+  inviterType  String  @default("admin") @map("inviter_type") // admin, super_admin, root_admin
+  inviterId    String? @map("inviter_id")
+  inviterEmail String? @map("inviter_email")
+
   // Invitation details
-  accountName   String?  @map("account_name") // For new company registrations
-  companyDomain String?  @map("company_domain") // Verified dealer domain
-  intendedRole  String   @default("NEW_USER") @map("intended_role")
-  
+  accountName   String? @map("account_name") // For new company registrations
+  companyDomain String? @map("company_domain") // Verified dealer domain
+  intendedRole  String  @default("NEW_USER") @map("intended_role")
+
   // Status
-  status        String   @default("pending") // pending, used, expired, revoked
-  usedAt        DateTime? @map("used_at")
-  usedByUserId  String?  @map("used_by_user_id")
-  
+  status       String    @default("pending") // pending, used, expired, revoked
+  usedAt       DateTime? @map("used_at")
+  usedByUserId String?   @map("used_by_user_id")
+
   // Trial info
-  isTrial       Boolean  @default(false) @map("is_trial")
-  trialDays     Int      @default(15) @map("trial_days")
-  
+  isTrial   Boolean @default(false) @map("is_trial")
+  trialDays Int     @default(15) @map("trial_days")
+
   // Verification
-  dealerLicenseUrl    String?  @map("dealer_license_url")
-  dealerVerified      Boolean  @default(false) @map("dealer_verified")
-  verifiedAt          DateTime? @map("verified_at")
-  verifiedByUserId    String?  @map("verified_by_user_id")
-  
-  expiresAt     DateTime @map("expires_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  dealerLicenseUrl String?   @map("dealer_license_url")
+  dealerVerified   Boolean   @default(false) @map("dealer_verified")
+  verifiedAt       DateTime? @map("verified_at")
+  verifiedByUserId String?   @map("verified_by_user_id")
+
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([code])
   @@index([email])
@@ -4513,25 +4766,25 @@ model RegistrationInvitation {
 
 // OAuth Link (soft-link for whitelisting)
 model OAuthLink {
-  id             String   @id @default(uuid())
-  userId         String   @map("user_id")
-  provider       String   // auth0, google, facebook
-  providerUserId String   @map("provider_user_id")
+  id             String @id @default(uuid())
+  userId         String @map("user_id")
+  provider       String // auth0, google, facebook
+  providerUserId String @map("provider_user_id")
   email          String
-  
+
   // Whitelisting
-  whitelisted    Boolean  @default(false)
-  whitelistedAt  DateTime? @map("whitelisted_at")
-  whitelistedBy  String?  @map("whitelisted_by")
-  
+  whitelisted   Boolean   @default(false)
+  whitelistedAt DateTime? @map("whitelisted_at")
+  whitelistedBy String?   @map("whitelisted_by")
+
   // Extension access
-  extensionLinked    Boolean  @default(false) @map("extension_linked")
-  extensionLinkedAt  DateTime? @map("extension_linked_at")
-  extensionId        String?  @map("extension_id")
-  
-  lastUsedAt    DateTime? @map("last_used_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  extensionLinked   Boolean   @default(false) @map("extension_linked")
+  extensionLinkedAt DateTime? @map("extension_linked_at")
+  extensionId       String?   @map("extension_id")
+
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -4544,28 +4797,28 @@ model OAuthLink {
 
 // Green Route Request Logs
 model GreenRouteLog {
-  id            String   @id @default(uuid())
-  requestId     String   @unique @map("request_id")
-  path          String
-  method        String
-  source        String   // extension, webapp, extension-hybrid, unknown
-  
-  accountId     String?  @map("account_id")
-  userId        String?  @map("user_id")
-  fingerprint   String?
-  
-  ipAddress     String   @map("ip_address")
-  userAgent     String   @map("user_agent") @db.Text
-  
-  responseStatus Int     @map("response_status")
-  responseTimeMs Int     @map("response_time_ms")
-  
-  verified      Boolean  @default(false)
-  whitelisted   Boolean  @default(false)
-  
-  metadata      Json     @default("{}")
-  
-  createdAt     DateTime @default(now()) @map("created_at")
+  id        String @id @default(uuid())
+  requestId String @unique @map("request_id")
+  path      String
+  method    String
+  source    String // extension, webapp, extension-hybrid, unknown
+
+  accountId   String? @map("account_id")
+  userId      String? @map("user_id")
+  fingerprint String?
+
+  ipAddress String @map("ip_address")
+  userAgent String @map("user_agent") @db.Text
+
+  responseStatus Int @map("response_status")
+  responseTimeMs Int @map("response_time_ms")
+
+  verified    Boolean @default(false)
+  whitelisted Boolean @default(false)
+
+  metadata Json @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([accountId])
   @@index([userId])
@@ -4576,33 +4829,33 @@ model GreenRouteLog {
 
 // Green Route Analytics (aggregated)
 model GreenRouteAnalytics {
-  id            String   @id @default(uuid())
-  path          String
-  method        String
-  requestCount  Int      @default(0) @map("request_count")
+  id             String   @id @default(uuid())
+  path           String
+  method         String
+  requestCount   Int      @default(0) @map("request_count")
   lastAccessedAt DateTime @map("last_accessed_at")
-  
+
   @@unique([path, method], name: "path_method")
   @@map("green_route_analytics")
 }
 
 // Origin Validation Logs
 model OriginValidationLog {
-  id           String   @id @default(uuid())
-  path         String
-  method       String
-  origin       String?
-  referer      String?
-  extensionId  String?  @map("extension_id")
-  ipAddress    String   @map("ip_address")
-  userAgent    String   @map("user_agent") @db.Text
-  
-  blocked      Boolean  @default(false)
-  reason       String?
-  source       String?  // extension, webapp, api-key, internal, unknown
-  verified     Boolean  @default(false)
-  
-  createdAt    DateTime @default(now()) @map("created_at")
+  id          String  @id @default(uuid())
+  path        String
+  method      String
+  origin      String?
+  referer     String?
+  extensionId String? @map("extension_id")
+  ipAddress   String  @map("ip_address")
+  userAgent   String  @map("user_agent") @db.Text
+
+  blocked  Boolean @default(false)
+  reason   String?
+  source   String? // extension, webapp, api-key, internal, unknown
+  verified Boolean @default(false)
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([blocked])
   @@index([source])
@@ -4612,29 +4865,29 @@ model OriginValidationLog {
 
 // Dealer Verification Requests
 model DealerVerificationRequest {
-  id              String   @id @default(uuid())
-  email           String
-  companyName     String   @map("company_name")
-  companyDomain   String?  @map("company_domain")
-  
+  id            String  @id @default(uuid())
+  email         String
+  companyName   String  @map("company_name")
+  companyDomain String? @map("company_domain")
+
   // Verification type
-  verificationType String  @default("domain") @map("verification_type") // domain, license, ticket
-  
+  verificationType String @default("domain") @map("verification_type") // domain, license, ticket
+
   // License upload
-  dealerLicenseUrl    String?  @map("dealer_license_url")
-  dealerLicenseNumber String?  @map("dealer_license_number")
-  
+  dealerLicenseUrl    String? @map("dealer_license_url")
+  dealerLicenseNumber String? @map("dealer_license_number")
+
   // Status
-  status          String   @default("pending") // pending, approved, rejected, expired
-  reviewedAt      DateTime? @map("reviewed_at")
-  reviewedByUserId String? @map("reviewed_by_user_id")
-  reviewNotes     String?  @map("review_notes") @db.Text
-  
+  status           String    @default("pending") // pending, approved, rejected, expired
+  reviewedAt       DateTime? @map("reviewed_at")
+  reviewedByUserId String?   @map("reviewed_by_user_id")
+  reviewNotes      String?   @map("review_notes") @db.Text
+
   // Rejection
-  rejectionReason String?  @map("rejection_reason")
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  rejectionReason String? @map("rejection_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([email])
   @@index([status])
@@ -4643,28 +4896,28 @@ model DealerVerificationRequest {
 
 // Account Whitelist (for API access)
 model AccountWhitelist {
-  id            String   @id @default(uuid())
-  accountId     String   @unique @map("account_id")
-  
+  id        String @id @default(uuid())
+  accountId String @unique @map("account_id")
+
   // Whitelist status
-  isWhitelisted Boolean  @default(false) @map("is_whitelisted")
+  isWhitelisted Boolean   @default(false) @map("is_whitelisted")
   whitelistedAt DateTime? @map("whitelisted_at")
-  whitelistedBy String?  @map("whitelisted_by")
-  
+  whitelistedBy String?   @map("whitelisted_by")
+
   // Access levels
-  greenRouteAccess   Boolean @default(false) @map("green_route_access")
-  apiKeyAccess       Boolean @default(false) @map("api_key_access")
-  extensionAccess    Boolean @default(true) @map("extension_access")
-  
+  greenRouteAccess Boolean @default(false) @map("green_route_access")
+  apiKeyAccess     Boolean @default(false) @map("api_key_access")
+  extensionAccess  Boolean @default(true) @map("extension_access")
+
   // Rate limits (custom per account)
-  customRateLimit    Int?    @map("custom_rate_limit")
-  
+  customRateLimit Int? @map("custom_rate_limit")
+
   // Audit
-  reason        String?
-  notes         String?  @db.Text
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  reason String?
+  notes  String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -4678,16 +4931,16 @@ model AccountWhitelist {
 
 // SSRF Domain Allowlist - Authorized external domains
 model SsrfAllowlistDomain {
-  id          String   @id @default(uuid())
-  domain      String   @unique // e.g., "scontent.fphx1-1.fna.fbcdn.net"
-  category    String   @default("other") // facebook, aws, cloudflare, dealer, cdn, internal, other
-  matchType   String   @default("exact") // exact, suffix, wildcard, regex
-  description String?  @db.Text
-  isActive    Boolean  @default(true) @map("is_active")
-  addedBy     String?  @map("added_by") // User ID who added
-  
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime? @map("updated_at")
+  id          String  @id @default(uuid())
+  domain      String  @unique // e.g., "scontent.fphx1-1.fna.fbcdn.net"
+  category    String  @default("other") // facebook, aws, cloudflare, dealer, cdn, internal, other
+  matchType   String  @default("exact") // exact, suffix, wildcard, regex
+  description String? @db.Text
+  isActive    Boolean @default(true) @map("is_active")
+  addedBy     String? @map("added_by") // User ID who added
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime? @map("updated_at")
 
   // Relations
   proxyRequests SsrfProxyLog[] @relation("DomainLogs")
@@ -4700,14 +4953,14 @@ model SsrfAllowlistDomain {
 
 // SSRF Blocked IP Prefixes - Private IPs and dangerous ranges
 model SsrfBlockedIP {
-  id        String   @id @default(uuid())
-  ipPrefix  String   @unique // e.g., "10.", "192.168.", "127.", "169.254."
-  category  String   @default("custom") // private, loopback, linklocal, cloud_metadata, custom
-  reason    String   @db.Text
-  isActive  Boolean  @default(true) @map("is_active")
-  addedBy   String?  @map("added_by")
-  
-  createdAt DateTime @default(now()) @map("created_at")
+  id       String  @id @default(uuid())
+  ipPrefix String  @unique // e.g., "10.", "192.168.", "127.", "169.254."
+  category String  @default("custom") // private, loopback, linklocal, cloud_metadata, custom
+  reason   String  @db.Text
+  isActive Boolean @default(true) @map("is_active")
+  addedBy  String? @map("added_by")
+
+  createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime? @map("updated_at")
 
   // Relations
@@ -4766,24 +5019,24 @@ model SsrfBlockEvent {
 
 // Enterprise Security Configuration
 model EnterpriseSecurityConfig {
-  id                      String   @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // SSRF Protection
-  ssrfProtectionEnabled   Boolean  @default(true) @map("ssrf_protection_enabled")
+  ssrfProtectionEnabled    Boolean @default(true) @map("ssrf_protection_enabled")
   privateIPBlockingEnabled Boolean @default(true) @map("private_ip_blocking_enabled")
-  domainAllowlistEnabled  Boolean  @default(true) @map("domain_allowlist_enabled")
-  strictModeEnabled       Boolean  @default(false) @map("strict_mode_enabled")
-  
+  domainAllowlistEnabled   Boolean @default(true) @map("domain_allowlist_enabled")
+  strictModeEnabled        Boolean @default(false) @map("strict_mode_enabled")
+
   // Logging & Monitoring
-  auditLoggingEnabled     Boolean  @default(true) @map("audit_logging_enabled")
-  realTimeAlertsEnabled   Boolean  @default(true) @map("real_time_alerts_enabled")
-  
+  auditLoggingEnabled   Boolean @default(true) @map("audit_logging_enabled")
+  realTimeAlertsEnabled Boolean @default(true) @map("real_time_alerts_enabled")
+
   // Rate Limiting
-  maxRequestsPerMinute    Int      @default(1000) @map("max_requests_per_minute")
-  blockDuration           Int      @default(3600) @map("block_duration") // seconds
-  
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  maxRequestsPerMinute Int @default(1000) @map("max_requests_per_minute")
+  blockDuration        Int @default(3600) @map("block_duration") // seconds
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("enterprise_security_config")
 }

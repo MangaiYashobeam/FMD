@@ -314,6 +314,75 @@ async function fetchUsers(companyId?: string): Promise<TargetUser[]> {
   }
 }
 
+// ============================================
+// v2.3.0 Predefined Templates
+// ============================================
+
+interface PredefinedTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: 'SOLDIER' | 'STEALTH' | 'NOVA' | 'SYSTEM';
+  targetGenre: 'SOLDIER' | 'STEALTH' | 'NOVA';
+  targetSource: 'EXTENSION' | 'CHROMIUM';
+  targetMode: 'USM' | 'STEALTH' | 'HYBRID' | 'NOVA_AI';
+  nodeLayout: ConnectionNode[];
+  connectionMap: Connection[];
+  recommendedConfig: Record<string, unknown>;
+  isDefault: boolean;
+  usageCount: number;
+}
+
+async function fetchPredefinedTemplates(options?: {
+  category?: string;
+  genre?: string;
+  source?: string;
+  mode?: string;
+}): Promise<PredefinedTemplate[]> {
+  const params = new URLSearchParams();
+  if (options?.category) params.append('category', options.category);
+  if (options?.genre) params.append('genre', options.genre);
+  if (options?.source) params.append('source', options.source);
+  if (options?.mode) params.append('mode', options.mode);
+  const response = await api.get(`/api/iai-factory/templates?${params.toString()}`);
+  return response.data.templates || [];
+}
+
+async function saveConnectionMap(data: {
+  name: string;
+  description?: string;
+  nodes: ConnectionNode[];
+  connections: Connection[];
+  isTemplate?: boolean;
+  category?: string;
+}): Promise<{ id: string }> {
+  const response = await api.post('/api/iai-factory/connection-maps', data);
+  return response.data;
+}
+
+async function loadConnectionMap(id: string): Promise<{
+  nodes: ConnectionNode[];
+  connections: Connection[];
+}> {
+  const response = await api.get(`/api/iai-factory/connection-maps/${id}`);
+  return {
+    nodes: response.data.map.nodes || [],
+    connections: response.data.map.connections || [],
+  };
+}
+
+async function fetchSavedConnectionMaps(): Promise<Array<{
+  id: string;
+  name: string;
+  description: string | null;
+  isTemplate: boolean;
+  category: string | null;
+  createdAt: string;
+}>> {
+  const response = await api.get('/api/iai-factory/connection-maps');
+  return response.data.maps || [];
+}
+
 // fetchUsers available for future use when implementing user targeting
 // async function fetchUsers(companyId?: string): Promise<User[]> { ... }
 
@@ -2011,6 +2080,13 @@ export default function IAIFactoryControlPanel() {
   // Connection builder state
   const [nodes, setNodes] = useState<ConnectionNode[]>([]);
   const [connectionsList, setConnectionsList] = useState<Connection[]>([]);
+  
+  // v2.3.0 Templates state
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [selectedTemplateCategory, setSelectedTemplateCategory] = useState<'SOLDIER' | 'STEALTH' | 'NOVA' | 'SYSTEM' | 'all'>('all');
+  const [showSaveMapModal, setShowSaveMapModal] = useState(false);
+  const [saveMapName, setSaveMapName] = useState('');
+  const [saveMapDescription, setSaveMapDescription] = useState('');
 
   // Queries
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -2048,6 +2124,21 @@ export default function IAIFactoryControlPanel() {
   const { data: users = [] } = useQuery({
     queryKey: ['admin-users'],
     queryFn: () => fetchUsers(),
+  });
+
+  // v2.3.0 Templates queries
+  const { data: predefinedTemplates = [] } = useQuery({
+    queryKey: ['iai-factory-templates', selectedTemplateCategory],
+    queryFn: () => fetchPredefinedTemplates(
+      selectedTemplateCategory !== 'all' ? { category: selectedTemplateCategory } : undefined
+    ),
+    enabled: showTemplateSelector,
+  });
+
+  const { data: savedMaps = [] } = useQuery({
+    queryKey: ['iai-factory-saved-maps'],
+    queryFn: fetchSavedConnectionMaps,
+    enabled: showTemplateSelector,
   });
 
   // Mutations
@@ -2090,6 +2181,46 @@ export default function IAIFactoryControlPanel() {
       queryClient.invalidateQueries({ queryKey: ['iai-factory-stats'] });
     },
   });
+
+  // v2.3.0 Save connection map mutation
+  const saveMapMutation = useMutation({
+    mutationFn: saveConnectionMap,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['iai-factory-saved-maps'] });
+      setShowSaveMapModal(false);
+      setSaveMapName('');
+      setSaveMapDescription('');
+    },
+  });
+
+  // v2.3.0 Template/Map handlers
+  const handleLoadTemplate = useCallback((template: PredefinedTemplate) => {
+    setNodes(template.nodeLayout || []);
+    setConnectionsList(template.connectionMap || []);
+    setShowTemplateSelector(false);
+  }, []);
+
+  const handleLoadSavedMap = useCallback(async (mapId: string) => {
+    try {
+      const { nodes: loadedNodes, connections } = await loadConnectionMap(mapId);
+      setNodes(loadedNodes);
+      setConnectionsList(connections);
+      setShowTemplateSelector(false);
+    } catch (error) {
+      console.error('Failed to load connection map:', error);
+    }
+  }, []);
+
+  const handleSaveCurrentMap = () => {
+    if (!saveMapName.trim()) return;
+    saveMapMutation.mutate({
+      name: saveMapName,
+      description: saveMapDescription || undefined,
+      nodes,
+      connections: connectionsList,
+      isTemplate: false,
+    });
+  };
 
   const handleAddNode = useCallback((type: NodeType, data?: Record<string, any>) => {
     const existingCount = nodes.filter(n => n.type === type).length;
@@ -2353,13 +2484,116 @@ export default function IAIFactoryControlPanel() {
       {activeView === 'connections' && (
         <div className="space-y-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
-            <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-              <Network className="w-5 h-5 text-cyan-400" />
-              Visual Connection Builder
-            </h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Network className="w-5 h-5 text-cyan-400" />
+                Visual Connection Builder
+              </h2>
+              <button
+                onClick={() => setShowTemplateSelector(!showTemplateSelector)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                  showTemplateSelector
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                }`}
+              >
+                <Package className="w-4 h-4" />
+                Templates & Saved Maps
+              </button>
+            </div>
             <p className="text-sm text-slate-400 mb-4">
               Design IAI routing and connections visually. Connect IAI blueprints to companies, users, patterns, and containers.
             </p>
+
+            {/* v2.3.0 Template Selector Panel */}
+            {showTemplateSelector && (
+              <div className="mb-4 bg-slate-900 rounded-lg border border-slate-600 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-white flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-yellow-400" />
+                    Predefined Templates
+                  </h3>
+                  <div className="flex gap-1">
+                    {(['all', 'SOLDIER', 'STEALTH', 'NOVA', 'SYSTEM'] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setSelectedTemplateCategory(cat)}
+                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          selectedTemplateCategory === cat
+                            ? cat === 'SOLDIER' ? 'bg-blue-600 text-white'
+                              : cat === 'STEALTH' ? 'bg-purple-600 text-white'
+                              : cat === 'NOVA' ? 'bg-amber-600 text-white'
+                              : cat === 'SYSTEM' ? 'bg-slate-600 text-white'
+                              : 'bg-cyan-600 text-white'
+                            : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                        }`}
+                      >
+                        {cat === 'all' ? 'All' : cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {predefinedTemplates.length === 0 ? (
+                    <div className="col-span-3 text-center py-4 text-slate-500 text-sm">
+                      No templates in this category
+                    </div>
+                  ) : (
+                    predefinedTemplates.map((template) => (
+                      <button
+                        key={template.id}
+                        onClick={() => handleLoadTemplate(template)}
+                        className="bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg p-3 text-left transition-colors group"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            template.targetGenre === 'SOLDIER' ? 'bg-blue-900/30 text-blue-400'
+                            : template.targetGenre === 'STEALTH' ? 'bg-purple-900/30 text-purple-400'
+                            : 'bg-amber-900/30 text-amber-400'
+                          }`}>
+                            {template.targetGenre}
+                          </span>
+                          <span className="text-xs text-slate-500">{template.targetSource}</span>
+                        </div>
+                        <p className="font-medium text-white group-hover:text-cyan-400 text-sm">
+                          {template.name}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">
+                          {template.description}
+                        </p>
+                        {template.isDefault && (
+                          <span className="text-[10px] text-green-400 mt-1 inline-block">★ Default</span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Saved Maps */}
+                <div className="border-t border-slate-700 pt-3">
+                  <h4 className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                    <Save className="w-3.5 h-3.5" />
+                    Your Saved Maps
+                  </h4>
+                  <div className="flex gap-2 flex-wrap">
+                    {savedMaps.length === 0 ? (
+                      <span className="text-xs text-slate-500">No saved maps yet</span>
+                    ) : (
+                      savedMaps.map((map) => (
+                        <button
+                          key={map.id}
+                          onClick={() => handleLoadSavedMap(map.id)}
+                          className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-300 transition-colors"
+                        >
+                          {map.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             
             <ConnectionBuilder
               nodes={nodes}
@@ -2383,17 +2617,65 @@ export default function IAIFactoryControlPanel() {
               Clear All
             </button>
             <button
-              onClick={() => {
-                console.log('Saving connections:', { nodes, connections: connectionsList });
-                // TODO: Save to backend
-                alert('Connection map saved! (Check console)');
-              }}
-              className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors flex items-center gap-2"
+              onClick={() => setShowSaveMapModal(true)}
+              disabled={nodes.length === 0}
+              className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-4 h-4" />
               Save Connection Map
             </button>
           </div>
+
+          {/* Save Map Modal */}
+          {showSaveMapModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 w-full max-w-md">
+                <h3 className="text-lg font-semibold text-white mb-4">Save Connection Map</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Name *</label>
+                    <input
+                      type="text"
+                      value={saveMapName}
+                      onChange={(e) => setSaveMapName(e.target.value)}
+                      placeholder="My connection map"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Description</label>
+                    <textarea
+                      value={saveMapDescription}
+                      onChange={(e) => setSaveMapDescription(e.target.value)}
+                      placeholder="Optional description..."
+                      rows={3}
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 resize-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <button
+                    onClick={() => { setShowSaveMapModal(false); setSaveMapName(''); setSaveMapDescription(''); }}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveCurrentMap}
+                    disabled={!saveMapName.trim() || saveMapMutation.isPending}
+                    className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {saveMapMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

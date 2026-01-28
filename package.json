@@ -1,6 +1,6 @@
 {
   "name": "dealersface",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Dealers Face - Auto Dealer Facebook Marketplace Automation Platform",
   "main": "dist/server.js",
   "scripts": {

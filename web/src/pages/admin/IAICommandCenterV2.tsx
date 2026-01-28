@@ -24,6 +24,10 @@ import {
   Boxes,
   Target,
   Cpu,
+  Ghost,
+  Brain,
+  Filter,
+  Layers,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import IAIPrototypePanel from './IAIPrototypePanel';
@@ -33,6 +37,16 @@ import IAIMissionControlPanel from './IAIMissionControlPanel';
 import IAIFactoryControlPanel from './IAIFactoryControlPanel';
 
 // ============================================
+// v2.3.0 Classification Types
+// ============================================
+
+type SoldierGenre = 'SOLDIER' | 'STEALTH' | 'NOVA';
+type ExecutionSource = 'EXTENSION' | 'CHROMIUM';
+type SoldierMode = 'USM' | 'STEALTH' | 'HYBRID' | 'NOVA_AI';
+type SoldierStatus = 'ONLINE' | 'OFFLINE' | 'WORKING' | 'IDLE' | 'ERROR' | 'SUSPENDED';
+type MissionProfile = 'FAST_POST' | 'STEALTH_POST' | 'ENGAGEMENT' | 'MONITORING' | 'FULL_CYCLE' | 'CUSTOM';
+
+// ============================================
 // Types
 // ============================================
 
@@ -40,11 +54,18 @@ interface IAISoldier {
   id: string;
   soldierId: string;
   soldierNumber: number;
-  status: 'online' | 'offline' | 'working' | 'idle' | 'error';
+  status: SoldierStatus;
   accountId: string;
   userId: string | null;
   browserId: string | null;
   extensionVersion: string | null;
+  // v2.3.0 Classification
+  genre: SoldierGenre;
+  executionSource: ExecutionSource;
+  mode: SoldierMode;
+  missionProfile: MissionProfile;
+  chromiumVersion: string | null;
+  // Location
   locationCity: string | null;
   locationCountry: string | null;
   locationLat: number | null;
@@ -53,7 +74,7 @@ interface IAISoldier {
   currentPatternId: string | null;
   currentPatternName: string | null;
   patternLoadedAt: string | null;
-  patternSource: 'override' | 'default' | 'weighted' | 'usm' | null;
+  patternSource: 'override' | 'default' | 'weighted' | 'usm' | 'nova' | null;
   // Performance
   tasksCompleted: number;
   tasksFailed: number;
@@ -64,6 +85,10 @@ interface IAISoldier {
   lastTaskAt: string | null;
   lastError: string | null;
   lastErrorAt: string | null;
+  // NOVA-specific
+  novaIntelligenceScore: number | null;
+  novaDecisionsMade: number | null;
+  novaLearningCycles: number | null;
   createdAt: string;
   account: {
     name: string;
@@ -74,6 +99,32 @@ interface IAISoldier {
     firstName: string | null;
     lastName: string | null;
   } | null;
+}
+
+interface IAIStats {
+  totalSoldiers: number;
+  onlineSoldiers: number;
+  workingSoldiers: number;
+  offlineSoldiers: number;
+  errorSoldiers: number;
+  recentActivity: number;
+  totalTasksCompleted: number;
+  totalTasksFailed: number;
+  // v2.3.0 Classification stats
+  byGenre: Record<SoldierGenre, number>;
+  bySource: Record<ExecutionSource, number>;
+  byMode: Record<SoldierMode, number>;
+}
+
+interface SoldiersResponse {
+  soldiers: IAISoldier[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+  filters: {
+    genres: SoldierGenre[];
+    sources: ExecutionSource[];
+    modes: SoldierMode[];
+    missions: MissionProfile[];
+  };
 }
 
 interface SystemInfo {
@@ -110,12 +161,28 @@ interface SystemInfo {
 // API Functions
 // ============================================
 
-async function fetchSoldiers() {
-  const response = await api.get('/api/admin/iai/soldiers?limit=100');
+async function fetchSoldiers(params: {
+  genre?: SoldierGenre;
+  executionSource?: ExecutionSource;
+  mode?: SoldierMode;
+  missionProfile?: MissionProfile;
+  status?: string;
+  search?: string;
+}): Promise<SoldiersResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.set('limit', '100');
+  if (params.genre) searchParams.set('genre', params.genre);
+  if (params.executionSource) searchParams.set('executionSource', params.executionSource);
+  if (params.mode) searchParams.set('mode', params.mode);
+  if (params.missionProfile) searchParams.set('missionProfile', params.missionProfile);
+  if (params.status) searchParams.set('status', params.status);
+  if (params.search) searchParams.set('search', params.search);
+  
+  const response = await api.get(`/api/admin/iai/soldiers?${searchParams.toString()}`);
   return response.data;
 }
 
-async function fetchStats() {
+async function fetchStats(): Promise<IAIStats> {
   const response = await api.get('/api/admin/iai/stats');
   return response.data;
 }
@@ -146,15 +213,59 @@ async function restartSoldier(id: string) {
 // Utility Functions
 // ============================================
 
+// v2.3.0 Genre icons and colors
+function getGenreIcon(genre: SoldierGenre) {
+  const icons: Record<SoldierGenre, React.ReactNode> = {
+    SOLDIER: <Zap className="w-4 h-4" />,
+    STEALTH: <Ghost className="w-4 h-4" />,
+    NOVA: <Brain className="w-4 h-4" />,
+  };
+  return icons[genre] || icons.SOLDIER;
+}
+
+function getGenreColor(genre: SoldierGenre): string {
+  const colors: Record<SoldierGenre, string> = {
+    SOLDIER: 'bg-blue-100 text-blue-800 border-blue-300',
+    STEALTH: 'bg-purple-100 text-purple-800 border-purple-300',
+    NOVA: 'bg-amber-100 text-amber-800 border-amber-300',
+  };
+  return colors[genre] || colors.SOLDIER;
+}
+
+function getModeColor(mode: SoldierMode): string {
+  const colors: Record<SoldierMode, string> = {
+    USM: 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30',
+    STEALTH: 'bg-purple-900/30 text-purple-400 border-purple-500/30',
+    HYBRID: 'bg-green-900/30 text-green-400 border-green-500/30',
+    NOVA_AI: 'bg-amber-900/30 text-amber-400 border-amber-500/30',
+  };
+  return colors[mode] || colors.USM;
+}
+
+function getSourceBadge(source: ExecutionSource): string {
+  const colors: Record<ExecutionSource, string> = {
+    EXTENSION: 'bg-blue-900/30 text-blue-400 border-blue-500/30',
+    CHROMIUM: 'bg-cyan-900/30 text-cyan-400 border-cyan-500/30',
+  };
+  return colors[source] || colors.EXTENSION;
+}
+
 function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
+    ONLINE: 'bg-green-100 text-green-800 border-green-200',
+    WORKING: 'bg-blue-100 text-blue-800 border-blue-200',
+    OFFLINE: 'bg-gray-100 text-gray-800 border-gray-200',
+    IDLE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    ERROR: 'bg-red-100 text-red-800 border-red-200',
+    SUSPENDED: 'bg-orange-100 text-orange-800 border-orange-200',
+    // Legacy lowercase support
     online: 'bg-green-100 text-green-800 border-green-200',
     working: 'bg-blue-100 text-blue-800 border-blue-200',
     offline: 'bg-gray-100 text-gray-800 border-gray-200',
     idle: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     error: 'bg-red-100 text-red-800 border-red-200',
   };
-  return colors[status] || colors.offline;
+  return colors[status] || colors.OFFLINE;
 }
 
 function getStatusIcon(status: string) {
@@ -240,6 +351,31 @@ function SoldierCard({
     <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 hover:shadow-lg hover:border-blue-500 transition-all group">
       <div className="flex items-start justify-between">
         <div className="flex-1" onClick={onClick} role="button">
+          {/* v2.3.0 Genre/Source/Mode badges */}
+          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+            {soldier.genre && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getGenreColor(soldier.genre)}`}>
+                {getGenreIcon(soldier.genre)}
+                {soldier.genre}
+              </span>
+            )}
+            {soldier.executionSource && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getSourceBadge(soldier.executionSource)}`}>
+                {soldier.executionSource === 'EXTENSION' ? (
+                  <Zap className="w-3 h-3" />
+                ) : (
+                  <Chrome className="w-3 h-3" />
+                )}
+                {soldier.executionSource}
+              </span>
+            )}
+            {soldier.mode && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getModeColor(soldier.mode)}`}>
+                {soldier.mode}
+              </span>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 mb-2">
             <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors cursor-pointer">
               {soldier.soldierId}
@@ -275,6 +411,21 @@ function SoldierCard({
               </div>
             )}
 
+            {/* NOVA Intelligence Score */}
+            {soldier.genre === 'NOVA' && soldier.novaIntelligenceScore && (
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-amber-400" />
+                <span className="text-amber-300 font-medium">
+                  NOVA IQ: {soldier.novaIntelligenceScore.toFixed(1)}
+                </span>
+                {soldier.novaDecisionsMade && (
+                  <span className="text-slate-500 text-xs">
+                    ({soldier.novaDecisionsMade} decisions)
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Current Pattern */}
             {soldier.currentPatternName && (
               <div className="flex items-center gap-2">
@@ -283,6 +434,14 @@ function SoldierCard({
                 <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getPatternSourceBadge(soldier.patternSource)}`}>
                   {soldier.patternSource?.toUpperCase() || 'DEFAULT'}
                 </span>
+              </div>
+            )}
+
+            {/* Mission Profile */}
+            {soldier.missionProfile && (
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-orange-400" />
+                <span className="text-orange-300 font-medium">{soldier.missionProfile}</span>
               </div>
             )}
 
@@ -509,17 +668,35 @@ function SystemDashboard({ systemInfo }: { systemInfo: SystemInfo | undefined })
 // ============================================
 
 export default function IAICommandCenterV2() {
+  // v2.3.0 Enhanced Filter State
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [genreFilter, setGenreFilter] = useState<SoldierGenre | 'all'>('all');
+  const [sourceFilter, setSourceFilter] = useState<ExecutionSource | 'all'>('all');
+  const [modeFilter, setModeFilter] = useState<SoldierMode | 'all'>('all');
+  const [missionFilter, setMissionFilter] = useState<MissionProfile | 'all'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  
   const [activeTab, setActiveTab] = useState<'soldiers' | 'system' | 'prototype' | 'training' | 'injection' | 'mission-control' | 'factory'>('soldiers');
   const queryClient = useQueryClient();
+
+  // Build filter params for API call
+  const filterParams = {
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    genre: genreFilter !== 'all' ? genreFilter : undefined,
+    executionSource: sourceFilter !== 'all' ? sourceFilter : undefined,
+    mode: modeFilter !== 'all' ? modeFilter : undefined,
+    missionProfile: missionFilter !== 'all' ? missionFilter : undefined,
+    search: searchQuery || undefined,
+  };
 
   const {
     data: soldiersData,
     isLoading: soldiersLoading,
     error: soldiersError,
   } = useQuery({
-    queryKey: ['soldiers'],
-    queryFn: fetchSoldiers,
+    queryKey: ['soldiers', filterParams],
+    queryFn: () => fetchSoldiers(filterParams),
     refetchInterval: 30000, // 30 seconds - much more reasonable
     retry: 1,
     staleTime: 10000,
@@ -562,8 +739,28 @@ export default function IAICommandCenterV2() {
   });
 
   const soldiers = soldiersData?.soldiers || [];
-  const filteredSoldiers =
-    statusFilter === 'all' ? soldiers : soldiers.filter((s: IAISoldier) => s.status === statusFilter);
+  // Client-side filtering no longer needed - server handles it
+  const filteredSoldiers = soldiers;
+
+  // Reset all filters
+  const handleResetFilters = () => {
+    setStatusFilter('all');
+    setGenreFilter('all');
+    setSourceFilter('all');
+    setModeFilter('all');
+    setMissionFilter('all');
+    setSearchQuery('');
+  };
+
+  // Count active filters
+  const activeFilterCount = [
+    statusFilter !== 'all',
+    genreFilter !== 'all',
+    sourceFilter !== 'all',
+    modeFilter !== 'all',
+    missionFilter !== 'all',
+    searchQuery.length > 0,
+  ].filter(Boolean).length;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['soldiers'] });
@@ -749,28 +946,28 @@ export default function IAICommandCenterV2() {
         <div className="w-full px-6 py-6 space-y-6">
         {activeTab === 'soldiers' ? (
           <>
-            {/* Stats Grid */}
+            {/* Primary Stats Grid */}
             <div className="grid grid-cols-4 gap-4">
               <StatsCard
                 title="Total Soldiers"
                 value={stats?.totalSoldiers || 0}
                 icon={Server}
                 color="bg-blue-600"
-                onClick={() => setStatusFilter('all')}
+                onClick={() => handleResetFilters()}
               />
               <StatsCard
                 title="Online"
                 value={stats?.onlineSoldiers || 0}
                 icon={CheckCircle}
                 color="bg-green-600"
-                onClick={() => setStatusFilter('online')}
+                onClick={() => { handleResetFilters(); setStatusFilter('ONLINE'); }}
               />
               <StatsCard
                 title="Working"
                 value={stats?.workingSoldiers || 0}
                 icon={Activity}
                 color="bg-purple-600"
-                onClick={() => setStatusFilter('working')}
+                onClick={() => { handleResetFilters(); setStatusFilter('WORKING'); }}
               />
               <StatsCard
                 title="Tasks Completed"
@@ -778,16 +975,169 @@ export default function IAICommandCenterV2() {
                 subtitle="All time"
                 icon={TrendingUp}
                 color="bg-emerald-600"
-                onClick={() => setStatusFilter('all')}
+                onClick={() => handleResetFilters()}
               />
             </div>
 
-            {/* Filters */}
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            {/* v2.3.0 Classification Stats */}
+            {stats?.byGenre && (
+              <div className="grid grid-cols-3 gap-4">
+                {/* By Genre */}
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+                  <h4 className="text-sm font-medium text-slate-400 mb-3 flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    By Genre
+                  </h4>
+                  <div className="space-y-2">
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setGenreFilter('SOLDIER'); }}
+                    >
+                      <span className="flex items-center gap-2 text-blue-400">
+                        <Zap className="w-4 h-4" />
+                        IAI Soldiers
+                      </span>
+                      <span className="text-lg font-bold text-white">{stats.byGenre.SOLDIER || 0}</span>
+                    </div>
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setGenreFilter('STEALTH'); }}
+                    >
+                      <span className="flex items-center gap-2 text-purple-400">
+                        <Ghost className="w-4 h-4" />
+                        Stealth Soldiers
+                      </span>
+                      <span className="text-lg font-bold text-white">{stats.byGenre.STEALTH || 0}</span>
+                    </div>
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setGenreFilter('NOVA'); }}
+                    >
+                      <span className="flex items-center gap-2 text-amber-400">
+                        <Brain className="w-4 h-4" />
+                        NOVA Soldiers
+                      </span>
+                      <span className="text-lg font-bold text-white">{stats.byGenre.NOVA || 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* By Execution Source */}
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+                  <h4 className="text-sm font-medium text-slate-400 mb-3 flex items-center gap-2">
+                    <Server className="w-4 h-4" />
+                    By Execution Source
+                  </h4>
+                  <div className="space-y-2">
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setSourceFilter('EXTENSION'); }}
+                    >
+                      <span className="flex items-center gap-2 text-blue-400">
+                        <Zap className="w-4 h-4" />
+                        Extension (User Browser)
+                      </span>
+                      <span className="text-lg font-bold text-white">{stats.bySource?.EXTENSION || 0}</span>
+                    </div>
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setSourceFilter('CHROMIUM'); }}
+                    >
+                      <span className="flex items-center gap-2 text-cyan-400">
+                        <Chrome className="w-4 h-4" />
+                        Chromium (Server)
+                      </span>
+                      <span className="text-lg font-bold text-white">{stats.bySource?.CHROMIUM || 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* By Mode */}
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+                  <h4 className="text-sm font-medium text-slate-400 mb-3 flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    By Mode
+                  </h4>
+                  <div className="space-y-2">
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setModeFilter('USM'); }}
+                    >
+                      <span className="text-yellow-400">Ultra Speed (USM)</span>
+                      <span className="text-lg font-bold text-white">{stats.byMode?.USM || 0}</span>
+                    </div>
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setModeFilter('STEALTH'); }}
+                    >
+                      <span className="text-purple-400">Stealth Mode</span>
+                      <span className="text-lg font-bold text-white">{stats.byMode?.STEALTH || 0}</span>
+                    </div>
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setModeFilter('HYBRID'); }}
+                    >
+                      <span className="text-green-400">Hybrid Mode</span>
+                      <span className="text-lg font-bold text-white">{stats.byMode?.HYBRID || 0}</span>
+                    </div>
+                    <div 
+                      className="flex items-center justify-between cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg transition-colors"
+                      onClick={() => { handleResetFilters(); setModeFilter('NOVA_AI'); }}
+                    >
+                      <span className="text-amber-400">NOVA AI</span>
+                      <span className="text-lg font-bold text-white">{stats.byMode?.NOVA_AI || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* v2.3.0 Enhanced Filters */}
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 space-y-4">
+              {/* Search and Toggle */}
               <div className="flex items-center gap-4">
-                <span className="text-sm font-medium text-slate-300">Filter by Status:</span>
-                <div className="flex gap-2">
-                  {['all', 'online', 'working', 'idle', 'offline', 'error'].map((status) => (
+                <div className="relative flex-1 max-w-md">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search soldiers by ID or account..."
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 pl-10 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  />
+                  <Server className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                </div>
+                <button
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    showAdvancedFilters || activeFilterCount > 0
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{activeFilterCount}</span>
+                  )}
+                </button>
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={handleResetFilters}
+                    className="text-sm text-slate-400 hover:text-white transition-colors"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <div className="ml-auto text-sm text-slate-400">
+                  Showing {filteredSoldiers.length} soldiers
+                </div>
+              </div>
+
+              {/* Status Filter - Always visible */}
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium text-slate-300">Status:</span>
+                <div className="flex gap-2 flex-wrap">
+                  {['all', 'ONLINE', 'WORKING', 'IDLE', 'OFFLINE', 'ERROR'].map((status) => (
                     <button
                       key={status}
                       onClick={() => setStatusFilter(status)}
@@ -797,14 +1147,108 @@ export default function IAICommandCenterV2() {
                           : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                       }`}
                     >
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                      {status === 'all' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}
                     </button>
                   ))}
                 </div>
-                <div className="ml-auto text-sm text-slate-400">
-                  Showing {filteredSoldiers.length} of {soldiers.length} soldiers
-                </div>
               </div>
+
+              {/* Advanced Filters - Collapsible */}
+              {showAdvancedFilters && (
+                <div className="pt-4 border-t border-slate-700 space-y-4">
+                  {/* Genre Filter */}
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-medium text-slate-300 w-20">Genre:</span>
+                    <div className="flex gap-2">
+                      {(['all', 'SOLDIER', 'STEALTH', 'NOVA'] as const).map((genre) => (
+                        <button
+                          key={genre}
+                          onClick={() => setGenreFilter(genre)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                            genreFilter === genre
+                              ? genre === 'SOLDIER' ? 'bg-blue-600 text-white'
+                              : genre === 'STEALTH' ? 'bg-purple-600 text-white'
+                              : genre === 'NOVA' ? 'bg-amber-600 text-white'
+                              : 'bg-blue-600 text-white'
+                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          {genre === 'SOLDIER' && <Zap className="w-3.5 h-3.5" />}
+                          {genre === 'STEALTH' && <Ghost className="w-3.5 h-3.5" />}
+                          {genre === 'NOVA' && <Brain className="w-3.5 h-3.5" />}
+                          {genre === 'all' ? 'All' : genre}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Execution Source Filter */}
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-medium text-slate-300 w-20">Source:</span>
+                    <div className="flex gap-2">
+                      {(['all', 'EXTENSION', 'CHROMIUM'] as const).map((source) => (
+                        <button
+                          key={source}
+                          onClick={() => setSourceFilter(source)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                            sourceFilter === source
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          {source === 'EXTENSION' && <Zap className="w-3.5 h-3.5" />}
+                          {source === 'CHROMIUM' && <Chrome className="w-3.5 h-3.5" />}
+                          {source === 'all' ? 'All Sources' : source}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Mode Filter */}
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-medium text-slate-300 w-20">Mode:</span>
+                    <div className="flex gap-2">
+                      {(['all', 'USM', 'STEALTH', 'HYBRID', 'NOVA_AI'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setModeFilter(mode)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            modeFilter === mode
+                              ? mode === 'USM' ? 'bg-yellow-600 text-white'
+                              : mode === 'STEALTH' ? 'bg-purple-600 text-white'
+                              : mode === 'HYBRID' ? 'bg-green-600 text-white'
+                              : mode === 'NOVA_AI' ? 'bg-amber-600 text-white'
+                              : 'bg-blue-600 text-white'
+                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          {mode === 'all' ? 'All Modes' : mode.replace('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Mission Profile Filter */}
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-medium text-slate-300 w-20">Mission:</span>
+                    <div className="flex gap-2 flex-wrap">
+                      {(['all', 'FAST_POST', 'STEALTH_POST', 'ENGAGEMENT', 'MONITORING', 'FULL_CYCLE', 'CUSTOM'] as const).map((mission) => (
+                        <button
+                          key={mission}
+                          onClick={() => setMissionFilter(mission)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            missionFilter === mission
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          {mission === 'all' ? 'All Missions' : mission.replace(/_/g, ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Soldiers Grid */}

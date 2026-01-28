@@ -1,6 +1,13 @@
 /**
- * IAI Factory Routes
- * API endpoints for IAI Blueprint management, instance spawning, and orchestration.
+ * IAI Factory Routes v2.3.0
+ * 
+ * Three-Class Soldier Architecture:
+ * - IAI Soldiers: User-side Chrome extension, includes USM (Ultra Speed Mode)
+ * - IAI Stealth Soldiers: Chromium-based, invisible, human-like patterns
+ * - NOVA Soldiers: Peak automation, full AI integration
+ * 
+ * API endpoints for IAI Blueprint management, instance spawning, 
+ * connection builder persistence, and predefined templates.
  * 
  * ⚠️ SECURITY: These routes control IAI creation - SUPER_ADMIN only.
  */
@@ -8,7 +15,13 @@
 import { Router, Response, NextFunction } from 'express';
 import { AuthRequest, authenticate } from '../middleware/auth';
 import { logger } from '../utils/logger';
-import { iaiFactoryService } from '../services/iai-factory.service';
+import { 
+  iaiFactoryService,
+  BLUEPRINT_TYPES,
+  type SoldierGenre,
+  type ExecutionSource,
+  type SoldierMode,
+} from '../services/iai-factory.service';
 import {
   sanitizeString,
   sanitizeUUID,
@@ -22,6 +35,13 @@ import {
 } from '../utils/admin-security';
 
 const router = Router();
+
+// ============================================
+// v2.3.0 Classification Constants
+// ============================================
+const VALID_GENRES: SoldierGenre[] = ['SOLDIER', 'STEALTH', 'NOVA'];
+const VALID_SOURCES: ExecutionSource[] = ['EXTENSION', 'CHROMIUM'];
+const VALID_MODES: SoldierMode[] = ['USM', 'STEALTH', 'HYBRID', 'NOVA_AI'];
 
 // ============================================
 // SECURITY: Authenticate ALL requests first
@@ -85,9 +105,6 @@ const asyncHandler = (fn: (req: AuthRequest, res: Response, next: NextFunction) 
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 
-// Allowed blueprint types
-const ALLOWED_BLUEPRINT_TYPES = ['standard', 'ultra_speed', 'stealth', 'hybrid', 'custom'] as const;
-
 // ============================================
 // Factory Stats
 // ============================================
@@ -99,7 +116,7 @@ router.get('/stats', asyncHandler(async (_req: AuthRequest, res: Response): Prom
 }));
 
 // ============================================
-// Blueprint Routes
+// Blueprint Routes (v2.3.0 Classification support)
 // ============================================
 
 router.get('/blueprints', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
@@ -107,9 +124,35 @@ router.get('/blueprints', asyncHandler(async (req: AuthRequest, res: Response): 
   const type = sanitizeString(req.query.type, 50);
   const limit = sanitizeInteger(req.query.limit, 1, 100) ?? 50;
   const offset = sanitizeInteger(req.query.offset, 0) ?? 0;
+  
+  // v2.3.0 Classification filters
+  const genre = sanitizeString(req.query.genre, 20) as SoldierGenre | undefined;
+  const source = sanitizeString(req.query.source, 20) as ExecutionSource | undefined;
+  const mode = sanitizeString(req.query.mode, 20) as SoldierMode | undefined;
+  const accountId = sanitizeUUID(req.query.accountId);
 
-  const blueprints = await iaiFactoryService.listBlueprints({ isActive, type, limit, offset });
-  res.json({ success: true, blueprints });
+  const blueprints = await iaiFactoryService.listBlueprints({ 
+    isActive, 
+    type: type as typeof BLUEPRINT_TYPES[number] | undefined, 
+    genre: genre && VALID_GENRES.includes(genre) ? genre : undefined,
+    source: source && VALID_SOURCES.includes(source) ? source : undefined,
+    mode: mode && VALID_MODES.includes(mode) ? mode : undefined,
+    accountId,
+    limit, 
+    offset 
+  });
+  
+  res.json({ 
+    success: true, 
+    blueprints,
+    // v2.3.0 Filter options
+    filters: {
+      types: BLUEPRINT_TYPES,
+      genres: VALID_GENRES,
+      sources: VALID_SOURCES,
+      modes: VALID_MODES,
+    },
+  });
   return;
 }));
 
@@ -133,7 +176,14 @@ router.get('/blueprints/:id', asyncHandler(async (req: AuthRequest, res: Respons
 router.post('/blueprints', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const name = sanitizeString(req.body.name, 100);
   const description = sanitizeString(req.body.description, 500);
-  const type = sanitizeString(req.body.type, 20) ?? 'standard';
+  const type = sanitizeString(req.body.type, 20) ?? 'STANDARD';
+  
+  // v2.3.0 Classification
+  const targetGenre = (sanitizeString(req.body.targetGenre, 20) ?? 'SOLDIER') as SoldierGenre;
+  const targetSource = (sanitizeString(req.body.targetSource, 20) ?? 'EXTENSION') as ExecutionSource;
+  const targetMode = (sanitizeString(req.body.targetMode, 20) ?? 'USM') as SoldierMode;
+  const accountId = sanitizeUUID(req.body.accountId) ?? req.user!.id; // Default to user's account
+  
   const baseConfig = sanitizeJSON(req.body.baseConfig, 5000) ?? {};
   const containerIds = Array.isArray(req.body.containerIds) ? req.body.containerIds.map((id: string) => sanitizeUUID(id)).filter(Boolean) : [];
   const patternIds = Array.isArray(req.body.patternIds) ? req.body.patternIds.map((id: string) => sanitizeUUID(id)).filter(Boolean) : [];
@@ -154,10 +204,35 @@ router.post('/blueprints', asyncHandler(async (req: AuthRequest, res: Response):
     return;
   }
 
-  if (type && !ALLOWED_BLUEPRINT_TYPES.includes(type as any)) {
+  if (type && !BLUEPRINT_TYPES.includes(type as typeof BLUEPRINT_TYPES[number])) {
     res.status(400).json({
       success: false,
-      error: `Invalid type. Allowed: ${ALLOWED_BLUEPRINT_TYPES.join(', ')}`
+      error: `Invalid type. Allowed: ${BLUEPRINT_TYPES.join(', ')}`
+    });
+    return;
+  }
+  
+  // v2.3.0 Validate classification
+  if (!VALID_GENRES.includes(targetGenre)) {
+    res.status(400).json({
+      success: false,
+      error: `Invalid targetGenre. Allowed: ${VALID_GENRES.join(', ')}`
+    });
+    return;
+  }
+  
+  if (!VALID_SOURCES.includes(targetSource)) {
+    res.status(400).json({
+      success: false,
+      error: `Invalid targetSource. Allowed: ${VALID_SOURCES.join(', ')}`
+    });
+    return;
+  }
+  
+  if (!VALID_MODES.includes(targetMode)) {
+    res.status(400).json({
+      success: false,
+      error: `Invalid targetMode. Allowed: ${VALID_MODES.join(', ')}`
     });
     return;
   }
@@ -165,7 +240,11 @@ router.post('/blueprints', asyncHandler(async (req: AuthRequest, res: Response):
   const blueprint = await iaiFactoryService.createBlueprint({
     name,
     description,
-    type,
+    type: type as typeof BLUEPRINT_TYPES[number],
+    targetGenre,
+    targetSource,
+    targetMode,
+    accountId,
     baseConfig,
     containerIds,
     patternIds,
@@ -188,11 +267,11 @@ router.post('/blueprints', asyncHandler(async (req: AuthRequest, res: Response):
     action: 'CREATE_IAI_BLUEPRINT',
     resource: 'iai_blueprint',
     resourceId: blueprint.id,
-    newValue: { name, type, isActive, hotSwapEnabled },
+    newValue: { name, type, targetGenre, targetSource, targetMode, isActive, hotSwapEnabled },
     ipAddress: getRealIP(req),
     userAgent: getUserAgent(req),
     success: true,
-    metadata: { severity: 'high', reason: 'iai_creation_capability' }
+    metadata: { severity: 'high', reason: 'iai_creation_capability', version: '2.3.0' }
   });
 
   res.status(201).json({ success: true, blueprint });
@@ -463,19 +542,48 @@ router.post('/instances/terminate-all', asyncHandler(async (req: AuthRequest, re
 }));
 
 // ============================================
-// Connection Map Routes
+// Connection Map Routes (v2.3.0 - Server-side persistence)
 // ============================================
 
-router.get('/connection-maps', asyncHandler(async (_req: AuthRequest, res: Response): Promise<void> => {
-  const maps = await iaiFactoryService.listConnectionMaps();
+router.get('/connection-maps', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const accountId = sanitizeUUID(req.query.accountId);
+  const isTemplate = sanitizeBoolean(req.query.isTemplate);
+  const isActive = sanitizeBoolean(req.query.isActive);
+  
+  const maps = await iaiFactoryService.listConnectionMaps({ accountId, isTemplate, isActive });
   res.json({ success: true, maps });
+  return;
+}));
+
+router.get('/connection-maps/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Invalid connection map ID format' });
+    return;
+  }
+  
+  const map = await iaiFactoryService.getConnectionMap(id);
+  if (!map) {
+    res.status(404).json({ success: false, error: 'Connection map not found' });
+    return;
+  }
+  
+  res.json({ success: true, map });
   return;
 }));
 
 router.post('/connection-maps', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const name = sanitizeString(req.body.name, 100);
+  const description = sanitizeString(req.body.description, 500);
   const nodes = sanitizeJSON(req.body.nodes, 50000) ?? {};
   const connections = sanitizeJSON(req.body.connections, 50000) ?? {};
+  const viewport = sanitizeJSON(req.body.viewport, 1000) ?? {};
+  const isTemplate = sanitizeBoolean(req.body.isTemplate) ?? false;
+  const templateType = sanitizeString(req.body.templateType, 50);
+  const templateTags = Array.isArray(req.body.templateTags) 
+    ? req.body.templateTags.map((t: string) => sanitizeString(t, 30)).filter(Boolean).slice(0, 10) 
+    : [];
+  const accountId = sanitizeUUID(req.body.accountId) ?? req.user!.id;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Connection map name is required' });
@@ -484,12 +592,72 @@ router.post('/connection-maps', asyncHandler(async (req: AuthRequest, res: Respo
 
   const map = await iaiFactoryService.createConnectionMap({
     name,
+    description,
     nodes,
     connections,
+    viewport,
+    isTemplate,
+    templateType,
+    templateTags,
+    accountId,
     createdBy: req.user!.id,
   });
 
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'CREATE_CONNECTION_MAP',
+    resource: 'iai_connection_map',
+    resourceId: map.id,
+    newValue: { name, isTemplate },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+  });
+
   res.status(201).json({ success: true, map });
+  return;
+}));
+
+router.put('/connection-maps/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = sanitizeUUID(req.params.id);
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Invalid connection map ID format' });
+    return;
+  }
+  
+  const existing = await iaiFactoryService.getConnectionMap(id);
+  if (!existing) {
+    res.status(404).json({ success: false, error: 'Connection map not found' });
+    return;
+  }
+
+  const name = sanitizeString(req.body.name, 100);
+  const description = sanitizeString(req.body.description, 500);
+  const nodes = sanitizeJSON(req.body.nodes, 50000);
+  const connections = sanitizeJSON(req.body.connections, 50000);
+  const viewport = sanitizeJSON(req.body.viewport, 1000);
+  
+  const map = await iaiFactoryService.updateConnectionMap(id, {
+    name,
+    description,
+    nodes,
+    connections,
+    viewport,
+  });
+
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'UPDATE_CONNECTION_MAP',
+    resource: 'iai_connection_map',
+    resourceId: id,
+    oldValue: { name: existing.name },
+    newValue: { name },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+  });
+
+  res.json({ success: true, map });
   return;
 }));
 
@@ -502,6 +670,84 @@ router.delete('/connection-maps/:id', asyncHandler(async (req: AuthRequest, res:
 
   await iaiFactoryService.deleteConnectionMap(id);
   res.json({ success: true, message: 'Connection map deleted' });
+  return;
+}));
+
+// ============================================
+// Predefined Templates Routes (v2.3.0)
+// ============================================
+
+router.get('/templates', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const category = sanitizeString(req.query.category, 50);
+  const genre = sanitizeString(req.query.genre, 20) as SoldierGenre | undefined;
+  const source = sanitizeString(req.query.source, 20) as ExecutionSource | undefined;
+  const mode = sanitizeString(req.query.mode, 20) as SoldierMode | undefined;
+  const isActive = sanitizeBoolean(req.query.isActive);
+  
+  const templates = await iaiFactoryService.listPredefinedTemplates({
+    category,
+    genre: genre && VALID_GENRES.includes(genre) ? genre : undefined,
+    source: source && VALID_SOURCES.includes(source) ? source : undefined,
+    mode: mode && VALID_MODES.includes(mode) ? mode : undefined,
+    isActive,
+  });
+  
+  res.json({ 
+    success: true, 
+    templates,
+    // Categories available
+    categories: ['fbm', 'messaging', 'intelligence', 'general', 'custom'],
+  });
+  return;
+}));
+
+router.get('/templates/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = sanitizeUUID(req.params.id) ?? sanitizeString(req.params.id, 100);
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Invalid template ID format' });
+    return;
+  }
+  
+  // Try to get by ID first, then by name
+  let template = await iaiFactoryService.getPredefinedTemplate(id);
+  if (!template) {
+    template = await iaiFactoryService.getPredefinedTemplateByName(id);
+  }
+  
+  if (!template) {
+    res.status(404).json({ success: false, error: 'Template not found' });
+    return;
+  }
+  
+  res.json({ success: true, template });
+  return;
+}));
+
+router.post('/templates/:id/use', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = sanitizeUUID(req.params.id) ?? sanitizeString(req.params.id, 100);
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Invalid template ID format' });
+    return;
+  }
+  
+  const result = await iaiFactoryService.usePredefinedTemplate(id);
+  if (!result.success || !result.template) {
+    res.status(404).json({ success: false, error: 'Template not found' });
+    return;
+  }
+  
+  createAuditLog({
+    userId: req.user!.id,
+    action: 'USE_PREDEFINED_TEMPLATE',
+    resource: 'iai_predefined_template',
+    resourceId: id,
+    newValue: { templateName: result.template.name, popularity: result.template.popularity },
+    ipAddress: getRealIP(req),
+    userAgent: getUserAgent(req),
+    success: true,
+  });
+  
+  res.json({ success: true, template: result.template });
   return;
 }));
 

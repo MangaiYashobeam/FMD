@@ -1,15 +1,18 @@
 /**
- * IAI Factory Service
+ * IAI Factory Service v2.3.0
  * 
- * Handles IAI Blueprint management, instance spawning, lifecycle control,
- * hot-swap mechanics, and connection map persistence.
+ * Three-Class Soldier Architecture:
+ * - IAI Soldiers: User-side Chrome extension, includes USM (Ultra Speed Mode)
+ * - IAI Stealth Soldiers: Chromium-based, invisible, human-like patterns
+ * - NOVA Soldiers: Peak automation, full AI integration, intelligent
  * 
  * Core Capabilities:
- * - Blueprint CRUD with validation
- * - Instance spawning with rate limiting
+ * - Blueprint CRUD with validation and classification
+ * - Instance spawning with rate limiting and targeting
  * - Hot-swap pattern injection at birth
  * - Lifespan management and auto-termination
  * - Connection map storage for visual builder
+ * - Predefined templates management
  * - Factory statistics and monitoring
  */
 
@@ -18,14 +21,38 @@ import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
 // ============================================
-// Types
+// v2.3.0 Type Definitions - Three-Class Architecture
 // ============================================
+
+// Soldier Genre - Three official soldier classes
+type SoldierGenre = 'SOLDIER' | 'STEALTH' | 'NOVA';
+
+// Execution Source - Where the soldier runs
+type ExecutionSource = 'EXTENSION' | 'CHROMIUM';
+
+// Soldier Mode - How the soldier behaves
+type SoldierMode = 'USM' | 'STEALTH' | 'HYBRID' | 'NOVA_AI';
+
+// Mission Profile - Targeting profiles
+type MissionProfile = 'FBM_LISTING' | 'FBM_MESSAGES' | 'FBM_FULL' | 'TRAINING' | 'INTELLIGENCE' | 'CUSTOM';
+
+// Instance Status
+type InstanceStatus = 'PENDING' | 'SPAWNING' | 'ACTIVE' | 'TERMINATING' | 'TERMINATED' | 'ERROR';
+
+// Blueprint types aligned with soldier classes
+const BLUEPRINT_TYPES = ['STANDARD', 'USM', 'STEALTH', 'NOVA', 'HYBRID', 'CUSTOM'] as const;
+type BlueprintType = typeof BLUEPRINT_TYPES[number];
 
 interface BlueprintCreateInput {
   name: string;
   description?: string | null;
-  type: string;
-  baseConfig: Record<string, any>;
+  type: BlueprintType;
+  // v2.3.0 Classification
+  targetGenre: SoldierGenre;
+  targetSource: ExecutionSource;
+  targetMode: SoldierMode;
+  // Configuration
+  baseConfig: Record<string, unknown>;
   containerIds: string[];
   patternIds: string[];
   hotSwapEnabled: boolean;
@@ -34,19 +61,23 @@ interface BlueprintCreateInput {
   maxConcurrent: number;
   lifespan: number;
   autoRespawn: boolean;
-  targeting: Record<string, any>;
-  schedule: Record<string, any>;
+  targeting: Record<string, unknown>;
+  schedule: Record<string, unknown>;
   isActive: boolean;
   priority: number;
   tags: string[];
   createdBy: string;
+  accountId: string;
 }
 
 interface BlueprintUpdateInput {
   name?: string;
   description?: string | null;
-  type?: string;
-  baseConfig?: Record<string, any>;
+  type?: BlueprintType;
+  targetGenre?: SoldierGenre;
+  targetSource?: ExecutionSource;
+  targetMode?: SoldierMode;
+  baseConfig?: Record<string, unknown>;
   containerIds?: string[];
   patternIds?: string[];
   hotSwapEnabled?: boolean;
@@ -55,8 +86,8 @@ interface BlueprintUpdateInput {
   maxConcurrent?: number;
   lifespan?: number;
   autoRespawn?: boolean;
-  targeting?: Record<string, any>;
-  schedule?: Record<string, any>;
+  targeting?: Record<string, unknown>;
+  schedule?: Record<string, unknown>;
   isActive?: boolean;
   priority?: number;
   tags?: string[];
@@ -64,17 +95,30 @@ interface BlueprintUpdateInput {
 
 interface ConnectionMapCreateInput {
   name: string;
-  nodes: Record<string, any>;
-  connections: Record<string, any>;
+  description?: string | null;
+  nodes: Record<string, unknown>;
+  connections: Record<string, unknown>;
+  viewport?: Record<string, unknown>;
+  isTemplate?: boolean;
+  templateType?: string;
+  templateTags?: string[];
   createdBy: string;
+  accountId: string;
 }
 
 interface Blueprint {
   id: string;
+  accountId: string;
   name: string;
   description: string | null;
-  type: string;
-  baseConfig: Record<string, any>;
+  version: string;
+  type: BlueprintType;
+  // v2.3.0 Classification
+  targetGenre: SoldierGenre;
+  targetSource: ExecutionSource;
+  targetMode: SoldierMode;
+  // Configuration
+  baseConfig: Record<string, unknown>;
   containerIds: string[];
   patternIds: string[];
   hotSwapEnabled: boolean;
@@ -83,8 +127,8 @@ interface Blueprint {
   maxConcurrent: number;
   lifespan: number;
   autoRespawn: boolean;
-  targeting: Record<string, any>;
-  schedule: Record<string, any>;
+  targeting: Record<string, unknown>;
+  schedule: Record<string, unknown>;
   isActive: boolean;
   priority: number;
   tags: string[];
@@ -94,15 +138,18 @@ interface Blueprint {
     successRate: number;
     avgLifespan: number;
   };
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
 interface Instance {
   id: string;
+  instanceId: string;
   blueprintId: string;
   blueprintName: string;
-  status: string;
+  soldierId: string | null;
+  status: InstanceStatus;
   currentPattern: string | null;
   assignedCompany: string | null;
   assignedUser: string | null;
@@ -110,10 +157,11 @@ interface Instance {
   spawnedAt: string;
   lastActiveAt: string | null;
   expiresAt: string | null;
+  terminatedAt: string | null;
   executionCount: number;
   successCount: number;
   errorCount: number;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
 }
 
 interface FactoryStats {
@@ -125,6 +173,10 @@ interface FactoryStats {
   terminationRate: number;
   avgSuccessRate: number;
   avgLifespan: number;
+  // v2.3.0 Classification stats
+  byGenre: Record<SoldierGenre, number>;
+  bySource: Record<ExecutionSource, number>;
+  byMode: Record<SoldierMode, number>;
   recentActivity: Array<{
     type: string;
     message: string;
@@ -132,8 +184,48 @@ interface FactoryStats {
   }>;
 }
 
+interface PredefinedTemplate {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string | null;
+  category: string;
+  nodes: Record<string, unknown>;
+  connections: Record<string, unknown>;
+  baseConfig: Record<string, unknown>;
+  targetGenre: SoldierGenre;
+  targetSource: ExecutionSource;
+  targetMode: SoldierMode;
+  targetMission: MissionProfile;
+  icon: string | null;
+  color: string | null;
+  tags: string[];
+  popularity: number;
+  isActive: boolean;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ConnectionMap {
+  id: string;
+  accountId: string;
+  name: string;
+  description: string | null;
+  nodes: Record<string, unknown>;
+  connections: Record<string, unknown>;
+  viewport: Record<string, unknown>;
+  isTemplate: boolean;
+  templateType: string | null;
+  templateTags: string[];
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ============================================
-// In-Memory Storage (Production would use Redis/Database)
+// In-Memory Storage (Production uses Database via Prisma)
 // ============================================
 
 // Blueprint storage
@@ -143,7 +235,10 @@ const blueprints = new Map<string, Blueprint>();
 const instances = new Map<string, Instance>();
 
 // Connection map storage
-const connectionMaps = new Map<string, any>();
+const connectionMaps = new Map<string, ConnectionMap>();
+
+// Predefined templates storage
+const predefinedTemplates = new Map<string, PredefinedTemplate>();
 
 // Activity log
 const activityLog: Array<{ type: string; message: string; timestamp: string }> = [];
@@ -151,6 +246,131 @@ const activityLog: Array<{ type: string; message: string; timestamp: string }> =
 // Stats tracking
 let spawningCount = 0;
 let terminationCount = 0;
+
+// ============================================
+// Initialize Default Predefined Templates
+// ============================================
+
+function initializeDefaultTemplates(): void {
+  const defaultTemplates: PredefinedTemplate[] = [
+    {
+      id: 'tpl-fbm-usm-soldier',
+      name: 'fbm-usm-soldier',
+      displayName: 'FBM USM Soldier',
+      description: 'Ultra Speed Mode soldier for Facebook Marketplace vehicle listing. Runs in user Chrome extension with maximum performance.',
+      category: 'fbm',
+      nodes: [{ id: 'soldier-1', type: 'iai', label: 'USM Soldier', config: { genre: 'SOLDIER', mode: 'USM' } }],
+      connections: [],
+      baseConfig: { speedMultiplier: 3, stealthLevel: 'low', humanSimulation: false },
+      targetGenre: 'SOLDIER',
+      targetSource: 'EXTENSION',
+      targetMode: 'USM',
+      targetMission: 'FBM_LISTING',
+      icon: 'Zap',
+      color: '#3B82F6',
+      tags: ['fbm', 'usm', 'fast', 'listing'],
+      popularity: 0,
+      isActive: true,
+      version: '1.0.0',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'tpl-fbm-stealth-soldier',
+      name: 'fbm-stealth-soldier',
+      displayName: 'FBM Stealth Soldier',
+      description: 'Invisible Chromium-based soldier with human-like patterns. Runs on dealersface-fbm server for maximum undetectability.',
+      category: 'fbm',
+      nodes: [{ id: 'stealth-1', type: 'iai', label: 'Stealth Soldier', config: { genre: 'STEALTH', mode: 'STEALTH' } }],
+      connections: [],
+      baseConfig: { speedMultiplier: 1, stealthLevel: 'maximum', humanSimulation: true, antiDetection: true },
+      targetGenre: 'STEALTH',
+      targetSource: 'CHROMIUM',
+      targetMode: 'STEALTH',
+      targetMission: 'FBM_LISTING',
+      icon: 'Ghost',
+      color: '#8B5CF6',
+      tags: ['fbm', 'stealth', 'chromium', 'invisible'],
+      popularity: 0,
+      isActive: true,
+      version: '1.0.0',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'tpl-nova-full-automation',
+      name: 'nova-full-automation',
+      displayName: 'NOVA Full Automation',
+      description: 'Peak automation tier with full NOVA AI integration. Intelligent decision-making, analytics, and adaptive behavior.',
+      category: 'intelligence',
+      nodes: [{ id: 'nova-1', type: 'iai', label: 'NOVA Soldier', config: { genre: 'NOVA', mode: 'NOVA_AI' } }],
+      connections: [],
+      baseConfig: { aiIntegration: true, decisionEngine: true, learningEnabled: true, analyticsLevel: 'full' },
+      targetGenre: 'NOVA',
+      targetSource: 'CHROMIUM',
+      targetMode: 'NOVA_AI',
+      targetMission: 'FBM_FULL',
+      icon: 'Brain',
+      color: '#F59E0B',
+      tags: ['nova', 'ai', 'intelligent', 'full-automation'],
+      popularity: 0,
+      isActive: true,
+      version: '1.0.0',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'tpl-hybrid-balanced',
+      name: 'hybrid-balanced',
+      displayName: 'Hybrid Balanced',
+      description: 'Balanced hybrid configuration combining extension speed with stealth patterns. Good for moderate volume.',
+      category: 'general',
+      nodes: [{ id: 'hybrid-1', type: 'iai', label: 'Hybrid Soldier', config: { genre: 'SOLDIER', mode: 'HYBRID' } }],
+      connections: [],
+      baseConfig: { speedMultiplier: 2, stealthLevel: 'moderate', humanSimulation: true },
+      targetGenre: 'SOLDIER',
+      targetSource: 'EXTENSION',
+      targetMode: 'HYBRID',
+      targetMission: 'FBM_LISTING',
+      icon: 'Layers',
+      color: '#10B981',
+      tags: ['hybrid', 'balanced', 'moderate'],
+      popularity: 0,
+      isActive: true,
+      version: '1.0.0',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'tpl-messenger-stealth',
+      name: 'messenger-stealth',
+      displayName: 'Messenger Stealth',
+      description: 'Stealth soldier optimized for Facebook Marketplace message handling. Human-like response patterns.',
+      category: 'messaging',
+      nodes: [{ id: 'messenger-1', type: 'iai', label: 'Messenger Soldier', config: { genre: 'STEALTH', mode: 'STEALTH' } }],
+      connections: [],
+      baseConfig: { messageMode: true, responseDelay: 'human', typingSimulation: true },
+      targetGenre: 'STEALTH',
+      targetSource: 'CHROMIUM',
+      targetMode: 'STEALTH',
+      targetMission: 'FBM_MESSAGES',
+      icon: 'MessageSquare',
+      color: '#EC4899',
+      tags: ['messaging', 'stealth', 'responses'],
+      popularity: 0,
+      isActive: true,
+      version: '1.0.0',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+
+  for (const template of defaultTemplates) {
+    predefinedTemplates.set(template.id, template);
+  }
+
+  logger.info('[IAI_FACTORY] Default templates initialized', { count: defaultTemplates.length });
+}
 
 // ============================================
 // Helper Functions
@@ -216,14 +436,14 @@ class IAIFactoryService {
   async getFactoryStats(): Promise<FactoryStats> {
     const allBlueprints = Array.from(blueprints.values());
     const allInstances = Array.from(instances.values());
-    const activeInstances = allInstances.filter(i => !['terminated', 'error'].includes(i.status));
+    const activeInstances = allInstances.filter(i => !['TERMINATED', 'ERROR'].includes(i.status));
 
     const totalSuccess = allInstances.reduce((sum, i) => sum + i.successCount, 0);
     const totalExecutions = allInstances.reduce((sum, i) => sum + i.executionCount, 0);
     const avgSuccessRate = totalExecutions > 0 ? totalSuccess / totalExecutions : 0;
 
     // Calculate avg lifespan from terminated instances
-    const terminatedInstances = allInstances.filter(i => i.status === 'terminated');
+    const terminatedInstances = allInstances.filter(i => i.status === 'TERMINATED');
     let avgLifespan = 0;
     if (terminatedInstances.length > 0) {
       const totalLifespan = terminatedInstances.reduce((sum, i) => {
@@ -232,6 +452,19 @@ class IAIFactoryService {
         return sum + (end - spawn);
       }, 0);
       avgLifespan = Math.round((totalLifespan / terminatedInstances.length) / 60000); // minutes
+    }
+
+    // v2.3.0: Calculate classification stats
+    const byGenre: Record<SoldierGenre, number> = { SOLDIER: 0, STEALTH: 0, NOVA: 0 };
+    const bySource: Record<ExecutionSource, number> = { EXTENSION: 0, CHROMIUM: 0 };
+    const byMode: Record<SoldierMode, number> = { USM: 0, STEALTH: 0, HYBRID: 0, NOVA_AI: 0 };
+
+    for (const blueprint of allBlueprints) {
+      if (blueprint.isActive) {
+        byGenre[blueprint.targetGenre]++;
+        bySource[blueprint.targetSource]++;
+        byMode[blueprint.targetMode]++;
+      }
     }
 
     return {
@@ -243,6 +476,9 @@ class IAIFactoryService {
       terminationRate: terminationCount,
       avgSuccessRate,
       avgLifespan,
+      byGenre,
+      bySource,
+      byMode,
       recentActivity: activityLog.slice(0, 20),
     };
   }
@@ -253,7 +489,12 @@ class IAIFactoryService {
 
   async listBlueprints(options?: {
     isActive?: boolean;
-    type?: string;
+    type?: BlueprintType;
+    // v2.3.0 Filters
+    genre?: SoldierGenre;
+    source?: ExecutionSource;
+    mode?: SoldierMode;
+    accountId?: string;
     limit?: number;
     offset?: number;
   }): Promise<Blueprint[]> {
@@ -265,6 +506,23 @@ class IAIFactoryService {
 
     if (options?.type) {
       result = result.filter(b => b.type === options.type);
+    }
+
+    // v2.3.0 Classification filters
+    if (options?.genre) {
+      result = result.filter(b => b.targetGenre === options.genre);
+    }
+
+    if (options?.source) {
+      result = result.filter(b => b.targetSource === options.source);
+    }
+
+    if (options?.mode) {
+      result = result.filter(b => b.targetMode === options.mode);
+    }
+
+    if (options?.accountId) {
+      result = result.filter(b => b.accountId === options.accountId);
     }
 
     // Sort by priority descending
@@ -285,9 +543,15 @@ class IAIFactoryService {
 
     const blueprint: Blueprint = {
       id,
+      accountId: input.accountId,
       name: input.name,
       description: input.description || null,
+      version: '1.0.0',
       type: input.type,
+      // v2.3.0 Classification
+      targetGenre: input.targetGenre,
+      targetSource: input.targetSource,
+      targetMode: input.targetMode,
       baseConfig: input.baseConfig,
       containerIds: input.containerIds,
       patternIds: input.patternIds,
@@ -308,13 +572,21 @@ class IAIFactoryService {
         successRate: 0,
         avgLifespan: 0,
       },
+      createdBy: input.createdBy,
       createdAt: now,
       updatedAt: now,
     };
 
     blueprints.set(id, blueprint);
-    addActivity('create', `Blueprint "${input.name}" created`);
-    logger.info('[IAI_FACTORY] Blueprint created', { id, name: input.name, type: input.type });
+    addActivity('create', `Blueprint "${input.name}" (${input.targetGenre}/${input.targetMode}) created`);
+    logger.info('[IAI_FACTORY] Blueprint created', { 
+      id, 
+      name: input.name, 
+      type: input.type,
+      genre: input.targetGenre,
+      source: input.targetSource,
+      mode: input.targetMode,
+    });
 
     return blueprint;
   }
@@ -518,15 +790,16 @@ class IAIFactoryService {
       return null;
     }
 
-    instance.status = 'terminated';
+    instance.status = 'TERMINATED';
     instance.lastActiveAt = new Date().toISOString();
+    instance.terminatedAt = new Date().toISOString();
     instances.set(id, instance);
 
     // Update blueprint stats
     const blueprint = blueprints.get(instance.blueprintId);
     if (blueprint) {
       blueprint.stats.activeCount = Array.from(instances.values())
-        .filter(i => i.blueprintId === instance.blueprintId && !['terminated', 'error'].includes(i.status))
+        .filter(i => i.blueprintId === instance.blueprintId && !['TERMINATED', 'ERROR'].includes(i.status))
         .length;
       blueprints.set(instance.blueprintId, blueprint);
 
@@ -552,15 +825,16 @@ class IAIFactoryService {
 
   async terminateAllInstances(blueprintId?: string): Promise<{ terminated: number }> {
     let toTerminate = Array.from(instances.values())
-      .filter(i => !['terminated', 'error'].includes(i.status));
+      .filter(i => !['TERMINATED', 'ERROR'].includes(i.status));
 
     if (blueprintId) {
       toTerminate = toTerminate.filter(i => i.blueprintId === blueprintId);
     }
 
     for (const instance of toTerminate) {
-      instance.status = 'terminated';
+      instance.status = 'TERMINATED';
       instance.lastActiveAt = new Date().toISOString();
+      instance.terminatedAt = new Date().toISOString();
       instances.set(instance.id, instance);
     }
 
@@ -585,22 +859,51 @@ class IAIFactoryService {
   }
 
   // ============================================
-  // Connection Maps
+  // Connection Maps (v2.3.0 - Server-side persistence)
   // ============================================
 
-  async listConnectionMaps(): Promise<any[]> {
-    return Array.from(connectionMaps.values());
+  async listConnectionMaps(options?: {
+    accountId?: string;
+    isTemplate?: boolean;
+    isActive?: boolean;
+  }): Promise<ConnectionMap[]> {
+    let result = Array.from(connectionMaps.values());
+
+    if (options?.accountId) {
+      result = result.filter(m => m.accountId === options.accountId);
+    }
+
+    if (options?.isTemplate !== undefined) {
+      result = result.filter(m => m.isTemplate === options.isTemplate);
+    }
+
+    if (options?.isActive !== undefined) {
+      result = result.filter(m => m.isActive === options.isActive);
+    }
+
+    return result;
   }
 
-  async createConnectionMap(input: ConnectionMapCreateInput): Promise<any> {
+  async getConnectionMap(id: string): Promise<ConnectionMap | null> {
+    return connectionMaps.get(id) || null;
+  }
+
+  async createConnectionMap(input: ConnectionMapCreateInput): Promise<ConnectionMap> {
     const id = uuidv4();
     const now = new Date().toISOString();
 
-    const map = {
+    const map: ConnectionMap = {
       id,
+      accountId: input.accountId,
       name: input.name,
+      description: input.description || null,
       nodes: input.nodes,
       connections: input.connections,
+      viewport: input.viewport || {},
+      isTemplate: input.isTemplate || false,
+      templateType: input.templateType || null,
+      templateTags: input.templateTags || [],
+      isActive: true,
       createdBy: input.createdBy,
       createdAt: now,
       updatedAt: now,
@@ -613,6 +916,25 @@ class IAIFactoryService {
     return map;
   }
 
+  async updateConnectionMap(id: string, input: Partial<ConnectionMapCreateInput>): Promise<ConnectionMap | null> {
+    const existing = connectionMaps.get(id);
+    if (!existing) {
+      return null;
+    }
+
+    const updated: ConnectionMap = {
+      ...existing,
+      ...input,
+      updatedAt: new Date().toISOString(),
+    };
+
+    connectionMaps.set(id, updated);
+    addActivity('connection_map', `Connection map "${updated.name}" updated`);
+    logger.info('[IAI_FACTORY] Connection map updated', { id, name: updated.name });
+
+    return updated;
+  }
+
   async deleteConnectionMap(id: string): Promise<void> {
     const map = connectionMaps.get(id);
     if (map) {
@@ -620,6 +942,75 @@ class IAIFactoryService {
       addActivity('connection_map', `Connection map "${map.name}" deleted`);
       logger.info('[IAI_FACTORY] Connection map deleted', { id, name: map.name });
     }
+  }
+
+  // ============================================
+  // Predefined Templates (v2.3.0)
+  // ============================================
+
+  async listPredefinedTemplates(options?: {
+    category?: string;
+    genre?: SoldierGenre;
+    source?: ExecutionSource;
+    mode?: SoldierMode;
+    isActive?: boolean;
+  }): Promise<PredefinedTemplate[]> {
+    let result = Array.from(predefinedTemplates.values());
+
+    if (options?.category) {
+      result = result.filter(t => t.category === options.category);
+    }
+
+    if (options?.genre) {
+      result = result.filter(t => t.targetGenre === options.genre);
+    }
+
+    if (options?.source) {
+      result = result.filter(t => t.targetSource === options.source);
+    }
+
+    if (options?.mode) {
+      result = result.filter(t => t.targetMode === options.mode);
+    }
+
+    if (options?.isActive !== undefined) {
+      result = result.filter(t => t.isActive === options.isActive);
+    }
+
+    // Sort by popularity descending
+    result.sort((a, b) => b.popularity - a.popularity);
+
+    return result;
+  }
+
+  async getPredefinedTemplate(id: string): Promise<PredefinedTemplate | null> {
+    return predefinedTemplates.get(id) || null;
+  }
+
+  async getPredefinedTemplateByName(name: string): Promise<PredefinedTemplate | null> {
+    for (const template of predefinedTemplates.values()) {
+      if (template.name === name) {
+        return template;
+      }
+    }
+    return null;
+  }
+
+  async usePredefinedTemplate(templateId: string): Promise<{ success: boolean; template: PredefinedTemplate | null }> {
+    const template = predefinedTemplates.get(templateId);
+    if (!template) {
+      return { success: false, template: null };
+    }
+
+    // Increment popularity
+    template.popularity++;
+    template.updatedAt = new Date().toISOString();
+    predefinedTemplates.set(templateId, template);
+
+    addActivity('template_used', `Template "${template.displayName}" used`);
+    logger.info('[IAI_FACTORY] Predefined template used', { id: templateId, name: template.name });
+
+    return { success: true, template };
   }
 
   // ============================================
@@ -773,7 +1164,7 @@ class IAIFactoryService {
     setInterval(() => {
       const now = Date.now();
       for (const instance of instances.values()) {
-        if (instance.status !== 'terminated' && instance.expiresAt) {
+        if (instance.status !== 'TERMINATED' && instance.expiresAt) {
           const expiresAt = new Date(instance.expiresAt).getTime();
           if (now >= expiresAt) {
             logger.info('[IAI_FACTORY] Instance expired, terminating', { id: instance.id });
@@ -788,16 +1179,17 @@ class IAIFactoryService {
     // Process scheduled blueprints every minute
     setInterval(() => {
       for (const blueprint of blueprints.values()) {
-        if (blueprint.isActive && blueprint.schedule.enabled && blueprint.schedule.cronExpression) {
+        if (blueprint.isActive && (blueprint.schedule as Record<string, unknown>).enabled && (blueprint.schedule as Record<string, unknown>).cronExpression) {
           // Simple schedule check (in production, use proper cron parser)
           // For now, just check if it should run based on current time
           const now = new Date();
+          const schedule = blueprint.schedule as Record<string, unknown>;
           
           // Check date range
-          if (blueprint.schedule.startDate && new Date(blueprint.schedule.startDate) > now) {
+          if (schedule.startDate && new Date(schedule.startDate as string) > now) {
             continue;
           }
-          if (blueprint.schedule.endDate && new Date(blueprint.schedule.endDate) < now) {
+          if (schedule.endDate && new Date(schedule.endDate as string) < now) {
             continue;
           }
 
@@ -821,5 +1213,26 @@ class IAIFactoryService {
 // Export singleton instance
 export const iaiFactoryService = new IAIFactoryService();
 
-// Start lifecycle manager on import
+// Initialize default templates and start lifecycle manager on import
+initializeDefaultTemplates();
 iaiFactoryService.startLifecycleManager();
+
+// Export types for external use
+export type {
+  SoldierGenre,
+  ExecutionSource,
+  SoldierMode,
+  MissionProfile,
+  InstanceStatus,
+  BlueprintType,
+  Blueprint,
+  Instance,
+  FactoryStats,
+  PredefinedTemplate,
+  ConnectionMap,
+  BlueprintCreateInput,
+  BlueprintUpdateInput,
+  ConnectionMapCreateInput,
+};
+
+export { BLUEPRINT_TYPES };
