@@ -83,7 +83,8 @@ export function sanitizeEmail(input: unknown): string | undefined {
 }
 
 /**
- * Sanitize UUID
+ * Sanitize UUID - extracts and validates UUID from pure UUIDs or prefixed strings
+ * Supports both pure UUIDs and prefixed formats like "usm-container-{uuid}"
  */
 export function sanitizeUUID(input: unknown): string | undefined {
   if (typeof input !== 'string') return undefined;
@@ -91,8 +92,46 @@ export function sanitizeUUID(input: unknown): string | undefined {
   // UUID v4 format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   
-  if (!uuidRegex.test(input)) return undefined;
-  return input.toLowerCase();
+  // First try pure UUID match
+  if (uuidRegex.test(input)) {
+    return input.toLowerCase();
+  }
+  
+  // Try to extract UUID from prefixed string (e.g., "usm-container-{uuid}")
+  const extractedMatch = input.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  if (extractedMatch) {
+    return extractedMatch[1].toLowerCase();
+  }
+  
+  return undefined;
+}
+
+/**
+ * Sanitize Container ID - accepts both prefixed container IDs and pure UUIDs
+ * Returns the FULL ID (with prefix) for database lookup
+ */
+export function sanitizeContainerId(input: unknown): string | undefined {
+  if (typeof input !== 'string') return undefined;
+  
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.length > 100) return undefined;
+  
+  // UUID v4 format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  
+  // Pure UUID is valid
+  if (uuidRegex.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  
+  // Prefixed container ID format (e.g., "usm-container-{uuid}")
+  // Allow alphanumeric prefix with hyphens, followed by UUID
+  const prefixedRegex = /^[a-z0-9-]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (prefixedRegex.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  
+  return undefined;
 }
 
 /**

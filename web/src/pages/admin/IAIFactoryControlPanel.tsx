@@ -284,17 +284,22 @@ async function fetchPatterns(containerId?: string): Promise<Pattern[]> {
 
 async function fetchCompanies(): Promise<Company[]> {
   try {
-    const response = await api.get('/api/admin/companies');
-    return response.data.companies || response.data.data || [];
+    // Use accounts endpoint (system uses "accounts" not "companies")
+    const response = await api.get('/api/admin/accounts');
+    // API returns { accounts: [...] } or { data: [...] }
+    const accounts = response.data.accounts || response.data.data || response.data || [];
+    // Map accounts to Company interface
+    return Array.isArray(accounts) ? accounts.map((acc: any) => ({
+      id: acc.id,
+      name: acc.dealershipName || acc.name || 'Unknown Account',
+      dealershipName: acc.dealershipName,
+      status: acc.status,
+      createdAt: acc.createdAt,
+      ...acc
+    })) : [];
   } catch (error) {
-    // Fallback: try alternate endpoint
-    try {
-      const fallback = await api.get('/api/companies');
-      return fallback.data.companies || fallback.data.data || [];
-    } catch {
-      console.warn('Failed to fetch companies');
-      return [];
-    }
+    console.warn('Failed to fetch accounts:', error);
+    return [];
   }
 }
 

@@ -13,6 +13,7 @@ import { logger } from '../utils/logger';
 import { 
   sanitizeString,
   sanitizeUUID,
+  sanitizeContainerId,
   sanitizeInteger,
   sanitizeBoolean,
   sanitizeJSON,
@@ -208,7 +209,7 @@ router.get('/containers', asyncHandler(async (req: AuthRequest, res: Response): 
 }));
 
 router.get('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
-  const id = sanitizeUUID(req.params.id);
+  const id = sanitizeContainerId(req.params.id);
   if (!id) {
     res.status(400).json({ success: false, error: 'Invalid container ID format' });
     return;
@@ -229,7 +230,7 @@ router.get('/containers/:id', asyncHandler(async (req: AuthRequest, res: Respons
 }));
 
 router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
-  const id = sanitizeUUID(req.params.id);
+  const id = sanitizeContainerId(req.params.id);
   if (!id) {
     res.status(400).json({ success: false, error: 'Invalid container ID format' });
     return;
@@ -284,7 +285,7 @@ router.put('/containers/:id', asyncHandler(async (req: AuthRequest, res: Respons
 }));
 
 router.delete('/containers/:id', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
-  const id = sanitizeUUID(req.params.id);
+  const id = sanitizeContainerId(req.params.id);
   if (!id) {
     res.status(400).json({ success: false, error: 'Invalid container ID format' });
     return;
@@ -324,7 +325,7 @@ const ALLOWED_CODE_TYPES = ['javascript', 'json', 'workflow', 'selector', 'templ
 
 router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize all inputs - patterns contain executable code so require super admin (enforced above)
-  const containerId = sanitizeUUID(req.body.containerId);
+  const containerId = sanitizeContainerId(req.body.containerId);
   const name = sanitizeString(req.body.name, 100);
   const description = sanitizeString(req.body.description, 500);
   const code = typeof req.body.code === 'string' ? req.body.code.substring(0, 50000) : null; // Allow longer code but limit
@@ -412,7 +413,7 @@ router.post('/patterns', asyncHandler(async (req: AuthRequest, res: Response): P
 }));
 
 router.get('/patterns', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
-  const containerId = sanitizeUUID(req.query.containerId);
+  const containerId = sanitizeContainerId(req.query.containerId);
   const isActive = sanitizeBoolean(req.query.isActive);
   const tagsStr = sanitizeString(req.query.tags, 200);
   const limit = sanitizeInteger(req.query.limit, 1, 100) ?? 50;
@@ -569,7 +570,7 @@ type SelectionStrategy = typeof ALLOWED_SELECTION_STRATEGIES[number];
 
 router.post('/inject', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   // Sanitize all inputs
-  const containerId = sanitizeUUID(req.body.containerId);
+  const containerId = sanitizeContainerId(req.body.containerId);
   const patternId = sanitizeUUID(req.body.patternId);
   const forceDefault = sanitizeBoolean(req.body.forceDefault) ?? false;
   const rawStrategy = sanitizeString(req.body.selectionStrategy, 20);
@@ -1035,7 +1036,7 @@ router.post('/overrides', asyncHandler(async (req: AuthRequest, res: Response): 
   // Sanitize all inputs
   const accountId = sanitizeUUID(req.body.accountId);
   const userId = sanitizeUUID(req.body.userId);
-  const containerId = sanitizeUUID(req.body.containerId);
+  const containerId = sanitizeContainerId(req.body.containerId);
   const patternId = sanitizeUUID(req.body.patternId);
   const isActive = sanitizeBoolean(req.body.isActive) ?? true;
   const priority = sanitizeInteger(req.body.priority, 0, 1000) ?? 100;
