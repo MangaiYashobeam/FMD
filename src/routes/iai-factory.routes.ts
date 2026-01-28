@@ -505,4 +505,106 @@ router.delete('/connection-maps/:id', asyncHandler(async (req: AuthRequest, res:
   return;
 }));
 
+// ============================================
+// USM (Ultra Speed Mode) Preload Route
+// ============================================
+
+router.post('/usm/preload', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+  // Import prisma dynamically to avoid circular deps
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+  
+  try {
+    const result = await iaiFactoryService.preloadUSMPatterns(prisma);
+    
+    createAuditLog({
+      userId: req.user!.id,
+      action: 'USM_PATTERN_PRELOAD',
+      resource: 'usm_container',
+      newValue: {
+        success: result.success,
+        containerId: result.container?.id,
+        patternCount: result.patterns.length,
+      },
+      ipAddress: getRealIP(req),
+      userAgent: getUserAgent(req),
+      success: result.success,
+      metadata: { operation: 'usm_preload' }
+    });
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.message,
+        container: {
+          id: result.container?.id,
+          name: result.container?.name,
+        },
+        patterns: result.patterns.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          isActive: p.isActive,
+        })),
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.message,
+      });
+    }
+  } finally {
+    await prisma.$disconnect();
+  }
+  return;
+}));
+
+// Get USM container status
+router.get('/usm/status', asyncHandler(async (_req: AuthRequest, res: Response): Promise<void> => {
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+  
+  try {
+    const container = await prisma.injectionContainer.findFirst({
+      where: { name: 'IAI Soldiers USM' },
+      include: {
+        patterns: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            weight: true,
+            isActive: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    if (!container) {
+      res.json({
+        success: true,
+        exists: false,
+        message: 'USM container not found - run preload to create',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      exists: true,
+      container: {
+        id: container.id,
+        name: container.name,
+        isActive: container.isActive,
+        patternCount: container.patterns.length,
+        patterns: container.patterns,
+      },
+      hotSwapReady: container.isActive && container.patterns.length > 0,
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+  return;
+}));
+
 export default router;

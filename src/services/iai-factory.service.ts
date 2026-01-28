@@ -623,6 +623,148 @@ class IAIFactoryService {
   }
 
   // ============================================
+  // USM Container Preload (Ultra Speed Mode)
+  // ============================================
+
+  /**
+   * Preload USM patterns into the USM container for hot-swap ready deployment
+   * This ensures the Ultra Speed Mode container is always ready with patterns
+   */
+  async preloadUSMPatterns(prisma: any): Promise<{
+    success: boolean;
+    container: any | null;
+    patterns: any[];
+    message: string;
+  }> {
+    try {
+      logger.info('[IAI_FACTORY] Starting USM pattern preload...');
+      
+      // Find or create USM container
+      let usmContainer = await prisma.injectionContainer.findFirst({
+        where: { name: 'IAI Soldiers USM' }
+      });
+
+      if (!usmContainer) {
+        // Create USM container if it doesn't exist
+        usmContainer = await prisma.injectionContainer.create({
+          data: {
+            name: 'IAI Soldiers USM',
+            description: 'Ultra Speed Mode container for high-performance IAI soldiers with hot-swap capability',
+            category: 'usm',
+            isActive: true,
+            config: {
+              mode: 'ultra_speed',
+              hotSwapEnabled: true,
+              priorityLevel: 'critical',
+              maxConcurrentPatterns: 100,
+              cacheEnabled: true
+            }
+          }
+        });
+        logger.info('[IAI_FACTORY] Created USM container', { id: usmContainer.id });
+        addActivity('usm_container', 'USM container created for hot-swap deployment');
+      }
+
+      // Ensure container is active
+      if (!usmContainer.isActive) {
+        usmContainer = await prisma.injectionContainer.update({
+          where: { id: usmContainer.id },
+          data: { isActive: true }
+        });
+        logger.info('[IAI_FACTORY] Activated USM container');
+      }
+
+      // Get existing patterns in USM container
+      const existingPatterns = await prisma.injectionPattern.findMany({
+        where: { containerId: usmContainer.id }
+      });
+
+      // If no patterns, create default USM patterns
+      if (existingPatterns.length === 0) {
+        const defaultUSMPatterns = [
+          {
+            name: 'USM-HotSwap-Alpha',
+            codeType: 'usm_soldier',
+            code: '/* USM Pattern Alpha - Ultra Speed Hot-Swap Ready */\nconst USM_MODE = "ALPHA";\nconst SPEED_MULTIPLIER = 3;\nconst HOT_SWAP_READY = true;',
+            description: 'Primary USM pattern for high-speed operations',
+            weight: 100,
+            containerId: usmContainer.id,
+            isActive: true,
+            config: {
+              speedMode: 'ultra',
+              hotSwapPriority: 1,
+              autoActivate: true
+            }
+          },
+          {
+            name: 'USM-HotSwap-Beta',
+            codeType: 'usm_soldier',
+            code: '/* USM Pattern Beta - Balanced Speed & Stealth */\nconst USM_MODE = "BETA";\nconst SPEED_MULTIPLIER = 2;\nconst STEALTH_MODE = true;\nconst HOT_SWAP_READY = true;',
+            description: 'Balanced USM pattern with stealth capabilities',
+            weight: 80,
+            containerId: usmContainer.id,
+            isActive: true,
+            config: {
+              speedMode: 'balanced',
+              hotSwapPriority: 2,
+              stealthEnabled: true
+            }
+          },
+          {
+            name: 'USM-HotSwap-Gamma',
+            codeType: 'usm_soldier',
+            code: '/* USM Pattern Gamma - Maximum Throughput */\nconst USM_MODE = "GAMMA";\nconst SPEED_MULTIPLIER = 5;\nconst BATCH_MODE = true;\nconst HOT_SWAP_READY = true;',
+            description: 'Maximum throughput USM pattern for bulk operations',
+            weight: 60,
+            containerId: usmContainer.id,
+            isActive: true,
+            config: {
+              speedMode: 'maximum',
+              hotSwapPriority: 3,
+              batchProcessing: true
+            }
+          }
+        ];
+
+        for (const patternData of defaultUSMPatterns) {
+          await prisma.injectionPattern.create({ data: patternData });
+          logger.info('[IAI_FACTORY] Created USM pattern', { name: patternData.name });
+        }
+        
+        addActivity('usm_patterns', `Created ${defaultUSMPatterns.length} default USM patterns`);
+      }
+
+      // Get final count of patterns
+      const finalPatterns = await prisma.injectionPattern.findMany({
+        where: { containerId: usmContainer.id, isActive: true }
+      });
+
+      logger.info('[IAI_FACTORY] USM preload complete', {
+        containerId: usmContainer.id,
+        patternCount: finalPatterns.length
+      });
+
+      addActivity('usm_preload', `USM container preloaded with ${finalPatterns.length} patterns`);
+
+      return {
+        success: true,
+        container: usmContainer,
+        patterns: finalPatterns,
+        message: `USM container ready with ${finalPatterns.length} hot-swap patterns`
+      };
+
+    } catch (error: any) {
+      logger.error('[IAI_FACTORY] USM preload failed', { error: error.message });
+      return {
+        success: false,
+        container: null,
+        patterns: [],
+        message: `USM preload failed: ${error.message}`
+      };
+    }
+  }
+
+  // ============================================
   // Lifecycle Management (Background Tasks)
   // ============================================
 
