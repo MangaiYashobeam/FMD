@@ -25,7 +25,7 @@ declare global {
     interface Request {
       greenRoute?: {
         verified: boolean;
-        source: 'extension' | 'webapp' | 'extension-hybrid' | 'unknown';
+        source: 'extension' | 'webapp' | 'extension-hybrid' | 'internal-worker' | 'unknown';
         accountId?: string;
         userId?: string;
         fingerprint?: string;
@@ -125,13 +125,35 @@ function validateSignature(
  */
 function validateOrigin(req: Request): { 
   valid: boolean; 
-  source: 'extension' | 'webapp' | 'extension-hybrid' | 'unknown';
+  source: 'extension' | 'webapp' | 'extension-hybrid' | 'internal-worker' | 'unknown';
   reason?: string;
 } {
   const origin = req.headers.origin || '';
   const referer = req.headers.referer || '';
   // userAgent reserved for future fingerprinting
   // const userAgent = req.headers['user-agent'] || '';
+  
+  // Check for internal worker requests (Docker network)
+  const clientIP = req.ip || req.headers['x-forwarded-for'] || '';
+  const workerSecret = req.headers['x-worker-secret'];
+  const isInternalNetwork = 
+    clientIP.startsWith('172.') || 
+    clientIP.startsWith('10.') || 
+    clientIP.startsWith('192.168.') ||
+    clientIP === '127.0.0.1' ||
+    clientIP === '::1' ||
+    req.headers.host?.includes('facemydealer-api-1') ||
+    req.headers.host?.includes('localhost');
+  
+  // Allow internal workers with secret
+  if (isInternalNetwork && workerSecret === process.env.WORKER_SECRET) {
+    return { valid: true, source: 'internal-worker' };
+  }
+  
+  // Allow internal Docker network requests without origin (server-to-server)
+  if (isInternalNetwork && !origin) {
+    return { valid: true, source: 'internal-worker' };
+  }
   
   // Check for Chrome extension
   if (origin.startsWith('chrome-extension://')) {
