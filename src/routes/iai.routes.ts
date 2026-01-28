@@ -2090,7 +2090,7 @@ router.get('/test/analytics', authenticate, async (_req: AuthRequest, res: Respo
  * DELETE /api/admin/iai/test/cleanup
  * Remove test soldiers (soldiers with 'TEST' in soldierId)
  */
-router.delete('/test/cleanup', authenticate, async (req: AuthRequest, res: Response) => {
+router.delete('/test/cleanup', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
     // Delete activity logs for test soldiers first
     const testSoldiers = await prisma.iAISoldier.findMany({
