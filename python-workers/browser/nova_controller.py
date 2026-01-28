@@ -509,27 +509,28 @@ class NovaController:
         attributes = req.get("attributes", ["href", "src", "value", "placeholder"])
         limit = req.get("limit", 100)
         
-        elements_data = await self.page.evaluate(f'''
-            (selector, attrs, limit) => {{
+        # Use argument dict for Playwright evaluate
+        elements_data = await self.page.evaluate('''
+            ({selector, attrs, limit}) => {
                 const elements = document.querySelectorAll(selector);
                 const results = [];
-                for (let i = 0; i < Math.min(elements.length, limit); i++) {{
+                for (let i = 0; i < Math.min(elements.length, limit); i++) {
                     const el = elements[i];
-                    const data = {{
+                    const data = {
                         tag: el.tagName.toLowerCase(),
                         text: el.innerText?.slice(0, 200),
-                        attributes: {{}}
-                    }};
-                    attrs.forEach(attr => {{
-                        if (el.hasAttribute(attr)) {{
+                        attributes: {}
+                    };
+                    attrs.forEach(attr => {
+                        if (el.hasAttribute(attr)) {
                             data.attributes[attr] = el.getAttribute(attr);
-                        }}
-                    }});
+                        }
+                    });
                     results.push(data);
-                }}
+                }
                 return results;
-            }}
-        ''', selector, attributes, limit)
+            }
+        ''', {"selector": selector, "attrs": attributes, "limit": limit})
         
         return ActionResult(
             success=True,
