@@ -92,7 +92,7 @@ const ALLOWED_BLUEPRINT_TYPES = ['standard', 'ultra_speed', 'stealth', 'hybrid',
 // Factory Stats
 // ============================================
 
-router.get('/stats', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/stats', asyncHandler(async (_req: AuthRequest, res: Response): Promise<void> => {
   const stats = await iaiFactoryService.getFactoryStats();
   res.json({ success: true, stats });
   return;
@@ -466,7 +466,7 @@ router.post('/instances/terminate-all', asyncHandler(async (req: AuthRequest, re
 // Connection Map Routes
 // ============================================
 
-router.get('/connection-maps', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/connection-maps', asyncHandler(async (_req: AuthRequest, res: Response): Promise<void> => {
   const maps = await iaiFactoryService.listConnectionMaps();
   res.json({ success: true, maps });
   return;
@@ -474,8 +474,8 @@ router.get('/connection-maps', asyncHandler(async (req: AuthRequest, res: Respon
 
 router.post('/connection-maps', asyncHandler(async (req: AuthRequest, res: Response): Promise<void> => {
   const name = sanitizeString(req.body.name, 100);
-  const nodes = sanitizeJSON(req.body.nodes, 50000);
-  const connections = sanitizeJSON(req.body.connections, 50000);
+  const nodes = sanitizeJSON(req.body.nodes, 50000) ?? {};
+  const connections = sanitizeJSON(req.body.connections, 50000) ?? {};
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Connection map name is required' });

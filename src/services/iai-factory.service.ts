@@ -13,11 +13,9 @@
  * - Factory statistics and monitoring
  */
 
-import { PrismaClient } from '@prisma/client';
+// import { PrismaClient } from '@prisma/client'; // Uncomment when migrating to DB storage
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
-
-const prisma = new PrismaClient();
 
 // ============================================
 // Types
