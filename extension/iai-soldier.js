@@ -2802,83 +2802,59 @@ class IAIStealth {
   }
   
   /**
-   * ULTRA SPEED DUMP (True Copy/Paste) - Gemini3 Ultra
-   * Uses actual clipboard API for real paste behavior
-   * Falls back to native setter if clipboard fails
+   * INSTANT VALUE INJECTION - No typing, no clipboard, just SET
+   * Directly injects text into any element instantly
    */
   async dump(element, text) {
     if (!text && text !== 0) return false;
     const strText = String(text);
     
-    console.log(`[IAI Dump] ⚡ Starting instant injection of ${strText.length} chars...`);
+    console.log(`[IAI DUMP] ⚡ INSTANT INJECT: ${strText.length} chars`);
     
-    // Step 1: Focus element
+    // Focus element first
     element.focus();
-    element.click && element.click();
     
-    // Step 2: Try clipboard-based paste (most natural)
-    let pasteSuccess = false;
-    try {
-      // Write to clipboard
-      await navigator.clipboard.writeText(strText);
-      
-      // Clear any existing content
-      if (element.isContentEditable) {
-        document.execCommand('selectAll', false, null);
-      } else if (element.select) {
-        element.select();
-      }
-      
-      // Trigger paste via execCommand (works on most sites)
-      pasteSuccess = document.execCommand('paste');
-      
-      if (!pasteSuccess) {
-        // Try programmatic paste event
-        const pasteEvent = new ClipboardEvent('paste', {
-          bubbles: true,
-          cancelable: true,
-          clipboardData: new DataTransfer()
-        });
-        pasteEvent.clipboardData.setData('text/plain', strText);
-        element.dispatchEvent(pasteEvent);
-        pasteSuccess = true;
-      }
-      
-      console.log(`[IAI Dump] ✅ Clipboard paste ${pasteSuccess ? 'succeeded' : 'attempted'}`);
-    } catch (clipboardError) {
-      console.log('[IAI Dump] Clipboard API unavailable, using native setter');
-    }
+    // DIRECT VALUE SET - No loops, no delays, just instant
+    const tagName = element.tagName?.toUpperCase();
     
-    // Step 3: Fallback - Direct value injection (always reliable)
-    if (!pasteSuccess) {
-      try {
-        if (element.tagName === 'INPUT' || element.type) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-          setter ? setter.call(element, strText) : (element.value = strText);
-        } else if (element.tagName === 'TEXTAREA') {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-          setter ? setter.call(element, strText) : (element.value = strText);
-        } else if (element.isContentEditable) {
-          element.textContent = '';
-          document.execCommand('insertText', false, strText);
-        } else {
-          element.value = strText;
-        }
-      } catch (e) {
+    if (tagName === 'INPUT') {
+      // Input: Use native setter to bypass React
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      if (setter) {
+        setter.call(element, strText);
+      } else {
+        element.value = strText;
+      }
+    } 
+    else if (tagName === 'TEXTAREA') {
+      // Textarea: Use native setter
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+      if (setter) {
+        setter.call(element, strText);
+      } else {
         element.value = strText;
       }
     }
+    else if (element.isContentEditable) {
+      // ContentEditable (Facebook rich text): Direct innerHTML/textContent
+      element.innerHTML = '';
+      element.textContent = strText;
+      // Also try insertText for React compatibility
+      try {
+        document.execCommand('selectAll', false, null);
+        document.execCommand('insertText', false, strText);
+      } catch(e) { /* ignore */ }
+    }
+    else {
+      // Fallback for any other element
+      element.value = strText;
+    }
     
-    // Step 4: Fire events for React/FB validation (minimal set)
-    element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: strText }));
+    // Fire React-compatible events (MINIMAL set for speed)
+    element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
     
-    // Tiny delay then blur
-    await this.delay(5, 10);
-    element.dispatchEvent(new Event('blur', { bubbles: true }));
-    
-    console.log(`[IAI Dump] ⚡ DONE - ${strText.length} chars injected instantly`);
+    console.log(`[IAI DUMP] ✅ DONE - ${strText.length} chars injected in 0ms`);
     return true;
   }
   
