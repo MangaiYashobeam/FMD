@@ -343,11 +343,25 @@ class PostingWorker:
 async def main():
     """Entry point for running worker standalone"""
     import sys
+    import logging
+    
+    # Force stdout to be unbuffered
+    sys.stdout.reconfigure(line_buffering=True)
+    
+    print("=" * 50, flush=True)
+    print("POSTING WORKER STARTING", flush=True)
+    print("=" * 50, flush=True)
+    
+    # Configure standard logging first
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
     
     # Configure structured logging
     structlog.configure(
         processors=[
-            structlog.stdlib.filter_by_level,
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.stdlib.PositionalArgumentsFormatter(),
@@ -355,7 +369,7 @@ async def main():
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer()
+            structlog.dev.ConsoleRenderer()  # Human-readable output
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -363,13 +377,21 @@ async def main():
         cache_logger_on_first_use=True,
     )
     
+    print("Logger configured, creating worker...", flush=True)
     worker = PostingWorker()
+    print(f"Worker created: {worker.worker_id}", flush=True)
     
     try:
+        print("Starting worker.start()...", flush=True)
         await worker.start()
     except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received")
+        print("Keyboard interrupt received", flush=True)
+    except Exception as e:
+        print(f"ERROR in worker: {type(e).__name__}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
     finally:
+        print("Stopping worker...", flush=True)
         await worker.stop()
 
 
