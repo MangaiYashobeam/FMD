@@ -138,6 +138,71 @@ const IAI_CONFIG = {
 // INJECTION SYSTEM - DYNAMIC PATTERN LOADING
 // ============================================
 
+// ============================================
+// LOGGING SYSTEM - COMPREHENSIVE ACTIVITY TRACKING
+// ============================================
+
+let CURRENT_SOLDIER_ID = null;
+let CURRENT_ACCOUNT_ID = null;
+
+/**
+ * Log comprehensive activity to server
+ * @param {string} eventType - The type of event (e.g., 'click', 'type', 'step_start', 'error')
+ * @param {object} details - The detailed data to log
+ * @param {string} level - Log level ('info', 'warn', 'error', 'debug')
+ */
+async function logStealthActivity(eventType, details, level = 'info') {
+  try {
+    // Attempt to load context if missing
+    if (!CURRENT_SOLDIER_ID) {
+        try {
+            const storage = await chrome.storage?.local?.get(['soldierInfo', 'authState']);
+            if (storage?.soldierInfo?.soldierId) CURRENT_SOLDIER_ID = storage.soldierInfo.soldierId;
+            if (storage?.authState?.accountId) CURRENT_ACCOUNT_ID = storage.authState.accountId;
+        } catch(e) {}
+    }
+
+    const logData = {
+      soldierId: CURRENT_SOLDIER_ID || 'unknown_soldier',
+      accountId: CURRENT_ACCOUNT_ID || 'unknown_account',
+      eventType,
+      message: details.message || `${eventType} occurred`,
+      eventData: {
+        ...details,
+        url: window.location.href,
+        timestamp: Date.now(),
+        userAgent: navigator.userAgent,
+        build: IAI_BUILD,
+        version: IAI_VERSION
+      },
+      level
+    };
+
+    // Get Auth Token
+    const token = window.iaiAuthToken || (await chrome.storage?.local?.get('authToken'))?.authToken;
+
+    // Direct API call (preferred for reliability over GreenRoute for logs currently)
+    // Don't await to avoid blocking execution
+    fetch(`${IAI_CONFIG.API.PRODUCTION}/extension/iai/log-activity`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-IAI-Soldier': IAI_VERSION,
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(logData)
+    }).catch(err => console.debug('[IAI LOG] Fetch failed', err));
+    
+    // Also log to console for local debugging
+    const color = level === 'error' ? '#ef4444' : level === 'warn' ? '#f59e0b' : '#3b82f6';
+    console.log(`%c[IAI LOG] ${eventType}: ${details.message || ''}`, `color: ${color}; font-weight: bold;`);
+    
+  } catch (e) {
+    // Fail silently to not break execution
+    console.warn('[IAI LOG] Failed to send log:', e);
+  }
+}
+
 /**
  * Injection data storage - loaded from server injection API
  * This is the ONLY source of automation patterns - NO hardcoded workflows
@@ -293,6 +358,10 @@ async function loadInjectionPattern() {
       ultraSpeedEnabled = storage?.ultraSpeedMode === true;
       soldierId = storage?.soldierInfo?.soldierId;
       accountId = storage?.authState?.dealerAccountId || storage?.authState?.accountId;
+      
+      // Update global context for logging
+      if (soldierId) CURRENT_SOLDIER_ID = soldierId;
+      if (accountId) CURRENT_ACCOUNT_ID = accountId;
       
       if (ultraSpeedEnabled) {
         console.log('[IAI] ⚡ Ultra Speed Mode ENABLED - will fetch from USM container');
@@ -1699,6 +1768,15 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
   const fieldType = step.fieldType || step.field;
   const value = resolveStepValue(step, vehicleData);
   
+  // LOG START
+  await logStealthActivity('step_attempt', {
+    stepConfig: step,
+    action,
+    fieldType,
+    hasValue: !!value,
+    location: window.location.href
+  });
+  
   // Get field mapping info for intelligent handling
   const fieldMapping = fieldType ? IAI_INJECTION.FIELD_SELECTORS?.[fieldType] : null;
   const fieldInputType = fieldMapping?.type || 'input';
@@ -1706,6 +1784,7 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
   // Skip steps without fieldType if they're just clicks with no value
   if (action === 'click' && !fieldType && !step.label && !step.ariaLabel) {
     console.log(`[IAI] ⏭ Skipping non-field click step ${step.step}`);
+    await logStealthActivity('step_skipped', { reason: 'no_target', step });
     return { success: true, skipped: true };
   }
   
@@ -1713,10 +1792,15 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
   if (fieldType && value !== null && value !== undefined && value !== '') {
     const el = await findElementForStep(step);
     if (!el) {
-      return { success: false, error: `Element not found for ${fieldType}` };
+      const errorMsg = `Element not found for ${fieldType}`;
+      await logStealthActivity('step_error', { error: errorMsg, step }, 'error');
+      return { success: false, error: errorMsg };
     }
     
     console.log(`[IAI] 📝 Filling ${fieldType} = "${String(value).substring(0, 30)}..." (type: ${fieldInputType})`);
+    
+    // Log interaction
+    await logStealthActivity('interaction_start', { type: fieldInputType, field: fieldType });
     
     switch (fieldInputType) {
       case 'dropdown':
@@ -1725,6 +1809,13 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
         await stealth.click(el);
         await stealth.delay(300, 500);
         const selectSuccess = await selectFacebookDropdownEnhancedV2(step.label || fieldType, value, stealth);
+        
+        await logStealthActivity(selectSuccess ? 'step_success' : 'step_fail', { 
+            result: selectSuccess, 
+            type: 'dropdown', 
+            field: fieldType 
+        });
+        
         return { success: selectSuccess };
         
       case 'contenteditable':
@@ -1738,6 +1829,7 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
         } else {
           await stealth.type(el, String(value));
         }
+        await logStealthActivity('step_success', { type: 'contenteditable', field: fieldType });
         return { success: true };
         
       case 'input':
@@ -1749,6 +1841,7 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
         el.value = '';
         el.dispatchEvent(new Event('input', { bubbles: true }));
         await stealth.type(el, String(value));
+        await logStealthActivity('step_success', { type: 'input', field: fieldType });
         return { success: true };
     }
   }
@@ -1759,9 +1852,20 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
       const clickEl = await findElementForStep(step);
       if (clickEl) {
         await stealth.click(clickEl);
+        await logStealthActivity('step_success', { action: 'click', selector: getSelectorForElement(clickEl) });
         return { success: true };
       }
-      return { success: false, error: `Element not found for click: ${fieldType || step.selector || step.label}` };
+      const clickErr = `Element not found for click: ${fieldType || step.selector || step.label}`;
+      // Log nearby HTML to help debugging
+      const nearbyHTML = document.body.innerHTML.substring(0, 1000); 
+      await logStealthActivity('step_error', { 
+         error: clickErr, 
+         step,
+         url: window.location.href,
+         pageTitle: document.title,
+         lastFoundElement: null 
+      }, 'warn');
+      return { success: false, error: clickErr };
       
     case 'type':
     case 'input':
@@ -1769,13 +1873,21 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
       if (inputEl) {
         await stealth.click(inputEl);
         await stealth.type(inputEl, String(value || ''));
+        await logStealthActivity('step_success', { action: 'type', length: String(value || '').length });
         return { success: true };
       }
-      return { success: false, error: `Input not found: ${fieldType || step.selector || step.label}` };
+      const inputErr = `Input not found: ${fieldType || step.selector || step.label}`;
+      await logStealthActivity('step_error', { 
+        error: inputErr, 
+        step,
+        url: window.location.href
+      }, 'warn');
+      return { success: false, error: inputErr };
       
     case 'select':
     case 'dropdown':
       const selectSuccess = await selectFacebookDropdownEnhancedV2(step.label || fieldType, value, stealth);
+      await logStealthActivity(selectSuccess ? 'step_success' : 'step_fail', { action: 'select', result: selectSuccess });
       return { success: selectSuccess };
       
     case 'wait':
@@ -1794,13 +1906,27 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
         return { success: true, skipped: true };
       }
       console.log(`[IAI] 🔗 Navigating to: ${targetUrl}`);
+      await logStealthActivity('navigation', { to: targetUrl, from: window.location.href });
       window.location.href = targetUrl;
       return { success: true };
       
     default:
       console.warn(`[IAI] Unknown step action: ${action}`);
+      await logStealthActivity('step_unknown', { action, step }, 'warn');
       return { success: false, error: `Unknown action: ${action}` };
   }
+}
+
+/**
+ * Helper to generate a simple selector for logging
+ */
+function getSelectorForElement(el) {
+    if (!el) return 'null';
+    let s = el.tagName.toLowerCase();
+    if (el.id) s += '#' + el.id;
+    if (el.className) s += '.' + el.className.split(' ').join('.');
+    if (el.getAttribute('aria-label')) s += `[aria-label="${el.getAttribute('aria-label')}"]`;
+    return s.substring(0, 100); // Limit length
 }
 
 /**
@@ -2855,6 +2981,7 @@ class IAIStealth {
     // Fire React-compatible events (MINIMAL set for speed)
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
+    element.dispatchEvent(new Event('blur', { bubbles: true })); // Added trigger for validation
     
     console.log(`[IAI DUMP] ✅ DONE - ${strText.length} chars injected in 0ms`);
     return true;
@@ -2972,6 +3099,9 @@ class IAINavigator {
   async navigateTo(destination) {
     console.log(`🧭 Navigating to: ${destination}`);
     
+    // Log navigation start
+    await logStealthActivity('navigation_start', { destination, from: window.location.href });
+    
     const urls = {
       marketplace: 'https://www.facebook.com/marketplace/',
       create_listing: 'https://www.facebook.com/marketplace/create/vehicle/',
@@ -2981,9 +3111,13 @@ class IAINavigator {
       notifications: 'https://www.facebook.com/notifications',
     };
     
-    if (urls[destination]) {
-      window.location.href = urls[destination];
-      await this.waitForPageReady();
+    // Handle both key and direct URL
+    const targetUrl = urls[destination] || destination;
+    
+    if (targetUrl) {
+      window.location.href = targetUrl;
+      const ready = await this.waitForPageReady();
+      await logStealthActivity('navigation_complete', { destination, url: window.location.href, success: ready });
     }
     
     this.currentPage = destination;
@@ -3011,6 +3145,10 @@ class IAINavigator {
           }
           
           if (element && this.isVisible(element) && this.isInteractable(element)) {
+            // Log success if it took a while
+            if (Date.now() - start > 1000) {
+               await logStealthActivity('element_found_delayed', { selector, duration: Date.now() - start }, 'debug');
+            }
             return element;
           }
         } catch (e) {
@@ -3027,7 +3165,9 @@ class IAINavigator {
       await this.stealth.delay(300, 500);
     }
     
-    console.warn(`Element not found: ${description || selectorList[0]}`);
+    const failMsg = `Element not found: ${description || selectorList[0]}`;
+    console.warn(failMsg);
+    await logStealthActivity('element_not_found', { selectors: selectorList, description }, 'warn');
     return null;
   }
   
@@ -5005,6 +5145,7 @@ function findOptionWithCascadingMatch(value) {
  */
 async function selectFacebookDropdownEnhancedV2(labelText, value, stealth) {
   console.log(`🔽 [IAI V2] Selecting dropdown "${labelText}" = "${value}"`);
+  await logStealthActivity('dropdown_start', { label: labelText, value });
   
   try {
     // CRITICAL: Close any open dropdowns first (like competitor)
@@ -5014,6 +5155,7 @@ async function selectFacebookDropdownEnhancedV2(labelText, value, stealth) {
     const label = C('label', labelText);
     if (!label) {
       console.warn(`❌ Dropdown label "${labelText}" not found`);
+      await logStealthActivity('dropdown_error', { error: 'Label not found', label: labelText });
       return false;
     }
     
