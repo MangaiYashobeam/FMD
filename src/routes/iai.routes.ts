@@ -193,6 +193,8 @@ router.get('/soldiers/:id/activity', authenticate, async (req: AuthRequest, res:
       endDate,
     } = req.query;
 
+    console.log(`📋 [ACTIVITY FETCH] Fetching activity for soldier: ${id}`);
+
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
@@ -215,6 +217,8 @@ router.get('/soldiers/:id/activity', authenticate, async (req: AuthRequest, res:
       prisma.iAIActivityLog.count({ where }),
     ]);
 
+    console.log(`✅ [ACTIVITY FETCH] Found ${total} logs for soldier ${id}`);
+
     res.json({
       logs,
       pagination: {
@@ -225,7 +229,7 @@ router.get('/soldiers/:id/activity', authenticate, async (req: AuthRequest, res:
       },
     });
   } catch (error) {
-    console.error('Error fetching activity logs:', error);
+    console.error('❌ [ACTIVITY FETCH] Error fetching activity logs:', error);
     res.status(500).json({ error: 'Failed to fetch activity logs' });
   }
 });
@@ -757,7 +761,11 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
       memoryUsageMb,
     } = req.body;
 
+    // 💓 HEARTBEAT LOG START
+    console.log(`💓 [HEARTBEAT] Received from ${soldierId} | Account: ${accountId} | Status: ${status}`);
+
     if (!soldierId || !accountId) {
+      console.log('❌ [HEARTBEAT] Missing soldierId or accountId');
       return res.status(400).json({ error: 'soldierId and accountId are required' });
     }
 
@@ -858,9 +866,26 @@ router.post('/heartbeat', authenticate, async (req: AuthRequest, res: Response) 
       },
     });
 
-    return res.json({ success: true });
+    // 💓 HEARTBEAT: Also log to activity for visibility in UI
+    await prisma.iAIActivityLog.create({
+      data: {
+        soldierId: soldier.id,
+        accountId,
+        eventType: 'heartbeat',
+        message: `💓 Heartbeat | Status: ${safeStatus}${currentTaskType ? ` | Working on: ${currentTaskType}` : ''}`,
+        eventData: { status: safeStatus, currentTaskType, currentTaskId },
+        ipAddress: realIpAddress,
+        locationLat: safeLat,
+        locationLng: safeLng,
+      },
+    });
+
+    // 💓 HEARTBEAT SUCCESS LOG
+    console.log(`💚 [HEARTBEAT] Updated ${soldierId} -> Status: ${safeStatus} | Task: ${currentTaskType || 'none'}`);
+
+    return res.json({ success: true, heartbeat: 'recorded', timestamp: new Date().toISOString() });
   } catch (error) {
-    console.error('Error updating heartbeat:', error);
+    console.error('❌ [HEARTBEAT] Error:', error);
     return res.status(500).json({ error: 'Failed to update heartbeat' });
   }
 });
@@ -886,7 +911,12 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
       locationLng,
     } = req.body;
 
+    // 📝 ACTIVITY LOG START
+    console.log(`📝 [ACTIVITY] ${soldierId} | Event: ${eventType} | Task: ${taskId || 'none'}`);
+    console.log(`   Message: ${message?.substring(0, 100) || 'no message'}`);
+
     if (!soldierId || !accountId || !eventType) {
+      console.log('❌ [ACTIVITY] Missing required fields');
       return res.status(400).json({ 
         error: 'soldierId, accountId, and eventType are required' 
       });
@@ -927,7 +957,11 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
       where: { soldierId, accountId },
     });
 
+    console.log(`🔍 [ACTIVITY] Looking for soldier with soldierId=${soldierId}, accountId=${accountId}`);
+    console.log(`🔍 [ACTIVITY] Found soldier: ${soldier ? soldier.id : 'NOT FOUND'}`);
+
     if (!soldier) {
+      console.log(`❌ [ACTIVITY] Soldier not found!`);
       return res.status(404).json({ error: 'Soldier not found' });
     }
 
@@ -947,7 +981,7 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
     }
 
     // Create activity log with sanitized data
-    await prisma.iAIActivityLog.create({
+    const activityLog = await prisma.iAIActivityLog.create({
       data: {
         soldierId: soldier.id,
         accountId,
@@ -962,6 +996,8 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
         locationLng: safeLng,
       },
     });
+
+    console.log(`✅ [ACTIVITY] Created activity log: ${activityLog.id} | Soldier: ${soldier.id} | Event: ${safeEventType}`);
 
     // Update soldier stats based on event type
     const updates: any = {};
@@ -1026,9 +1062,12 @@ router.post('/log-activity', authenticate, async (req: AuthRequest, res: Respons
       }
     }
 
-    return res.json({ success: true });
+    // 📝 ACTIVITY LOG SUCCESS
+    console.log(`✅ [ACTIVITY] Logged ${safeEventType} for ${soldierId}`);
+
+    return res.json({ success: true, logged: true, eventType: safeEventType, timestamp: new Date().toISOString() });
   } catch (error) {
-    console.error('Error logging activity:', error);
+    console.error('❌ [ACTIVITY] Error:', error);
     return res.status(500).json({ error: 'Failed to log activity' });
   }
 });

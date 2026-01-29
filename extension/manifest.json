@@ -40,7 +40,8 @@
     "default_path": "sidepanel-ai.html"
   },
   "background": {
-    "service_worker": "background-ai.js"
+    "service_worker": "background-ai.js",
+    "type": "module"
   },
   "content_scripts": [
     {

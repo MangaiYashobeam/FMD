@@ -22,13 +22,6 @@ const elements = {
   userName: document.getElementById('userName'),
   userEmail: document.getElementById('userEmail'),
   
-  // Heartbeat indicators
-  heartbeatIndicator: document.getElementById('heartbeatIndicator'),
-  heartbeatStatus: document.getElementById('heartbeatStatus'),
-  stealthConnection: document.getElementById('stealthConnection'),
-  linkedSoldierId: document.getElementById('linkedSoldierId'),
-  soldierStatusText: document.getElementById('soldierStatusText'),
-  
   // Stats
   postsCount: document.getElementById('postsCount'),
   leadsCount: document.getElementById('leadsCount'),
@@ -107,8 +100,6 @@ let selectedVehicles = new Set();
 let postingInProgress = false;
 let abortController = null;
 let ultraSpeedEnabled = false; // USM state
-let soldierInfo = null; // IAI Soldier connection info
-let heartbeatInterval = null; // Heartbeat sync interval
 
 // ============================================
 // Initialization
@@ -124,25 +115,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateUSMToggleUI();
     
     // Check authentication state
-    // MODIFIED: Added timeout to prevent infinite loading state
-    try {
-      const response = await Promise.race([
-        sendMessage({ type: 'GET_AUTH_STATE' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Auth check timeout')), 5000))
-      ]);
-      authState = response.data;
-    } catch (e) {
-      console.warn('Auth check timed out or failed, assuming logged out:', e);
-      authState = { isAuthenticated: false };
-    }
-    
-    // Fallback if data is missing
-    if (!authState) authState = { isAuthenticated: false };
+    const response = await sendMessage({ type: 'GET_AUTH_STATE' });
+    authState = response.data;
     
     if (authState?.isAuthenticated) {
       await loadDashboard();
-      // Initialize heartbeat sync with IAI Soldiers
-      await initHeartbeatSync();
     } else {
       showAuthSection();
     }
@@ -151,105 +128,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     showAuthSection();
   }
 });
-
-// ============================================
-// IAI Soldier Heartbeat Sync
-// ============================================
-
-/**
- * Initialize heartbeat synchronization with IAI Stealth Soldiers
- * Polls the background script for soldier info and updates UI
- */
-async function initHeartbeatSync() {
-  try {
-    // Get soldier info from storage
-    const { soldierInfo: storedSoldier } = await chrome.storage.local.get(['soldierInfo']);
-    soldierInfo = storedSoldier;
-    
-    updateHeartbeatUI();
-    
-    // Start heartbeat polling
-    heartbeatInterval = setInterval(async () => {
-      await syncHeartbeat();
-    }, 5000); // Sync every 5 seconds
-    
-    // Initial sync
-    await syncHeartbeat();
-    
-    console.log('💓 Heartbeat sync initialized');
-  } catch (error) {
-    console.error('Failed to initialize heartbeat sync:', error);
-    updateHeartbeatUI(false);
-  }
-}
-
-/**
- * Sync heartbeat with background script
- */
-async function syncHeartbeat() {
-  try {
-    // Get latest soldier info from storage
-    const { soldierInfo: storedSoldier } = await chrome.storage.local.get(['soldierInfo']);
-    soldierInfo = storedSoldier;
-    
-    // Request heartbeat from background
-    const response = await sendMessage({ type: 'GET_SOLDIER_STATUS' });
-    
-    if (response?.data?.soldier) {
-      soldierInfo = response.data.soldier;
-      updateHeartbeatUI(true);
-    } else if (soldierInfo) {
-      updateHeartbeatUI(true);
-    } else {
-      updateHeartbeatUI(false);
-    }
-  } catch (error) {
-    console.warn('Heartbeat sync failed:', error.message);
-    updateHeartbeatUI(false);
-  }
-}
-
-/**
- * Update heartbeat UI elements
- */
-function updateHeartbeatUI(connected = !!soldierInfo) {
-  const heartbeatIndicator = elements.heartbeatIndicator;
-  const heartbeatStatus = elements.heartbeatStatus;
-  const stealthConnection = elements.stealthConnection;
-  const linkedSoldierId = elements.linkedSoldierId;
-  const soldierStatusText = elements.soldierStatusText;
-  
-  if (!heartbeatIndicator) return;
-  
-  if (connected && soldierInfo) {
-    // Connected state
-    heartbeatIndicator.classList.remove('disconnected');
-    heartbeatIndicator.classList.add('connected');
-    heartbeatStatus.textContent = 'IAI Synced';
-    
-    if (stealthConnection) {
-      stealthConnection.classList.add('active');
-      stealthConnection.style.display = 'flex';
-    }
-    if (linkedSoldierId) {
-      linkedSoldierId.textContent = soldierInfo.soldierId || 'STEALTH-?';
-    }
-    if (soldierStatusText) {
-      const status = soldierInfo.status || 'online';
-      soldierStatusText.textContent = `• ${status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}`;
-    }
-  } else {
-    // Disconnected state
-    heartbeatIndicator.classList.remove('connected');
-    heartbeatIndicator.classList.add('disconnected');
-    heartbeatStatus.textContent = 'Waiting...';
-    
-    if (stealthConnection) {
-      stealthConnection.classList.remove('active');
-      stealthConnection.style.display = 'none';
-    }
-  }
-}
 
 // ============================================
 // USM Toggle Management

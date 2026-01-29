@@ -1,5 +1,6 @@
 // Dealers Face Chrome Extension - Background Service Worker
 // Enhanced with IAI Soldier Task Polling and Marketplace Automation
+// 💓 THE HEARTBEAT OF THE IAI STEALTH SOLDIER 💓
 
 const API_BASE_URL = 'https://dealersface.com';
 const TASK_POLL_INTERVAL = 5000; // 5 seconds - Production: Check frequently
@@ -11,6 +12,7 @@ let heartbeatInterval = null;
 let heartbeatCheckInterval = null;
 let isPolling = false;
 let isAwake = false;
+let currentTask = null; // 💓 Track current task for heartbeat sync
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener((details) => {
@@ -661,6 +663,7 @@ async function getBrowserId() {
 /**
  * Send heartbeat to IAI Command Center
  * This keeps the soldier status online and tracks activity
+ * 💓 THE HEART OF THE IAI STEALTH SOLDIER 💓
  */
 async function sendHeartbeat() {
   try {
@@ -676,7 +679,7 @@ async function sendHeartbeat() {
     
     const activeSoldierId = soldierId || currentSoldierId;
     
-    // Send heartbeat to IAI system
+    // 💓 Send heartbeat to IAI system
     const response = await fetch(`${API_BASE_URL}/api/extension/iai/heartbeat`, {
       method: 'POST',
       headers: {
@@ -687,17 +690,29 @@ async function sendHeartbeat() {
         soldierId: activeSoldierId,
         accountId,
         status: 'online',
+        currentTaskType: currentTask?.type || null,
+        currentTaskId: currentTask?.id || null,
       }),
     });
     
     if (response.ok) {
-      console.log(`💓 IAI Heartbeat sent (${activeSoldierId})`);
+      const data = await response.json();
+      console.log(`💓 IAI Heartbeat: ${activeSoldierId} | ${data.timestamp}`);
+      
+      // Update badge to show heartbeat
+      chrome.action.setBadgeText({ text: '💓' });
+      setTimeout(() => chrome.action.setBadgeText({ text: '' }), 500);
+      
+      // Log heartbeat activity
+      await logActivity('heartbeat', `💓 Heartbeat sync | Status: online`);
     } else if (response.status === 404) {
       // Soldier not found, re-register
       console.log('⚠️ Soldier not found, re-registering...');
       await chrome.storage.local.remove(['soldierId']);
       currentSoldierId = null;
       await registerAsSoldier();
+    } else {
+      console.log(`⚠️ Heartbeat failed: ${response.status}`);
     }
     
     // Also send to legacy heartbeat endpoint for backwards compatibility
@@ -710,7 +725,40 @@ async function sendHeartbeat() {
       body: JSON.stringify({ accountId }),
     });
   } catch (error) {
-    console.error('Heartbeat error:', error);
+    console.error('💔 Heartbeat error:', error);
+  }
+}
+
+/**
+ * 📝 Log activity to IAI Command Center
+ */
+async function logActivity(eventType, message, taskData = {}) {
+  try {
+    const { authToken, accountId, soldierId } = await chrome.storage.local.get(['authToken', 'accountId', 'soldierId']);
+    if (!authToken || !accountId || !soldierId) return;
+    
+    const response = await fetch(`${API_BASE_URL}/api/extension/iai/log-activity`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        soldierId: soldierId || currentSoldierId,
+        accountId,
+        eventType,
+        message,
+        taskId: taskData.id || null,
+        taskType: taskData.type || null,
+        eventData: taskData,
+      }),
+    });
+    
+    if (response.ok) {
+      console.log(`📝 Activity logged: ${eventType}`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to log activity:', error);
   }
 }
 
@@ -940,6 +988,12 @@ async function notifyFacebookTabs(tasks) {
 async function executeIAITask(task) {
   console.log('🎯 Executing IAI Task:', task.type);
   
+  // � Set current task for heartbeat sync
+  currentTask = task;
+  
+  // �📝 Log task start
+  await logActivity('task_start', `🚀 Starting task: ${task.type}`, { id: task.id, type: task.type });
+  
   // Update task status to processing
   await updateTaskStatus(task.id, 'processing');
   
@@ -951,6 +1005,9 @@ async function executeIAITask(task) {
     const newTab = await chrome.tabs.create({
       url: 'https://www.facebook.com/marketplace/create/vehicle/',
     });
+    
+    // 📝 Log tab creation
+    await logActivity('info', `📂 Opened new Facebook tab`, { tabId: newTab.id });
     
     // Wait for page to load
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -967,9 +1024,22 @@ async function executeIAITask(task) {
       task: task,
     });
     
+    // 📝 Log task completion
+    await logActivity('task_complete', `✅ Task completed: ${task.type}`, { id: task.id, type: task.type, result });
+    
+    // 💓 Clear current task
+    currentTask = null;
+    
     return result;
   } catch (error) {
     console.error('Failed to execute task:', error);
+    
+    // 📝 Log task failure
+    await logActivity('task_fail', `❌ Task failed: ${error.message}`, { id: task.id, type: task.type, error: error.message });
+    
+    // 💓 Clear current task
+    currentTask = null;
+    
     await updateTaskStatus(task.id, 'failed', { error: error.message });
     throw error;
   }
