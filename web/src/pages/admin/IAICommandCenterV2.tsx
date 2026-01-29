@@ -29,7 +29,6 @@ import {
   Filter,
   Layers,
   Heart,
-  HeartPulse,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import IAIPrototypePanel from './IAIPrototypePanel';
@@ -394,12 +393,10 @@ function SoldierCard({
       // Calculate based on how long the task has been running
       // Use lastHeartbeatAt to estimate - fresher heartbeat = actively working
       const lastHb = soldier.lastHeartbeatAt ? new Date(soldier.lastHeartbeatAt).getTime() : 0;
-      const lastTask = soldier.lastTaskAt ? new Date(soldier.lastTaskAt).getTime() : 0;
       const now = Date.now();
       
       // If heartbeat is fresh (< 60s), soldier is actively working
       const heartbeatAge = now - lastHb;
-      const taskAge = now - lastTask;
       
       // Base progress: 30% for starting, increments based on task type
       let basePct = 30;
