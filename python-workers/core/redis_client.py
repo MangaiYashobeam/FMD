@@ -89,40 +89,50 @@ class RedisQueue:
         logger.info("Task enqueued", task_id=task_id, priority=priority)
         return task_id
     
-    async def dequeue_task(self, queue_name: str = None, timeout: int = 0, worker_id: str = None) -> Optional[Dict[str, Any]]:
+    async def dequeue_task(self, queue_name: str = None, timeout: int = 5, worker_id: str = None) -> Optional[Dict[str, Any]]:
         """
-        Get the next task from the queue (highest priority first)
+        Get the next task from the queue
         Atomically moves task to processing queue
         
         Args:
             queue_name: Queue name (optional, defaults to TASK_QUEUE)
-            timeout: Blocking timeout in seconds (optional, not used with sorted sets)
+            timeout: Blocking timeout in seconds
             worker_id: Worker ID to assign to task (optional)
         """
-        # Use specified queue or default
-        task_queue = f"fmd:tasks:{queue_name}:pending" if queue_name else self.TASK_QUEUE
+        # Use specified queue directly if provided, or default
+        task_queue = queue_name if queue_name else self.TASK_QUEUE
         
-        # Get highest priority task (lowest score)
-        result = await self.client.zpopmin(task_queue, count=1)
+        logger.debug("Attempting to dequeue task", queue=task_queue, timeout=timeout)
+        
+        # Use BRPOP for blocking list pop (FIFO order with LPUSH)
+        # Returns None if timeout reached with no items
+        result = await self.client.brpop(task_queue, timeout=timeout)
         
         if not result:
             return None
         
-        task_json, score = result[0]
-        task = json.loads(task_json)
+        queue_name_returned, task_json = result
+        
+        try:
+            task = json.loads(task_json)
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse task JSON", error=str(e), task_json=task_json[:200])
+            return None
         
         # Add to processing queue with worker info (if worker_id provided)
         if worker_id:
             task['worker_id'] = worker_id
         task['started_at'] = datetime.utcnow().isoformat()
         
+        task_id = task.get('id', f"task_{datetime.utcnow().timestamp()}")
+        
         await self.client.hset(
             self.PROCESSING_QUEUE,
-            task.get('id', f"task_{datetime.utcnow().timestamp()}"),
+            task_id,
             json.dumps(task)
         )
         
-        logger.info("Task dequeued", task_id=task.get('id'), worker_id=worker_id)
+        logger.info("Task dequeued", task_id=task_id, worker_id=worker_id, task_type=task.get('type'))
         return task
     
     async def complete_task(self, task_id: str, result: Dict[str, Any]):
