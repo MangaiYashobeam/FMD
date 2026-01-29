@@ -56,6 +56,12 @@ let authState = {
   tokenExpiry: null,
 };
 
+// Promise that resolves when auth state is loaded from storage
+let authStateLoadedResolve;
+let authStateLoaded = new Promise((resolve) => {
+  authStateLoadedResolve = resolve;
+});
+
 let facebookConfig = null; // Cached Facebook config from server
 let activeTabs = new Map(); // tabId -> { accountId, url }
 
@@ -1413,6 +1419,11 @@ async function handleMessage(message, sender) {
       }
       
     case 'GET_AUTH_STATE':
+      // Wait for auth state to be loaded from storage (max 3 seconds)
+      await Promise.race([
+        authStateLoaded,
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
       return authState;
     
     case 'GET_SOLDIER_STATUS':
@@ -2156,6 +2167,13 @@ chrome.storage.local.get(['authState', 'authToken'], async (result) => {
       heartbeatCheckInterval = setInterval(checkIAIHeartbeat, CONFIG.HEARTBEAT_CHECK_INTERVAL);
       await sendIAIHeartbeat();
     }
+  } else {
+    console.log('No saved auth state found');
+  }
+  
+  // Signal that auth state loading is complete
+  if (authStateLoadedResolve) {
+    authStateLoadedResolve();
   }
   
   // Fetch Facebook config from server

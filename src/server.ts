@@ -30,16 +30,6 @@ import {
   csrfProtection,
   attachSecurityContext,
 } from '@/middleware/security.middleware';
-// Enterprise Security - PCI-DSS & SOC2 Compliant
-import {
-  enterpriseSecurityHeaders,
-  sensitiveDataCacheControl,
-  clearSiteDataOnLogout,
-  pciAuditLogger,
-  deepSanitizeRequest,
-  advancedInjectionGuard,
-  threatIntelligenceCheck,
-} from '@/middleware/enterprise-security.middleware';
 import {
   createSecureGateway,
   ring5AuthBarrier,
@@ -59,7 +49,6 @@ import { schedulerService } from '@/services/scheduler.service';
 import { shutdownEmailQueue } from '@/queues/email.queue';
 import { intelliceilService } from '@/services/intelliceil.service';
 import { intelliceilMiddleware, intelliceilMonitor } from '@/middleware/intelliceil';
-import { intelliceilEnterpriseMiddleware, validateInput, honeypotTrap } from '@/middleware/intelliceil.middleware';
 import intelliceilRoutes from '@/routes/intelliceil.routes';
 import { iipcService } from '@/services/iipc.service';
 import { iipcCheck } from '@/middleware/iipc';
@@ -174,44 +163,8 @@ app.use(async (req, res, next) => {
 // This enables full session analytics for non-authenticated visitors
 app.use(trackVisitorSession);
 
-// ============================================
-// VITAL ORGANS - GREEN ROUTE & IAI BYPASS
-// ============================================
-// These routes MUST be defined before security middleware to prevent lockout
-// They implement their own strict security (signatures/tokens)
-
-// 1. Green Route - Encrypted Tunnel (Bypasses WAF/IP Filter)
-// Uses its own body parsing and signature verification
-app.use('/api/green', express.json({limit: '50mb'}), require('./routes/green-route.routes').default);
-
-// 2. Worker IAI Routes - Python workers communicate via X-Worker-Secret header
-// No JWT auth - uses shared secret for authentication
-app.use('/api/worker/iai', express.json({limit: '10mb'}), require('./routes/worker-iai.routes').default);
-
-// 3. IAI Soldier Heartbeat & Registration (Critical for automation)
-// We hoist this to ensure soldiers can report in even under high security mode/attack
-// Note: We use express.json() here because global parser is applied later to /api
-app.use('/api/extension/iai', express.json({limit: '50mb'}), ring5AuthBarrier, require('./routes/iai.routes').default);
-
-// 4. Extension Token Exchange (Critical for auth recovery)
-app.use('/api/extension/token', express.json(), require('./routes/extension-token.routes').default);
-
-// ============================================
-// END VITAL ORGANS
-// ============================================
-
 // API-specific Intelliceil protection (blocks malicious traffic)
 app.use('/api', intelliceilMiddleware);
-
-// Honeypot trap endpoints (catch scanners and attackers)
-app.use(honeypotTrap);
-
-// Enterprise Security Middleware - SQL Injection, XSS, Bot Detection, IP Reputation
-// This performs comprehensive security checks on ALL API requests
-app.use('/api', intelliceilEnterpriseMiddleware);
-
-// Input validation middleware - Additional SQL/XSS scanning for request bodies
-app.use('/api', validateInput);
 
 // IP Filtering and suspicious activity tracking (first line of defense for API)
 app.use('/api', ipFilter);
@@ -517,30 +470,6 @@ app.use('/api', sanitizeRequest);
 app.use('/api', injectionGuard);
 
 // ============================================
-// Enterprise Security Layer (PCI-DSS & SOC2 Compliant)
-// ============================================
-// 1. PCI Audit Logging - All requests logged with compliance tags
-app.use('/api', pciAuditLogger);
-
-// 2. Enterprise Security Headers (CSP, HSTS, X-Frame-Options, etc.)
-app.use('/api', enterpriseSecurityHeaders);
-
-// 3. Sensitive Data Cache Control
-app.use('/api', sensitiveDataCacheControl);
-
-// 4. Clear Site Data on Logout
-app.use('/api', clearSiteDataOnLogout);
-
-// 5. Threat Intelligence Check
-app.use('/api', threatIntelligenceCheck);
-
-// 6. Deep Sanitization (advanced XSS/Injection prevention)
-app.use('/api', deepSanitizeRequest);
-
-// 7. Advanced Injection Guard
-app.use('/api', advancedInjectionGuard);
-
-// ============================================
 // Security Context & CSRF Protection
 // ============================================
 // Attach security context (request ID, IP, user agent) for audit logging
@@ -610,8 +539,6 @@ app.use('/api', (req, res, next) => {
     '/ai/',
     // Facebook session management (admin-authenticated)
     '/facebook/session',
-    // IAI public endpoints (extension uses own token/no CSRF)
-    '/iai/',
   ];
   
   if (skipPaths.some(p => req.path.startsWith(p))) {
@@ -753,139 +680,56 @@ app.get('/api/config/facebook', async (_req, res) => {
 
 // Public IAI Pattern Endpoint - For extension to load workflow patterns
 // No auth required - returns only active/default pattern for IAI soldiers
-// Supports ?ultraSpeed=true to fetch from USM container
-// Supports ?soldierId=xxx to update soldier's current pattern tracking
-app.get('/api/iai/pattern', async (req, res): Promise<void> => {
+app.get('/api/iai/pattern', async (_req, res): Promise<void> => {
   try {
     const { injectionService } = require('./services/injection.service');
-    const prisma = require('./config/database').default;
     
-    const ultraSpeed = req.query.ultraSpeed === 'true' || req.query.usm === 'true';
-    const soldierId = req.query.soldierId as string | undefined;
-    const accountId = req.query.accountId as string | undefined;
+    // Get active containers
+    const { containers } = await injectionService.listContainers({
+      isActive: true,
+      includePatterns: true,
+      limit: 10
+    });
     
-    let container = null;
-    let pattern = null;
-    let patternSource = ultraSpeed ? 'usm' : 'weighted';
-    
-    // Check for pattern override first if we have accountId
-    if (accountId) {
-      const effectiveResult = await injectionService.getEffectivePattern(accountId);
-      if (effectiveResult.pattern && effectiveResult.source === 'override') {
-        pattern = effectiveResult.pattern;
-        patternSource = 'override';
-        // Get container info
-        container = await injectionService.getContainer(pattern.containerId, false);
-        console.log(`[IAI Pattern] 🎯 Using override pattern: ${pattern.name} for account ${accountId}`);
-      }
-    }
-    
-    if (!pattern && ultraSpeed) {
-      // Ultra Speed Mode - fetch exclusively from USM container
-      console.log('[IAI Pattern] ⚡ Ultra Speed Mode - fetching from USM container');
-      const usmResult = await injectionService.selectUSMPattern();
-      
-      if (usmResult.pattern) {
-        pattern = usmResult.pattern;
-        container = usmResult.container;
-        patternSource = 'usm';
-        console.log(`[IAI Pattern] ⚡ USM Pattern selected: ${pattern.name}`);
-      } else {
-        // Fallback to normal if USM unavailable
-        console.log('[IAI Pattern] ⚠️ USM container not available, falling back to normal');
-      }
-    }
-    
-    // If no pattern yet (normal mode or USM fallback)
-    if (!pattern) {
-      // Get active containers
-      const { containers } = await injectionService.listContainers({
-        isActive: true,
-        includePatterns: true,
-        limit: 10
+    if (!containers || containers.length === 0) {
+      res.status(404).json({ 
+        success: false, 
+        error: 'No active injection containers found',
+        message: 'Please configure an injection container in the admin panel'
       });
-      
-      if (!containers || containers.length === 0) {
-        res.status(404).json({ 
-          success: false, 
-          error: 'No active injection containers found',
-          message: 'Please configure an injection container in the admin panel'
-        });
-        return;
-      }
-      
-      // Find default or first container
-      container = containers.find((c: any) => c.isDefault) || containers[0];
-      
-      // Get patterns from container - use weighted random selection for hot-swap
-      const { patterns } = await injectionService.listPatterns({
+      return;
+    }
+    
+    // Find default or first container
+    const container = containers.find((c: any) => c.isDefault) || containers[0];
+    
+    // Get patterns from container
+    const { patterns } = await injectionService.listPatterns({
+      containerId: container.id,
+      isActive: true,
+      limit: 10
+    });
+    
+    if (!patterns || patterns.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'No active patterns found in container',
         containerId: container.id,
-        isActive: true,
-        limit: 50
+        containerName: container.name
       });
-      
-      if (!patterns || patterns.length === 0) {
-        res.status(404).json({
-          success: false,
-          error: 'No active patterns found in container',
-          containerId: container.id,
-          containerName: container.name
-        });
-        return;
-      }
-      
-      // Weighted random selection based on success count (hot-swap)
-      const weightedPatterns = patterns.map((p: any) => ({
-        pattern: p,
-        calculatedWeight: Math.max(1, p.weight + (p.successCount * 10) - (p.failureCount * 5))
-      }));
-      
-      const totalWeight = weightedPatterns.reduce((sum: number, wp: any) => sum + wp.calculatedWeight, 0);
-      let random = Math.random() * totalWeight;
-      
-      for (const wp of weightedPatterns) {
-        random -= wp.calculatedWeight;
-        if (random <= 0) {
-          pattern = wp.pattern;
-          break;
-        }
-      }
-      
-      // Fallback to first pattern if selection fails
-      if (!pattern) {
-        pattern = patterns[0];
-      }
-      
-      patternSource = 'weighted';
-      console.log(`[IAI Pattern] 🔄 Hot-swap selected: ${pattern.name} (weight: ${pattern.weight})`);
+      return;
     }
     
-    // Update soldier's current pattern if soldierId provided
-    if (soldierId && pattern) {
-      try {
-        await prisma.iAISoldier.updateMany({
-          where: { soldierId },
-          data: {
-            currentPatternId: pattern.id,
-            currentPatternName: pattern.name,
-            patternLoadedAt: new Date(),
-            patternSource,
-          },
-        });
-        console.log(`[IAI Pattern] 📝 Updated soldier ${soldierId} pattern: ${pattern.name} (source: ${patternSource})`);
-      } catch (err) {
-        console.error(`[IAI Pattern] Failed to update soldier pattern:`, err);
-      }
-    }
+    // Find default or first pattern
+    const pattern = patterns.find((p: any) => p.isDefault) || patterns[0];
     
     // Return pattern data for extension
     res.json({
       success: true,
-      ultraSpeed: ultraSpeed,
       container: {
-        id: container?.id,
-        name: container?.name,
-        category: container?.category
+        id: container.id,
+        name: container.name,
+        category: container.category
       },
       pattern: {
         id: pattern.id,
@@ -895,11 +739,6 @@ app.get('/api/iai/pattern', async (req, res): Promise<void> => {
         schema: pattern.schema,
         config: pattern.config,
         tags: pattern.tags
-      },
-      hotSwap: {
-        enabled: true,
-        mode: patternSource,
-        container: ultraSpeed ? 'IAI Soldiers USM' : 'all'
       },
       loadedAt: new Date().toISOString()
     });
@@ -1010,23 +849,11 @@ app.use('/api/leads', ring5AuthBarrier, require('./routes/lead.routes').default)
 app.use('/api/messages', ring5AuthBarrier, require('./routes/message.routes').default); // Messages/conversations (requires auth)
 app.use('/api/analytics', ring5AuthBarrier, require('./routes/analytics.routes').default); // Analytics dashboard (requires auth)
 app.use('/api/intelliceil', ring5AuthBarrier, intelliceilRoutes);              // Requires admin (Intelliceil dashboard)
-app.use('/api/enterprise-security', ring5AuthBarrier, require('./routes/enterprise-security.routes').default); // Enterprise Security (super admin)
 app.use('/api/session-analytics', require('./routes/session-analytics.routes').default); // Session & visitor analytics
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications
 app.use('/api/posting', ring5AuthBarrier, postingRoutes);                      // Auto-posting settings & triggers
 app.use('/api/workers', ring5AuthBarrier, require('./routes/worker.routes').default); // Python worker management
-
-// ============================================
-// Invitation & Security Routes
-// ============================================
-app.use('/api/invitations', require('./routes/invitation.routes').default);    // Invitation codes (mixed auth - validate is public)
-app.use('/api/security', ring5AuthBarrier, require('./routes/security.routes').default); // Security dashboard (super admin)
-
-// ============================================
-// Green Route - Secure Internal API (works during mitigation)
-// ============================================
-app.use('/api/green', require('./routes/green-route.routes').default); // Green Route (verified ecosystem only)
 
 // Super Admin Dashboard Routes (requires super admin access)
 app.use('/api/dashboard', ring5AuthBarrier, require('./routes/dashboard.routes').default); // Dashboard analytics (RBAC protected)
@@ -1042,16 +869,7 @@ app.use('/api/fb-session', ring5AuthBarrier, require('./routes/fb-session.routes
 // Chrome Extension AI Hybrid System
 // DEPRECATED: OAuth routes kept for backwards compatibility - will return 410 Gone
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (DEPRECATED)
-
-// Extension routes - all require JWT auth (extension has user's token)
 app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
-
-// ============================================
-// Extension Token Exchange (SECURE - No bundled secrets)
-// ============================================
-// These routes replace the need for bundled secrets in the extension
-// Extension calls these to get ephemeral session tokens
-app.use('/api/extension/token', require('./routes/extension-token.routes').default); // Token exchange (public)
 
 // IAI Soldier Command Center
 app.use('/api/admin/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier tracking (admin)
@@ -1084,9 +902,6 @@ app.use('/api/ai', ring5AuthBarrier, require('./routes/ai-chat.routes').default)
 
 // IAI Injection System - Pattern/Container management (requires admin)
 app.use('/api/injection', ring5AuthBarrier, require('./routes/injection.routes').default); // Injection containers & patterns
-
-// IAI Factory - Blueprint management, instance spawning, orchestration (requires admin)
-app.use('/api/iai-factory', ring5AuthBarrier, require('./routes/iai-factory.routes').default); // IAI Factory Control
 
 // Mission Control - Mission planning and execution (requires admin)
 app.use('/api/mission-control', ring5AuthBarrier, require('./routes/mission-control.routes').default); // Mission Control system

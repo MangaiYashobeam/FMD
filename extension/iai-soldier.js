@@ -21,65 +21,52 @@
  */
 
 // ============================================
-// IAI VERSION & BUILD INFO
-// ============================================
-const IAI_VERSION = '3.9.0';
-const IAI_BUILD = 'GREEN-01-2026012800';  // Format: BUILD-YYYYMMDDHH
-const IAI_COMMIT = 'GREEN-ROUTE-UNIFIED';  // ALL API calls through GreenRouteService
-
-console.log(`%c[IAI SOLDIER] v${IAI_VERSION} | Build: ${IAI_BUILD} | Commit: ${IAI_COMMIT}`, 
-  'background: linear-gradient(90deg, #059669, #10b981); color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 14px;');
-console.log(`%c[IAI] 🟢 GREEN ROUTE UNIFIED - All internal, no external calls`, 'color: #10b981; font-weight: bold;');
-console.log(`%c[IAI] 🚀 Loaded at ${new Date().toISOString()}`, 'color: #10b981; font-weight: bold;');
-
-// ============================================
 // IAI CORE CONFIGURATION
 // ============================================
 
 const IAI_CONFIG = {
-  // API Endpoints - ALL ROUTED THROUGH GREEN ROUTE
+  // API Endpoints
   API: {
     PRODUCTION: 'https://dealersface.com/api', // Production via Cloudflare
-    GREEN: 'https://dealersface.com/api/green', // Green Route (bypass mitigation)
     LOCAL: 'http://localhost:5000/api',
     AI_SERVICE: 'https://sag.gemquery.com/api/v1',
   },
   
-  // Human Behavior Simulation - ULTRA SPEED 9X FASTER
+  // Human Behavior Simulation - ENHANCED with competitor patterns
   HUMAN: {
     TYPING: {
-      // 9X faster typing for dropdowns (was 3x, now 3x more)
-      DROPDOWN_MIN_DELAY: 1,
-      DROPDOWN_MAX_DELAY: 3,
-      // 9X faster normal typing
-      MIN_DELAY: 4,
-      MAX_DELAY: 13,
-      // 9X faster for descriptions
-      DESC_MIN_DELAY: 1,
-      DESC_MAX_DELAY: 2,
-      TYPO_RATE: 0,         // No typos for max speed
-      PAUSE_RATE: 0,        // No pauses
-      LONG_PAUSE_PROBABILITY: 0,
-      PAUSE_DURATION: { MIN: 10, MAX: 30 },
+      // Fast typing for dropdowns (like competitor: 10-28ms)
+      DROPDOWN_MIN_DELAY: 10,
+      DROPDOWN_MAX_DELAY: 28,
+      // Normal typing for inputs
+      MIN_DELAY: 35,
+      MAX_DELAY: 120,
+      // Fast typing for descriptions (like competitor: 6-18ms)
+      DESC_MIN_DELAY: 6,
+      DESC_MAX_DELAY: 18,
+      TYPO_RATE: 0.015,   // 1.5% typo rate
+      PAUSE_RATE: 0.08,   // 8% chance of pause
+      LONG_PAUSE_PROBABILITY: 0.12, // 12% like competitor
+      PAUSE_DURATION: { MIN: 800, MAX: 2500 },
     },
     MOUSE: {
-      JITTER: 2,            // Minimal jitter
-      SCROLL_NOISE: 20,     // Minimal noise
-      HOVER_TIME: { MIN: 3, MAX: 10 },
+      JITTER: 12,         // Pixel jitter on clicks
+      SCROLL_NOISE: 150,  // Random scroll variation
+      HOVER_TIME: { MIN: 150, MAX: 400 },
     },
     TIMING: {
-      ACTION_DELAY: { MIN: 8, MAX: 40 },    // 9x faster
-      PAGE_LOAD_WAIT: { MIN: 100, MAX: 200 },
-      THINK_TIME: { MIN: 8, MAX: 25 },
-      SESSION_BREAK: { MIN: 500, MAX: 2000 },
-      // Dropdown specific timing - ULTRA FAST
-      DROPDOWN_WAIT: 5,
-      DROPDOWN_MAX_ATTEMPTS: 5,
+      ACTION_DELAY: { MIN: 400, MAX: 1800 },
+      PAGE_LOAD_WAIT: { MIN: 1500, MAX: 3500 },
+      THINK_TIME: { MIN: 800, MAX: 3000 },
+      SESSION_BREAK: { MIN: 45000, MAX: 180000 },
+      // Dropdown specific timing
+      DROPDOWN_WAIT: 200,        // Wait between dropdown retries (like competitor)
+      DROPDOWN_MAX_ATTEMPTS: 10, // Max retries for dropdown (like competitor)
     },
     SESSION: {
-      MAX_ACTIONS_BEFORE_BREAK: { MIN: 100, MAX: 200 },
-      BREAK_CHANCE: 0,       // No breaks
-      OCCASIONAL_LONG_PAUSE_CHANCE: 0,
+      MAX_ACTIONS_BEFORE_BREAK: { MIN: 15, MAX: 35 },
+      BREAK_CHANCE: 0.05,
+      OCCASIONAL_LONG_PAUSE_CHANCE: 0.08, // 8% chance after clicks (like competitor)
     },
   },
   
@@ -89,29 +76,6 @@ const IAI_CONFIG = {
     INJECT_NOISE: true,
     AVOID_DETECTION_PATTERNS: true,
     NATURAL_SCROLL_BEHAVIOR: true,
-  },
-  
-  // Value mappings for FB dropdown options
-  VALUE_MAPS: {
-    transmission: {
-      'cvt': 'Automatic',
-      'CVT': 'Automatic',
-      'auto': 'Automatic',
-      'automatic': 'Automatic',
-      'manual': 'Manual',
-      'Manual': 'Manual',
-    },
-    fuelType: {
-      'gas': 'Gasoline',
-      'Gas': 'Gasoline',
-      'gasoline': 'Gasoline',
-      'diesel': 'Diesel',
-      'Diesel': 'Diesel',
-      'electric': 'Electric',
-      'Electric': 'Electric',
-      'hybrid': 'Hybrid',
-      'Hybrid': 'Hybrid',
-    },
   },
   
   // Task Polling
@@ -137,71 +101,6 @@ const IAI_CONFIG = {
 // ============================================
 // INJECTION SYSTEM - DYNAMIC PATTERN LOADING
 // ============================================
-
-// ============================================
-// LOGGING SYSTEM - COMPREHENSIVE ACTIVITY TRACKING
-// ============================================
-
-let CURRENT_SOLDIER_ID = null;
-let CURRENT_ACCOUNT_ID = null;
-
-/**
- * Log comprehensive activity to server
- * @param {string} eventType - The type of event (e.g., 'click', 'type', 'step_start', 'error')
- * @param {object} details - The detailed data to log
- * @param {string} level - Log level ('info', 'warn', 'error', 'debug')
- */
-async function logStealthActivity(eventType, details, level = 'info') {
-  try {
-    // Attempt to load context if missing
-    if (!CURRENT_SOLDIER_ID) {
-        try {
-            const storage = await chrome.storage?.local?.get(['soldierInfo', 'authState']);
-            if (storage?.soldierInfo?.soldierId) CURRENT_SOLDIER_ID = storage.soldierInfo.soldierId;
-            if (storage?.authState?.accountId) CURRENT_ACCOUNT_ID = storage.authState.accountId;
-        } catch(e) {}
-    }
-
-    const logData = {
-      soldierId: CURRENT_SOLDIER_ID || 'unknown_soldier',
-      accountId: CURRENT_ACCOUNT_ID || 'unknown_account',
-      eventType,
-      message: details.message || `${eventType} occurred`,
-      eventData: {
-        ...details,
-        url: window.location.href,
-        timestamp: Date.now(),
-        userAgent: navigator.userAgent,
-        build: IAI_BUILD,
-        version: IAI_VERSION
-      },
-      level
-    };
-
-    // Get Auth Token
-    const token = window.iaiAuthToken || (await chrome.storage?.local?.get('authToken'))?.authToken;
-
-    // Direct API call (preferred for reliability over GreenRoute for logs currently)
-    // Don't await to avoid blocking execution
-    fetch(`${IAI_CONFIG.API.PRODUCTION}/extension/iai/log-activity`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-IAI-Soldier': IAI_VERSION,
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(logData)
-    }).catch(err => console.debug('[IAI LOG] Fetch failed', err));
-    
-    // Also log to console for local debugging
-    const color = level === 'error' ? '#ef4444' : level === 'warn' ? '#f59e0b' : '#3b82f6';
-    console.log(`%c[IAI LOG] ${eventType}: ${details.message || ''}`, `color: ${color}; font-weight: bold;`);
-    
-  } catch (e) {
-    // Fail silently to not break execution
-    console.warn('[IAI LOG] Failed to send log:', e);
-  }
-}
 
 /**
  * Injection data storage - loaded from server injection API
@@ -253,25 +152,14 @@ function processPatternData(pattern, container) {
       }
     }
     
-    // Extract workflow steps - check multiple possible field names
-    if (patternCode?.sequence) {
-      workflow = patternCode.sequence;
-      console.log('[IAI] 📋 Found workflow in "sequence" field');
-    } else if (patternCode?.workflow) {
+    // Extract workflow steps
+    if (patternCode?.workflow) {
       workflow = patternCode.workflow;
-      console.log('[IAI] 📋 Found workflow in "workflow" field');
     } else if (patternCode?.steps) {
       workflow = patternCode.steps;
-      console.log('[IAI] 📋 Found workflow in "steps" field');
     } else if (patternCode?.STEPS) {
       workflow = patternCode.STEPS;
-      console.log('[IAI] 📋 Found workflow in "STEPS" field');
-    } else {
-      console.warn('[IAI] ⚠️ No workflow found in pattern - checked: sequence, workflow, steps, STEPS');
     }
-    
-    // Extract config for timing/speed settings
-    const config = patternCode?.config || {};
     
     IAI_INJECTION = {
       _loaded: true,
@@ -283,22 +171,13 @@ function processPatternData(pattern, container) {
       _loadedAt: new Date(),
       WORKFLOW: workflow,
       FIELD_SELECTORS: patternCode?.fieldMappings || patternCode?.fieldSelectors || {},
-      TIMING: patternCode?.timing || config || { averageDelay: 500, recommendedDelay: 400 },
-      CONFIG: config,
+      TIMING: patternCode?.timing || { averageDelay: 500, recommendedDelay: 400 },
       METADATA: {
         tags: pattern.tags,
         codeType: pattern.codeType || 'workflow',
         isDefault: pattern.isDefault,
         errorRecovery: patternCode?.errorRecovery || {},
         actions: patternCode?.actions || {},
-        // Pass through pattern metadata for speed/dump mode
-        mode: patternCode?.mode || 'STANDARD',
-        speedMultiplier: config?.speedMultiplier || pattern.metadata?.speedMultiplier || patternCode?.speedMultiplier || 1,
-        dumpMode: config?.dumpMode ?? pattern.metadata?.dumpMode ?? patternCode?.dumpMode ?? false,
-        minDelay: config?.minDelay || 50,
-        maxDelay: config?.maxDelay || 200,
-        clickDelay: config?.clickDelay || 100,
-        typeDelay: config?.typeDelay || 50,
       },
     };
     
@@ -342,54 +221,23 @@ async function loadCachedPattern() {
 /**
  * Load injection pattern from server
  * Uses PUBLIC endpoint first (no auth required), falls back to authenticated endpoint
- * Supports Ultra Speed Mode (USM) via chrome.storage
  */
 async function loadInjectionPattern() {
   try {
     console.log('[IAI] 🔄 Loading injection pattern from server...');
-    
-    // Check if Ultra Speed Mode is enabled
-    let ultraSpeedEnabled = false;
-    let soldierId = null;
-    let accountId = null;
-    
-    try {
-      const storage = await chrome.storage?.local?.get(['ultraSpeedMode', 'soldierInfo', 'authState']);
-      ultraSpeedEnabled = storage?.ultraSpeedMode === true;
-      soldierId = storage?.soldierInfo?.soldierId;
-      accountId = storage?.authState?.dealerAccountId || storage?.authState?.accountId;
-      
-      // Update global context for logging
-      if (soldierId) CURRENT_SOLDIER_ID = soldierId;
-      if (accountId) CURRENT_ACCOUNT_ID = accountId;
-      
-      if (ultraSpeedEnabled) {
-        console.log('[IAI] ⚡ Ultra Speed Mode ENABLED - will fetch from USM container');
-      }
-    } catch (e) {
-      console.log('[IAI] Could not check USM mode:', e);
-    }
     
     const apiUrl = window.location.hostname === 'localhost' 
       ? IAI_CONFIG.API.LOCAL 
       : IAI_CONFIG.API.PRODUCTION;
     
     // TRY PUBLIC ENDPOINT FIRST (no auth required)
-    // Add ultraSpeed, soldierId, and accountId parameters
-    const queryParams = new URLSearchParams();
-    if (ultraSpeedEnabled) queryParams.set('ultraSpeed', 'true');
-    if (soldierId) queryParams.set('soldierId', soldierId);
-    if (accountId) queryParams.set('accountId', accountId);
-    
-    const patternUrl = `${apiUrl}/iai/pattern${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-    console.log('[IAI] 📡 Trying public pattern endpoint:', patternUrl);
-    const publicResponse = await fetch(patternUrl);
+    console.log('[IAI] 📡 Trying public pattern endpoint...');
+    const publicResponse = await fetch(`${apiUrl}/iai/pattern`);
     
     if (publicResponse.ok) {
       const publicData = await publicResponse.json();
       if (publicData.success && publicData.pattern) {
         console.log('[IAI] ✅ Loaded pattern from public endpoint');
-        console.log(`[IAI] 🎯 Pattern: ${publicData.pattern.name} (source: ${publicData.hotSwap?.mode || 'unknown'})`);
         return processPatternData(publicData.pattern, publicData.container);
       }
     }
@@ -411,8 +259,48 @@ async function loadInjectionPattern() {
       const data = await response.json();
       if (data.success && data.data) {
         const { pattern, container } = data.data;
-        // Use processPatternData for consistent handling
-        return processPatternData(pattern, container);
+        
+        // Parse workflow from pattern code
+        let workflow = [];
+        try {
+          if (typeof pattern.code === 'string') {
+            const parsed = JSON.parse(pattern.code);
+            workflow = parsed.steps || parsed.workflow || parsed.STEPS || [];
+          } else if (pattern.code?.steps || pattern.code?.workflow) {
+            workflow = pattern.code.steps || pattern.code.workflow;
+          }
+        } catch (parseErr) {
+          console.error('[IAI] Failed to parse pattern code:', parseErr);
+        }
+        
+        IAI_INJECTION = {
+          _loaded: true,
+          _patternId: pattern.id,
+          _patternName: pattern.name,
+          _patternVersion: pattern.version,
+          _containerId: container?.id,
+          _containerName: container?.name,
+          _loadedAt: new Date(),
+          WORKFLOW: workflow,
+          FIELD_SELECTORS: pattern.code?.fieldSelectors || {},
+          TIMING: pattern.code?.timing || { averageDelay: 500, recommendedDelay: 400 },
+          METADATA: {
+            tags: pattern.tags,
+            codeType: pattern.codeType,
+            isDefault: pattern.isDefault,
+          },
+        };
+        
+        // Update legacy alias
+        IAI_TRAINING = IAI_INJECTION;
+        
+        // Cache for offline use
+        await chrome.storage?.local?.set({ iaiInjection: IAI_INJECTION });
+        
+        console.log(`[IAI] ✅ Injection pattern loaded: ${pattern.name} v${pattern.version}`);
+        console.log(`[IAI] 📋 Workflow steps: ${workflow.length}`);
+        console.log(`[IAI] 📦 Container: ${container?.name || 'default'}`);
+        return true;
       }
     }
     
@@ -437,1435 +325,81 @@ async function loadInjectionPattern() {
 const loadTrainingData = loadInjectionPattern;
 
 /**
- * Upload images to Facebook Marketplace listing - TEST7
- * Uses multiple strategies to find and interact with FB's photo upload area
- */
-async function uploadImagesToFB(imageUrls, stealth) {
-  console.log(`[IAI] 📷 TEST7: Uploading ${imageUrls?.length || 0} images...`);
-  
-  if (!imageUrls || imageUrls.length === 0) {
-    console.log('[IAI] ⚠️ No images to upload');
-    return { success: false, error: 'No images provided' };
-  }
-  
-  try {
-    // ========== STEP 1: Find the photo upload area ==========
-    let fileInput = null;
-    let uploadArea = null;
-    
-    // Strategy 1: Find ANY file input on the page
-    const allFileInputs = document.querySelectorAll('input[type="file"]');
-    console.log(`[IAI] 🔍 Found ${allFileInputs.length} file inputs on page`);
-    
-    for (const input of allFileInputs) {
-      const accept = input.getAttribute('accept') || '';
-      const multiple = input.hasAttribute('multiple');
-      console.log(`[IAI]   - Input: accept="${accept}", multiple=${multiple}, visible=${isVisible(input)}`);
-      
-      // Prefer inputs that accept images
-      if (accept.includes('image') || accept.includes('video') || accept === '*' || !accept) {
-        fileInput = input;
-        console.log('[IAI] ✓ Selected file input for images');
-        break;
-      }
-    }
-    
-    // Strategy 2: Find "Add photos" clickable area by text content
-    if (!fileInput) {
-      const allDivs = document.querySelectorAll('div');
-      for (const div of allDivs) {
-        const text = div.textContent?.toLowerCase() || '';
-        if ((text.includes('add photos') || text.includes('add photo')) && 
-            text.length < 100 && isVisible(div)) {
-          uploadArea = div;
-          console.log('[IAI] ✓ Found "Add photos" area by text');
-          
-          // Click it to potentially reveal/activate file input
-          await stealth.click(div);
-          await stealth.delay(300, 500);
-          
-          // Check for file input in same container or newly appeared
-          const container = div.closest('div[class*="x"]')?.parentElement;
-          if (container) {
-            fileInput = container.querySelector('input[type="file"]');
-          }
-          if (!fileInput) {
-            fileInput = document.querySelector('input[type="file"]');
-          }
-          break;
-        }
-      }
-    }
-    
-    // Strategy 3: Find by aria-label
-    if (!fileInput) {
-      uploadArea = document.querySelector('[aria-label*="photo" i], [aria-label*="Photo"]');
-      if (uploadArea) {
-        console.log('[IAI] ✓ Found upload area by aria-label');
-        await stealth.click(uploadArea);
-        await stealth.delay(300, 500);
-        fileInput = document.querySelector('input[type="file"]');
-      }
-    }
-    
-    // Strategy 4: Look for the drag-and-drop zone with specific structure
-    if (!fileInput) {
-      // FB's photo upload area typically has this structure
-      const dropZones = document.querySelectorAll('[role="button"]');
-      for (const zone of dropZones) {
-        if (zone.textContent?.includes('photo') || zone.textContent?.includes('drag')) {
-          console.log('[IAI] ✓ Found potential drop zone');
-          // Look for file input in ancestors
-          let parent = zone.parentElement;
-          for (let i = 0; i < 10 && parent; i++) {
-            fileInput = parent.querySelector('input[type="file"]');
-            if (fileInput) {
-              console.log('[IAI] ✓ Found file input in drop zone ancestor');
-              break;
-            }
-            parent = parent.parentElement;
-          }
-          if (fileInput) break;
-        }
-      }
-    }
-    
-    if (!fileInput) {
-      console.log('[IAI] ✗ Could not find file input - listing all inputs for debugging:');
-      document.querySelectorAll('input').forEach((inp, i) => {
-        console.log(`[IAI]   Input ${i}: type=${inp.type}, name=${inp.name}, id=${inp.id}`);
-      });
-      return { success: false, error: 'File input not found' };
-    }
-    
-    console.log('[IAI] ✓ File input found, preparing images...');
-    
-    // ========== STEP 2: Fetch images and convert to Files ==========
-    // TEST11: Use image proxy for external URLs to bypass CORS
-    const files = [];
-    const maxImages = Math.min(imageUrls.length, 20); // FB limit
-    
-    // Get auth token for proxy (if available)
-    let authToken = null;
-    try {
-      const storage = await chrome.storage.local.get(['authToken', 'token']);
-      authToken = storage.authToken || storage.token;
-    } catch (e) {
-      console.log('[IAI] ⚠️ Could not get auth token for image proxy');
-    }
-    
-    for (let i = 0; i < maxImages; i++) {
-      const url = imageUrls[i];
-      const shortUrl = url.length > 60 ? url.substring(0, 60) + '...' : url;
-      console.log(`[IAI] 📥 Fetching image ${i + 1}/${maxImages}: ${shortUrl}`);
-      
-      try {
-        // Handle different URL types
-        let blob;
-        
-        if (url.startsWith('data:')) {
-          // Data URL - convert directly
-          const response = await fetch(url);
-          blob = await response.blob();
-        } else if (url.startsWith('blob:')) {
-          // Blob URL - fetch directly
-          const response = await fetch(url);
-          blob = await response.blob();
-        } else {
-          // TEST11: External URL - use GREEN ROUTE image proxy to bypass CORS
-          // Green route works without auth and has SSRF protection
-          console.log(`[IAI] 🔄 Using GREEN ROUTE image proxy for external URL...`);
-          
-          // Build proxy URL using GREEN ROUTE (no auth required)
-          const proxyUrl = `${IAI_CONFIG.API.PRODUCTION}/green/image-proxy?url=${encodeURIComponent(url)}`;
-          
-          const fetchOptions = {
-            method: 'GET',
-            headers: {
-              'X-Green-Route': 'true',
-              'X-IAI-Soldier': IAI_VERSION
-            }
-          };
-          
-          console.log('[IAI] ✓ Using green route - no auth required');
-          
-          const response = await fetch(proxyUrl, fetchOptions);
-          
-          if (!response.ok) {
-            // If proxy fails, try direct fetch as fallback
-            console.log(`[IAI] ⚠️ Proxy returned ${response.status}, trying direct fetch...`);
-            const directResponse = await fetch(url, { 
-              mode: 'cors',
-              credentials: 'omit'
-            });
-            if (!directResponse.ok) {
-              throw new Error(`Direct fetch failed: HTTP ${directResponse.status}`);
-            }
-            blob = await directResponse.blob();
-          } else {
-            blob = await response.blob();
-            console.log('[IAI] ✓ Image fetched via proxy');
-          }
-        }
-        
-        // Determine file extension
-        const mimeType = blob.type || 'image/jpeg';
-        const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-        const fileName = `vehicle_${Date.now()}_${i + 1}.${ext}`;
-        
-        const file = new File([blob], fileName, { type: mimeType });
-        files.push(file);
-        
-        const sizeKB = (blob.size / 1024).toFixed(1);
-        console.log(`[IAI] ✓ Image ${i + 1} ready: ${fileName} (${sizeKB}KB)`);
-        
-      } catch (fetchError) {
-        console.warn(`[IAI] ⚠️ Failed to fetch image ${i + 1}: ${fetchError.message}`);
-      }
-    }
-    
-    if (files.length === 0) {
-      console.log('[IAI] ✗ No images could be fetched');
-      return { success: false, error: 'No images fetched successfully' };
-    }
-    
-    // ========== STEP 3: Set files on input and trigger events ==========
-    console.log(`[IAI] 📤 Setting ${files.length} files on input...`);
-    
-    const dataTransfer = new DataTransfer();
-    files.forEach(file => dataTransfer.items.add(file));
-    
-    // Set the files
-    fileInput.files = dataTransfer.files;
-    
-    // Trigger all possible events that FB might listen to
-    const events = ['input', 'change', 'drop'];
-    for (const eventType of events) {
-      const event = new Event(eventType, { bubbles: true, cancelable: true });
-      fileInput.dispatchEvent(event);
-      console.log(`[IAI]   Dispatched '${eventType}' event`);
-    }
-    
-    // Also try dispatching on the upload area if we found one
-    if (uploadArea) {
-      const dropEvent = new DragEvent('drop', {
-        bubbles: true,
-        cancelable: true,
-        dataTransfer: dataTransfer
-      });
-      uploadArea.dispatchEvent(dropEvent);
-      console.log('[IAI]   Dispatched drop event on upload area');
-    }
-    
-    console.log(`[IAI] ✅ ${files.length} images uploaded!`);
-    
-    // Wait for FB to process the upload
-    await stealth.delay(1500, 2500);
-    
-    return { success: true, count: files.length };
-    
-  } catch (error) {
-    console.error('[IAI] ❌ Image upload error:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Select Facebook Marketplace Make/Model typeahead fields
- * These are combobox fields - you type and suggestions appear
- */
-async function selectFBTypeahead(labelText, value, stealth) {
-  console.log(`[IAI] ⌨️ Typing "${labelText}" = "${value}"`);
-  
-  if (!value) {
-    console.log(`[IAI] ⚠ No value provided for ${labelText}, skipping`);
-    return false;
-  }
-  
-  try {
-    // Find the input field by looking for the label
-    let inputField = null;
-    
-    // Strategy 1: Find span with label text and get associated input
-    const spans = document.querySelectorAll('span');
-    for (const span of spans) {
-      const text = span.textContent?.trim();
-      if (text === labelText || text?.toLowerCase() === labelText.toLowerCase()) {
-        // Look for input in parent containers
-        let container = span.parentElement;
-        for (let i = 0; i < 8 && container; i++) {
-          const input = container.querySelector('input[type="text"], input:not([type]), input[role="combobox"]');
-          if (input && isVisible(input)) {
-            inputField = input;
-            break;
-          }
-          container = container.parentElement;
-        }
-        if (inputField) break;
-      }
-    }
-    
-    // Strategy 2: Find by aria-label containing label text
-    if (!inputField) {
-      inputField = document.querySelector(`input[aria-label*="${labelText}"]`);
-    }
-    
-    // Strategy 3: Find label element and associated input
-    if (!inputField) {
-      const labels = document.querySelectorAll('label');
-      for (const label of labels) {
-        if (label.textContent?.includes(labelText)) {
-          inputField = label.querySelector('input') || 
-                       label.parentElement?.querySelector('input') ||
-                       document.querySelector(`input[id="${label.getAttribute('for')}"]`);
-          if (inputField) break;
-        }
-      }
-    }
-    
-    if (!inputField) {
-      console.log(`[IAI] ✗ Typeahead input for "${labelText}" not found`);
-      return false;
-    }
-    
-    console.log(`[IAI] ✓ Found typeahead input for "${labelText}"`);
-    
-    // Click to focus
-    await stealth.click(inputField);
-    await stealth.delay(100, 150);
-    
-    // Clear any existing value
-    inputField.value = '';
-    inputField.dispatchEvent(new Event('input', { bubbles: true }));
-    await stealth.delay(50, 80);
-    
-    // Type the value character by character to trigger suggestions
-    await stealth.type(inputField, String(value));
-    await stealth.delay(300, 500); // Wait for suggestions to load
-    
-    // Look for matching suggestion
-    let suggestionFound = false;
-    for (let attempt = 0; attempt < 15; attempt++) {
-      // Look for suggestions in listbox/menu
-      const suggestionSelectors = [
-        '[role="option"]',
-        '[role="listbox"] [role="option"]',
-        '[role="combobox"] + * [role="option"]',
-        '[data-visualcompletion="ignore-dynamic"] span',
-        'ul[role="listbox"] li',
-      ];
-      
-      for (const selector of suggestionSelectors) {
-        const suggestions = document.querySelectorAll(selector);
-        for (const suggestion of suggestions) {
-          const suggestionText = suggestion.textContent?.trim();
-          // Match exactly or partially
-          if (suggestionText?.toLowerCase() === String(value).toLowerCase() ||
-              suggestionText?.toLowerCase().includes(String(value).toLowerCase()) ||
-              String(value).toLowerCase().includes(suggestionText?.toLowerCase() || '')) {
-            console.log(`[IAI] ✓ Found suggestion: "${suggestionText}"`);
-            await stealth.click(suggestion);
-            suggestionFound = true;
-            break;
-          }
-        }
-        if (suggestionFound) break;
-      }
-      
-      if (suggestionFound) break;
-      
-      // Also try clicking any visible option that contains our value
-      const allSpans = document.querySelectorAll('span');
-      for (const span of allSpans) {
-        const spanText = span.textContent?.trim();
-        if (spanText && 
-            spanText.toLowerCase().includes(String(value).toLowerCase()) &&
-            isVisible(span)) {
-          // Check if it's in a dropdown/suggestion context
-          const inSuggestionBox = span.closest('[role="listbox"], [role="menu"], [role="option"], [data-visualcompletion]');
-          if (inSuggestionBox) {
-            console.log(`[IAI] ✓ Found suggestion by span: "${spanText}"`);
-            await stealth.click(span);
-            suggestionFound = true;
-            break;
-          }
-        }
-      }
-      
-      if (suggestionFound) break;
-      await stealth.delay(50, 80);
-    }
-    
-    if (!suggestionFound) {
-      console.log(`[IAI] ✗ Suggestion for "${value}" not found, pressing Tab to confirm`);
-      // Press Tab to confirm what was typed
-      inputField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
-      await stealth.delay(60, 100);
-      return true; // Still return true - value was typed even if no suggestion selected
-    }
-    
-    console.log(`[IAI] ✅ "${labelText}" = "${value}" selected successfully`);
-    await stealth.delay(80, 120);
-    return true;
-    
-  } catch (error) {
-    console.error(`[IAI] Error with typeahead ${labelText}:`, error);
-    return false;
-  }
-}
-
-/**
  * Execute workflow from injected pattern
  * This is the main pattern execution engine
  */
-
-/**
- * TEST11: Typeahead search that EXCLUDES Location field
- * Used for Model selection which is a searchable typeahead input
- */
-async function typeaheadSearchExcludingLocation(fieldName, value, stealth) {
-  console.log(`[IAI] 🔎 TEST11: Typeahead search for "${fieldName}" = "${value}" (excluding Location)`);
-  
-  if (!value) return false;
-  
-  try {
-    // Find the Model input field by label, EXCLUDING Location
-    let inputField = null;
-    
-    // Strategy 1: Find label with exact field name, then get associated input
-    const allLabels = document.querySelectorAll('label, span[dir="auto"]');
-    for (const label of allLabels) {
-      const text = label.textContent?.trim();
-      
-      // Skip Location!
-      if (text === 'Location' || text?.includes('Location')) continue;
-      
-      // Match field name
-      if (text === fieldName) {
-        // Navigate up to find the container, then find input
-        let container = label.closest('label') || label.parentElement;
-        for (let i = 0; i < 8 && container; i++) {
-          const containerText = container.textContent || '';
-          // Skip if container has Location
-          if (containerText.includes('Location') && !containerText.includes(fieldName)) {
-            container = container.parentElement;
-            continue;
-          }
-          
-          // Look for input in this container
-          const input = container.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-          if (input && isVisible(input)) {
-            inputField = input;
-            console.log(`[IAI] ✓ Found "${fieldName}" input via label`);
-            break;
-          }
-          container = container.parentElement;
-        }
-        if (inputField) break;
-      }
-    }
-    
-    // Strategy 2: Find by aria-label
-    if (!inputField) {
-      const candidates = document.querySelectorAll(`input[aria-label*="${fieldName}"]`);
-      for (const c of candidates) {
-        const ariaLabel = c.getAttribute('aria-label') || '';
-        if (!ariaLabel.includes('Location') && isVisible(c)) {
-          inputField = c;
-          console.log(`[IAI] ✓ Found "${fieldName}" input via aria-label`);
-          break;
-        }
-      }
-    }
-    
-    // Strategy 3: Find combobox role with aria-label
-    if (!inputField) {
-      const comboboxes = document.querySelectorAll('[role="combobox"]');
-      for (const cb of comboboxes) {
-        const ariaLabel = cb.getAttribute('aria-label') || '';
-        const labelledBy = cb.getAttribute('aria-labelledby');
-        let labelText = ariaLabel;
-        if (labelledBy) {
-          const labelEl = document.getElementById(labelledBy);
-          labelText = labelEl?.textContent || ariaLabel;
-        }
-        
-        if (labelText.includes(fieldName) && !labelText.includes('Location')) {
-          // This might be the combobox, look for input inside
-          inputField = cb.querySelector('input') || cb;
-          console.log(`[IAI] ✓ Found "${fieldName}" via combobox role`);
-          break;
-        }
-      }
-    }
-    
-    if (!inputField) {
-      console.log(`[IAI] ✗ Typeahead input for "${fieldName}" not found (Location excluded)`);
-      return false;
-    }
-    
-    // Click to focus
-    await stealth.click(inputField);
-    await stealth.delay(100, 200);
-    
-    // Clear existing value
-    if (inputField.value) {
-      inputField.value = '';
-      inputField.dispatchEvent(new Event('input', { bubbles: true }));
-      await stealth.delay(50, 100);
-    }
-    
-    // Type the value to trigger suggestions
-    console.log(`[IAI] ⌨️ Typing "${value}" into ${fieldName} field...`);
-    await stealth.type(inputField, String(value));
-    await stealth.delay(400, 600); // Wait for suggestions
-    
-    // Look for matching suggestion
-    let suggestionFound = false;
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const options = document.querySelectorAll('[role="option"], [role="listbox"] [role="option"]');
-      
-      for (const opt of options) {
-        const optText = opt.textContent?.trim();
-        if (optText?.toLowerCase() === String(value).toLowerCase() ||
-            optText?.toLowerCase().includes(String(value).toLowerCase())) {
-          console.log(`[IAI] ✓ Found suggestion: "${optText}"`);
-          await stealth.click(opt);
-          suggestionFound = true;
-          console.log(`[IAI] ✅ ${fieldName} = "${value}" selected via typeahead`);
-          await stealth.delay(100, 200);
-          return true;
-        }
-      }
-      
-      // Also check spans in dropdown
-      const spans = document.querySelectorAll('[role="listbox"] span, [data-visualcompletion] span');
-      for (const span of spans) {
-        const spanText = span.textContent?.trim();
-        if (spanText?.toLowerCase() === String(value).toLowerCase() && isVisible(span)) {
-          console.log(`[IAI] ✓ Found suggestion by span: "${spanText}"`);
-          await stealth.click(span);
-          suggestionFound = true;
-          console.log(`[IAI] ✅ ${fieldName} = "${value}" selected via typeahead`);
-          await stealth.delay(100, 200);
-          return true;
-        }
-      }
-      
-      await stealth.delay(50, 100);
-    }
-    
-    if (!suggestionFound) {
-      console.log(`[IAI] ⚠️ No suggestion found for "${value}", pressing Enter to confirm`);
-      inputField.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-      await stealth.delay(100, 200);
-      // Close any open dropdown
-      document.body.click();
-      return true; // Value was typed
-    }
-    
-    return suggestionFound;
-    
-  } catch (error) {
-    console.error(`[IAI] Error with typeahead ${fieldName}:`, error);
-    return false;
-  }
-}
-
-/**
- * SPECIALIZED Make/Model selector that EXCLUDES Location field
- * The Location field also has a dropdown/typeahead, so we must skip it!
- */
-async function selectMakeOrModel(fieldName, value, stealth) {
-  console.log(`[IAI] 🚗 Selecting ${fieldName} = "${value}" (excluding Location)`);
-  
-  
-  if (!value) return false;
-  
-  try {
-    // Find ALL labels/spans, then filter OUT Location
-    const allLabels = document.querySelectorAll('label, span');
-    let targetField = null;
-    
-    for (const el of allLabels) {
-      const text = el.textContent?.trim();
-      
-      // Skip if this is the Location field!
-      if (text === 'Location' || text?.includes('Location')) continue;
-      
-      // Check for exact match of field name
-      if (text === fieldName) {
-        // Find the associated dropdown/input
-        let container = el.closest('label') || el.parentElement;
-        for (let i = 0; i < 6 && container; i++) {
-          // Check container doesn't have Location in it
-          const containerText = container.textContent || '';
-          if (containerText.includes('Location')) {
-            container = container.parentElement;
-            continue;
-          }
-          
-          // Look for clickable dropdown trigger
-          const clickable = container.querySelector('[role="combobox"], [role="button"], [tabindex="0"]') ||
-                           (container.getAttribute('role') === 'combobox' ? container : null) ||
-                           (container.getAttribute('role') === 'button' ? container : null);
-          if (clickable && isVisible(clickable)) {
-            targetField = clickable;
-            break;
-          }
-          container = container.parentElement;
-        }
-        if (targetField) break;
-      }
-    }
-    
-    // Fallback: find by aria-label but exclude Location
-    if (!targetField) {
-      const candidates = document.querySelectorAll(`[aria-label*="${fieldName}"]`);
-      for (const c of candidates) {
-        const ariaLabel = c.getAttribute('aria-label') || '';
-        if (!ariaLabel.includes('Location') && isVisible(c)) {
-          targetField = c;
-          break;
-        }
-      }
-    }
-    
-    if (!targetField) {
-      console.log(`[IAI] ✗ ${fieldName} field not found (Location excluded)`);
-      return false;
-    }
-    
-    console.log(`[IAI] ✓ Found ${fieldName} field (not Location!)`);
-    
-    // Click to open dropdown
-    await stealth.click(targetField);
-    await stealth.delay(30, 50);
-    
-    // Wait for options and select
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const options = document.querySelectorAll('[role="option"], [role="menuitem"]');
-      for (const opt of options) {
-        const optText = opt.textContent?.trim();
-        if (optText === value || optText?.toLowerCase() === value.toLowerCase()) {
-          console.log(`[IAI] ✓ Found option: "${optText}"`);
-          await stealth.click(opt);
-          console.log(`[IAI] ✅ ${fieldName} = "${value}" selected`);
-          await stealth.delay(20, 40);
-          return true;
-        }
-      }
-      await stealth.delay(15, 25);
-    }
-    
-    console.log(`[IAI] ✗ Option "${value}" not found for ${fieldName}`);
-    document.body.click(); // Close dropdown
-    return false;
-    
-  } catch (e) {
-    console.error(`[IAI] Error selecting ${fieldName}:`, e);
-    return false;
-  }
-}
-
-/**
- * Generic Facebook Marketplace dropdown selector
- * Finds dropdown by visible label text, clicks to open, selects option
- * Works for Year, Make, Model, Transmission, Fuel Type, etc.
- */
-async function selectFBDropdown(labelText, value, stealth) {
-  console.log(`[IAI] 🔽 Selecting "${labelText}" = "${value}"`);
-  
-  if (!value) {
-    console.log(`[IAI] ⚠ No value provided for ${labelText}, skipping`);
-    return false;
-  }
-  
-  try {
-    // Strategy 1: Find clickable element containing the label text
-    let dropdown = null;
-    
-    // Look for spans/divs with the label text
-    const findDropdownTrigger = () => {
-      // Find span with exact label text
-      const spans = document.querySelectorAll('span');
-      for (const span of spans) {
-        const text = span.textContent?.trim();
-        if (text === labelText || text?.toLowerCase() === labelText.toLowerCase()) {
-          // Walk up to find clickable parent
-          let parent = span.parentElement;
-          for (let i = 0; i < 6 && parent; i++) {
-            if (parent.getAttribute('role') === 'button' ||
-                parent.getAttribute('role') === 'combobox' ||
-                parent.getAttribute('tabindex') === '0' ||
-                parent.tagName === 'LABEL' ||
-                parent.classList.contains('x1i10hfl')) {
-              return parent;
-            }
-            parent = parent.parentElement;
-          }
-          // If no clickable parent, the span's parent might be clickable
-          if (span.parentElement?.closest('[role="button"], [tabindex="0"], label')) {
-            return span.parentElement.closest('[role="button"], [tabindex="0"], label');
-          }
-        }
-      }
-      
-      // Try aria-label
-      const ariaEl = document.querySelector(`[aria-label*="${labelText}"]`);
-      if (ariaEl && isVisible(ariaEl)) return ariaEl;
-      
-      // Try label element
-      const labels = document.querySelectorAll('label');
-      for (const label of labels) {
-        if (label.textContent?.trim().toLowerCase().includes(labelText.toLowerCase())) {
-          return label;
-        }
-      }
-      
-      return null;
-    };
-    
-    dropdown = findDropdownTrigger();
-    
-    if (!dropdown) {
-      console.log(`[IAI] ✗ Dropdown trigger for "${labelText}" not found`);
-      return false;
-    }
-    
-    console.log(`[IAI] ✓ Found dropdown trigger for "${labelText}"`);
-    
-    // Click to open dropdown
-    await stealth.click(dropdown);
-    await stealth.delay(80, 120);
-    
-    // Wait for options to appear and select the value
-    let optionFound = false;
-    for (let attempt = 0; attempt < 12; attempt++) {
-      // Look for options in various containers
-      const optionSelectors = [
-        '[role="option"]',
-        '[role="menuitem"]',
-        '[role="listbox"] [role="option"]',
-        '[role="menu"] span',
-        '[data-visualcompletion="ignore-dynamic"] span',
-      ];
-      
-      for (const selector of optionSelectors) {
-        const options = document.querySelectorAll(selector);
-        for (const option of options) {
-          const optionText = option.textContent?.trim();
-          // Exact match or contains match
-          if (optionText === String(value) || 
-              optionText?.toLowerCase() === String(value).toLowerCase() ||
-              optionText?.includes(String(value))) {
-            console.log(`[IAI] ✓ Found option: "${optionText}"`);
-            await stealth.click(option);
-            optionFound = true;
-            break;
-          }
-        }
-        if (optionFound) break;
-      }
-      
-      if (optionFound) break;
-      
-      // Also try finding visible spans with the value
-      if (!optionFound) {
-        const allSpans = document.querySelectorAll('span');
-        for (const span of allSpans) {
-          const spanText = span.textContent?.trim();
-          if (spanText === String(value) && isVisible(span)) {
-            // Check if it's in a dropdown context (not the form itself)
-            const inDropdown = span.closest('[role="listbox"], [role="menu"], [role="dialog"], [data-visualcompletion]');
-            if (inDropdown) {
-              console.log(`[IAI] ✓ Found option by span: "${spanText}"`);
-              await stealth.click(span);
-              optionFound = true;
-              break;
-            }
-          }
-        }
-      }
-      
-      if (optionFound) break;
-      await stealth.delay(20, 40);
-    }
-    
-    if (!optionFound) {
-      console.log(`[IAI] ✗ Option "${value}" not found for "${labelText}"`);
-      // Press Escape to close any open dropdown
-      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      await stealth.delay(40, 60);
-      return false;
-    }
-    
-    console.log(`[IAI] ✅ "${labelText}" = "${value}" selected successfully`);
-    await stealth.delay(60, 100);
-    return true;
-    
-  } catch (error) {
-    console.error(`[IAI] Error selecting ${labelText}:`, error);
-    return false;
-  }
-}
-
-/**
- * Select Facebook Marketplace Vehicle Type dropdown
- * This is a special dropdown that appears first on the form
- */
-async function selectVehicleType(vehicleType, stealth) {
-  console.log(`[IAI] 🚗 Selecting vehicle type: ${vehicleType}`);
-  
-  // Normalize vehicle type value
-  const typeMap = {
-    'car': 'Car/Truck',
-    'car/truck': 'Car/Truck',
-    'truck': 'Car/Truck',
-    'motorcycle': 'Motorcycle',
-    'powersport': 'Powersport',
-    'rv': 'RV/Camper',
-    'rv/camper': 'RV/Camper',
-    'camper': 'RV/Camper',
-    'trailer': 'Trailer',
-    'boat': 'Boat',
-    'commercial': 'Commercial/Industrial',
-    'commercial/industrial': 'Commercial/Industrial',
-    'other': 'Other',
-  };
-  
-  const normalizedType = typeMap[vehicleType.toLowerCase()] || vehicleType;
-  console.log(`[IAI] Normalized vehicle type: ${normalizedType}`);
-  
-  try {
-    // Strategy 1: Find dropdown by "Vehicle type" text
-    const vehicleTypeSelectors = [
-      // Text-based selectors
-      () => [...document.querySelectorAll('span')].find(s => s.textContent?.trim() === 'Vehicle type')?.closest('[role="button"], [role="combobox"], div[tabindex]'),
-      () => [...document.querySelectorAll('div')].find(d => d.textContent?.trim() === 'Vehicle type' && d.querySelector('span'))?.closest('[role="button"], [tabindex="0"]'),
-      // Aria-label based
-      () => document.querySelector('[aria-label*="Vehicle type"]'),
-      () => document.querySelector('[aria-label*="vehicle type"]'),
-      // Role-based dropdown trigger
-      () => document.querySelector('[role="combobox"][aria-haspopup="listbox"]'),
-      // Common FB dropdown pattern - look for expandable div with "Vehicle type"
-      () => {
-        const spans = document.querySelectorAll('span');
-        for (const span of spans) {
-          if (span.textContent?.trim() === 'Vehicle type') {
-            // Walk up to find the clickable parent
-            let parent = span.parentElement;
-            for (let i = 0; i < 5 && parent; i++) {
-              if (parent.getAttribute('role') === 'button' || 
-                  parent.getAttribute('tabindex') === '0' ||
-                  parent.classList.contains('x1i10hfl')) {
-                return parent;
-              }
-              parent = parent.parentElement;
-            }
-          }
-        }
-        return null;
-      },
-    ];
-    
-    let dropdownTrigger = null;
-    for (const selector of vehicleTypeSelectors) {
-      try {
-        dropdownTrigger = selector();
-        if (dropdownTrigger && isVisible(dropdownTrigger)) {
-          console.log(`[IAI] ✓ Found vehicle type dropdown trigger`);
-          break;
-        }
-      } catch (e) { /* continue */ }
-    }
-    
-    if (!dropdownTrigger) {
-      console.error('[IAI] ✗ Vehicle type dropdown not found');
-      return false;
-    }
-    
-    // Click to open dropdown
-    await stealth.click(dropdownTrigger);
-    await stealth.delay(80, 140);
-    
-    // Wait for dropdown options to appear
-    let optionFound = false;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      // Look for the options in listbox or menu
-      const options = document.querySelectorAll('[role="option"], [role="menuitem"], [role="listbox"] span, [role="menu"] span');
-      
-      for (const option of options) {
-        const optionText = option.textContent?.trim();
-        if (optionText && optionText.toLowerCase() === normalizedType.toLowerCase()) {
-          console.log(`[IAI] ✓ Found option: "${optionText}"`);
-          await stealth.click(option);
-          optionFound = true;
-          break;
-        }
-      }
-      
-      if (optionFound) break;
-      
-      // Also try finding by exact text match in any visible span
-      if (!optionFound) {
-        const allSpans = document.querySelectorAll('span');
-        for (const span of allSpans) {
-          if (span.textContent?.trim() === normalizedType && isVisible(span)) {
-            // Make sure it's in a dropdown context (not the trigger itself)
-            const parent = span.closest('[role="listbox"], [role="menu"], [role="dialog"]');
-            if (parent || span.closest('[data-visualcompletion]')) {
-              console.log(`[IAI] ✓ Found option by span text: "${normalizedType}"`);
-              await stealth.click(span);
-              optionFound = true;
-              break;
-            }
-          }
-        }
-      }
-      
-      if (optionFound) break;
-      await stealth.delay(30, 50);
-    }
-    
-    if (!optionFound) {
-      console.error(`[IAI] ✗ Option "${normalizedType}" not found in dropdown`);
-      // Try pressing Escape to close dropdown
-      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      return false;
-    }
-    
-    console.log(`[IAI] ✅ Vehicle type "${normalizedType}" selected successfully`);
-    await stealth.delay(100, 160); // Wait for form to update with new fields
-    return true;
-    
-  } catch (error) {
-    console.error('[IAI] Error selecting vehicle type:', error);
-    return false;
-  }
-}
-
 async function executeInjectedWorkflow(vehicleData) {
-  // TEST VERSION TRACKING for debugging:
-  // TEST1: Original code - clean title clicked twice
-  // TEST2: Added clickedAriaLabels tracking but only for step.type === 'click'
-  // TEST3: Track ALL ariaLabels regardless of step type + pre-emptive marking ✅ FIXED
-  // TEST4: Make/Model as DROPDOWN (selectFBDropdown) - more reliable than typeahead ✅ ORIGINAL
-  // TEST5: Add Body style, Vehicle condition dropdowns + IMAGE UPLOAD - saved as TEST6
-  // TEST6: All form fields working! ✅ Image upload not finding images in vehicleData
-  // TEST7: Changed Make/Model to TYPEAHEAD - BROKEN! Finds Location input instead!
-  // TEST8: REVERT to DROPDOWN for Make/Model - typeahead finds wrong input (Location)
-  // TEST9: Explicit Location exclusion when finding Make/Model + 3x faster + image fix
-  // TEST10: Add value mappings (CVT→Automatic, gas→Gasoline), longer Model wait
-  // TEST11: Model is TYPEAHEAD not dropdown, image proxy for CORS
-  // TEST12: Fix image field name - database uses imageUrls not images
-  const TEST_VERSION = 'TEST12';
-  console.log(`[IAI] 🧪 Running ${TEST_VERSION} - Fixed imageUrls field name`);
-  
-  // Normalize image URLs - support both formats:
-  // - imageUrls: String[] from database (most common)
-  // - images: Array of strings or objects with .url property
-  const normalizedImages = vehicleData.imageUrls || 
-                           vehicleData.images?.map(i => typeof i === 'string' ? i : i?.url).filter(Boolean) ||
-                           (vehicleData.imageUrl ? [vehicleData.imageUrl] : []);
-  
-  // Log vehicleData to debug missing fields
-  console.log('[IAI] 📦 Vehicle data received:', JSON.stringify({
-    year: vehicleData.year,
-    make: vehicleData.make,
-    model: vehicleData.model,
-    bodyStyle: vehicleData.bodyStyle || vehicleData.body,
-    condition: vehicleData.condition,
-    imagesCount: normalizedImages.length,
-    imageUrlsField: vehicleData.imageUrls?.length || 0,
-    imagesField: vehicleData.images?.length || 0,
-    firstImage: normalizedImages[0]?.substring(0, 60) || 'none'
-  }));
-  
-  // Store normalized images back for later phases
-  vehicleData._normalizedImages = normalizedImages;
-  
-  // Apply defaults for missing fields
-  vehicleData.bodyStyle = vehicleData.bodyStyle || vehicleData.body || 'Sedan';
-  vehicleData.condition = vehicleData.condition || 'Good';
-  
-  if (!IAI_INJECTION._loaded) {
+  if (!IAI_INJECTION._loaded || !IAI_INJECTION.WORKFLOW.length) {
     console.error('[IAI] ❌ No injection pattern loaded - cannot execute workflow');
     return { success: false, error: 'No injection pattern loaded' };
   }
   
   console.log(`[IAI] 🚀 Executing injected workflow: ${IAI_INJECTION._patternName}`);
+  console.log(`[IAI] 📋 Steps to execute: ${IAI_INJECTION.WORKFLOW.length}`);
   
   const startTime = Date.now();
   const stealth = new IAIStealth();
-  const filledFields = new Set(); // Track filled fields across all phases
-  const clickedAriaLabels = new Set(); // Track clicked ariaLabels to prevent double-clicks (clean title issue)
-  const clickedElements = new WeakSet(); // Track actual DOM elements that have been clicked
   const results = {
     success: false,
     stepsExecuted: 0,
-    stepsTotal: 0,
+    stepsTotal: IAI_INJECTION.WORKFLOW.length,
     errors: [],
     completed: [],
     duration: 0,
   };
   
-  // === PHASE 0: Select Vehicle Type FIRST (required to reveal other fields) ===
-  console.log('[IAI] 📋 Phase 0: Selecting vehicle type...');
-  const vehicleType = vehicleData.vehicleType || vehicleData.type || 'Car/Truck';
-  results.stepsTotal++;
-  
-  const vehicleTypeSuccess = await selectVehicleType(vehicleType, stealth);
-  if (vehicleTypeSuccess) {
-    results.completed.push({ field: 'vehicleType', value: vehicleType });
-    results.stepsExecuted++;
-    filledFields.add('vehicleType');
-    console.log('[IAI] ✅ Vehicle type selected, waiting for form fields to load...');
-    await stealth.delay(200, 300); // Give FB time to load additional fields
-  } else {
-    results.errors.push({ field: 'vehicleType', error: 'Failed to select vehicle type' });
-    console.error('[IAI] ⚠️ Vehicle type selection failed, continuing anyway...');
-  }
-  
-  // === PHASE 0.1: Upload Images (do this early so they're processing while we fill fields) ===
-  // Use normalized images (supports imageUrls, images, imageUrl fields)
-  const imagesToUpload = vehicleData._normalizedImages || [];
-  if (imagesToUpload.length > 0) {
-    console.log(`[IAI] 📋 Phase 0.1: Uploading ${imagesToUpload.length} images...`);
-    results.stepsTotal++;
-    const imageResult = await uploadImagesToFB(imagesToUpload, stealth);
-    if (imageResult.success) {
-      results.completed.push({ field: 'images', value: `${imageResult.count} images` });
-      results.stepsExecuted++;
-      filledFields.add('images');
-      console.log(`[IAI] ✅ Images uploaded: ${imageResult.count} files`);
-    } else {
-      results.errors.push({ field: 'images', error: imageResult.error });
-      console.warn(`[IAI] ⚠️ Image upload failed: ${imageResult.error}`);
-    }
-  } else {
-    console.log('[IAI] ℹ️ No images provided (imageUrls/images/imageUrl all empty), skipping upload');
-  }
-  
-  // === PHASE 0.5: Fill key dropdowns (Year, Make, Model, Transmission, etc.) ===
-  console.log('[IAI] 📋 Phase 0.5: Filling key dropdowns...');
-  
-  // STEP 1: Select Year FIRST (Make depends on Year)
-  if (vehicleData.year) {
-    results.stepsTotal++;
-    const yearSuccess = await selectFBDropdown('Year', vehicleData.year, stealth);
-    if (yearSuccess) {
-      filledFields.add('year');
-      results.completed.push({ field: 'year', value: String(vehicleData.year) });
-      results.stepsExecuted++;
-      // Wait for Make options to load (3x faster)
-      console.log('[IAI] ⏳ Waiting for Make options to load...');
-      await stealth.delay(250, 400);
-    } else {
-      results.errors.push({ field: 'year', error: 'Failed to select Year' });
-    }
-  }
-  
-  // STEP 2: Select Make using SPECIALIZED function that EXCLUDES Location!
-  // TEST9 FIX: Use selectMakeOrModel which explicitly skips Location field
-  if (vehicleData.make) {
-    results.stepsTotal++;
-    console.log('[IAI] 📝 Using selectMakeOrModel (excludes Location field!)');
-    let makeSuccess = false;
-    for (let attempt = 0; attempt < 3 && !makeSuccess; attempt++) {
-      if (attempt > 0) {
-        console.log(`[IAI] 🔄 Retrying Make (attempt ${attempt + 1})...`);
-        await stealth.delay(100, 200);
-      }
-      makeSuccess = await selectMakeOrModel('Make', vehicleData.make, stealth);
-    }
-    if (makeSuccess) {
-      filledFields.add('make');
-      results.completed.push({ field: 'make', value: String(vehicleData.make) });
-      results.stepsExecuted++;
-      // Wait for Model options - INCREASED for TEST10 (Model needs time to load)
-      console.log('[IAI] ⏳ Waiting for Model field to update (500-800ms)...');
-      await stealth.delay(500, 800);
-    } else {
-      results.errors.push({ field: 'make', error: 'Failed to select Make' });
-    }
-  }
-  
-  // STEP 3: Select Model - TEST11: Use TYPEAHEAD (search input) not dropdown!
-  // After Make selection, FB shows Model as a searchable typeahead input
-  if (vehicleData.model) {
-    results.stepsTotal++;
-    console.log('[IAI] 📝 TEST11: Model is TYPEAHEAD - using search approach');
-    let modelSuccess = false;
-    
-    // Try typeahead first (which is correct for Model)
-    for (let attempt = 0; attempt < 3 && !modelSuccess; attempt++) {
-      if (attempt > 0) {
-        console.log(`[IAI] 🔄 Retrying Model typeahead (attempt ${attempt + 1})...`);
-        await stealth.delay(300, 500);
-      }
-      // Try to find Model input by label (excluding Location)
-      modelSuccess = await typeaheadSearchExcludingLocation('Model', vehicleData.model, stealth);
-    }
-    
-    // Fallback: try dropdown approach
-    if (!modelSuccess) {
-      console.log('[IAI] 🔄 Typeahead failed, trying dropdown approach...');
-      modelSuccess = await selectMakeOrModel('Model', vehicleData.model, stealth);
-    }
-    
-    if (modelSuccess) {
-      filledFields.add('model');
-      results.completed.push({ field: 'model', value: String(vehicleData.model) });
-      results.stepsExecuted++;
-    } else {
-      results.errors.push({ field: 'model', error: 'Failed to select Model' });
-    }
-  }
-  
-  // STEP 4: Fill remaining dropdowns (non-dependent)
-  // Apply value mappings for FB dropdown options (CVT→Automatic, gas→Gasoline)
-  const mapValue = (field, val) => {
-    if (!val) return val;
-    const map = IAI_CONFIG.VALUE_MAPS[field];
-    const mapped = map?.[val] || map?.[val.toLowerCase()];
-    if (mapped && mapped !== val) {
-      console.log(`[IAI] 🔄 Value mapped: ${field} "${val}" → "${mapped}"`);
-      return mapped;
-    }
-    return val;
-  };
-  
-  const remainingDropdowns = [
-    { field: 'transmission', label: 'Transmission', value: mapValue('transmission', vehicleData.transmission) },
-    { field: 'fuelType', label: 'Fuel type', value: mapValue('fuelType', vehicleData.fuelType || vehicleData.fuel) },
-    { field: 'bodyStyle', label: 'Body style', value: vehicleData.bodyStyle || vehicleData.body },
-    { field: 'condition', label: 'Vehicle condition', value: vehicleData.condition },
-    { field: 'exteriorColor', label: 'Exterior color', value: vehicleData.exteriorColor || vehicleData.color },
-    { field: 'interiorColor', label: 'Interior color', value: vehicleData.interiorColor },
-  ];
-  
-  console.log('[IAI] 📋 Remaining dropdowns to fill:', remainingDropdowns.map(d => `${d.field}=${d.value || 'EMPTY'}`).join(', '));
-  
-  for (const { field, label, value } of remainingDropdowns) {
-    if (!value) {
-      console.log(`[IAI] ⏭️ Skipping ${field} - no value provided`);
-      continue;
-    }
-    
-    console.log(`[IAI] 🔄 Processing dropdown: ${field} = "${value}"`);
-    results.stepsTotal++;
-    const success = await selectFBDropdown(label, value, stealth);
-    
-    if (success) {
-      filledFields.add(field);
-      results.completed.push({ field, value: String(value) });
-      results.stepsExecuted++;
-    } else {
-      results.errors.push({ field, error: `Failed to select ${label}` });
-    }
-    
-    await stealth.delay(80, 140);
-  }
-  
-  console.log(`[IAI] Phase 0.5 complete: ${filledFields.size} dropdowns filled`);
-  
-  // === PHASE 1: Fill fields directly using fieldMappings (stable approach) ===
-  console.log('[IAI] 📋 Phase 1: Filling fields via fieldMappings...');
-  const fieldMappings = IAI_INJECTION.FIELD_SELECTORS || {};
-  
-  // Map vehicle data fields to form fields
-  const fieldValueMap = {
-    'year': vehicleData.year,
-    'make': vehicleData.make,
-    'model': vehicleData.model,
-    'price': vehicleData.price,
-    'mileage': vehicleData.mileage,
-    'vin': vehicleData.vin,
-    'title': vehicleData.title || `${vehicleData.year} ${vehicleData.make} ${vehicleData.model}`,
-    'description': vehicleData.description,
-    'location': vehicleData.location || vehicleData.city,
-    'transmission': vehicleData.transmission,
-    'fuelType': vehicleData.fuelType || vehicleData.fuel,
-    'bodyStyle': vehicleData.bodyStyle || vehicleData.body,
-    'condition': vehicleData.condition,
-    'color': vehicleData.color || vehicleData.exteriorColor,
-    'exteriorColor': vehicleData.exteriorColor || vehicleData.color,
-    'interiorColor': vehicleData.interiorColor,
-  };
-  
-  for (const [fieldType, value] of Object.entries(fieldValueMap)) {
-    if (value === null || value === undefined || value === '') continue;
-    
-    // Skip if already filled in Phase 0.5
-    if (filledFields.has(fieldType)) {
-      continue;
-    }
-    
-    results.stepsTotal++;
-    const mapping = fieldMappings[fieldType];
-    
-    if (!mapping || !mapping.selectors) {
-      console.log(`[IAI] ⚠ No mapping for ${fieldType}, will try later...`);
-      continue;
-    }
-    
-    // Find element using stable selectors
-    let element = null;
-    for (const selector of mapping.selectors) {
-      try {
-        element = document.querySelector(selector);
-        if (element && isVisible(element)) break;
-      } catch (e) { /* invalid selector */ }
-    }
-    
-    if (!element) {
-      console.log(`[IAI] ⚠ Element not found for ${fieldType}`);
-      results.errors.push({ field: fieldType, error: 'Element not found' });
-      continue;
-    }
+  for (let i = 0; i < IAI_INJECTION.WORKFLOW.length; i++) {
+    const step = IAI_INJECTION.WORKFLOW[i];
+    console.log(`[IAI] Step ${i + 1}/${IAI_INJECTION.WORKFLOW.length}: ${step.action || step.type} - ${step.description || step.fieldType || ''}`);
     
     try {
-      const inputType = mapping.type || 'input';
-      console.log(`[IAI] 📝 Filling ${fieldType} = "${String(value).substring(0, 30)}..." (${inputType})`);
-      
-      if (inputType === 'dropdown' || inputType === 'select') {
-        // Click to open dropdown
-        await stealth.click(element);
-        await stealth.delay(80, 120);
-        
-        // Find and select option
-        const options = document.querySelectorAll('[role="option"], [role="listbox"] [role="option"]');
-        let found = false;
-        for (const opt of options) {
-          if (opt.textContent?.toLowerCase().includes(String(value).toLowerCase())) {
-            await stealth.click(opt);
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          // Try typing in combobox
-          const input = element.querySelector('input') || element;
-          if (input) {
-            await stealth.type(input, String(value));
-            await stealth.delay(60, 100);
-            // Press Enter or Tab
-            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
-          }
-        }
-      } else if (inputType === 'contenteditable') {
-        await stealth.click(element);
-        await stealth.delay(40, 80);
-        element.focus();
-        element.innerHTML = '';
-        document.execCommand('insertText', false, String(value));
-      } else {
-        // Standard input
-        await stealth.click(element);
-        await stealth.delay(20, 40);
-        element.value = '';
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        await stealth.type(element, String(value));
-      }
-      
-      filledFields.add(fieldType);
-      results.completed.push({ field: fieldType, value: String(value).substring(0, 50) });
+      const stepResult = await executeWorkflowStep(step, vehicleData, stealth);
       results.stepsExecuted++;
       
-      await stealth.delay(60, 120);
+      if (stepResult.success) {
+        results.completed.push({ step: i + 1, action: step.action, field: step.fieldType });
+      } else {
+        results.errors.push({ step: i + 1, error: stepResult.error, action: step.action });
+        // Continue on non-critical errors
+        if (step.critical) {
+          console.error(`[IAI] Critical step ${i + 1} failed - aborting`);
+          break;
+        }
+      }
       
-    } catch (err) {
-      console.error(`[IAI] Error filling ${fieldType}:`, err);
-      results.errors.push({ field: fieldType, error: err.message });
+      // Delay between steps
+      const delay = step.delay || IAI_INJECTION.TIMING.recommendedDelay;
+      await stealth.delay(delay * 0.8, delay * 1.2);
+      
+    } catch (stepError) {
+      console.error(`[IAI] Step ${i + 1} error:`, stepError);
+      results.errors.push({ step: i + 1, error: stepError.message });
     }
   }
   
-  console.log(`[IAI] Phase 1 complete: ${filledFields.size} fields filled`);
-  
-  // === PHASE 2: Execute remaining workflow steps (for clicks, navigation, etc.) ===
-  if (IAI_INJECTION.WORKFLOW?.length > 0) {
-    console.log('[IAI] 📋 Phase 2: Executing workflow steps for unfilled fields...');
-    
-    // Only process steps for fields not yet filled
-    for (let i = 0; i < IAI_INJECTION.WORKFLOW.length; i++) {
-      const step = IAI_INJECTION.WORKFLOW[i];
-      const stepType = step.type || step.action;
-      const fieldType = step.fieldType || step.field;
-      
-      // SKIP navigation and wait steps in Phase 2 - we're already on the page
-      if (stepType === 'navigate' || stepType === 'wait') {
-        console.log(`[IAI] ⏭ Skipping ${stepType} step in Phase 2`);
-        continue;
-      }
-      
-      // Skip if already filled in Phase 1
-      if (fieldType && filledFields.has(fieldType)) {
-        continue;
-      }
-      
-      // Skip pure click steps with no field association
-      if (step.type === 'click' && !fieldType && !step.label && !step.ariaLabel) {
-        continue;
-      }
-      
-      // CRITICAL FIX (TEST3): Skip duplicate ariaLabel clicks to prevent checkbox double-toggle
-      // The clean title checkbox appears in multiple workflow steps - only click ONCE
-      const stepAriaLabel = step.element?.ariaLabel || step.ariaLabel;
-      if (stepAriaLabel) {
-        if (clickedAriaLabels.has(stepAriaLabel)) {
-          console.log(`[IAI] ⏭ TEST3: Skipping duplicate ariaLabel: "${stepAriaLabel}"`);
-          continue;
-        }
-        // Pre-emptively mark this ariaLabel as clicked BEFORE attempting
-        clickedAriaLabels.add(stepAriaLabel);
-        console.log(`[IAI] 🎯 TEST3: First time clicking ariaLabel: "${stepAriaLabel}"`);
-      }
-      
-      results.stepsTotal++;
-      
-      try {
-        const stepResult = await executeWorkflowStep(step, vehicleData, stealth);
-        results.stepsExecuted++;
-        
-        if (stepResult.success) {
-          if (fieldType) {
-            filledFields.add(fieldType);
-            results.completed.push({ step: i + 1, field: fieldType });
-          }
-        } else if (!stepResult.skipped) {
-          results.errors.push({ step: i + 1, error: stepResult.error, field: fieldType });
-        }
-        
-        // Delay between steps
-        const delay = step.delay || IAI_INJECTION.TIMING?.recommendedDelay || 400;
-        await stealth.delay(delay * 0.8, delay * 1.2);
-        
-      } catch (stepError) {
-        console.error(`[IAI] Step ${i + 1} error:`, stepError);
-        results.errors.push({ step: i + 1, error: stepError.message });
-      }
-    }
-  }
-  
-  // Success if we filled at least 5 important fields (vehicleType, year, make, model, price)
-  // The "errors" are mostly "element not found" for optional fields - not critical
-  const minFieldsRequired = 5;
-  results.success = results.completed.length >= minFieldsRequired;
+  results.success = results.errors.length === 0 || results.stepsExecuted > IAI_INJECTION.WORKFLOW.length * 0.7;
   results.duration = Date.now() - startTime;
-  console.log(`[IAI] ✅ Workflow complete: ${results.completed.length} fields filled, ${results.errors.length} errors in ${results.duration}ms`);
-  console.log(`[IAI] 📊 Success: ${results.success} (need ${minFieldsRequired}+ fields, got ${results.completed.length})`);
+  console.log(`[IAI] Workflow complete: ${results.stepsExecuted}/${results.stepsTotal} steps (${results.errors.length} errors) in ${results.duration}ms`);
   
   return results;
 }
 
 /**
  * Execute a single workflow step
- * ENHANCED: Use fieldMappings type info to determine correct action
  */
 async function executeWorkflowStep(step, vehicleData, stealth) {
   const action = step.action || step.type;
   const fieldType = step.fieldType || step.field;
   const value = resolveStepValue(step, vehicleData);
   
-  // LOG START
-  await logStealthActivity('step_attempt', {
-    stepConfig: step,
-    action,
-    fieldType,
-    hasValue: !!value,
-    location: window.location.href
-  });
-  
-  // Get field mapping info for intelligent handling
-  const fieldMapping = fieldType ? IAI_INJECTION.FIELD_SELECTORS?.[fieldType] : null;
-  const fieldInputType = fieldMapping?.type || 'input';
-  
-  // Skip steps without fieldType if they're just clicks with no value
-  if (action === 'click' && !fieldType && !step.label && !step.ariaLabel) {
-    console.log(`[IAI] ⏭ Skipping non-field click step ${step.step}`);
-    await logStealthActivity('step_skipped', { reason: 'no_target', step });
-    return { success: true, skipped: true };
-  }
-  
-  // If we have a fieldType with a value, handle it intelligently
-  if (fieldType && value !== null && value !== undefined && value !== '') {
-    const el = await findElementForStep(step);
-    if (!el) {
-      const errorMsg = `Element not found for ${fieldType}`;
-      await logStealthActivity('step_error', { error: errorMsg, step }, 'error');
-      return { success: false, error: errorMsg };
-    }
-    
-    console.log(`[IAI] 📝 Filling ${fieldType} = "${String(value).substring(0, 30)}..." (type: ${fieldInputType})`);
-    
-    // Log interaction
-    await logStealthActivity('interaction_start', { type: fieldInputType, field: fieldType });
-    
-    switch (fieldInputType) {
-      case 'dropdown':
-      case 'select':
-        // For dropdowns, click to open then select option
-        await stealth.click(el);
-        await stealth.delay(300, 500);
-        const selectSuccess = await selectFacebookDropdownEnhancedV2(step.label || fieldType, value, stealth);
-        
-        await logStealthActivity(selectSuccess ? 'step_success' : 'step_fail', { 
-            result: selectSuccess, 
-            type: 'dropdown', 
-            field: fieldType 
-        });
-        
-        return { success: selectSuccess };
-        
-      case 'contenteditable':
-        // For description and rich text fields
-        await stealth.click(el);
-        await stealth.delay(200, 400);
-        if (el.contentEditable === 'true' || el.getAttribute('role') === 'textbox') {
-          el.innerHTML = '';
-          el.focus();
-          document.execCommand('insertText', false, String(value));
-        } else {
-          await stealth.type(el, String(value));
-        }
-        await logStealthActivity('step_success', { type: 'contenteditable', field: fieldType });
-        return { success: true };
-        
-      case 'input':
-      default:
-        // For regular inputs
-        await stealth.click(el);
-        await stealth.delay(100, 200);
-        // Clear existing value
-        el.value = '';
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        await stealth.type(el, String(value));
-        await logStealthActivity('step_success', { type: 'input', field: fieldType });
-        return { success: true };
-    }
-  }
-  
-  // Fall back to action-based handling
   switch (action) {
     case 'click':
       const clickEl = await findElementForStep(step);
       if (clickEl) {
         await stealth.click(clickEl);
-        await logStealthActivity('step_success', { action: 'click', selector: getSelectorForElement(clickEl) });
         return { success: true };
       }
-      const clickErr = `Element not found for click: ${fieldType || step.selector || step.label}`;
-      // Log nearby HTML to help debugging
-      const nearbyHTML = document.body.innerHTML.substring(0, 1000); 
-      await logStealthActivity('step_error', { 
-         error: clickErr, 
-         step,
-         url: window.location.href,
-         pageTitle: document.title,
-         lastFoundElement: null 
-      }, 'warn');
-      return { success: false, error: clickErr };
+      return { success: false, error: `Element not found for click: ${step.selector || step.label}` };
       
     case 'type':
     case 'input':
@@ -1873,21 +407,13 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
       if (inputEl) {
         await stealth.click(inputEl);
         await stealth.type(inputEl, String(value || ''));
-        await logStealthActivity('step_success', { action: 'type', length: String(value || '').length });
         return { success: true };
       }
-      const inputErr = `Input not found: ${fieldType || step.selector || step.label}`;
-      await logStealthActivity('step_error', { 
-        error: inputErr, 
-        step,
-        url: window.location.href
-      }, 'warn');
-      return { success: false, error: inputErr };
+      return { success: false, error: `Input not found: ${step.selector || step.label}` };
       
     case 'select':
     case 'dropdown':
       const selectSuccess = await selectFacebookDropdownEnhancedV2(step.label || fieldType, value, stealth);
-      await logStealthActivity(selectSuccess ? 'step_success' : 'step_fail', { action: 'select', result: selectSuccess });
       return { success: selectSuccess };
       
     case 'wait':
@@ -1899,182 +425,51 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
       return { success: true };
       
     case 'navigate':
-      // SKIP navigation if we're already on the target page
-      const targetUrl = step.url || step.destination;
-      if (targetUrl && window.location.href.includes('marketplace/create/vehicle')) {
-        console.log('[IAI] ⏭ Skipping navigate step - already on vehicle listing page');
-        return { success: true, skipped: true };
-      }
-      console.log(`[IAI] 🔗 Navigating to: ${targetUrl}`);
-      await logStealthActivity('navigation', { to: targetUrl, from: window.location.href });
-      window.location.href = targetUrl;
+      window.location.href = step.url || step.destination;
       return { success: true };
       
     default:
       console.warn(`[IAI] Unknown step action: ${action}`);
-      await logStealthActivity('step_unknown', { action, step }, 'warn');
       return { success: false, error: `Unknown action: ${action}` };
   }
 }
 
 /**
- * Helper to generate a simple selector for logging
- */
-function getSelectorForElement(el) {
-    if (!el) return 'null';
-    let s = el.tagName.toLowerCase();
-    if (el.id) s += '#' + el.id;
-    if (el.className) s += '.' + el.className.split(' ').join('.');
-    if (el.getAttribute('aria-label')) s += `[aria-label="${el.getAttribute('aria-label')}"]`;
-    return s.substring(0, 100); // Limit length
-}
-
-/**
  * Find element for a workflow step
- * PRIORITY: Use stable fieldMappings (aria-label) FIRST, then fall back to recorded selectors
  */
 async function findElementForStep(step) {
-  const fieldType = step.fieldType || step.field;
-  
-  // === PRIORITY 1: Use stable fieldMappings (aria-label based selectors) ===
-  if (fieldType && IAI_INJECTION.FIELD_SELECTORS?.[fieldType]) {
-    const mapping = IAI_INJECTION.FIELD_SELECTORS[fieldType];
-    if (mapping?.selectors && Array.isArray(mapping.selectors)) {
-      for (const selector of mapping.selectors) {
-        try {
-          const el = document.querySelector(selector);
-          if (el && isVisible(el)) {
-            console.log(`[IAI] ✓ Found ${fieldType} via fieldMapping: ${selector}`);
-            return el;
-          }
-        } catch (e) { /* invalid selector */ }
-      }
-    }
-    // Also try primary from fieldMappings
-    if (mapping?.primary) {
-      try {
-        const el = document.querySelector(mapping.primary);
-        if (el && isVisible(el)) {
-          console.log(`[IAI] ✓ Found ${fieldType} via fieldMapping.primary`);
-          return el;
-        }
-      } catch (e) { /* invalid selector */ }
-    }
-  }
-  
-  // === PRIORITY 2: Try common aria-label patterns for vehicle fields ===
-  const ariaLabelMap = {
-    'year': 'Year',
-    'make': 'Make',
-    'model': 'Model',
-    'price': 'Price',
-    'mileage': 'Mileage',
-    'vin': 'VIN',
-    'title': 'Title',
-    'description': 'Description',
-    'location': 'Location',
-    'transmission': 'Transmission',
-    'fuelType': 'Fuel',
-    'bodyStyle': 'Body',
-    'condition': 'Condition',
-    'color': 'Color',
-    'exteriorColor': 'Exterior',
-    'interiorColor': 'Interior',
-  };
-  
-  if (fieldType && ariaLabelMap[fieldType]) {
-    const label = ariaLabelMap[fieldType];
-    const ariaSelectors = [
-      `input[aria-label*="${label}"]`,
-      `textarea[aria-label*="${label}"]`,
-      `[aria-label*="${label}"] input`,
-      `[aria-label*="${label}"] textarea`,
-      `[role="combobox"][aria-label*="${label}"]`,
-      `[role="textbox"][aria-label*="${label}"]`,
-    ];
-    for (const selector of ariaSelectors) {
-      try {
-        const el = document.querySelector(selector);
-        if (el && isVisible(el)) {
-          console.log(`[IAI] ✓ Found ${fieldType} via ariaLabel fallback: ${selector}`);
-          return el;
-        }
-      } catch (e) { /* invalid selector */ }
-    }
-  }
-  
-  // === PRIORITY 3: Try label text search ===
-  if (step.label || (fieldType && ariaLabelMap[fieldType])) {
-    const labelText = step.label || ariaLabelMap[fieldType];
-    const el = C('label', labelText) || C('span', labelText) || C('div', labelText);
-    if (el) {
-      // Find associated input
-      const input = el.querySelector('input, textarea, [contenteditable="true"]');
-      if (input && isVisible(input)) {
-        console.log(`[IAI] ✓ Found ${fieldType} via label text: ${labelText}`);
-        return input;
-      }
-      if (isVisible(el)) return el;
-    }
-  }
-  
-  // === PRIORITY 4: Try element.ariaLabel from recorded data ===
-  if (step.element?.ariaLabel) {
-    const el = document.querySelector(`[aria-label="${step.element.ariaLabel}"]`) ||
-               document.querySelector(`[aria-label*="${step.element.ariaLabel}"]`);
-    if (el && isVisible(el)) {
-      console.log(`[IAI] ✓ Found element with ariaLabel: ${step.element.ariaLabel}`);
-      return el;
-    }
-  }
-  
-  // === PRIORITY 5: Try direct selector property ===
+  // Try selector first
   if (step.selector) {
     try {
       const el = document.querySelector(step.selector);
-      if (el && isVisible(el)) {
-        console.log(`[IAI] ✓ Found element with step.selector`);
-        return el;
-      }
+      if (el && isVisible(el)) return el;
     } catch (e) { /* invalid selector */ }
   }
   
-  // === PRIORITY 6: Try step.ariaLabel directly ===
+  // Try label with C() function
+  if (step.label) {
+    const el = C('label', step.label) || C('span', step.label) || C('div', step.label);
+    if (el) return el;
+  }
+  
+  // Try aria-label
   if (step.ariaLabel) {
     const el = document.querySelector(`[aria-label="${step.ariaLabel}"]`) ||
                document.querySelector(`[aria-label*="${step.ariaLabel}"]`);
-    if (el && isVisible(el)) {
-      console.log(`[IAI] ✓ Found element with step.ariaLabel`);
-      return el;
-    }
+    if (el) return el;
   }
   
-  // === PRIORITY 7: Try recorded element.selectors (last resort - often broken) ===
-  if (step.element?.selectors && Array.isArray(step.element.selectors)) {
-    for (const selector of step.element.selectors) {
+  // Try field selectors from injection
+  if (step.fieldType && IAI_INJECTION.FIELD_SELECTORS[step.fieldType]) {
+    const fieldSelector = IAI_INJECTION.FIELD_SELECTORS[step.fieldType];
+    if (fieldSelector.primary) {
       try {
-        const el = document.querySelector(selector);
-        if (el && isVisible(el)) {
-          console.log(`[IAI] ✓ Found element with recorded selector: ${selector.substring(0, 50)}...`);
-          return el;
-        }
+        const el = document.querySelector(fieldSelector.primary);
+        if (el) return el;
       } catch (e) { /* invalid selector */ }
     }
   }
   
-  // === PRIORITY 8: Try element.className directly ===
-  if (step.element?.className) {
-    const classSelector = '.' + step.element.className.split(' ').join('.');
-    try {
-      const el = document.querySelector(classSelector);
-      if (el && isVisible(el)) {
-        console.log(`[IAI] ✓ Found element with className: ${classSelector.substring(0, 50)}...`);
-        return el;
-      }
-    } catch (e) { /* invalid selector */ }
-  }
-  
-  console.log(`[IAI] ✗ Element not found for step: ${fieldType || step.type || 'unknown'}`);
   return null;
 }
 
@@ -2202,33 +597,23 @@ async function clearInjectionCache() {
 
 /**
  * Report IAI metrics to server for analytics
- * Uses GreenRouteService for reliable delivery during mitigation
  */
 async function reportIAIMetric(eventType, data) {
   try {
-    // Use GreenRouteService if available (loaded before iai-soldier.js)
-    if (typeof greenRoute !== 'undefined' && greenRoute.reportMetrics) {
-      await greenRoute.reportMetrics(eventType, {
-        ...data,
-        extensionVersion: IAI_VERSION,
-      });
-      console.log(`[IAI] 📊 Metric via GreenRoute: ${eventType}`);
-      return;
-    }
-    
-    // Fallback to direct call if GreenRouteService not loaded
-    await fetch(`${IAI_CONFIG.API.GREEN}/iai/metrics`, {
+    const token = await getAuthToken();
+    // Flatten data into the request body for server compatibility
+    await fetch(`${IAI_CONFIG.API.PRODUCTION}/iai/metrics`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Green-Route': 'true',
-        'X-IAI-Soldier': IAI_VERSION,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
         eventType,
+        // Spread the data directly so server gets patternId, containerId, etc. at top level
         ...data,
         source: 'extension',
-        extensionVersion: IAI_VERSION,
+        extensionVersion: '3.4.0',
         timestamp: data.timestamp || new Date().toISOString(),
       }),
     });
@@ -2929,64 +1314,6 @@ class IAIStealth {
     });
   }
   
-  /**
-   * INSTANT VALUE INJECTION - No typing, no clipboard, just SET
-   * Directly injects text into any element instantly
-   */
-  async dump(element, text) {
-    if (!text && text !== 0) return false;
-    const strText = String(text);
-    
-    console.log(`[IAI DUMP] ⚡ INSTANT INJECT: ${strText.length} chars`);
-    
-    // Focus element first
-    element.focus();
-    
-    // DIRECT VALUE SET - No loops, no delays, just instant
-    const tagName = element.tagName?.toUpperCase();
-    
-    if (tagName === 'INPUT') {
-      // Input: Use native setter to bypass React
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-      if (setter) {
-        setter.call(element, strText);
-      } else {
-        element.value = strText;
-      }
-    } 
-    else if (tagName === 'TEXTAREA') {
-      // Textarea: Use native setter
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-      if (setter) {
-        setter.call(element, strText);
-      } else {
-        element.value = strText;
-      }
-    }
-    else if (element.isContentEditable) {
-      // ContentEditable (Facebook rich text): Direct innerHTML/textContent
-      element.innerHTML = '';
-      element.textContent = strText;
-      // Also try insertText for React compatibility
-      try {
-        document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, strText);
-      } catch(e) { /* ignore */ }
-    }
-    else {
-      // Fallback for any other element
-      element.value = strText;
-    }
-    
-    // Fire React-compatible events (MINIMAL set for speed)
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    element.dispatchEvent(new Event('blur', { bubbles: true })); // Added trigger for validation
-    
-    console.log(`[IAI DUMP] ✅ DONE - ${strText.length} chars injected in 0ms`);
-    return true;
-  }
-  
   async typeChar(element, char, currentText) {
     // Key events
     const keydown = new KeyboardEvent('keydown', { key: char, bubbles: true });
@@ -3099,9 +1426,6 @@ class IAINavigator {
   async navigateTo(destination) {
     console.log(`🧭 Navigating to: ${destination}`);
     
-    // Log navigation start
-    await logStealthActivity('navigation_start', { destination, from: window.location.href });
-    
     const urls = {
       marketplace: 'https://www.facebook.com/marketplace/',
       create_listing: 'https://www.facebook.com/marketplace/create/vehicle/',
@@ -3111,13 +1435,9 @@ class IAINavigator {
       notifications: 'https://www.facebook.com/notifications',
     };
     
-    // Handle both key and direct URL
-    const targetUrl = urls[destination] || destination;
-    
-    if (targetUrl) {
-      window.location.href = targetUrl;
-      const ready = await this.waitForPageReady();
-      await logStealthActivity('navigation_complete', { destination, url: window.location.href, success: ready });
+    if (urls[destination]) {
+      window.location.href = urls[destination];
+      await this.waitForPageReady();
     }
     
     this.currentPage = destination;
@@ -3145,10 +1465,6 @@ class IAINavigator {
           }
           
           if (element && this.isVisible(element) && this.isInteractable(element)) {
-            // Log success if it took a while
-            if (Date.now() - start > 1000) {
-               await logStealthActivity('element_found_delayed', { selector, duration: Date.now() - start }, 'debug');
-            }
             return element;
           }
         } catch (e) {
@@ -3165,9 +1481,7 @@ class IAINavigator {
       await this.stealth.delay(300, 500);
     }
     
-    const failMsg = `Element not found: ${description || selectorList[0]}`;
-    console.warn(failMsg);
-    await logStealthActivity('element_not_found', { selectors: selectorList, description }, 'warn');
+    console.warn(`Element not found: ${description || selectorList[0]}`);
     return null;
   }
   
@@ -4068,24 +2382,16 @@ class IAISoldier {
         }
       }
       
-      // Use GreenRouteService for FBM updates (works during mitigation)
-      if (typeof greenRoute !== 'undefined' && greenRoute.updateFBMPost) {
-        await greenRoute.updateFBMPost(logId, payload);
-      } else {
-        // Fallback to direct call
-        await fetch(`${IAI_CONFIG.API.GREEN}/fbm-posts/update`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.authToken}`,
-            'X-Green-Route': 'true',
-            'X-IAI-Soldier': IAI_VERSION,
-          },
-          body: JSON.stringify({ logId, ...payload }),
-        });
-      }
+      await fetch(`${IAI_CONFIG.API.PRODUCTION}/fbm-posts/internal/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({ logId, ...payload }),
+      });
       
-      console.debug('FBM log updated via GreenRoute:', logId, payload);
+      console.debug('FBM log updated:', logId, payload);
     } catch (e) {
       console.debug('Failed to update FBM log:', e);
     }
@@ -4093,34 +2399,24 @@ class IAISoldier {
   
   /**
    * Report FBM stage progress event
-   * Uses GreenRouteService for reliable delivery
    */
   async reportFBMEvent(logId, eventType, stage, message, details = null) {
     try {
-      const eventData = {
-        eventType,  // stage_change, error, warning, info, debug
-        stage,
-        message,
-        details,
-        source: 'extension',
-      };
-      
-      // Use GreenRouteService if available
-      if (typeof greenRoute !== 'undefined' && greenRoute.addFBMEvent) {
-        await greenRoute.addFBMEvent(logId, eventData);
-      } else {
-        // Fallback to direct call
-        await fetch(`${IAI_CONFIG.API.GREEN}/fbm-posts/event`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.authToken}`,
-            'X-Green-Route': 'true',
-            'X-IAI-Soldier': IAI_VERSION,
-          },
-          body: JSON.stringify({ logId, ...eventData }),
-        });
-      }
+      await fetch(`${IAI_CONFIG.API.PRODUCTION}/fbm-posts/internal/event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({
+          logId,
+          eventType,  // stage_change, error, warning, info, debug
+          stage,
+          message,
+          details,
+          source: 'extension',
+        }),
+      });
     } catch (e) {
       console.debug('Failed to report FBM event:', e);
     }
@@ -4422,35 +2718,27 @@ async function executeRecordedClick(step) {
 async function executeRecordedType(step) {
   const stealth = new IAIStealth();
   const element = findElementByRecordedData(step.element || step);
-    
-    if (!element) {
-      return { success: false, error: 'Element not found' };
-    }
-    
-    // Get the text to type (use value from training data or placeholder)
-    const text = step.value || step.text || step.exampleValue || '';
-    
-    if (!text && text !== 0) {
-      return { success: false, error: 'No text to type' };
-    }
-    
-    // ALWAYS USE DUMP MODE - Instant paste for maximum speed
-    // Dump mode is superior: instant injection vs character-by-character typing
-    const useDump = true; // Force dump mode always
-    
-    if (useDump || step.action === 'dump' || step.type === 'dump' || IAI_INJECTION.METADATA?.dumpMode || IAI_INJECTION.METADATA?.speedMultiplier >= 1) {
-      console.log(`[IAI] ⚡ DUMP MODE: Injecting "${text.substring(0, 30)}..." instantly`);
-      await stealth.dump(element, text);
-      return { success: true, mode: 'dump' };
-    }
-    
-    // Fallback to typing (should never reach here with useDump = true)
-    element.focus();
-    await stealth.delay(30, 60);
-    await stealth.type(element, text);
-    
-    return { success: true, mode: 'type' };
+  
+  if (!element) {
+    return { success: false, error: 'Element not found' };
   }
+  
+  // Focus the element
+  element.focus();
+  await stealth.delay(100, 200);
+  
+  // Get the text to type (use value from training data or placeholder)
+  const text = step.value || step.text || step.exampleValue || '';
+  
+  if (!text) {
+    return { success: false, error: 'No text to type' };
+  }
+  
+  // Type with human-like delays
+  await stealth.typeWithHumanBehavior(element, text);
+  
+  return { success: true, action: 'type', length: text.length };
+}
 
 /**
  * Execute a recorded scroll action
@@ -5145,7 +3433,6 @@ function findOptionWithCascadingMatch(value) {
  */
 async function selectFacebookDropdownEnhancedV2(labelText, value, stealth) {
   console.log(`🔽 [IAI V2] Selecting dropdown "${labelText}" = "${value}"`);
-  await logStealthActivity('dropdown_start', { label: labelText, value });
   
   try {
     // CRITICAL: Close any open dropdowns first (like competitor)
@@ -5155,7 +3442,6 @@ async function selectFacebookDropdownEnhancedV2(labelText, value, stealth) {
     const label = C('label', labelText);
     if (!label) {
       console.warn(`❌ Dropdown label "${labelText}" not found`);
-      await logStealthActivity('dropdown_error', { error: 'Label not found', label: labelText });
       return false;
     }
     
@@ -5841,133 +4127,64 @@ async function fillVehicleListing(vehicle) {
 }
 
 /**
- * Upload images to Facebook Marketplace - Used by IAI_UPLOAD_IMAGES
- * TEST11: Uses image proxy for CORS bypass on external URLs
+ * Upload images to the listing
  */
 async function uploadVehicleImages(imageUrls) {
-  console.log('📷 IAI Uploading images:', imageUrls?.length || 0);
-  
-  if (!imageUrls || imageUrls.length === 0) {
-    console.log('📷 No images to upload');
-    return { success: false, error: 'No images provided', uploaded: 0 };
-  }
+  console.log('📷 IAI Uploading images:', imageUrls.length);
   
   const stealth = new IAIStealth();
   
-  // Find file input - try multiple strategies
-  let fileInput = document.querySelector('input[type="file"][accept*="image"]') ||
-                  document.querySelector('input[type="file"]');
+  // Find file input
+  const fileInput = document.querySelector('input[type="file"][accept*="image"]');
   
   if (!fileInput) {
     // Try clicking add photo button first
-    console.log('📷 Looking for Add Photo button...');
-    const addPhotoBtn = document.querySelector('[aria-label*="Add photo" i], [aria-label*="photo" i], [aria-label*="Photo" i]');
+    const addPhotoBtn = document.querySelector('[aria-label*="Add photo" i], [aria-label*="photo" i]');
     if (addPhotoBtn) {
-      console.log('📷 Found Add Photo button, clicking...');
       await stealth.click(addPhotoBtn);
       await stealth.delay(500, 1000);
     }
     
     // Check again for file input
-    fileInput = document.querySelector('input[type="file"][accept*="image"]') ||
-                document.querySelector('input[type="file"]');
-  }
-  
-  if (!fileInput) {
-    console.error('📷 Could not find file input');
-    return { success: false, error: 'File input not found', uploaded: 0 };
-  }
-  
-  console.log('📷 Found file input, preparing images...');
-  
-  // Get auth token for proxy
-  let authToken = null;
-  try {
-    const storage = await chrome.storage.local.get(['authToken', 'token']);
-    authToken = storage.authToken || storage.token;
-    if (authToken) {
-      console.log('📷 ✓ Got auth token for image proxy');
+    const newFileInput = document.querySelector('input[type="file"][accept*="image"]');
+    if (!newFileInput) {
+      console.error('Could not find file input');
+      return { success: false, error: 'File input not found' };
     }
-  } catch (e) {
-    console.warn('📷 Could not get auth token');
   }
+  
+  const input = document.querySelector('input[type="file"][accept*="image"]');
   
   // Fetch and convert images
   const files = [];
-  const maxImages = Math.min(imageUrls.length, 10);
-  
-  for (let i = 0; i < maxImages; i++) {
-    const url = imageUrls[i];
-    const shortUrl = url?.substring(0, 60) + '...';
-    console.log(`📷 Fetching image ${i + 1}/${maxImages}: ${shortUrl}`);
-    
+  for (let i = 0; i < Math.min(imageUrls.length, 10); i++) {
     try {
-      let blob;
-      
-      if (url.startsWith('data:') || url.startsWith('blob:')) {
-        // Data/Blob URL - fetch directly
-        const response = await fetch(url);
-        blob = await response.blob();
-      } else {
-        // External URL - use GREEN ROUTE proxy to bypass CORS (no auth needed)
-        console.log(`📷 Using GREEN ROUTE image proxy for external URL...`);
-        
-        const proxyUrl = `${IAI_CONFIG.API.PRODUCTION}/green/image-proxy?url=${encodeURIComponent(url)}`;
-        const fetchOptions = { 
-          method: 'GET', 
-          headers: {
-            'X-Green-Route': 'true',
-            'X-IAI-Soldier': IAI_VERSION
-          }
-        };
-        
-        const response = await fetch(proxyUrl, fetchOptions);
-        
-        if (!response.ok) {
-          // Fallback to direct fetch
-          console.log(`📷 Proxy failed (${response.status}), trying direct fetch...`);
-          const directResponse = await fetch(url, { mode: 'cors', credentials: 'omit' });
-          if (!directResponse.ok) {
-            throw new Error(`HTTP ${directResponse.status}`);
-          }
-          blob = await directResponse.blob();
-        } else {
-          blob = await response.blob();
-          console.log('📷 ✓ Image fetched via proxy');
-        }
-      }
-      
-      const mimeType = blob.type || 'image/jpeg';
-      const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
-      const file = new File([blob], `vehicle_${Date.now()}_${i + 1}.${ext}`, { type: mimeType });
+      const response = await fetch(imageUrls[i]);
+      const blob = await response.blob();
+      const file = new File([blob], `vehicle_${i}.jpg`, { type: 'image/jpeg' });
       files.push(file);
-      
-      console.log(`📷 ✓ Image ${i + 1} ready (${(blob.size / 1024).toFixed(1)}KB)`);
-      
     } catch (e) {
-      console.warn(`📷 Failed to fetch image ${i + 1}:`, e.message);
+      console.warn(`Failed to fetch image ${i}:`, e);
     }
   }
   
   if (files.length === 0) {
-    console.error('📷 No images could be loaded');
-    return { success: false, error: 'No images could be loaded', uploaded: 0 };
+    return { success: false, error: 'No images could be loaded' };
   }
   
   // Create DataTransfer and assign files
-  console.log(`📷 Setting ${files.length} files on input...`);
   const dataTransfer = new DataTransfer();
   files.forEach(f => dataTransfer.items.add(f));
-  fileInput.files = dataTransfer.files;
+  input.files = dataTransfer.files;
   
-  // Dispatch change event to trigger FB upload
-  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  // Dispatch change event
+  input.dispatchEvent(new Event('change', { bubbles: true }));
   
-  // Wait for upload to process
+  // Wait for upload
   await stealth.delay(2000, 4000);
   
-  console.log(`📷 ✅ Uploaded ${files.length} images`);
-  return { success: true, uploaded: files.length, count: files.length };
+  console.log(`✅ Uploaded ${files.length} images`);
+  return { success: true, count: files.length };
 }
 
 /**
@@ -5980,12 +4197,7 @@ async function publishListing() {
   
   const stealth = new IAIStealth();
   
-  // Facebook Marketplace is a multi-step wizard:
-  // Page 1: Vehicle details → Click "Next"
-  // Page 2: Location/pricing → Click "Next" or "Publish"
-  // We need to click through all steps
-  
-  // Priority 1: Look for actual publish/post buttons
+  // Priority 1: Look for actual publish/post buttons using C() pattern
   const publishButtonTexts = ['Publish', 'Post', 'List item', 'List vehicle', 'Submit'];
   
   // Try C() pattern first (like competitor)
@@ -5999,17 +4211,6 @@ async function publishListing() {
       console.log('✅ [IAI V2] Publish button clicked');
       return { success: true, clicked: true, buttonText: text };
     }
-  }
-  
-  // Priority 2: Click "Next" to proceed through wizard steps
-  const nextButton = C('span', 'Next') || C('div', 'Next');
-  if (nextButton && isVisible(nextButton)) {
-    const clickable = nextButton.closest('[role="button"]') || nextButton.closest('button') || nextButton;
-    console.log('📤 [IAI V2] Found "Next" button - clicking to proceed to next step');
-    await stealth.click(clickable);
-    await stealth.delay(2000, 3000);
-    console.log('✅ [IAI V2] Next button clicked - proceeding to next wizard step');
-    return { success: true, clicked: true, buttonText: 'Next', isWizardStep: true };
   }
   
   // Fallback: Search all buttons
@@ -6034,26 +4235,33 @@ async function publishListing() {
       }
     }
     
-    // Check for Next button (priority 2)
-    if (text === 'next' || ariaLabel.includes('next')) {
-      if (bestPriority > 2) {
-        bestButton = el;
-        bestPriority = 2;
-      }
-    }
+    // "Next" is NOT clicked - form is incomplete if only Next is visible
+    // This is like competitor behavior
   }
   
   if (bestButton) {
     const buttonText = bestButton.textContent?.trim();
-    console.log(`📤 [IAI V2] Found button: "${buttonText}" - clicking`);
+    console.log(`📤 [IAI V2] Found publish button: "${buttonText}" - clicking`);
     await stealth.click(bestButton);
     await stealth.delay(2000, 3000);
-    console.log('✅ [IAI V2] Button clicked');
+    console.log('✅ [IAI V2] Publish button clicked');
     return { success: true, clicked: true, buttonText };
   }
   
-  console.warn('⚠️ [IAI V2] No Next/Publish button found');
-  return { success: false, clicked: false, error: 'No Next or Publish button found' };
+  // Check if "Next" is visible - means form is incomplete (like competitor)
+  const nextButton = C('span', 'Next') || C('div', 'Next');
+  if (nextButton && isVisible(nextButton)) {
+    console.warn('⚠️ [IAI V2] Only "Next" button found - form incomplete');
+    return { 
+      success: false, 
+      clicked: false,
+      error: 'Form incomplete - only Next button found',
+      suggestion: 'Fill all required fields before publishing'
+    };
+  }
+  
+  console.warn('⚠️ [IAI V2] Publish button not found');
+  return { success: false, clicked: false, error: 'Publish button not found' };
 }
 
 /**

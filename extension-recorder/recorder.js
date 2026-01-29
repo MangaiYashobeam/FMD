@@ -51,52 +51,7 @@
       isMultiTab: false,    // Flag for multi-tab session
     },
     isPaused: false,  // Pause state
-    
-    // MARKING MODE STATE
-    markingMode: {
-      active: false,
-      fieldType: null,
-    },
-    
-    // Click sequence tracking
-    clickSequence: {
-      counter: 0,
-      subCounters: {},  // For hierarchical numbering
-      markers: [],      // Visual markers on page
-    },
   };
-
-  // ============================================
-  // FBM FIELD DEFINITIONS
-  // ============================================
-  
-  const FBM_FIELDS = [
-    { id: 'vehicleType', label: 'Vehicle Type', icon: '🚗', shortcut: '1' },
-    { id: 'year', label: 'Year', icon: '📅', shortcut: '2' },
-    { id: 'make', label: 'Make', icon: '🏭', shortcut: '3' },
-    { id: 'model', label: 'Model', icon: '🔧', shortcut: '4' },
-    { id: 'trim', label: 'Trim', icon: '✨', shortcut: '5' },
-    { id: 'price', label: 'Price', icon: '💰', shortcut: '6' },
-    { id: 'mileage', label: 'Mileage', icon: '🛣️', shortcut: '7' },
-    { id: 'bodyStyle', label: 'Body Style', icon: '🚙', shortcut: '8' },
-    { id: 'exteriorColor', label: 'Ext Color', icon: '🎨', shortcut: '9' },
-    { id: 'interiorColor', label: 'Int Color', icon: '🛋️', shortcut: '0' },
-    { id: 'transmission', label: 'Transmission', icon: '⚙️', shortcut: 'Q' },
-    { id: 'fuelType', label: 'Fuel Type', icon: '⛽', shortcut: 'W' },
-    { id: 'condition', label: 'Condition', icon: '✅', shortcut: 'E' },
-    { id: 'description', label: 'Description', icon: '📝', shortcut: 'R' },
-    { id: 'title', label: 'Title', icon: '📌', shortcut: 'T' },
-    { id: 'location', label: 'Location', icon: '📍', shortcut: 'Y' },
-    { id: 'vin', label: 'VIN', icon: '🔑', shortcut: 'U' },
-    { id: 'photos', label: 'Photos', icon: '📷', shortcut: 'I' },
-    { id: 'publish', label: 'Publish', icon: '🚀', shortcut: 'O' },
-    { id: 'next', label: 'Next/Continue', icon: '➡️', shortcut: 'P' },
-    { id: 'link', label: 'Link/Nav', icon: '🔗', shortcut: 'L' },
-    { id: 'dropdown', label: 'Dropdown', icon: '📋', shortcut: 'A' },
-    { id: 'input', label: 'Input Field', icon: '✏️', shortcut: 'S' },
-    { id: 'button', label: 'Button', icon: '🔘', shortcut: 'D' },
-    { id: 'safeClick', label: 'Safe Click', icon: '🟢', shortcut: 'F' },
-  ];
 
   // ============================================
   // CONFIGURATION
@@ -105,8 +60,7 @@
   const CONFIG = {
     API_URL: 'https://dealersface.com/api',
     // API_URL: 'http://localhost:5000/api',
-    MAX_EVENTS: 50000,        // Increased for long sessions (was 10000)
-    MAX_EVENTS_WARNING: 40000, // Warn when approaching limit
+    MAX_EVENTS: 10000,
     DEBOUNCE_SCROLL: 100,
     DEBOUNCE_MOUSE: 50,
     CAPTURE_SCREENSHOTS: false,
@@ -402,17 +356,9 @@
     }
     RecorderState.eventsByTab[tabId].push(event);
     
-    // Warn when approaching limit
-    if (RecorderState.events.length === CONFIG.MAX_EVENTS_WARNING) {
-      log(`⚠️ Warning: ${CONFIG.MAX_EVENTS_WARNING} events recorded - approaching limit`, 'warning');
-      console.warn('[FMD Recorder] Approaching event limit:', RecorderState.events.length);
-    }
-    
-    // Limit events to prevent memory issues (keep most recent)
+    // Limit events to prevent memory issues
     if (RecorderState.events.length > CONFIG.MAX_EVENTS) {
-      const discarded = RecorderState.events.length - CONFIG.MAX_EVENTS;
       RecorderState.events = RecorderState.events.slice(-CONFIG.MAX_EVENTS);
-      log(`⚠️ Event limit reached - discarded ${discarded} oldest events`, 'warning');
     }
     
     log(`Event recorded: ${type}`, event);
@@ -436,92 +382,35 @@
   
   function handleClick(e) {
     console.log('[CONTENT DEBUG] handleClick triggered, isRecording:', RecorderState.isRecording);
-    
-    // Mark that we handled this click (with timestamp to prevent stale flags)
-    RecorderState._clickHandled = Date.now();
-    
-    // If grid overlay is visible and click is inside it, let it handle
-    if (gridOverlay?.classList.contains('visible') && gridOverlay.contains(e.target)) {
-      return;
-    }
-    
     if (!RecorderState.isRecording) return;
     
     const element = e.target;
     const elementInfo = extractElementInfo(element);
-    let fieldType = detectFieldType(elementInfo);
+    const fieldType = detectFieldType(elementInfo);
+    console.log('[CONTENT DEBUG] Click recorded:', { element: element.tagName, fieldType });
     
-    // Check if in marking mode (user selected a field type from grid)
-    let isMarked = false;
-    let markedFieldType = null;
+    // Check if Ctrl+Click (mark as high-interest)
+    const isMarked = e.ctrlKey || e.metaKey;
     
-    if (RecorderState.markingMode.active) {
-      isMarked = true;
-      markedFieldType = RecorderState.markingMode.fieldType;
-      fieldType = markedFieldType; // Override auto-detected field type
-      
-      // Mark this element as the selected field type
+    if (isMarked) {
+      // Mark this element as high-interest field
       RecorderState.markedElements.push({
         elementInfo,
-        fieldType: markedFieldType,
+        fieldType,
         timestamp: getTimestamp(),
         relativeTime: getRelativeTime(),
-        markedAs: markedFieldType,
-        sequenceNumber: RecorderState.clickSequence.counter + 1,
-      });
-      
-      // Visual feedback with specific field type
-      showMarkedFeedback(element, markedFieldType);
-      
-      // Add sequence marker at click position (green for marked)
-      addSequenceMarker(e.pageX, e.pageY, true, markedFieldType);
-      
-      // Exit marking mode after marking
-      exitMarkingMode();
-      
-      console.log('[CONTENT DEBUG] Marked element as:', markedFieldType);
-    } else if (e.ctrlKey || e.metaKey) {
-      // Legacy Ctrl+Click behavior - auto-detect field type
-      isMarked = true;
-      markedFieldType = fieldType || 'unknown';
-      
-      RecorderState.markedElements.push({
-        elementInfo,
-        fieldType: markedFieldType,
-        timestamp: getTimestamp(),
-        relativeTime: getRelativeTime(),
-        markedAs: markedFieldType,
-        sequenceNumber: RecorderState.clickSequence.counter + 1,
+        markedAs: fieldType || 'unknown',
       });
       
       // Visual feedback
-      showMarkedFeedback(element, markedFieldType);
-      
-      // Add sequence marker at click position (green for marked)
-      addSequenceMarker(e.pageX, e.pageY, true, markedFieldType);
-    } else {
-      // Regular click - default to 'link' (navigation click) and add orange sequence marker
-      fieldType = fieldType || 'link';
-      addSequenceMarker(e.pageX, e.pageY, false, fieldType);
+      showMarkedFeedback(element, fieldType);
     }
-    
-    console.log('[CONTENT DEBUG] Click recorded on:', { 
-      element: element.tagName, 
-      fieldType,
-      isMarked,
-      markedFieldType,
-      sequenceNum: RecorderState.clickSequence.counter,
-      ariaLabel: element.getAttribute?.('aria-label'),
-      id: element.id,
-      className: element.className?.substring?.(0, 50)
-    });
     
     recordEvent('click', {
       element: elementInfo,
       fieldType: fieldType,
       isMarked: isMarked,
-      markedAs: isMarked ? markedFieldType : null,
-      sequenceNumber: RecorderState.clickSequence.counter,
+      markedAs: isMarked ? (fieldType || 'unknown') : null,
       mousePosition: {
         clientX: e.clientX,
         clientY: e.clientY,
@@ -572,303 +461,6 @@
   }
 
   // ============================================
-  // FIELD GRID OVERLAY
-  // ============================================
-  
-  let gridOverlay = null;
-  let ctrlKeyHeld = false;
-  let hoveredFieldId = null;  // Track which field is being hovered in the grid
-  
-  /**
-   * Create the field selection grid overlay
-   */
-  function createGridOverlay() {
-    if (gridOverlay) return gridOverlay;
-    
-    gridOverlay = document.createElement('div');
-    gridOverlay.id = 'fmd-field-grid-overlay';
-    
-    const gridHTML = `
-      <div class="fmd-grid-header">
-        <div class="fmd-grid-title">📋 FBM FIELD SELECTOR</div>
-        <button class="fmd-grid-close" title="Close (ESC)">✕</button>
-      </div>
-      <div class="fmd-grid-subtitle">Hover over a field, release Ctrl to select</div>
-      <div class="fmd-field-grid">
-        ${FBM_FIELDS.map(field => `
-          <div class="fmd-field-btn" data-field="${field.id}" title="${field.label} (${field.shortcut})">
-            <span class="fmd-field-icon">${field.icon}</span>
-            <span class="fmd-field-label">${field.label}</span>
-          </div>
-        `).join('')}
-      </div>
-      <div class="fmd-grid-actions">
-        <button class="fmd-grid-publish-btn" title="Publish current session to server">
-          🚀 PUBLISH SESSION
-        </button>
-      </div>
-      <div class="fmd-grid-hint">
-        <kbd>Hover + release Ctrl</kbd> to select • <kbd>ESC</kbd> to close • Scroll exits marking mode
-      </div>
-    `;
-    
-    gridOverlay.innerHTML = gridHTML;
-    document.body.appendChild(gridOverlay);
-    
-    // Add close button handler
-    gridOverlay.querySelector('.fmd-grid-close').addEventListener('click', (e) => {
-      e.stopPropagation();
-      hideGridOverlay();
-    });
-    
-    // Add publish button handler
-    gridOverlay.querySelector('.fmd-grid-publish-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      hideGridOverlay();
-      // Send message to sidebar to trigger publish
-      chrome.runtime.sendMessage({ type: 'PUBLISH_SESSION' }).catch(() => {});
-      log('Publish requested via Ctrl menu');
-    });
-    
-    // Add click and hover handlers to field buttons
-    gridOverlay.querySelectorAll('.fmd-field-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const fieldId = btn.dataset.field;
-        enterMarkingMode(fieldId);
-      });
-      
-      // Track hover for Ctrl-release selection
-      btn.addEventListener('mouseenter', () => {
-        hoveredFieldId = btn.dataset.field;
-        btn.classList.add('hovered');
-      });
-      
-      btn.addEventListener('mouseleave', () => {
-        hoveredFieldId = null;
-        btn.classList.remove('hovered');
-      });
-    });
-    
-    // Close on clicking outside
-    gridOverlay.addEventListener('click', (e) => {
-      if (e.target === gridOverlay) {
-        hideGridOverlay();
-      }
-    });
-    
-    return gridOverlay;
-  }
-  
-  /**
-   * Show the field grid overlay
-   */
-  function showGridOverlay() {
-    // Allow showing grid even before recording (for exploration)
-    const overlay = createGridOverlay();
-    overlay.classList.add('visible');
-    log('Field grid overlay shown');
-  }
-  
-  /**
-   * Hide the field grid overlay
-   */
-  function hideGridOverlay() {
-    if (gridOverlay) {
-      gridOverlay.classList.remove('visible');
-    }
-  }
-  
-  /**
-   * Enter marking mode for a specific field type
-   */
-  function enterMarkingMode(fieldType) {
-    hideGridOverlay();
-    
-    RecorderState.markingMode.active = true;
-    RecorderState.markingMode.fieldType = fieldType;
-    
-    // Show marking mode indicator
-    showMarkingModeIndicator(fieldType);
-    
-    // Add crosshair cursor to body
-    document.body.classList.add('fmd-marking-cursor');
-    
-    log(`Marking mode active: ${fieldType}`);
-  }
-  
-  /**
-   * Exit marking mode
-   */
-  function exitMarkingMode() {
-    RecorderState.markingMode.active = false;
-    RecorderState.markingMode.fieldType = null;
-    ctrlKeyHeld = false;  // Reset Ctrl state to restore responsiveness
-    
-    hideMarkingModeIndicator();
-    hideGridOverlay();  // Also hide grid if open
-    document.body.classList.remove('fmd-marking-cursor');
-    
-    log('Marking mode exited');
-  }
-  
-  /**
-   * Show the marking mode indicator
-   */
-  function showMarkingModeIndicator(fieldType) {
-    let indicator = document.getElementById('fmd-marking-mode-indicator');
-    
-    if (!indicator) {
-      indicator = document.createElement('div');
-      indicator.id = 'fmd-marking-mode-indicator';
-      document.body.appendChild(indicator);
-    }
-    
-    const field = FBM_FIELDS.find(f => f.id === fieldType) || { icon: '🏷️', label: fieldType };
-    
-    indicator.innerHTML = `
-      <span class="fmd-marking-icon">${field.icon}</span>
-      <span>Click element for:</span>
-      <span class="fmd-marking-field">${field.label}</span>
-      <span class="fmd-marking-cancel" title="Cancel (ESC)">✕</span>
-    `;
-    
-    indicator.classList.add('visible');
-    
-    // Add cancel handler
-    indicator.querySelector('.fmd-marking-cancel').onclick = exitMarkingMode;
-  }
-  
-  /**
-   * Hide the marking mode indicator
-   */
-  function hideMarkingModeIndicator() {
-    const indicator = document.getElementById('fmd-marking-mode-indicator');
-    if (indicator) {
-      indicator.classList.remove('visible');
-    }
-  }
-
-  // ============================================
-  // CLICK SEQUENCE TRAIL
-  // ============================================
-  
-  /**
-   * Add a sequence marker at exact click coordinates
-   */
-  function addSequenceMarker(pageX, pageY, isMarkedField = false, fieldType = null) {
-    RecorderState.clickSequence.counter++;
-    const seqNum = RecorderState.clickSequence.counter;
-    
-    const marker = document.createElement('div');
-    marker.className = `fmd-sequence-marker ${isMarkedField ? 'marked-field' : ''}`;
-    marker.textContent = seqNum;
-    marker.dataset.seqNum = seqNum;
-    
-    // Position using page coordinates (absolute position in document)
-    marker.style.cssText = `
-      position: absolute;
-      top: ${pageY - 12}px;
-      left: ${pageX - 12}px;
-      z-index: 2147483640;
-    `;
-    
-    document.body.appendChild(marker);
-    
-    const markerData = {
-      element: marker,
-      seqNum,
-      fieldType,
-      position: { x: pageX, y: pageY },
-    };
-    
-    RecorderState.clickSequence.markers.push(markerData);
-    
-    // Also add field tag if it's a marked field
-    if (isMarkedField && fieldType) {
-      addFieldTag(pageX, pageY + 20, fieldType, seqNum);
-    }
-    
-    // Draw line from previous marker (skip tags and lines)
-    const realMarkers = RecorderState.clickSequence.markers.filter(m => !m.isTag && !m.isLine && m.position);
-    if (realMarkers.length > 1) {
-      drawSequenceLine(
-        realMarkers[realMarkers.length - 2],
-        realMarkers[realMarkers.length - 1]
-      );
-    }
-    
-    return seqNum;
-  }
-  
-  /**
-   * Add a field type tag at coordinates
-   */
-  function addFieldTag(pageX, pageY, fieldType, seqNum) {
-    const field = FBM_FIELDS.find(f => f.id === fieldType) || { icon: '🏷️', label: fieldType };
-    
-    const tag = document.createElement('div');
-    tag.className = 'fmd-field-tag';
-    tag.textContent = `${field.icon} ${field.label} #${seqNum}`;
-    tag.style.cssText = `
-      position: absolute;
-      top: ${pageY}px;
-      left: ${pageX}px;
-      z-index: 2147483641;
-    `;
-    
-    document.body.appendChild(tag);
-    
-    RecorderState.clickSequence.markers.push({
-      element: tag,
-      isTag: true,
-    });
-  }
-  
-  /**
-   * Draw a line between two sequence markers
-   */
-  function drawSequenceLine(from, to) {
-    if (!from?.position || !to?.position) return;
-    
-    const dx = to.position.x - from.position.x;
-    const dy = to.position.y - from.position.y;
-    const length = Math.sqrt(dx * dx + dy * dy);
-    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    
-    const line = document.createElement('div');
-    line.className = 'fmd-sequence-line';
-    line.style.cssText = `
-      position: absolute;
-      width: ${length}px;
-      top: ${from.position.y}px;
-      left: ${from.position.x}px;
-      transform: rotate(${angle}deg);
-      z-index: 2147483639;
-    `;
-    
-    document.body.appendChild(line);
-    
-    RecorderState.clickSequence.markers.push({
-      element: line,
-      isLine: true,
-    });
-  }
-  
-  /**
-   * Clear all sequence markers from the page
-   */
-  function clearSequenceMarkers() {
-    RecorderState.clickSequence.markers.forEach(m => {
-      if (m.element && m.element.parentNode) {
-        m.element.remove();
-      }
-    });
-    RecorderState.clickSequence.markers = [];
-    RecorderState.clickSequence.counter = 0;
-  }
-
-  // ============================================
   // KEYBOARD HANDLER
   // ============================================
   
@@ -877,41 +469,10 @@
   let lastKeyTarget = null;
 
   function handleKeyDown(e) {
-    // Handle Ctrl key for grid overlay - works even before recording
-    if (e.key === 'Control' && !ctrlKeyHeld) {
-      ctrlKeyHeld = true;
-      if (!RecorderState.markingMode.active) {
-        showGridOverlay();
-      }
-      return;
-    }
-    
-    // Handle ESC to exit marking mode or close grid (works anytime)
-    if (e.key === 'Escape') {
-      if (RecorderState.markingMode.active) {
-        exitMarkingMode();
-      } else if (gridOverlay?.classList.contains('visible')) {
-        hideGridOverlay();
-      }
-      return;
-    }
-    
-    // Handle shortcut keys when grid is visible
-    if (gridOverlay?.classList.contains('visible')) {
-      const shortcut = e.key.toUpperCase();
-      const field = FBM_FIELDS.find(f => f.shortcut === shortcut);
-      if (field) {
-        e.preventDefault();
-        enterMarkingMode(field.id);
-        return;
-      }
-    }
-    
-    // Below this point, only process if recording
     if (!RecorderState.isRecording) return;
     
     // Special keys to record immediately
-    const specialKeys = ['Enter', 'Tab', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    const specialKeys = ['Enter', 'Tab', 'Escape', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
     
     if (specialKeys.includes(e.key)) {
       recordEvent('keypress', {
@@ -941,24 +502,6 @@
       
       clearTimeout(keyBufferTimeout);
       keyBufferTimeout = setTimeout(flushKeyBuffer, 500);
-    }
-  }
-  
-  function handleKeyUp(e) {
-    // Handle Ctrl release - select hovered field if any
-    if (e.key === 'Control') {
-      ctrlKeyHeld = false;
-      
-      // If hovering over a field when Ctrl is released, select it
-      if (hoveredFieldId && gridOverlay?.classList.contains('visible')) {
-        enterMarkingMode(hoveredFieldId);
-        hoveredFieldId = null;
-        return;
-      }
-      
-      if (!RecorderState.markingMode.active) {
-        hideGridOverlay();
-      }
     }
   }
 
@@ -1015,27 +558,8 @@
   let scrollTimeout = null;
   let lastScrollPosition = { x: 0, y: 0 };
 
-  /**
-   * Handle mouse wheel - exits marking mode immediately (very sensitive)
-   */
-  function handleWheel(e) {
-    if (!RecorderState.isRecording) return;
-    
-    // Exit marking mode immediately on any wheel movement
-    if (RecorderState.markingMode.active) {
-      exitMarkingMode();
-      log('Marking mode exited due to mouse wheel');
-    }
-  }
-
   function handleScroll(e) {
     if (!RecorderState.isRecording) return;
-    
-    // Exit marking mode on any scroll (even slight mouse wheel)
-    if (RecorderState.markingMode.active) {
-      exitMarkingMode();
-      log('Marking mode exited due to scroll');
-    }
     
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
@@ -1274,40 +798,16 @@
     RecorderState.metadata.recordingType = options.recordingType || 'iai';
     RecorderState.metadata.url = window.location.href;
     
-    // Reset sequence tracking
-    clearSequenceMarkers();
-    RecorderState.clickSequence.counter = 0;
-    RecorderState.clickSequence.subCounters = {};
-    
-    // Reset marking mode
-    exitMarkingMode();
-    
-    console.log('[CONTENT DEBUG] Adding event listeners to document');
-    
-    // Add event listeners with capture phase (true) to catch events before Facebook handles them
+    console.log('[CONTENT DEBUG] Adding event listeners');
+    // Add event listeners
     document.addEventListener('click', handleClick, true);
-    document.addEventListener('mousedown', handleMouseDown, true);  // Also capture mousedown
     document.addEventListener('keydown', handleKeyDown, true);
-    document.addEventListener('keyup', handleKeyUp, true);  // For Ctrl release detection
     document.addEventListener('input', handleInput, true);
     document.addEventListener('change', handleChange, true);
     document.addEventListener('scroll', handleScroll, true);
-    document.addEventListener('wheel', handleWheel, true);  // For mouse wheel in marking mode
     document.addEventListener('focus', handleFocus, true);
     document.addEventListener('blur', handleBlur, true);
     document.addEventListener('drop', handleDrop, true);
-    
-    // Also add to window for events that might bubble there
-    window.addEventListener('click', handleClickWindow, true);
-    window.addEventListener('mousedown', handleMouseDownWindow, true);
-    
-    // === CRITICAL FIX FOR FACEBOOK ===
-    // Add pointer events which are harder for React to intercept
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('pointerup', handlePointerUp, true);
-    
-    // Monitor all iframes for clicks
-    setupIframeMonitoring();
     
     console.log('[CONTENT DEBUG] Setting up file inputs');
     // File inputs
@@ -1321,9 +821,6 @@
     
     // URL change polling
     setInterval(checkUrlChange, 500);
-    
-    // Set up Shadow DOM observer to catch events in React/Facebook shadow trees
-    setupShadowDOMObserver();
     
     console.log('[CONTENT DEBUG] Showing recording indicator');
     // Show recording indicator
@@ -1340,276 +837,8 @@
       },
     });
     
-    // Confirm to sidebar that recording started
-    try {
-      chrome.runtime.sendMessage({
-        type: 'RECORDING_STARTED',
-        sessionId: RecorderState.sessionId,
-        timestamp: Date.now()
-      });
-    } catch (e) {
-      console.log('[CONTENT DEBUG] Could not notify sidebar:', e.message);
-    }
-    
-    // Show Ctrl hint immediately when recording starts
-    showCtrlHint();
-    
     console.log('[CONTENT DEBUG] Recording started successfully:', RecorderState.sessionId);
-    console.log('[CONTENT DEBUG] === EVENT LISTENERS ACTIVE ===');
-    console.log('[CONTENT DEBUG] isRecording:', RecorderState.isRecording);
     log('Recording started', RecorderState.sessionId);
-  }
-  
-  /**
-   * Show a hint about Ctrl+key for field tagging
-   */
-  function showCtrlHint() {
-    let hint = document.getElementById('fmd-ctrl-hint');
-    if (hint) hint.remove();
-    
-    hint = document.createElement('div');
-    hint.id = 'fmd-ctrl-hint';
-    hint.innerHTML = `
-      <div class="fmd-ctrl-hint-inner">
-        <span class="fmd-ctrl-key">CTRL</span>
-        <span class="fmd-ctrl-text">Hold to tag fields</span>
-      </div>
-    `;
-    hint.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(139, 92, 246, 0.9) 100%);
-      color: white;
-      padding: 12px 24px;
-      border-radius: 30px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      z-index: 2147483645;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
-      animation: fmdCtrlHintPulse 2s ease-in-out infinite, fmdCtrlHintFadeIn 0.3s ease-out;
-      pointer-events: none;
-    `;
-    
-    document.body.appendChild(hint);
-    
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-      if (hint && hint.parentNode) {
-        hint.style.animation = 'fmdCtrlHintFadeOut 0.3s ease-out forwards';
-        setTimeout(() => hint.remove(), 300);
-      }
-    }, 5000);
-  }
-  
-  /**
-   * Handle mousedown events (sometimes click doesn't fire on React elements)
-   */
-  function handleMouseDown(e) {
-    console.log('[CONTENT DEBUG] handleMouseDown triggered');
-    if (!RecorderState.isRecording) return;
-    
-    // Don't double-record, just track that we got the mousedown
-    RecorderState._lastMouseDown = {
-      target: e.target,
-      x: e.clientX,
-      y: e.clientY,
-      timestamp: Date.now()
-    };
-  }
-  
-  /**
-   * Window-level click handler (backup)
-   */
-  function handleClickWindow(e) {
-    console.log('[CONTENT DEBUG] handleClickWindow triggered');
-    // If the regular click handler didn't fire recently (within 100ms), record here
-    const timeSinceHandled = Date.now() - (RecorderState._clickHandled || 0);
-    if (timeSinceHandled > 100 && RecorderState.isRecording) {
-      console.log('[CONTENT DEBUG] Recording from window click handler (document handler missed)');
-      handleClick(e);
-    }
-  }
-  
-  /**
-   * Window-level mousedown handler (backup)
-   */
-  function handleMouseDownWindow(e) {
-    console.log('[CONTENT DEBUG] handleMouseDownWindow triggered');
-    // Track for debugging
-  }
-  
-  // === POINTER EVENT HANDLERS (More reliable on Facebook) ===
-  let lastPointerDownTime = 0;
-  let lastPointerTarget = null;
-  
-  /**
-   * Pointer down handler - captures clicks more reliably than click event
-   */
-  function handlePointerDown(e) {
-    if (!RecorderState.isRecording) return;
-    
-    lastPointerDownTime = Date.now();
-    lastPointerTarget = e.target;
-    
-    console.log('[POINTER] Down on:', e.target.tagName, e.target.className?.substring?.(0, 30));
-  }
-  
-  /**
-   * Pointer up handler - if click wasn't recorded, record it here
-   */
-  function handlePointerUp(e) {
-    if (!RecorderState.isRecording) return;
-    
-    const timeSinceDown = Date.now() - lastPointerDownTime;
-    const timeSinceHandled = Date.now() - (RecorderState._clickHandled || 0);
-    
-    // If it's a quick tap (< 500ms) and click wasn't recently handled, treat as click
-    if (timeSinceDown < 500 && timeSinceHandled > 100 && e.target === lastPointerTarget) {
-      console.log('[POINTER] Click fallback - recording via pointer events');
-      
-      // Create a synthetic click-like event
-      const element = e.target;
-      const elementInfo = extractElementInfo(element);
-      const fieldType = detectFieldType(elementInfo);
-      
-      // Add sequence marker
-      addSequenceMarker(e.pageX, e.pageY, false, fieldType || 'link');
-      
-      recordEvent('click', {
-        element: elementInfo,
-        fieldType: fieldType || 'link',
-        isMarked: false,
-        markedAs: null,
-        sequenceNumber: RecorderState.clickSequence.counter,
-        mousePosition: {
-          clientX: e.clientX,
-          clientY: e.clientY,
-          pageX: e.pageX,
-          pageY: e.pageY,
-        },
-        modifiers: {
-          ctrl: e.ctrlKey,
-          shift: e.shiftKey,
-          alt: e.altKey,
-          meta: e.metaKey,
-        },
-        button: e.button,
-        capturedVia: 'pointer-fallback'
-      });
-    }
-  }
-  
-  /**
-   * Setup iframe monitoring - Facebook uses many iframes
-   */
-  function setupIframeMonitoring() {
-    console.log('[IFRAME] Setting up iframe monitoring');
-    
-    // Track iframes we've already attached to
-    const attachedIframes = new Set();
-    
-    function attachToIframe(iframe) {
-      if (attachedIframes.has(iframe)) return;
-      
-      try {
-        // Check if we can access the iframe (same-origin only)
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (!iframeDoc) return;
-        
-        console.log('[IFRAME] Attaching listeners to iframe:', iframe.src?.substring(0, 50));
-        
-        iframeDoc.addEventListener('click', handleClick, true);
-        iframeDoc.addEventListener('pointerdown', handlePointerDown, true);
-        iframeDoc.addEventListener('pointerup', handlePointerUp, true);
-        iframeDoc.addEventListener('input', handleInput, true);
-        iframeDoc.addEventListener('change', handleChange, true);
-        iframeDoc.addEventListener('keydown', handleKeyDown, true);
-        
-        attachedIframes.add(iframe);
-      } catch (err) {
-        // Cross-origin iframe - can't access
-        console.log('[IFRAME] Cross-origin iframe, cannot attach:', iframe.src?.substring(0, 50));
-      }
-    }
-    
-    // Attach to existing iframes
-    document.querySelectorAll('iframe').forEach(attachToIframe);
-    
-    // Watch for new iframes
-    const iframeObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.tagName === 'IFRAME') {
-            // Wait for iframe to load
-            node.addEventListener('load', () => attachToIframe(node));
-            attachToIframe(node);
-          }
-          if (node.querySelectorAll) {
-            node.querySelectorAll('iframe').forEach(iframe => {
-              iframe.addEventListener('load', () => attachToIframe(iframe));
-              attachToIframe(iframe);
-            });
-          }
-        }
-      }
-    });
-    
-    iframeObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  /**
-   * Setup Shadow DOM observer for Facebook's React components
-   */
-  function setupShadowDOMObserver() {
-    console.log('[CONTENT DEBUG] Setting up Shadow DOM observer');
-    
-    // Facebook heavily uses React portals and dynamic DOM
-    // Set up a MutationObserver to find and attach to shadow roots
-    const shadowObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.shadowRoot) {
-            attachShadowListeners(node.shadowRoot);
-          }
-          // Also check descendants
-          if (node.querySelectorAll) {
-            node.querySelectorAll('*').forEach(child => {
-              if (child.shadowRoot) {
-                attachShadowListeners(child.shadowRoot);
-              }
-            });
-          }
-        }
-      }
-    });
-    
-    shadowObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-    
-    // Attach to any existing shadow roots
-    document.querySelectorAll('*').forEach(el => {
-      if (el.shadowRoot) {
-        attachShadowListeners(el.shadowRoot);
-      }
-    });
-  }
-  
-  function attachShadowListeners(shadowRoot) {
-    console.log('[CONTENT DEBUG] Attaching listeners to shadow root');
-    shadowRoot.addEventListener('click', handleClick, true);
-    shadowRoot.addEventListener('keydown', handleKeyDown, true);
-    shadowRoot.addEventListener('input', handleInput, true);
-    shadowRoot.addEventListener('change', handleChange, true);
   }
 
   function stopRecording() {
@@ -1631,31 +860,15 @@
     
     RecorderState.isRecording = false;
     
-    // Exit marking mode if active
-    exitMarkingMode();
-    
-    // Hide grid overlay
-    hideGridOverlay();
-    
-    // Clear sequence markers from page
-    clearSequenceMarkers();
-    
-    // Remove event listeners from document
+    // Remove event listeners
     document.removeEventListener('click', handleClick, true);
-    document.removeEventListener('mousedown', handleMouseDown, true);
     document.removeEventListener('keydown', handleKeyDown, true);
-    document.removeEventListener('keyup', handleKeyUp, true);
     document.removeEventListener('input', handleInput, true);
     document.removeEventListener('change', handleChange, true);
     document.removeEventListener('scroll', handleScroll, true);
-    document.removeEventListener('wheel', handleWheel, true);
     document.removeEventListener('focus', handleFocus, true);
     document.removeEventListener('blur', handleBlur, true);
     document.removeEventListener('drop', handleDrop, true);
-    
-    // Remove window listeners
-    window.removeEventListener('click', handleClickWindow, true);
-    window.removeEventListener('mousedown', handleMouseDownWindow, true);
     
     // Stop mutation observer
     if (mutationObserver) {
@@ -2022,7 +1235,7 @@
       <span class="fmd-rec-text">🔴 RECORDING</span>
       <span class="fmd-rec-mode">${RecorderState.currentMode.toUpperCase()}</span>
       <span class="fmd-rec-events">0 events</span>
-      <div class="fmd-rec-hint">Hold Ctrl for field grid</div>
+      <div class="fmd-rec-hint">Ctrl+Click to mark fields</div>
     `;
     document.body.appendChild(indicator);
     
@@ -2266,17 +1479,10 @@
   // INITIALIZATION
   // ============================================
   
-  console.log('%c[FMD Recorder] ========================================', 'background: #8b5cf6; color: white; font-size: 14px; padding: 4px 8px;');
-  console.log('%c[FMD Recorder] Content script loaded on: ' + window.location.href, 'background: #8b5cf6; color: white; font-size: 12px; padding: 2px 8px;');
-  console.log('%c[FMD Recorder] ========================================', 'background: #8b5cf6; color: white; font-size: 14px; padding: 4px 8px;');
-  console.log('[FMD Recorder] To debug, open browser console and type: window.__FMD_RECORDER__.getState()');
-  console.log('[FMD Recorder] To manually start recording: window.__FMD_RECORDER__.startRecording()');
-  console.log('[FMD Recorder] Press Ctrl to show field selector grid anytime');
+  console.log('[FMD Recorder] ========================================');
+  console.log('[FMD Recorder] Content script loaded on:', window.location.href);
+  console.log('[FMD Recorder] ========================================');
   log('FMD Training Recorder loaded');
-  
-  // Add global Ctrl key listener for grid overlay (works even before recording)
-  document.addEventListener('keydown', handleKeyDown, true);
-  document.addEventListener('keyup', handleKeyUp, true);
   
   // Send a message to background that we're ready
   try {
@@ -2287,18 +1493,6 @@
     console.log('[FMD Recorder] Could not notify background:', e.message);
   }
   
-  // Add a global test to verify event listeners work
-  // This fires once to verify the capture phase works
-  setTimeout(() => {
-    console.log('[FMD Recorder] Running capture phase test...');
-    const testHandler = (e) => {
-      console.log('%c[FMD Recorder] ✓ Capture phase works! Detected:', 'color: #22c55e;', e.type, 'on', e.target?.tagName);
-      document.removeEventListener('click', testHandler, true);
-    };
-    document.addEventListener('click', testHandler, true);
-    console.log('[FMD Recorder] Click anywhere to verify event capture...');
-  }, 1000);
-  
   // Expose for debugging
   window.__FMD_RECORDER__ = {
     getState: () => RecorderState,
@@ -2306,29 +1500,6 @@
     stopRecording,
     getEvents: () => RecorderState.events,
     getMarkedElements: () => RecorderState.markedElements,
-    // Debug helpers
-    forceRecordClick: () => {
-      console.log('[FMD Recorder] Forcing test click record');
-      recordEvent('click', {
-        element: { tagName: 'TEST', id: 'test-element' },
-        fieldType: null,
-        isMarked: false,
-        mousePosition: { clientX: 0, clientY: 0, pageX: 0, pageY: 0 },
-        modifiers: { ctrl: false, shift: false, alt: false, meta: false },
-        button: 0,
-      });
-      console.log('[FMD Recorder] Events after force:', RecorderState.events.length);
-    },
-    debug: () => {
-      console.log('=== FMD Recorder Debug ===');
-      console.log('isRecording:', RecorderState.isRecording);
-      console.log('sessionId:', RecorderState.sessionId);
-      console.log('events:', RecorderState.events.length);
-      console.log('markedElements:', RecorderState.markedElements.length);
-      console.log('mode:', RecorderState.currentMode);
-      console.log('Last 3 events:', RecorderState.events.slice(-3));
-      return RecorderState;
-    }
   };
   
 })();

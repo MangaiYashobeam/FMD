@@ -343,39 +343,10 @@ router.get('/tasks/:accountId/pending', authenticate, async (req: AuthRequest, r
 /**
  * POST /api/extension/tasks/:taskId/complete
  * Mark task as completed
- * SECURITY: Verifies user owns the task before allowing update
  */
 router.post('/tasks/:taskId/complete', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const taskId = req.params.taskId as string;
-    
-    // SECURITY: Verify user has access to this task's account
-    const task = await prisma.extensionTask.findUnique({
-      where: { id: taskId },
-      select: { accountId: true },
-    });
-    
-    if (!task) {
-      res.status(404).json({ error: 'Task not found' });
-      return;
-    }
-    
-    const accountUser = await prisma.accountUser.findFirst({
-      where: {
-        userId: req.user!.id,
-        accountId: task.accountId,
-      },
-    });
-    
-    if (!accountUser) {
-      logger.warn('Task complete: Access denied', { 
-        taskId, 
-        userId: req.user!.id, 
-        taskAccountId: task.accountId 
-      });
-      res.status(403).json({ error: 'Access denied to this task' });
-      return;
-    }
     
     await prisma.extensionTask.update({
       where: { id: taskId },
@@ -397,54 +368,21 @@ router.post('/tasks/:taskId/complete', authenticate, async (req: AuthRequest, re
 /**
  * POST /api/extension/tasks/:taskId/failed
  * Mark task as failed
- * SECURITY: Verifies user owns the task before allowing update
  */
 router.post('/tasks/:taskId/failed', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const taskId = req.params.taskId as string;
-    
-    // SECURITY: Verify user has access to this task's account
-    const task = await prisma.extensionTask.findUnique({
-      where: { id: taskId },
-      select: { accountId: true },
-    });
-    
-    if (!task) {
-      res.status(404).json({ error: 'Task not found' });
-      return;
-    }
-    
-    const accountUser = await prisma.accountUser.findFirst({
-      where: {
-        userId: req.user!.id,
-        accountId: task.accountId,
-      },
-    });
-    
-    if (!accountUser) {
-      logger.warn('Task failed: Access denied', { 
-        taskId, 
-        userId: req.user!.id, 
-        taskAccountId: task.accountId 
-      });
-      res.status(403).json({ error: 'Access denied to this task' });
-      return;
-    }
-    
-    // SECURITY: Sanitize error message for logging
-    const { sanitizeForLog } = require('@/utils/admin-security');
-    const sanitizedError = sanitizeForLog(req.body.error, 200);
     
     await prisma.extensionTask.update({
       where: { id: taskId },
       data: { 
         status: 'failed',
         updatedAt: new Date(),
-        result: { error: sanitizedError || 'Unknown error', failedAt: new Date().toISOString() },
+        result: { error: req.body.error || 'Unknown error', failedAt: new Date().toISOString() },
       },
     });
     
-    logger.info(`❌ Task ${taskId} marked as failed: ${sanitizedError}`);
+    logger.info(`❌ Task ${taskId} marked as failed: ${req.body.error}`);
     res.json({ success: true });
   } catch (error) {
     logger.error('Fail task error:', error);
@@ -727,19 +665,34 @@ router.post('/conversations', authenticate, async (req: AuthRequest, res: Respon
 /**
  * POST /api/extension/sync
  * Sync data from extension (uses API key auth)
- * 
- * ⚠️ SECURITY: This endpoint is DEPRECATED and disabled for security.
- * Use authenticated endpoints instead.
  */
-router.post('/sync', async (_req: Request, res: Response) => {
-  // Security: Disabled endpoint - was never properly implemented
-  // and accepted any apiKey value without verification
-  logger.warn('[SECURITY] Deprecated /sync endpoint called');
-  res.status(410).json({ 
-    success: false, 
-    error: 'This endpoint has been deprecated. Use authenticated endpoints instead.',
-    code: 'ENDPOINT_DEPRECATED'
-  });
+router.post('/sync', async (req: Request, res: Response) => {
+  try {
+    const { apiKey, data } = req.body;
+    
+    if (!apiKey) {
+      res.status(401).json({ error: 'API key required' });
+      return;
+    }
+    
+    // Find account by API key - AccountSettings doesn't have apiKey column
+    // Use a placeholder approach for now - in production this would check a real API key table
+    console.log('Extension sync request received');
+    
+    // Process sync data based on type
+    if (data?.type === 'listings') {
+      console.log(`Syncing ${data.listings?.length || 0} listings`);
+    } else if (data?.type === 'messages') {
+      console.log(`Syncing ${data.messages?.length || 0} messages`);
+    } else if (data?.type === 'stats') {
+      console.log(`Syncing stats`);
+    }
+    
+    res.json({ success: true, message: 'Data synced successfully' });
+  } catch (error) {
+    console.error('Extension sync error:', error);
+    res.status(500).json({ error: 'Failed to sync data' });
+  }
 });
 
 // ============================================
@@ -925,150 +878,6 @@ router.get('/health', (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
-
-/**
- * GET /api/extension/image-proxy
- * Proxy for fetching images from external URLs (CORS bypass for FB)
- * Used by IAI soldier to upload dealer vehicle images
- */
-export async function imageProxyHandler(req: Request, res: Response): Promise<void> {
-  try {
-    const imageUrl = req.query.url as string;
-    
-    if (!imageUrl) {
-      res.status(400).json({ error: 'url parameter required' });
-      return;
-    }
-
-    // Validate URL format
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(imageUrl);
-      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-        throw new Error('Invalid protocol');
-      }
-    } catch {
-      res.status(400).json({ error: 'Invalid URL format' });
-      return;
-    }
-    
-    // ⚠️ SECURITY: SSRF Prevention - Allowlist of trusted domains
-    const ALLOWED_IMAGE_DOMAINS = [
-      // Facebook/Meta CDNs
-      'scontent.xx.fbcdn.net',
-      'external.xx.fbcdn.net',
-      'scontent-*.xx.fbcdn.net',
-      'lookaside.fbsbx.com',
-      'platform-lookaside.fbsbx.com',
-      'static.xx.fbcdn.net',
-      // Facebook Marketplace images
-      'marketplace.fbsbx.com',
-      // Common dealer image hosts
-      'images.dealer.com',
-      'pictures.dealer.com',
-      'www.cstatic-images.com',
-      'vehicle-photos-published.vauto.com',
-      // AWS S3 (our own buckets)
-      '.s3.amazonaws.com',
-      '.s3.us-east-1.amazonaws.com',
-      '.s3.us-west-2.amazonaws.com',
-    ];
-    
-    const hostname = parsedUrl.hostname.toLowerCase();
-    const isAllowed = ALLOWED_IMAGE_DOMAINS.some(domain => {
-      if (domain.startsWith('.')) {
-        // Suffix match (e.g., .s3.amazonaws.com)
-        return hostname.endsWith(domain);
-      } else if (domain.includes('*')) {
-        // Wildcard match (e.g., scontent-*.xx.fbcdn.net)
-        const pattern = domain.replace(/\*/g, '[a-z0-9-]+');
-        return new RegExp(`^${pattern}$`).test(hostname);
-      } else {
-        // Exact match
-        return hostname === domain;
-      }
-    });
-    
-    if (!isAllowed) {
-      logger.warn(`[Image Proxy] SSRF blocked - untrusted domain: ${hostname}`);
-      res.status(403).json({ 
-        error: 'Domain not allowed',
-        code: 'SSRF_BLOCKED'
-      });
-      return;
-    }
-    
-    // Block internal/private IPs
-    const blockedPrefixes = [
-      '10.', '172.16.', '172.17.', '172.18.', '172.19.', 
-      '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', 
-      '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', 
-      '172.30.', '172.31.', '192.168.', '127.', '0.', '169.254.',
-      'localhost', '::1', 'fe80::', 'fd00::'
-    ];
-    
-    if (blockedPrefixes.some(prefix => hostname.startsWith(prefix) || hostname === 'localhost')) {
-      logger.warn(`[Image Proxy] SSRF blocked - internal IP: ${hostname}`);
-      res.status(403).json({ 
-        error: 'Internal addresses not allowed',
-        code: 'SSRF_BLOCKED'
-      });
-      return;
-    }
-
-    // Fetch the image
-    const response = await fetch(imageUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'image/*,*/*;q=0.8',
-      },
-    });
-
-    if (!response.ok) {
-      res.status(response.status).json({ 
-        error: `Failed to fetch image: ${response.statusText}` 
-      });
-      return;
-    }
-
-    // Get content type
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    
-    // Validate it's an image
-    if (!contentType.startsWith('image/')) {
-      res.status(400).json({ error: 'URL does not point to an image' });
-      return;
-    }
-
-    // Get the image data as buffer
-    const imageBuffer = Buffer.from(await response.arrayBuffer());
-
-    // Set CORS and caching headers
-    res.set({
-      'Content-Type': contentType,
-      'Content-Length': imageBuffer.length.toString(),
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
-      'X-Proxied-From': parsedUrl.hostname,
-    });
-
-    res.send(imageBuffer);
-    
-    logger.info(`[Image Proxy] Served image from ${parsedUrl.hostname}, ${imageBuffer.length} bytes`);
-    
-  } catch (error) {
-    logger.error('[Image Proxy] Error:', error);
-    res.status(500).json({ 
-      error: 'Failed to proxy image',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-}
-
-// Also register on router for backwards compatibility
-router.get('/image-proxy', imageProxyHandler);
 
 /**
  * POST /api/extension/posting

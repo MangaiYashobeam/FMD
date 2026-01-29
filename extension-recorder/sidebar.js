@@ -33,10 +33,7 @@ const ConsoleState = {
   contentScriptReady: false,
   lastHeartbeat: null,
   connectionRetries: 0,
-  maxRetries: 5,
-  // Rate limiting backoff
-  heartbeatBackoffUntil: null,
-  heartbeatFailCount: 0
+  maxRetries: 5
 };
 
 // Heartbeat interval
@@ -75,19 +72,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('[Console] Background script not responding:', bgError);
     log('Background script not responding - try reloading extension', 'error');
   }
-  
-  // Check and display current auth status
-  const tokenCheck = await chrome.storage.local.get(['fmd_admin_token', 'fmd_token_synced_at']);
-  if (tokenCheck.fmd_admin_token) {
-    const age = tokenCheck.fmd_token_synced_at ? Math.round((Date.now() - tokenCheck.fmd_token_synced_at) / 1000) : null;
-    console.log('[Console] Cached token found, age:', age, 'seconds');
-    updateAuthStatusUI(true, age ? (age < 300 ? 'FRESH' : 'CACHED') : 'CACHED');
-  } else {
-    updateAuthStatusUI(false, 'NONE');
-  }
-  
-  // Sync auth token from webapp
-  await syncAuthTokenFromWebapp();
   
   // Start connection checks
   startConnectionMonitoring();
@@ -147,7 +131,6 @@ function initializeDOMReferences() {
     
     // Stats
     liveStats: document.getElementById('live-stats'),
-    liveIndicator: document.getElementById('live-indicator'),
     statEvents: document.getElementById('stat-events'),
     statClicks: document.getElementById('stat-clicks'),
     statInputs: document.getElementById('stat-inputs'),
@@ -246,12 +229,6 @@ function initializeEventListeners() {
   document.getElementById('api-endpoint')?.addEventListener('change', (e) => {
     ConsoleState.config.apiEndpoint = e.target.value;
     saveConfig();
-  });
-  
-  // Sync token button
-  document.getElementById('sync-token-btn')?.addEventListener('click', async () => {
-    log('Manual token sync requested...', 'info');
-    await forceSyncAuthToken();
   });
   
   // Listen for messages from background script
@@ -479,15 +456,6 @@ async function startRecording() {
     console.log('[DEBUG START] Step 1: Updating status indicator');
     updateStatusIndicator('loading', 'INITIALIZING...');
     
-    // Wake up background script first with a ping
-    console.log('[DEBUG START] Step 1.5: Waking up background script...');
-    try {
-      const pingResponse = await sendMessageWithTimeout({ type: 'PING' }, 2000);
-      console.log('[DEBUG START] Background woke up:', pingResponse);
-    } catch (pingErr) {
-      console.warn('[DEBUG START] Background ping failed, continuing anyway:', pingErr.message);
-    }
-    
     // Check webapp connection first (with short timeout)
     log('Checking webapp connection...', 'info');
     console.log('[DEBUG START] Step 2: Checking webapp connection');
@@ -514,7 +482,7 @@ async function startRecording() {
     try {
       // Use the new sendMessageWithTimeout for better error handling
       console.log('[DEBUG START] Sending GET_ACTIVE_TAB via sendMessageWithTimeout...');
-      tabResponse = await sendMessageWithTimeout({ type: 'GET_ACTIVE_TAB' }, 8000); // Increased timeout
+      tabResponse = await sendMessageWithTimeout({ type: 'GET_ACTIVE_TAB' }, 5000);
       console.log('[DEBUG START] Tab response:', tabResponse);
     } catch (tabError) {
       console.error('[DEBUG START] GET_ACTIVE_TAB error:', tabError);
@@ -524,7 +492,7 @@ async function startRecording() {
       log('Trying fallback: querying Facebook tabs...', 'info');
       updateStatusIndicator('loading', 'FINDING FACEBOOK...');
       try {
-        const fbResponse = await sendMessageWithTimeout({ type: 'GET_FACEBOOK_TABS' }, 8000); // Increased timeout
+        const fbResponse = await sendMessageWithTimeout({ type: 'GET_FACEBOOK_TABS' }, 5000);
         console.log('[DEBUG START] Facebook tabs fallback:', fbResponse);
         if (fbResponse?.success && fbResponse.tabs?.length > 0) {
           tabResponse = { success: true, tab: fbResponse.tabs[0] };
@@ -773,11 +741,9 @@ async function startSingleTabRecording(tab) {
     updateRecordingUI(true);
     updateScriptConnectionUI('active');
     startStatsPolling();
-    startAutoBackup(); // Start auto-backup for long sessions
     
     log(`Recording ACTIVE in ${ConsoleState.currentMode.toUpperCase()} mode`, 'success');
     log('Interact with the page - events will be captured', 'info');
-    log('Auto-backup enabled every 30 seconds', 'info');
     log('Click TERMINATE RECORDING when finished', 'info');
     updateStatusIndicator('recording', 'RECORDING...');
     
@@ -822,10 +788,8 @@ async function startMultiTabRecording() {
     updateRecordingUI(true);
     updateActiveTabsDisplay(ConsoleState.activeTabs);
     startStatsPolling();
-    startAutoBackup(); // Start auto-backup for long sessions
     
     log(`Multi-tab recording started: ${allTabs.length} tabs`, 'success');
-    log('Auto-backup enabled every 30 seconds', 'info');
     
   } catch (error) {
     throw error;
@@ -860,10 +824,6 @@ async function stopRecording() {
     
     updateRecordingUI(false);
     stopStatsPolling();
-    stopAutoBackup(); // Stop auto-backup
-    
-    // Clear backup data on successful stop
-    await chrome.storage.local.remove(['fmd_session_backup', 'fmd_backup_timestamp']);
     
     if (sessionData) {
       const eventCount = sessionData?.events?.length || 0;
@@ -892,27 +852,6 @@ async function stopRecording() {
     } else {
       log('No session data received from content script', 'warning');
       updateScriptConnectionUI('idle');
-      
-      // Try to recover from backup if no session data
-      log('Attempting to recover from backup...', 'info');
-      const backup = await chrome.storage.local.get(['fmd_session_backup', 'fmd_backup_timestamp']);
-      if (backup.fmd_session_backup) {
-        const backupAge = Date.now() - (backup.fmd_backup_timestamp || 0);
-        log(`Found backup (${Math.round(backupAge/1000)}s old) with ${backup.fmd_session_backup.eventCounts?.events || 0} events`, 'info');
-        
-        // Use backup data if available
-        const recoveredData = {
-          sessionId: backup.fmd_session_backup.sessionId || `recovery_${Date.now()}`,
-          mode: backup.fmd_session_backup.mode,
-          events: backup.fmd_session_backup.liveEvents || [],
-          metadata: { recovered: true, backupTimestamp: backup.fmd_backup_timestamp },
-        };
-        
-        ConsoleState.sessionData = recoveredData;
-        displaySessionData(recoveredData);
-        await saveSession(recoveredData);
-        log('Session recovered from backup!', 'success');
-      }
     }
     
   } catch (error) {
@@ -922,53 +861,29 @@ async function stopRecording() {
     updateRecordingUI(false);
     updateScriptConnectionUI('error');
     stopStatsPolling();
-    stopAutoBackup();
   }
 }
 
 async function sendSessionToWebapp(sessionData) {
   try {
-    // Apply stealth mode filtering if enabled
-    let filteredEvents = sessionData.events || [];
-    if (ConsoleState.config.stealthMode) {
-      console.log('[DEBUG] Stealth mode enabled, filtering events...');
-      const originalCount = filteredEvents.length;
-      filteredEvents = filteredEvents.filter(evt => {
-        // Filter out Ctrl, Alt, Shift, Meta key presses (modifier keys)
-        if (evt.type === 'keydown' || evt.type === 'keyup') {
-          const key = evt.key?.toLowerCase() || '';
-          const isModifierKey = ['control', 'ctrl', 'alt', 'shift', 'meta'].includes(key);
-          if (isModifierKey) {
-            return false; // Remove modifier key events
-          }
-        }
-        return true;
-      });
-      console.log(`[DEBUG] Stealth filter: ${originalCount} -> ${filteredEvents.length} events`);
-    }
-    
     const payload = {
       sessionId: sessionData.sessionId || `session_${Date.now()}`,
-      mode: sessionData.mode || ConsoleState.currentMode,
-      recordingType: sessionData.recordingType || 'training',
+      mode: ConsoleState.currentMode,
+      recordingType: 'training',
       duration: sessionData.duration || 0,
-      events: filteredEvents,
+      events: sessionData.events || [],
       markedElements: sessionData.markedElements || [],
       clickSequence: sessionData.clickSequence || [],
       typingPatterns: sessionData.typingPatterns || [],
-      patterns: sessionData.patterns || {},
-      fieldMappings: sessionData.fieldMappings || {},
-      automationCode: sessionData.automationCode || {},
       metadata: {
-        ...sessionData.metadata,
-        tabUrl: sessionData.url || sessionData.metadata?.url || window.location.href,
+        tabUrl: sessionData.url || window.location.href,
         recordedAt: new Date().toISOString(),
-        extensionVersion: '2.1.0',
+        extensionVersion: '2.0.0',
         config: ConsoleState.config
       }
     };
     
-    const result = await sendToWebapp('/training/upload', payload);
+    const result = await sendToWebapp('/training/sessions', payload);
     
     if (result.success) {
       return { 
@@ -1063,71 +978,10 @@ function updateRecordingUI(isRecording) {
 }
 
 // ============================================
-// STATS POLLING & AUTO-BACKUP
+// STATS POLLING
 // ============================================
 
 let statsInterval = null;
-let autoBackupInterval = null;
-let lastBackupEventCount = 0;
-const AUTO_BACKUP_INTERVAL_MS = 30000; // 30 seconds
-const AUTO_BACKUP_MIN_EVENTS = 50;     // Don't backup if less than 50 new events
-
-async function autoBackupSession() {
-  if (!ConsoleState.isRecording) return;
-  
-  const currentEvents = ConsoleState.eventCounts.events || 0;
-  const newEventsSinceBackup = currentEvents - lastBackupEventCount;
-  
-  // Skip if not enough new events
-  if (newEventsSinceBackup < AUTO_BACKUP_MIN_EVENTS) {
-    console.log('[AutoBackup] Skipping - only', newEventsSinceBackup, 'new events');
-    return;
-  }
-  
-  try {
-    console.log('[AutoBackup] Backing up session with', currentEvents, 'events...');
-    
-    // Get live events from background script
-    const liveEventsResponse = await chrome.runtime.sendMessage({ type: 'GET_LIVE_EVENTS' });
-    const liveEvents = liveEventsResponse?.events || [];
-    
-    const backupData = {
-      sessionId: `backup_${Date.now()}`,
-      timestamp: Date.now(),
-      mode: ConsoleState.currentMode,
-      eventCounts: ConsoleState.eventCounts,
-      liveEvents: liveEvents.slice(-500), // Keep last 500 events in backup
-      recordingTabId: ConsoleState.recordingTabId,
-    };
-    
-    // Store backup in chrome.storage.local
-    await chrome.storage.local.set({ 
-      'fmd_session_backup': backupData,
-      'fmd_backup_timestamp': Date.now()
-    });
-    
-    lastBackupEventCount = currentEvents;
-    log('Auto-backup saved: ' + currentEvents + ' events', 'info');
-    console.log('[AutoBackup] Backup complete');
-  } catch (error) {
-    console.error('[AutoBackup] Failed:', error);
-  }
-}
-
-function startAutoBackup() {
-  if (autoBackupInterval) clearInterval(autoBackupInterval);
-  lastBackupEventCount = 0;
-  
-  autoBackupInterval = setInterval(autoBackupSession, AUTO_BACKUP_INTERVAL_MS);
-  console.log('[AutoBackup] Started - backing up every', AUTO_BACKUP_INTERVAL_MS/1000, 'seconds');
-}
-
-function stopAutoBackup() {
-  if (autoBackupInterval) {
-    clearInterval(autoBackupInterval);
-    autoBackupInterval = null;
-  }
-}
 
 function startStatsPolling() {
   console.log('[DEBUG STATS] startStatsPolling called');
@@ -1160,22 +1014,13 @@ function startStatsPolling() {
         console.log('[DEBUG STATS] Status response:', response);
       }
       
-      // ONLY update counts if we got valid data (events > 0 or same as before)
-      // This prevents overwriting good counts with zeros from failed polls
       if (response?.counts) {
-        const newCounts = response.counts;
-        // Validate: only accept if new counts are >= current counts
-        // (events should only increase during recording, not decrease)
-        if (newCounts.events >= ConsoleState.eventCounts.events) {
-          ConsoleState.eventCounts = newCounts;
-          console.log('[DEBUG STATS] Updated counts:', newCounts);
-        } else {
-          console.warn('[DEBUG STATS] Rejected decreasing counts:', newCounts, 'current:', ConsoleState.eventCounts);
-        }
+        ConsoleState.eventCounts = response.counts;
         updateStats();
+        console.log('[DEBUG STATS] Updated counts:', response.counts);
       }
     } catch (error) {
-      // Tab might be closed or navigated away - don't reset counts
+      // Tab might be closed or navigated away
       console.warn('[DEBUG STATS] Stats polling error:', error);
     }
   }, 500);
@@ -1206,13 +1051,6 @@ function updateStats() {
   if (fillClicks) fillClicks.style.width = `${Math.min((counts.clicks / 50) * 100, 100)}%`;
   if (fillInputs) fillInputs.style.width = `${Math.min((counts.inputs / 30) * 100, 100)}%`;
   if (fillMarks) fillMarks.style.width = `${Math.min((counts.marks / 10) * 100, 100)}%`;
-  
-  // Update live indicator with actual event count
-  if (DOM.liveIndicator && ConsoleState.isRecording) {
-    const evtCount = counts.events || 0;
-    DOM.liveIndicator.textContent = evtCount > 0 ? `● LIVE (${evtCount})` : '● WAITING...';
-    DOM.liveIndicator.style.color = evtCount > 0 ? 'var(--success)' : 'var(--warning)';
-  }
   
   // Update minimized badge if collapsed
   if (DOM.expandBadge && ConsoleState.isRecording) {
@@ -1343,16 +1181,16 @@ async function uploadSessionData() {
   try {
     log('Uploading session to server...', 'info');
     
-    // Use sendSessionToWebapp which formats the payload correctly
-    const result = await sendSessionToWebapp(ConsoleState.sessionData);
+    const response = await fetch(`${ConsoleState.config.apiEndpoint}/training/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ConsoleState.sessionData)
+    });
     
-    if (result.success) {
-      log(`Session uploaded successfully: ID ${result.sessionId || 'N/A'}`, 'success');
-    } else if (result.queued) {
-      log('Session queued for upload when connected', 'warning');
-    } else {
-      log(`Upload failed: ${result.error || 'Unknown error'}`, 'error');
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    const result = await response.json();
+    log(`Session uploaded successfully: ID ${result.id || 'N/A'}`, 'success');
     
   } catch (error) {
     log(`Upload failed: ${error.message}`, 'error');
@@ -1377,8 +1215,8 @@ async function saveSession(sessionData) {
     ConsoleState.savedSessions.unshift(session);
     
     // Keep only last 20 sessions
-    if (ConsoleState.savedSessions.length > 100) {
-      ConsoleState.savedSessions = ConsoleState.savedSessions.slice(0, 100);
+    if (ConsoleState.savedSessions.length > 20) {
+      ConsoleState.savedSessions = ConsoleState.savedSessions.slice(0, 20);
     }
     
     await chrome.storage.local.set({ savedSessions: ConsoleState.savedSessions });
@@ -1744,22 +1582,17 @@ function startConnectionMonitoring() {
     }
   }, 10000); // Every 10 seconds
   
-  // Start heartbeat interval - sends to server every 30 seconds (reduced from 5 to avoid rate limiting)
+  // Start heartbeat interval - sends to server every 5 seconds
   // IMPORTANT: Always send heartbeat regardless of webappConnected state
   // The heartbeat IS what establishes connection, not the other way around
   heartbeatInterval = setInterval(async () => {
-    // Skip if we're in backoff period
-    if (ConsoleState.heartbeatBackoffUntil && Date.now() < ConsoleState.heartbeatBackoffUntil) {
-      console.log('[Console] Heartbeat skipped - in backoff period');
-      return;
-    }
     console.log('[Console] Heartbeat tick - sending heartbeat...');
     try {
       await sendHeartbeatToServer();
     } catch (e) {
       console.error('[Console] Heartbeat interval error:', e);
     }
-  }, 30000); // Changed from 5000 to 30000 (30 seconds) to avoid rate limiting
+  }, 5000);
   
   // Also send initial heartbeat immediately
   sendHeartbeatToServer().catch(e => console.error('[Console] Initial heartbeat error:', e));
@@ -1775,209 +1608,6 @@ function stopConnectionMonitoring() {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
-  }
-}
-
-/**
- * Sync auth token from webapp (dealersface.com) to extension storage
- * Tries multiple methods:
- * 1. Check if webapp-bridge already synced the token
- * 2. Try to send message to webapp tab to get token
- * 3. Check storage for previously synced token
- */
-async function syncAuthTokenFromWebapp() {
-  console.log('[Console] Syncing auth token from webapp...');
-  
-  try {
-    // First check if we already have a token synced
-    const existing = await chrome.storage.local.get(['fmd_admin_token', 'fmd_token_synced_at']);
-    if (existing.fmd_admin_token) {
-      const syncedAgo = existing.fmd_token_synced_at ? Date.now() - existing.fmd_token_synced_at : null;
-      console.log('[Console] Existing token found, synced', syncedAgo ? `${Math.round(syncedAgo/1000)}s ago` : 'unknown time ago');
-      
-      // If token was synced recently (within 5 minutes), use it
-      if (syncedAgo && syncedAgo < 5 * 60 * 1000) {
-        log('Auth token loaded from sync', 'success');
-        return true;
-      }
-    }
-    
-    // Try to find a webapp tab and get token from it
-    console.log('[Console] Looking for webapp tabs to sync token...');
-    const tabs = await chrome.tabs.query({
-      url: ['https://dealersface.com/*', 'https://www.dealersface.com/*', 'http://localhost:3000/*', 'http://localhost:5173/*']
-    });
-    
-    if (tabs.length > 0) {
-      console.log('[Console] Found', tabs.length, 'webapp tab(s), requesting token sync...');
-      
-      for (const tab of tabs) {
-        try {
-          const response = await chrome.tabs.sendMessage(tab.id, { type: 'SYNC_AUTH_TOKEN' });
-          if (response?.success) {
-            console.log('[Console] Token synced from webapp tab:', tab.id);
-            log('Auth token synced from webapp', 'success');
-            return true;
-          }
-        } catch (err) {
-          console.log('[Console] Tab', tab.id, 'did not respond:', err.message);
-        }
-      }
-    }
-    
-    // No webapp tabs or sync failed
-    if (existing.fmd_admin_token) {
-      console.log('[Console] Using existing token (may be stale)');
-      log('Using cached auth token', 'info');
-      updateAuthStatusUI(true, 'CACHED');
-      return true;
-    }
-    
-    log('No auth token - open dealersface.com and login', 'warning');
-    console.log('[Console] No auth token available');
-    updateAuthStatusUI(false, 'NOT FOUND');
-    return false;
-    
-  } catch (error) {
-    console.error('[Console] Error syncing auth token:', error);
-    updateAuthStatusUI(false, 'ERROR');
-    return false;
-  }
-}
-
-/**
- * Force sync auth token - tries harder including injecting script
- */
-async function forceSyncAuthToken() {
-  const authStatus = document.getElementById('auth-status');
-  const authText = document.getElementById('auth-text');
-  
-  if (authStatus) authStatus.style.borderColor = 'rgba(0,150,255,0.5)';
-  if (authText) authText.textContent = '⟳ SYNCING...';
-  
-  try {
-    // First try normal sync
-    console.log('[Console] Force sync: trying normal sync...');
-    
-    // Look for webapp tabs
-    const tabs = await chrome.tabs.query({
-      url: ['https://dealersface.com/*', 'https://www.dealersface.com/*', 'http://localhost:3000/*', 'http://localhost:5173/*']
-    });
-    
-    console.log('[Console] Force sync: found', tabs.length, 'webapp tab(s)');
-    
-    if (tabs.length === 0) {
-      log('No dealersface.com tabs open - please open the webapp', 'error');
-      updateAuthStatusUI(false, 'OPEN WEBAPP');
-      return false;
-    }
-    
-    // Try to inject webapp-bridge if it's not responding
-    for (const tab of tabs) {
-      try {
-        // First try direct message
-        console.log('[Console] Force sync: pinging tab', tab.id);
-        const response = await Promise.race([
-          chrome.tabs.sendMessage(tab.id, { type: 'GET_AUTH_TOKEN' }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
-        ]);
-        
-        console.log('[Console] Force sync: got response:', response);
-        
-        if (response?.accessToken) {
-          // Store the token directly
-          await chrome.storage.local.set({
-            fmd_admin_token: response.accessToken,
-            fmd_refresh_token: response.refreshToken,
-            fmd_user_id: response.userId,
-            fmd_token_synced_at: Date.now()
-          });
-          
-          log('Auth token synced successfully!', 'success');
-          updateAuthStatusUI(true, 'SYNCED');
-          return true;
-        }
-      } catch (err) {
-        console.log('[Console] Force sync: tab', tab.id, 'error:', err.message);
-        
-        // Try to inject the bridge script
-        if (err.message === 'timeout' || err.message.includes('Receiving end does not exist')) {
-          console.log('[Console] Force sync: injecting bridge script into tab', tab.id);
-          try {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['webapp-bridge.js']
-            });
-            
-            // Wait a moment for it to initialize
-            await new Promise(r => setTimeout(r, 500));
-            
-            // Try again
-            const retryResponse = await Promise.race([
-              chrome.tabs.sendMessage(tab.id, { type: 'GET_AUTH_TOKEN' }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
-            ]);
-            
-            console.log('[Console] Force sync: retry response:', retryResponse);
-            
-            if (retryResponse?.accessToken) {
-              await chrome.storage.local.set({
-                fmd_admin_token: retryResponse.accessToken,
-                fmd_refresh_token: retryResponse.refreshToken,
-                fmd_user_id: retryResponse.userId,
-                fmd_token_synced_at: Date.now()
-              });
-              
-              log('Auth token synced after script injection!', 'success');
-              updateAuthStatusUI(true, 'SYNCED');
-              return true;
-            }
-          } catch (injectErr) {
-            console.error('[Console] Force sync: inject error:', injectErr);
-          }
-        }
-      }
-    }
-    
-    // Check if we have a cached token
-    const cached = await chrome.storage.local.get('fmd_admin_token');
-    if (cached.fmd_admin_token) {
-      log('Using cached token (sync failed)', 'warning');
-      updateAuthStatusUI(true, 'CACHED');
-      return true;
-    }
-    
-    log('Token sync failed - make sure you are logged in to dealersface.com', 'error');
-    updateAuthStatusUI(false, 'FAILED');
-    return false;
-    
-  } catch (error) {
-    console.error('[Console] Force sync error:', error);
-    log(`Token sync error: ${error.message}`, 'error');
-    updateAuthStatusUI(false, 'ERROR');
-    return false;
-  }
-}
-
-/**
- * Update the auth status UI in CONFIG tab
- */
-function updateAuthStatusUI(hasToken, status) {
-  const authStatus = document.getElementById('auth-status');
-  const authText = document.getElementById('auth-text');
-  
-  if (!authStatus || !authText) return;
-  
-  if (hasToken) {
-    authStatus.style.borderColor = 'rgba(0,255,100,0.5)';
-    authStatus.style.background = 'rgba(0,255,100,0.1)';
-    authText.style.color = '#00ff64';
-    authText.textContent = `✓ AUTH: ${status}`;
-  } else {
-    authStatus.style.borderColor = 'rgba(255,50,50,0.5)';
-    authStatus.style.background = 'rgba(255,50,50,0.1)';
-    authText.style.color = '#ff5050';
-    authText.textContent = `✗ AUTH: ${status}`;
   }
 }
 
@@ -2004,8 +1634,8 @@ async function checkWebappConnection() {
       ConsoleState.lastHeartbeat = Date.now();
       updateConnectionUI(true);
       
-      // NOTE: Don't send heartbeat here - heartbeatInterval handles it
-      // This prevents double-sending which causes rate limiting
+      // Send heartbeat to training console endpoint
+      await sendHeartbeatToServer();
       
       return true;
     }
@@ -2029,13 +1659,6 @@ async function checkWebappConnection() {
  */
 async function sendHeartbeatToServer() {
   try {
-    // Check if we're still in backoff period
-    if (ConsoleState.heartbeatBackoffUntil && Date.now() < ConsoleState.heartbeatBackoffUntil) {
-      const remainingMs = ConsoleState.heartbeatBackoffUntil - Date.now();
-      console.log(`[Console] Heartbeat skipped - in backoff for ${Math.ceil(remainingMs/1000)}s more`);
-      return;
-    }
-    
     const heartbeatUrl = `${ConsoleState.config.apiEndpoint}/training/console/heartbeat`;
     console.log('[Console] Sending heartbeat to:', heartbeatUrl);
     
@@ -2061,7 +1684,7 @@ async function sendHeartbeatToServer() {
     console.log('[Console] Heartbeat data:', JSON.stringify(heartbeatData));
     
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), 3000);
     
     const response = await fetch(heartbeatUrl, {
       method: 'POST',
@@ -2077,10 +1700,6 @@ async function sendHeartbeatToServer() {
     if (response.ok) {
       const data = await response.json();
       console.log('[Console] Heartbeat response data:', data);
-      // Reset backoff on success
-      ConsoleState.heartbeatFailCount = 0;
-      ConsoleState.heartbeatBackoffUntil = null;
-      
       if (data.success) {
         // Update UI to show fully connected (server received heartbeat)
         const webappStatus = document.getElementById('webapp-status');
@@ -2092,33 +1711,13 @@ async function sendHeartbeatToServer() {
         ConsoleState.webappConnected = true;
         ConsoleState.lastHeartbeat = Date.now();
       }
-    } else if (response.status === 429) {
-      // Rate limited - implement exponential backoff
-      ConsoleState.heartbeatFailCount++;
-      const backoffSeconds = Math.min(60, 30 * Math.pow(2, ConsoleState.heartbeatFailCount - 1)); // 30s, 60s, capped at 60s
-      ConsoleState.heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
-      console.warn(`[Console] Rate limited (429) - backing off for ${backoffSeconds}s`);
-      log(`Heartbeat rate limited - backing off ${backoffSeconds}s`, 'warning');
     } else {
       const errorText = await response.text();
       console.error('[Console] Heartbeat failed:', response.status, errorText);
-      // Increment fail count but use shorter backoff for non-429 errors
-      ConsoleState.heartbeatFailCount++;
-      if (ConsoleState.heartbeatFailCount >= 3) {
-        const backoffSeconds = 15;
-        ConsoleState.heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
-        console.warn(`[Console] Multiple failures - backing off for ${backoffSeconds}s`);
-      }
     }
   } catch (error) {
     // Log error but don't crash
     console.error('[Console] Heartbeat error:', error.message);
-    ConsoleState.heartbeatFailCount++;
-    // Backoff on network errors too
-    if (ConsoleState.heartbeatFailCount >= 2) {
-      const backoffSeconds = 20;
-      ConsoleState.heartbeatBackoffUntil = Date.now() + (backoffSeconds * 1000);
-    }
   }
 }
 
@@ -2189,63 +1788,32 @@ function updateScriptConnectionUI(status) {
 
 async function sendToWebapp(endpoint, data) {
   console.log('[DEBUG SEND] sendToWebapp called:', endpoint, 'webappConnected:', ConsoleState.webappConnected);
-  
-  // /training/upload is a PUBLIC endpoint - doesn't require auth
-  const isPublicEndpoint = endpoint === '/training/upload' || 
-                           endpoint === '/training/console/heartbeat' ||
-                           endpoint === '/training/console/log';
-  
-  // Check for token first - don't require webappConnected if we have a valid token
-  const tokenCheck = await chrome.storage.local.get('fmd_admin_token');
-  const hasToken = !!tokenCheck.fmd_admin_token;
-  console.log('[DEBUG SEND] hasToken:', hasToken, 'isPublicEndpoint:', isPublicEndpoint);
-  
-  // For public endpoints, we can proceed even without token
-  if (!isPublicEndpoint && !hasToken && !ConsoleState.webappConnected) {
-    log('No auth token and webapp not connected, queueing data locally', 'warning');
-    console.log('[DEBUG SEND] No token and webapp not connected, queueing locally');
+  if (!ConsoleState.webappConnected) {
+    log('Webapp not connected, queueing data locally', 'warning');
+    console.log('[DEBUG SEND] Webapp not connected, queueing locally');
     await saveLocalQueue(data);
     return { success: false, queued: true };
   }
   
   try {
-    // Get auth token (optional for public endpoints)
-    let tokenResult = await chrome.storage.local.get('fmd_admin_token');
-    let token = tokenResult.fmd_admin_token;
+    // Get auth token
+    const tokenResult = await chrome.storage.local.get('fmd_admin_token');
+    const token = tokenResult.fmd_admin_token;
     console.log('[DEBUG SEND] Token found:', !!token);
     
-    // If no token for non-public endpoints, try to sync from webapp
-    if (!token && !isPublicEndpoint) {
-      log('No auth token cached - trying to sync from webapp...', 'warning');
-      console.log('[DEBUG SEND] Attempting auth token sync...');
-      const synced = await syncAuthTokenFromWebapp();
-      if (synced) {
-        tokenResult = await chrome.storage.local.get('fmd_admin_token');
-        token = tokenResult.fmd_admin_token;
-        console.log('[DEBUG SEND] Token after sync:', !!token);
-      }
-    }
-    
-    // For non-public endpoints, require token
-    if (!token && !isPublicEndpoint) {
-      log('No auth token - please login at dealersface.com', 'error');
-      console.log('[DEBUG SEND] No auth token after sync attempt!');
+    if (!token) {
+      log('No auth token - please login to webapp first', 'error');
+      console.log('[DEBUG SEND] No auth token!');
       return { success: false, error: 'Not authenticated' };
     }
     
     console.log('[DEBUG SEND] Sending to:', `${ConsoleState.config.apiEndpoint}${endpoint}`);
-    
-    // Build headers - include token only if available
-    const headers = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
     const response = await fetch(`${ConsoleState.config.apiEndpoint}${endpoint}`, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify(data)
     });
     
@@ -2254,13 +1822,6 @@ async function sendToWebapp(endpoint, data) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.log('[DEBUG SEND] Error response:', errorData);
-      
-      // If 401/403, clear cached token and suggest re-login
-      if (response.status === 401 || response.status === 403) {
-        await chrome.storage.local.remove(['fmd_admin_token', 'fmd_token_synced_at']);
-        log('Auth token expired - please refresh dealersface.com and try again', 'error');
-      }
-      
       throw new Error(errorData.error || `HTTP ${response.status}`);
     }
     
@@ -2306,7 +1867,7 @@ async function syncPendingUploads() {
     
     const synced = [];
     for (const item of queue) {
-      const sendResult = await sendToWebapp('/training/upload', item);
+      const sendResult = await sendToWebapp('/training/sessions', item);
       if (sendResult.success) {
         synced.push(item);
       }
@@ -2331,17 +1892,15 @@ async function syncPendingUploads() {
 function handleBackgroundMessage(message, sender, sendResponse) {
   switch (message.type) {
     case 'EVENT_RECORDED':
-      // Only accept increasing event counts (events can't decrease during recording)
-      if (message.counts && message.counts.events >= ConsoleState.eventCounts.events) {
+      if (message.counts) {
         ConsoleState.eventCounts = message.counts;
         updateStats();
-        console.log('[MSG] EVENT_RECORDED accepted:', message.counts);
       }
       break;
       
     case 'RECORDING_STATUS_UPDATE':
-      if (message.status?.counts && message.status.counts.events >= ConsoleState.eventCounts.events) {
-        ConsoleState.eventCounts = message.status.counts;
+      if (message.status) {
+        ConsoleState.eventCounts = message.status.counts || ConsoleState.eventCounts;
         updateStats();
       }
       break;
@@ -2356,12 +1915,6 @@ function handleBackgroundMessage(message, sender, sendResponse) {
       
     case 'RECORDING_ERROR':
       log(`Recording error: ${message.error}`, 'error');
-      break;
-      
-    case 'TRIGGER_PUBLISH':
-      // Publish button was pressed from Ctrl grid overlay
-      log('Publish triggered from overlay', 'info');
-      uploadSessionData();
       break;
   }
   

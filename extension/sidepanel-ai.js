@@ -124,8 +124,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateUSMToggleUI();
     
     // Check authentication state
-    const response = await sendMessage({ type: 'GET_AUTH_STATE' });
-    authState = response.data;
+    // MODIFIED: Added timeout to prevent infinite loading state
+    try {
+      const response = await Promise.race([
+        sendMessage({ type: 'GET_AUTH_STATE' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Auth check timeout')), 5000))
+      ]);
+      authState = response.data;
+    } catch (e) {
+      console.warn('Auth check timed out or failed, assuming logged out:', e);
+      authState = { isAuthenticated: false };
+    }
+    
+    // Fallback if data is missing
+    if (!authState) authState = { isAuthenticated: false };
     
     if (authState?.isAuthenticated) {
       await loadDashboard();
