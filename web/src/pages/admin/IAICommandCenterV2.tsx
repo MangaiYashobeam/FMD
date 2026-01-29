@@ -460,23 +460,6 @@ function SoldierCard({
     
     return { pct: 5, status: 'standby', label: 'STANDBY' };
   };
-    if (soldier.status === 'OFFLINE') {
-      return { pct: 0, status: 'offline', label: 'OFFLINE' };
-    }
-    if (soldier.status === 'IDLE') {
-      return { pct: 15, status: 'idle', label: 'IDLE' };
-    }
-    // If completed tasks
-    if (soldier.tasksCompleted > 0 && soldier.tasksFailed === 0) {
-      return { pct: 100, status: 'complete', label: 'COMPLETE' };
-    }
-    // Mixed results - calculate based on success rate
-    if (soldier.successRate !== null) {
-      return { pct: Math.round(soldier.successRate), status: soldier.successRate >= 70 ? 'good' : soldier.successRate >= 40 ? 'warning' : 'error', label: `${soldier.successRate.toFixed(0)}%` };
-    }
-    // Ready state
-    return { pct: 20, status: 'ready', label: 'READY' };
-  };
 
   const progress = calculateProgress();
 
