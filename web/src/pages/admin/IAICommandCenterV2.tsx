@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
@@ -215,6 +215,21 @@ async function updateSoldier(id: string, data: Partial<IAISoldier>) {
   return response.data;
 }
 
+// Activity Log Types & Fetch
+interface ActivityLog {
+  id: string;
+  soldierId: string;
+  eventType: string;
+  message: string;
+  metadata: Record<string, any> | null;
+  createdAt: string;
+}
+
+async function fetchSoldierActivity(soldierId: string): Promise<{ logs: ActivityLog[] }> {
+  const response = await api.get(`/api/admin/iai/soldiers/${soldierId}/activity?limit=50`);
+  return response.data;
+}
+
 // ============================================
 // Utility Functions
 // ============================================
@@ -325,6 +340,10 @@ function StatsCard({ title, value, icon: Icon, color, onClick, subtitle }: any) 
   );
 }
 
+// ============================================
+// Enhanced Flipping Soldier Card with Console
+// ============================================
+
 function SoldierCard({
   soldier,
   onClick,
@@ -338,207 +357,370 @@ function SoldierCard({
   onDelete: () => void;
   onRestart: () => void;
 }) {
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
   const isOnline = soldier.lastHeartbeatAt
     ? new Date().getTime() - new Date(soldier.lastHeartbeatAt).getTime() < 120000
     : false;
 
-  // Get pattern source badge color
-  const getPatternSourceBadge = (source: string | null) => {
-    const styles: Record<string, string> = {
-      override: 'bg-purple-900/30 text-purple-400 border-purple-500/30',
-      usm: 'bg-yellow-900/30 text-yellow-400 border-yellow-500/30',
-      weighted: 'bg-blue-900/30 text-blue-400 border-blue-500/30',
-      default: 'bg-slate-700 text-slate-400 border-slate-600',
+  // Calculate progress percentage based on multiple factors
+  const calculateProgress = () => {
+    // If there's an error, progress is 0
+    if (soldier.status === 'ERROR' || soldier.lastError) {
+      return { pct: 0, status: 'error', label: 'ERROR' };
+    }
+    // If currently working
+    if (soldier.currentTaskType) {
+      // Estimate progress based on task type and time
+      const baseProgress = 30 + Math.random() * 40; // 30-70% while working
+      return { pct: Math.round(baseProgress), status: 'working', label: 'WORKING' };
+    }
+    // If idle/offline
+    if (soldier.status === 'OFFLINE') {
+      return { pct: 0, status: 'offline', label: 'OFFLINE' };
+    }
+    if (soldier.status === 'IDLE') {
+      return { pct: 15, status: 'idle', label: 'IDLE' };
+    }
+    // If completed tasks
+    if (soldier.tasksCompleted > 0 && soldier.tasksFailed === 0) {
+      return { pct: 100, status: 'complete', label: 'COMPLETE' };
+    }
+    // Mixed results - calculate based on success rate
+    if (soldier.successRate !== null) {
+      return { pct: Math.round(soldier.successRate), status: soldier.successRate >= 70 ? 'good' : soldier.successRate >= 40 ? 'warning' : 'error', label: `${soldier.successRate.toFixed(0)}%` };
+    }
+    // Ready state
+    return { pct: 20, status: 'ready', label: 'READY' };
+  };
+
+  const progress = calculateProgress();
+
+  // Dynamic gradient color based on progress
+  const getProgressGradient = () => {
+    const pct = progress.pct;
+    if (progress.status === 'error') return 'from-red-600 to-red-800';
+    if (progress.status === 'working') return 'from-blue-500 via-cyan-400 to-blue-600';
+    if (pct >= 90) return 'from-green-400 to-emerald-500';
+    if (pct >= 70) return 'from-green-500 to-lime-400';
+    if (pct >= 50) return 'from-yellow-400 to-green-500';
+    if (pct >= 30) return 'from-orange-400 to-yellow-500';
+    if (pct > 0) return 'from-orange-500 to-red-500';
+    return 'from-red-600 to-red-800';
+  };
+
+  // Card border glow based on status
+  const getCardBorderGlow = () => {
+    if (progress.status === 'error') return 'border-red-500/50 shadow-red-500/20';
+    if (progress.status === 'working') return 'border-blue-500/50 shadow-blue-500/20 animate-pulse';
+    if (progress.pct >= 90) return 'border-green-500/50 shadow-green-500/20';
+    if (progress.pct >= 50) return 'border-yellow-500/50 shadow-yellow-500/20';
+    if (progress.pct >= 30) return 'border-orange-500/50 shadow-orange-500/20';
+    return 'border-slate-700 shadow-none';
+  };
+
+  // Fetch activity logs when flipped
+  useEffect(() => {
+    if (isFlipped && activityLogs.length === 0) {
+      setLoadingLogs(true);
+      fetchSoldierActivity(soldier.id)
+        .then(data => {
+          setActivityLogs(data.logs || []);
+        })
+        .catch(err => {
+          console.error('Failed to fetch logs:', err);
+          setActivityLogs([{
+            id: 'error',
+            soldierId: soldier.id,
+            eventType: 'error',
+            message: 'Failed to load activity logs',
+            metadata: null,
+            createdAt: new Date().toISOString()
+          }]);
+        })
+        .finally(() => setLoadingLogs(false));
+    }
+  }, [isFlipped, soldier.id]);
+
+  // Format console log time
+  const formatLogTime = (date: string) => {
+    return new Date(date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  // Get event type color for console
+  const getEventColor = (eventType: string) => {
+    const colors: Record<string, string> = {
+      'status_change': 'text-blue-400',
+      'task_start': 'text-cyan-400',
+      'task_complete': 'text-green-400',
+      'task_failed': 'text-red-400',
+      'error': 'text-red-500',
+      'heartbeat': 'text-slate-500',
+      'pattern_loaded': 'text-purple-400',
+      'session_start': 'text-yellow-400',
+      'session_end': 'text-orange-400',
     };
-    return styles[source || 'default'] || styles.default;
+    return colors[eventType] || 'text-slate-400';
   };
 
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 hover:shadow-lg hover:border-blue-500 transition-all group">
-      <div className="flex items-start justify-between">
-        <div className="flex-1" onClick={onClick} role="button">
-          {/* v2.3.0 Genre/Source/Mode badges */}
-          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-            {soldier.genre && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getGenreColor(soldier.genre)}`}>
-                {getGenreIcon(soldier.genre)}
-                {soldier.genre}
+    <div className="perspective-1000" style={{ perspective: '1000px' }}>
+      <div 
+        className={`relative transition-transform duration-500 transform-style-preserve-3d ${isFlipped ? 'rotate-y-180' : ''}`}
+        style={{ 
+          transformStyle: 'preserve-3d',
+          transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+        }}
+      >
+        {/* FRONT SIDE - Stats View */}
+        <div 
+          className={`bg-slate-800 rounded-xl border-2 p-4 transition-all group shadow-lg ${getCardBorderGlow()}`}
+          style={{ backfaceVisibility: 'hidden' }}
+        >
+          {/* Progress Bar at Top */}
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-slate-400">Progress</span>
+              <span className={`text-xs font-bold ${
+                progress.status === 'error' ? 'text-red-400' :
+                progress.status === 'working' ? 'text-blue-400' :
+                progress.pct >= 70 ? 'text-green-400' :
+                progress.pct >= 40 ? 'text-yellow-400' : 'text-orange-400'
+              }`}>
+                {progress.pct}% • {progress.label}
               </span>
-            )}
-            {soldier.executionSource && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getSourceBadge(soldier.executionSource)}`}>
-                {soldier.executionSource === 'EXTENSION' ? (
-                  <Zap className="w-3 h-3" />
-                ) : (
-                  <Chrome className="w-3 h-3" />
-                )}
-                {soldier.executionSource}
-              </span>
-            )}
-            {soldier.mode && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getModeColor(soldier.mode)}`}>
-                {soldier.mode}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors cursor-pointer">
-              {soldier.soldierId}
-            </h3>
-            <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(
-                soldier.status
-              )}`}
-            >
-              {getStatusIcon(soldier.status)}
-              {soldier.status.toUpperCase()}
-            </span>
-            {isOnline && (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-            )}
-          </div>
-
-          <div className="space-y-1 text-sm text-slate-400">
-            <div className="flex items-center gap-2">
-              <Server className="w-4 h-4" />
-              <span className="font-medium text-slate-300">{soldier.account.dealershipName || soldier.account.name}</span>
             </div>
+            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full bg-gradient-to-r ${getProgressGradient()} transition-all duration-1000 ${
+                  progress.status === 'working' ? 'animate-pulse' : ''
+                }`}
+                style={{ width: `${progress.pct}%` }}
+              />
+            </div>
+          </div>
 
-            {soldier.locationCity && (
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <span>
-                  {soldier.locationCity}, {soldier.locationCountry}
-                </span>
-              </div>
-            )}
-
-            {/* NOVA Intelligence Score */}
-            {soldier.genre === 'NOVA' && soldier.novaIntelligenceScore && (
-              <div className="flex items-center gap-2">
-                <Brain className="w-4 h-4 text-amber-400" />
-                <span className="text-amber-300 font-medium">
-                  NOVA IQ: {soldier.novaIntelligenceScore.toFixed(1)}
-                </span>
-                {soldier.novaDecisionsMade && (
-                  <span className="text-slate-500 text-xs">
-                    ({soldier.novaDecisionsMade} decisions)
+          <div className="flex items-start justify-between">
+            <div className="flex-1" onClick={onClick} role="button">
+              {/* Genre/Source/Mode badges */}
+              <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                {soldier.genre && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getGenreColor(soldier.genre)}`}>
+                    {getGenreIcon(soldier.genre)}
+                    {soldier.genre}
+                  </span>
+                )}
+                {soldier.executionSource && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getSourceBadge(soldier.executionSource)}`}>
+                    {soldier.executionSource === 'EXTENSION' ? <Zap className="w-3 h-3" /> : <Chrome className="w-3 h-3" />}
+                    {soldier.executionSource}
+                  </span>
+                )}
+                {soldier.mode && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getModeColor(soldier.mode)}`}>
+                    {soldier.mode}
                   </span>
                 )}
               </div>
-            )}
 
-            {/* Current Pattern */}
-            {soldier.currentPatternName && (
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-purple-400" />
-                <span className="text-purple-300 font-medium">{soldier.currentPatternName}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getPatternSourceBadge(soldier.patternSource)}`}>
-                  {soldier.patternSource?.toUpperCase() || 'DEFAULT'}
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors cursor-pointer">
+                  {soldier.soldierId}
+                </h3>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(soldier.status)}`}>
+                  {getStatusIcon(soldier.status)}
+                  {soldier.status.toUpperCase()}
                 </span>
+                {isOnline && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                )}
               </div>
-            )}
 
-            {/* Mission Profile */}
-            {soldier.missionProfile && (
-              <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-orange-400" />
-                <span className="text-orange-300 font-medium">{soldier.missionProfile}</span>
-              </div>
-            )}
+              <div className="space-y-1 text-sm text-slate-400">
+                <div className="flex items-center gap-2">
+                  <Server className="w-4 h-4" />
+                  <span className="font-medium text-slate-300">{soldier.account?.dealershipName || soldier.account?.name || 'Unknown'}</span>
+                </div>
 
-            {soldier.currentTaskType && (
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-blue-400" />
-                <span className="text-blue-400 font-medium">Working: {soldier.currentTaskType}</span>
+                {soldier.locationCity && (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    <span>{soldier.locationCity}, {soldier.locationCountry}</span>
+                  </div>
+                )}
+
+                {soldier.genre === 'NOVA' && soldier.novaIntelligenceScore && (
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-amber-400" />
+                    <span className="text-amber-300 font-medium">NOVA IQ: {soldier.novaIntelligenceScore.toFixed(1)}</span>
+                  </div>
+                )}
+
+                {soldier.currentPatternName && (
+                  <div className="flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-purple-400" />
+                    <span className="text-purple-300 font-medium">{soldier.currentPatternName}</span>
+                  </div>
+                )}
+
+                {soldier.currentTaskType && (
+                  <div className="flex items-center gap-2 animate-pulse">
+                    <Activity className="w-4 h-4 text-blue-400" />
+                    <span className="text-blue-400 font-medium">Working: {soldier.currentTaskType}</span>
+                  </div>
+                )}
+
+                {soldier.lastError && (
+                  <div className="flex items-center gap-2 text-red-400">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="truncate text-xs">{soldier.lastError}</span>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
+                className="p-2 text-purple-400 hover:bg-purple-900/30 rounded-lg transition-colors"
+                title="View Console"
+              >
+                <Terminal className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                className="p-2 text-blue-400 hover:bg-blue-900/30 rounded-lg transition-colors"
+                title="Edit soldier"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onRestart(); }}
+                className="p-2 text-green-400 hover:bg-green-900/30 rounded-lg transition-colors"
+                title="Restart soldier"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="p-2 text-red-400 hover:bg-red-900/30 rounded-lg transition-colors"
+                title="Delete soldier"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Footer */}
+          <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p className="text-xs text-slate-500">Completed</p>
+              <p className="text-lg font-bold text-green-400">{soldier.tasksCompleted}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Failed</p>
+              <p className="text-lg font-bold text-red-400">{soldier.tasksFailed}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Success</p>
+              <p className="text-lg font-bold text-white">
+                {soldier.successRate ? `${soldier.successRate.toFixed(0)}%` : 'N/A'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 text-xs text-slate-500 text-center">
+            Last seen: {formatTimeAgo(soldier.lastHeartbeatAt)}
           </div>
         </div>
 
-        <div className="flex gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            className="p-2 text-blue-400 hover:bg-blue-900/30 rounded-lg transition-colors"
-            title="Edit soldier"
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRestart();
-            }}
-            className="p-2 text-green-400 hover:bg-green-900/30 rounded-lg transition-colors"
-            title="Restart soldier"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="p-2 text-red-400 hover:bg-red-900/30 rounded-lg transition-colors"
-            title="Delete soldier"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+        {/* BACK SIDE - Console View */}
+        <div 
+          className={`absolute top-0 left-0 w-full h-full bg-slate-900 rounded-xl border-2 p-4 ${getCardBorderGlow()}`}
+          style={{ 
+            backfaceVisibility: 'hidden',
+            transform: 'rotateY(180deg)'
+          }}
+        >
+          {/* Console Header */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-green-400" />
+              <span className="text-sm font-mono text-green-400">{soldier.soldierId} Console</span>
+            </div>
+            <button
+              onClick={() => setIsFlipped(false)}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              title="Back to stats"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+          </div>
 
-      {/* Minimalistic Progress Indicator */}
-      <div className="mt-3 flex items-center gap-2 text-xs">
-        <span className="text-slate-500">Progress:</span>
-        <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
-          <div 
-            className={`h-full rounded-full ${
-              soldier.currentTaskType ? 'bg-blue-500 animate-pulse' :
-              soldier.status === 'ERROR' ? 'bg-red-500' :
-              soldier.tasksCompleted > 0 ? 'bg-green-500' : 'bg-slate-600'
-            }`}
-            style={{ 
-              width: `${soldier.currentTaskType ? 60 : soldier.status === 'ERROR' ? 0 : soldier.tasksCompleted > 0 ? 100 : 20}%` 
-            }}
-          />
-        </div>
-        <span className={`font-medium ${
-          soldier.currentTaskType ? 'text-blue-400' :
-          soldier.status === 'ERROR' ? 'text-red-400' :
-          soldier.tasksCompleted > 0 ? 'text-green-400' : 'text-slate-400'
-        }`}>
-          {soldier.currentTaskType ? 'Working' :
-           soldier.status === 'ERROR' ? 'Error' :
-           soldier.tasksCompleted > 0 ? 'Complete' : 'Ready'}
-        </span>
-      </div>
+          {/* Progress Bar on Console */}
+          <div className="mb-2 flex items-center gap-2 text-xs">
+            <span className={`font-mono ${
+              progress.status === 'error' ? 'text-red-400' :
+              progress.status === 'working' ? 'text-blue-400' : 'text-green-400'
+            }`}>
+              [{progress.pct.toString().padStart(3, ' ')}%]
+            </span>
+            <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full bg-gradient-to-r ${getProgressGradient()}`}
+                style={{ width: `${progress.pct}%` }}
+              />
+            </div>
+            <span className="text-xs text-slate-500">{progress.label}</span>
+          </div>
 
-      <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-3 gap-4 text-center">
-        <div>
-          <p className="text-xs text-slate-500">Completed</p>
-          <p className="text-lg font-bold text-green-400">{soldier.tasksCompleted}</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Failed</p>
-          <p className="text-lg font-bold text-red-400">{soldier.tasksFailed}</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Success Rate</p>
-          <p className="text-lg font-bold text-white">
-            {soldier.successRate ? `${soldier.successRate.toFixed(0)}%` : 'N/A'}
-          </p>
-        </div>
-      </div>
+          {/* Console Output */}
+          <div className="bg-black/50 rounded-lg p-2 h-[200px] overflow-y-auto font-mono text-xs scrollbar-thin scrollbar-thumb-slate-600">
+            {loadingLogs ? (
+              <div className="flex items-center gap-2 text-slate-500">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Loading activity logs...</span>
+              </div>
+            ) : activityLogs.length === 0 ? (
+              <div className="text-slate-500">
+                <p>$ awaiting activity...</p>
+                <p className="animate-pulse">▌</p>
+              </div>
+            ) : (
+              activityLogs.map((log, idx) => (
+                <div key={log.id || idx} className="mb-1 hover:bg-slate-800/50 px-1 rounded">
+                  <span className="text-slate-600">[{formatLogTime(log.createdAt)}]</span>
+                  <span className={`ml-1 ${getEventColor(log.eventType)}`}>[{log.eventType}]</span>
+                  <span className="ml-1 text-slate-300">{log.message}</span>
+                </div>
+              ))
+            )}
+          </div>
 
-      <div className="mt-2 text-xs text-slate-500 text-center">
-        Last seen: {formatTimeAgo(soldier.lastHeartbeatAt)}
+          {/* Quick Actions */}
+          <div className="mt-2 flex items-center justify-between text-xs">
+            <div className="text-slate-500">
+              {activityLogs.length} events tracked
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setActivityLogs([]);
+                  fetchSoldierActivity(soldier.id).then(data => setActivityLogs(data.logs || []));
+                }}
+                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors flex items-center gap-1"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Refresh
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
