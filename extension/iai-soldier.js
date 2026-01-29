@@ -436,27 +436,74 @@ async function executeWorkflowStep(step, vehicleData, stealth) {
 
 /**
  * Find element for a workflow step
+ * Handles both new pattern format (step.element.selectors) and legacy format (step.selector)
  */
 async function findElementForStep(step) {
-  // Try selector first
-  if (step.selector) {
+  // Extract element info - support both new and legacy formats
+  const element = step.element || {};
+  const selectors = element.selectors || step.selectors || (step.selector ? [step.selector] : []);
+  const ariaLabel = element.ariaLabel || step.ariaLabel;
+  
+  // Try each selector in order
+  if (Array.isArray(selectors)) {
+    for (const selector of selectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el && isVisible(el)) {
+          console.log(`[IAI] ✓ Found element with selector: ${selector}`);
+          return el;
+        }
+      } catch (e) { /* invalid selector - continue */ }
+    }
+  } else if (typeof selectors === 'string') {
+    // Handle case where selectors is a single string
     try {
-      const el = document.querySelector(step.selector);
-      if (el && isVisible(el)) return el;
+      const el = document.querySelector(selectors);
+      if (el && isVisible(el)) {
+        console.log(`[IAI] ✓ Found element with selector: ${selectors}`);
+        return el;
+      }
     } catch (e) { /* invalid selector */ }
+  }
+  
+  // Try aria-label from element data
+  if (ariaLabel) {
+    // Exact match
+    let el = document.querySelector(`[aria-label="${ariaLabel}"]`);
+    if (el && isVisible(el)) {
+      console.log(`[IAI] ✓ Found element with aria-label: ${ariaLabel}`);
+      return el;
+    }
+    // Partial match
+    el = document.querySelector(`[aria-label*="${ariaLabel}"]`);
+    if (el && isVisible(el)) {
+      console.log(`[IAI] ✓ Found element with partial aria-label: ${ariaLabel}`);
+      return el;
+    }
   }
   
   // Try label with C() function
   if (step.label) {
     const el = C('label', step.label) || C('span', step.label) || C('div', step.label);
-    if (el) return el;
+    if (el) {
+      console.log(`[IAI] ✓ Found element with label: ${step.label}`);
+      return el;
+    }
   }
   
-  // Try aria-label
-  if (step.ariaLabel) {
-    const el = document.querySelector(`[aria-label="${step.ariaLabel}"]`) ||
-               document.querySelector(`[aria-label*="${step.ariaLabel}"]`);
-    if (el) return el;
+  // Try className-based search if we have className from element
+  if (element.className) {
+    // Take first few classes for a more reliable match
+    const classMatch = element.className.split(' ').slice(0, 3).join('.');
+    if (classMatch) {
+      try {
+        const el = document.querySelector(`.${classMatch}`);
+        if (el && isVisible(el)) {
+          console.log(`[IAI] ✓ Found element with class pattern: ${classMatch}`);
+          return el;
+        }
+      } catch (e) { /* invalid selector */ }
+    }
   }
   
   // Try field selectors from injection
@@ -465,11 +512,15 @@ async function findElementForStep(step) {
     if (fieldSelector.primary) {
       try {
         const el = document.querySelector(fieldSelector.primary);
-        if (el) return el;
+        if (el) {
+          console.log(`[IAI] ✓ Found element with field selector for: ${step.fieldType}`);
+          return el;
+        }
       } catch (e) { /* invalid selector */ }
     }
   }
   
+  console.log(`[IAI] ✗ Element not found for step: ${step.fieldType || step.type || 'unknown'}`);
   return null;
 }
 
