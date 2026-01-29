@@ -144,7 +144,8 @@ app.use(['/api/extension', '/api/iai', '/api/worker/iai', '/api/green'], (req, r
   
   // Handle preflight OPTIONS requests immediately
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    res.sendStatus(200);
+    return;
   }
   next();
 });
