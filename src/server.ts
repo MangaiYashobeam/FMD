@@ -54,6 +54,9 @@ import { iipcService } from '@/services/iipc.service';
 import { iipcCheck } from '@/middleware/iipc';
 import iipcRoutes from '@/routes/iipc.routes';
 import postingRoutes from '@/routes/posting.routes';
+import greenRouteRoutes from '@/routes/green-route.routes';
+import iaiRoutes from '@/routes/iai.routes';
+import extensionRoutes from '@/routes/extension.routes';
 import { autoPostService } from '@/services/autopost.service';
 import sessionTracker, { 
   trackUserSession, 
@@ -121,6 +124,33 @@ app.use(express.static(webDistPath, {
 
 // Cookie parser for visitor fingerprinting
 app.use(cookieParser());
+
+// ============================================
+// VITAL ORGANS - Extension Heartbeat/IAI Routes
+// These MUST run BEFORE security middleware (WAF/Rate Limits)
+// so that Soldiers can report status even during lockdowns
+// ============================================
+console.log('🫀 Mounting Vital Organs (Extension/IAI bypass routes)...');
+
+// Body parsing for vital organs only
+app.use('/api/extension/iai', express.json({ limit: '1mb' }));
+app.use('/api/green', express.json({ limit: '1mb' }));
+
+// Mount Green Route (bypasses WAF for verified ecosystem clients)
+app.use('/api/green', greenRouteRoutes);
+
+// Mount IAI Extension routes BEFORE WAF
+// These are authenticated via JWT in the routes themselves
+app.use('/api/extension/iai', iaiRoutes);
+
+// Extension status/tasks/heartbeat - vital for soldier communication
+app.use('/api/extension', express.json({ limit: '1mb' }), extensionRoutes);
+
+console.log('🫀 Vital Organs mounted successfully');
+
+// ============================================
+// Security Middleware (WAF/Rate Limits - AFTER vital organs)
+// ============================================
 
 // Intelliceil - Anti-DDoS & Exchange Security (monitors all traffic)
 app.use(intelliceilMonitor);
@@ -869,11 +899,13 @@ app.use('/api/fb-session', ring5AuthBarrier, require('./routes/fb-session.routes
 // Chrome Extension AI Hybrid System
 // DEPRECATED: OAuth routes kept for backwards compatibility - will return 410 Gone
 app.use('/api/auth/facebook', require('./routes/facebook-auth.routes').default); // Facebook OAuth (DEPRECATED)
-app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default); // Extension API (requires auth)
+// NOTE: Extension routes moved to VITAL ORGANS section (before WAF) - see top of file
+// app.use('/api/extension', ring5AuthBarrier, require('./routes/extension.routes').default);
 
 // IAI Soldier Command Center
 app.use('/api/admin/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier tracking (admin)
-app.use('/api/extension/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier registration/heartbeat
+// NOTE: Extension IAI routes moved to VITAL ORGANS section (before WAF) - see top of file
+// app.use('/api/extension/iai', ring5AuthBarrier, require('./routes/iai.routes').default);
 
 // IAI Training System (Super Admin only)
 // PUBLIC Heartbeat endpoints - must be BEFORE ring5AuthBarrier for extension access
