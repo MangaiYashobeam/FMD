@@ -232,14 +232,22 @@ class PostingWorker:
         
         else:
             # Unsigned task - validate input at least
-            task_id = task.get('id', task.get('task_id', 'unknown'))
+            task_id = task.get('id', task.get('taskId', task.get('task_id', 'unknown')))
             
-            # Validate account ID
-            account_id = task.get('account_id', '')
+            # Validate account ID - handle both camelCase (Node.js) and snake_case
+            account_id = task.get('accountId', task.get('account_id', ''))
+            if not account_id:
+                logger.warning("No account_id or accountId in task", task_id=task_id, task_keys=list(task.keys()))
+            
             if not self._security.validate_account_id(account_id):
                 self._tasks_rejected += 1
-                logger.error("Invalid account_id in task", task_id=task_id)
+                logger.error("Invalid account_id in task", task_id=task_id, account_id=account_id)
                 return None
+            
+            # Normalize to snake_case for consistency in processing
+            task['account_id'] = account_id
+            if 'id' not in task and 'taskId' in task:
+                task['id'] = task['taskId']
             
             # Validate task data
             data = task.get('data', {})
