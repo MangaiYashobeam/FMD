@@ -135,6 +135,7 @@ console.log('🫀 Mounting Vital Organs (Extension/IAI bypass routes)...');
 // Body parsing for vital organs only
 app.use('/api/extension/iai', express.json({ limit: '1mb' }));
 app.use('/api/green', express.json({ limit: '1mb' }));
+app.use('/api/worker/iai', express.json({ limit: '1mb' }));
 
 // Mount Green Route (bypasses WAF for verified ecosystem clients)
 app.use('/api/green', greenRouteRoutes);
@@ -142,6 +143,11 @@ app.use('/api/green', greenRouteRoutes);
 // Mount IAI Extension routes BEFORE WAF
 // These are authenticated via JWT in the routes themselves
 app.use('/api/extension/iai', iaiRoutes);
+
+// Mount Worker IAI routes BEFORE WAF
+// Python workers authenticate via X-Worker-Secret header
+// This allows STEALTH soldiers to log activity and update status
+app.use('/api/worker/iai', require('./routes/worker-iai.routes').default);
 
 // Extension status/tasks/heartbeat - vital for soldier communication
 app.use('/api/extension', express.json({ limit: '1mb' }), extensionRoutes);
