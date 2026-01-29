@@ -10,6 +10,7 @@ import structlog
 import httpx
 
 from core.config import get_settings
+from core.api_client import get_api_client
 from browser.manager import BrowserPoolManager, BrowserInstance
 from facebook.auth import FacebookAuth
 from facebook.marketplace import MarketplacePoster
@@ -63,6 +64,7 @@ class TaskProcessor:
         self.settings = get_settings()
         self._session_manager = SessionManager()
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._api_client = get_api_client()
         
         # Task handlers registry - handle all task type formats
         self._handlers: Dict[TaskType, Callable] = {
@@ -109,6 +111,7 @@ class TaskProcessor:
         task_id = task.get('id')
         task_type = task.get('type')
         account_id = task.get('account_id')
+        soldier_id = task.get('soldier_id', task.get('soldierId'))
         
         result = {
             'task_id': task_id,
@@ -122,7 +125,31 @@ class TaskProcessor:
         logger.info("Processing task", 
                    task_id=task_id,
                    task_type=task_type,
-                   account_id=account_id)
+                   account_id=account_id,
+                   soldier_id=soldier_id)
+        
+        # Log task start to API if we have soldier_id
+        if soldier_id and account_id:
+            await self._api_client.log_soldier_activity(
+                soldier_id=soldier_id,
+                account_id=account_id,
+                event_type='task_start',
+                message=f'Starting task: {task_type}',
+                event_data={
+                    'task_id': task_id,
+                    'task_type': task_type,
+                    'worker_id': self.worker_id,
+                },
+                task_id=task_id,
+                task_type=task_type,
+            )
+            # Update soldier status to WORKING
+            await self._api_client.update_soldier_status(
+                soldier_id=soldier_id,
+                account_id=account_id,
+                status='WORKING',
+                current_task_type=task_type,
+            )
         
         try:
             # Validate task type
@@ -131,6 +158,17 @@ class TaskProcessor:
             except ValueError:
                 result['status'] = TaskStatus.FAILED
                 result['error'] = f'Unknown task type: {task_type}'
+                
+                # Log failure
+                if soldier_id and account_id:
+                    await self._api_client.log_soldier_activity(
+                        soldier_id=soldier_id,
+                        account_id=account_id,
+                        event_type='task_fail',
+                        message=f'Unknown task type: {task_type}',
+                        task_id=task_id,
+                    )
+                    
                 return result
             
             # Get handler
@@ -138,10 +176,41 @@ class TaskProcessor:
             if not handler:
                 result['status'] = TaskStatus.FAILED
                 result['error'] = f'No handler for task type: {task_type}'
+                
+                # Log failure
+                if soldier_id and account_id:
+                    await self._api_client.log_soldier_activity(
+                        soldier_id=soldier_id,
+                        account_id=account_id,
+                        event_type='task_fail',
+                        message=f'No handler for task type: {task_type}',
+                        task_id=task_id,
+                    )
+                    
                 return result
+            
+            # Log browser acquisition attempt
+            if soldier_id and account_id:
+                await self._api_client.log_soldier_activity(
+                    soldier_id=soldier_id,
+                    account_id=account_id,
+                    event_type='browser_acquire',
+                    message='Acquiring browser from pool...',
+                    task_id=task_id,
+                )
             
             # Execute task with browser
             async with self.browser_pool.use_browser(account_id) as browser:
+                # Log browser acquired
+                if soldier_id and account_id:
+                    await self._api_client.log_soldier_activity(
+                        soldier_id=soldier_id,
+                        account_id=account_id,
+                        event_type='browser_ready',
+                        message='Browser acquired, executing task...',
+                        task_id=task_id,
+                    )
+                
                 task_result = await handler(task, browser)
                 
                 result['data'] = task_result
@@ -152,6 +221,24 @@ class TaskProcessor:
                 
                 if not task_result.get('success'):
                     result['error'] = task_result.get('error')
+            
+            # Log completion
+            if soldier_id and account_id:
+                event_type = 'task_complete' if result['status'] == TaskStatus.COMPLETED else 'task_fail'
+                await self._api_client.log_soldier_activity(
+                    soldier_id=soldier_id,
+                    account_id=account_id,
+                    event_type=event_type,
+                    message=f"Task {'completed' if result['status'] == TaskStatus.COMPLETED else 'failed'}: {task_type}",
+                    event_data=result['data'],
+                    task_id=task_id,
+                )
+                # Update soldier status back to READY
+                await self._api_client.update_soldier_status(
+                    soldier_id=soldier_id,
+                    account_id=account_id,
+                    status='READY',
+                )
             
             # Report result to main API
             await self._report_task_result(result)
@@ -164,12 +251,39 @@ class TaskProcessor:
                           task_id=task_id,
                           error=str(e))
             
+            # Log retry
+            if soldier_id and account_id:
+                await self._api_client.log_soldier_activity(
+                    soldier_id=soldier_id,
+                    account_id=account_id,
+                    event_type='task_retry',
+                    message=f'Browser unavailable, will retry: {str(e)}',
+                    task_id=task_id,
+                )
+            
         except Exception as e:
             result['status'] = TaskStatus.FAILED
             result['error'] = str(e)
             logger.error("Task processing failed",
                         task_id=task_id,
                         error=str(e))
+            
+            # Log failure
+            if soldier_id and account_id:
+                await self._api_client.log_soldier_activity(
+                    soldier_id=soldier_id,
+                    account_id=account_id,
+                    event_type='task_fail',
+                    message=f'Task failed: {str(e)}',
+                    event_data={'error': str(e)},
+                    task_id=task_id,
+                )
+                # Update soldier status to ERROR
+                await self._api_client.update_soldier_status(
+                    soldier_id=soldier_id,
+                    account_id=account_id,
+                    status='ERROR',
+                )
             
             # Report failure
             await self._report_task_result(result)

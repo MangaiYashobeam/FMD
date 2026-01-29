@@ -184,12 +184,16 @@ app.use(trackVisitorSession);
 // Uses its own body parsing and signature verification
 app.use('/api/green', express.json({limit: '50mb'}), require('./routes/green-route.routes').default);
 
-// 2. IAI Soldier Heartbeat & Registration (Critical for automation)
+// 2. Worker IAI Routes - Python workers communicate via X-Worker-Secret header
+// No JWT auth - uses shared secret for authentication
+app.use('/api/worker/iai', express.json({limit: '10mb'}), require('./routes/worker-iai.routes').default);
+
+// 3. IAI Soldier Heartbeat & Registration (Critical for automation)
 // We hoist this to ensure soldiers can report in even under high security mode/attack
 // Note: We use express.json() here because global parser is applied later to /api
 app.use('/api/extension/iai', express.json({limit: '50mb'}), ring5AuthBarrier, require('./routes/iai.routes').default);
 
-// 3. Extension Token Exchange (Critical for auth recovery)
+// 4. Extension Token Exchange (Critical for auth recovery)
 app.use('/api/extension/token', express.json(), require('./routes/extension-token.routes').default);
 
 // ============================================

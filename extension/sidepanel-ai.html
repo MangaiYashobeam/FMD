@@ -149,6 +149,80 @@
       margin-top: 6px;
     }
     
+    /* Heartbeat indicator for IAI Stealth Soldier connection */
+    .heartbeat-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(255, 87, 87, 0.2);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    
+    .heartbeat-indicator.connected {
+      background: rgba(255, 87, 87, 0.2);
+      color: #ff5757;
+    }
+    
+    .heartbeat-indicator.disconnected {
+      background: rgba(150, 150, 150, 0.2);
+      color: #999;
+    }
+    
+    .heartbeat-icon {
+      display: inline-block;
+      font-size: 14px;
+      animation: heartbeat 1s ease-in-out infinite;
+    }
+    
+    .heartbeat-indicator.disconnected .heartbeat-icon {
+      animation: none;
+      opacity: 0.5;
+    }
+    
+    @keyframes heartbeat {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+      }
+    }
+    
+    /* Stealth Soldier Connection Badge */
+    .stealth-connection {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: linear-gradient(135deg, rgba(255, 87, 87, 0.15), rgba(255, 150, 150, 0.1));
+      border: 1px solid rgba(255, 87, 87, 0.3);
+      border-radius: 12px;
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    
+    .stealth-connection.active {
+      border-color: rgba(255, 87, 87, 0.5);
+      box-shadow: 0 0 15px rgba(255, 87, 87, 0.2);
+    }
+    
+    .stealth-connection .soldier-id {
+      color: #ff5757;
+      font-weight: 700;
+      font-family: monospace;
+    }
+    
+    .stealth-connection .status-text {
+      color: #8892b0;
+    }
+    
     /* Stats Grid */
     .stats-grid {
       display: grid;
@@ -1352,8 +1426,22 @@
         <div class="user-info">
           <h3 id="userName">Loading...</h3>
           <p id="userEmail">...</p>
-          <span class="status-badge">● Active</span>
+          <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <span class="status-badge">● Active</span>
+            <span class="heartbeat-indicator connected" id="heartbeatIndicator">
+              <span class="heartbeat-icon">❤️</span>
+              <span id="heartbeatStatus">IAI Connected</span>
+            </span>
+          </div>
         </div>
+      </div>
+      
+      <!-- Stealth Soldier Connection Status -->
+      <div class="stealth-connection" id="stealthConnection">
+        <span class="heartbeat-icon">💓</span>
+        <span class="status-text">Linked to</span>
+        <span class="soldier-id" id="linkedSoldierId">STEALTH-?</span>
+        <span class="status-text" id="soldierStatusText">• Synced</span>
       </div>
       
       <div class="stats-grid">

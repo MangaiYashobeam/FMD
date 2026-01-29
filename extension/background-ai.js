@@ -1415,6 +1415,15 @@ async function handleMessage(message, sender) {
     case 'GET_AUTH_STATE':
       return authState;
     
+    case 'GET_SOLDIER_STATUS':
+      // Return current soldier info and status for heartbeat sync
+      return {
+        soldier: soldierInfo,
+        isPolling: isPolling,
+        isAwake: isAwake,
+        lastHeartbeat: new Date().toISOString(),
+      };
+    
     case 'GET_FACEBOOK_CONFIG':
       // Return current Facebook config (fetch if not loaded)
       if (!facebookConfig) {
