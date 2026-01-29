@@ -132,10 +132,28 @@ app.use(cookieParser());
 // ============================================
 console.log('🫀 Mounting Vital Organs (Extension/IAI bypass routes)...');
 
+// CORS headers for vital organ routes - allows extension content scripts to call API
+// This runs BEFORE other middleware to ensure CORS preflight requests work
+app.use(['/api/extension', '/api/iai', '/api/worker/iai', '/api/green'], (req, res, next) => {
+  // Allow requests from any origin (extensions run from chrome-extension:// and content scripts from any site)
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Worker-Secret, X-Extension-Version, X-Account-Id');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+  
+  // Handle preflight OPTIONS requests immediately
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Body parsing for vital organs only
 app.use('/api/extension/iai', express.json({ limit: '1mb' }));
 app.use('/api/green', express.json({ limit: '1mb' }));
 app.use('/api/worker/iai', express.json({ limit: '1mb' }));
+app.use('/api/iai', express.json({ limit: '1mb' }));
 
 // Mount Green Route (bypasses WAF for verified ecosystem clients)
 app.use('/api/green', greenRouteRoutes);
