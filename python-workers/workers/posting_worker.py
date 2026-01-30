@@ -347,66 +347,113 @@ class PostingWorker:
     async def _heartbeat_loop(self):
         """
         💓 STEALTH SOLDIER HEARTBEAT LOOP
-        Sends periodic heartbeats to the main API every 30 seconds
-        This keeps the STEALTH soldiers visible in the IAI Command Center
+        Fetches ALL STEALTH soldiers from API and sends heartbeats for them every 30 seconds
+        This keeps ALL STEALTH soldiers visible in the IAI Command Center
         """
         logger.info("💓 Starting heartbeat loop", worker_id=self.worker_id)
         
         # HTTP client for API calls
         async with httpx.AsyncClient(
             base_url=self.settings.api_base_url,
-            timeout=10.0
+            timeout=15.0
         ) as client:
             while self._running:
                 try:
-                    # Only send heartbeat if we have an assigned soldier ID
-                    if self._current_soldier_id:
-                        stats = self._browser_pool.get_stats() if self._browser_pool else {}
-                        
-                        # Determine status based on current state
-                        busy_browsers = sum(1 for b in stats.get('browsers', []) if b.get('is_busy', False))
-                        status = 'WORKING' if busy_browsers > 0 else 'ONLINE'
-                        
-                        payload = {
-                            'soldierId': self._current_soldier_id,
-                            'status': status,
-                            'workerId': self.worker_id,
-                            'browserCount': stats.get('total_browsers', 0),
-                            'cpuUsage': None,  # Could add psutil for real values
-                            'memoryUsageMb': None,
-                        }
-                        
-                        response = await client.post(
-                            '/api/worker/iai/worker/heartbeat',
-                            json=payload,
-                            headers={
-                                'X-Worker-Secret': self.settings.worker_secret,
-                                'Content-Type': 'application/json'
-                            }
-                        )
-                        
-                        if response.status_code == 200:
-                            logger.debug("💚 Heartbeat sent", 
-                                       soldier_id=self._current_soldier_id,
-                                       status=status)
-                        else:
-                            logger.warning("⚠️ Heartbeat failed", 
-                                         status_code=response.status_code,
-                                         response=response.text[:100])
-                    else:
-                        logger.debug("💤 No soldier assigned, skipping heartbeat")
+                    # First, fetch all STEALTH soldiers from the API
+                    stealth_soldiers = await self._fetch_stealth_soldiers(client)
                     
-                    # Wait 30 seconds before next heartbeat
+                    if stealth_soldiers:
+                        stats = self._browser_pool.get_stats() if self._browser_pool else {}
+                        busy_browsers = sum(1 for b in stats.get('browsers', []) if b.get('is_busy', False))
+                        
+                        # Send heartbeat for EACH stealth soldier
+                        for soldier in stealth_soldiers:
+                            soldier_id = soldier.get('soldierId') or soldier.get('soldier_id')
+                            if not soldier_id:
+                                continue
+                            
+                            # Determine status - WORKING if this is the active soldier, else ONLINE
+                            is_active = soldier_id == self._current_soldier_id and busy_browsers > 0
+                            status = 'WORKING' if is_active else 'ONLINE'
+                            
+                            payload = {
+                                'soldierId': soldier_id,
+                                'status': status,
+                                'workerId': self.worker_id,
+                                'browserCount': stats.get('total_browsers', 0),
+                                'cpuUsage': None,
+                                'memoryUsageMb': None,
+                            }
+                            
+                            try:
+                                response = await client.post(
+                                    '/api/worker/iai/worker/heartbeat',
+                                    json=payload,
+                                    headers={
+                                        'X-Worker-Secret': self.settings.worker_secret,
+                                        'Content-Type': 'application/json'
+                                    }
+                                )
+                                
+                                if response.status_code == 200:
+                                    logger.debug("💚 Heartbeat sent", 
+                                               soldier_id=soldier_id,
+                                               status=status)
+                                else:
+                                    logger.warning("⚠️ Heartbeat failed", 
+                                                 soldier_id=soldier_id,
+                                                 status_code=response.status_code)
+                            except Exception as e:
+                                logger.error("❌ Heartbeat error for soldier", 
+                                           soldier_id=soldier_id, error=str(e))
+                            
+                            # Small delay between heartbeats to avoid overwhelming API
+                            await asyncio.sleep(0.5)
+                        
+                        logger.info("💚 Batch heartbeat complete", 
+                                  soldier_count=len(stealth_soldiers))
+                    else:
+                        logger.debug("💤 No STEALTH soldiers found")
+                    
+                    # Wait 30 seconds before next heartbeat cycle
                     await asyncio.sleep(30)
                     
                 except asyncio.CancelledError:
                     logger.info("💓 Heartbeat loop cancelled")
                     break
                 except Exception as e:
-                    logger.error("❌ Heartbeat error", error=str(e))
+                    logger.error("❌ Heartbeat loop error", error=str(e))
                     await asyncio.sleep(30)  # Still wait on error
         
         logger.info("💓 Heartbeat loop stopped")
+    
+    async def _fetch_stealth_soldiers(self, client: httpx.AsyncClient) -> list:
+        """
+        Fetch all STEALTH soldiers from the API
+        Returns list of soldier objects with soldierId
+        """
+        try:
+            response = await client.get(
+                '/api/worker/iai/worker/soldiers',
+                headers={
+                    'X-Worker-Secret': self.settings.worker_secret,
+                    'Content-Type': 'application/json'
+                },
+                params={'genre': 'STEALTH'}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                soldiers = data.get('soldiers', []) if isinstance(data, dict) else data
+                logger.debug("🔍 Fetched STEALTH soldiers", count=len(soldiers))
+                return soldiers
+            else:
+                logger.warning("⚠️ Failed to fetch soldiers", 
+                             status_code=response.status_code)
+                return []
+        except Exception as e:
+            logger.error("❌ Error fetching soldiers", error=str(e))
+            return []
     
     def set_soldier_id(self, soldier_id: str):
         """Set the current soldier ID for heartbeats"""

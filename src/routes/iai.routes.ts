@@ -2193,6 +2193,49 @@ const authenticateWorker = (req: Request, res: Response, next: NextFunction): vo
 };
 
 /**
+ * GET /api/worker/iai/soldiers
+ * List soldiers for Python workers to send heartbeats
+ * Can filter by genre (e.g., STEALTH)
+ * Authenticates via X-Worker-Secret header
+ */
+router.get('/worker/soldiers', authenticateWorker, async (req: Request, res: Response) => {
+  try {
+    const { genre } = req.query;
+    
+    console.log(`🔍 [WORKER] Fetching soldiers, genre filter: ${genre || 'all'}`);
+    
+    const whereClause: any = {};
+    if (genre) {
+      whereClause.genre = genre as string;
+    }
+    
+    const soldiers = await prisma.iAISoldier.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        soldierId: true,
+        genre: true,
+        status: true,
+        executionSource: true,
+        lastHeartbeatAt: true,
+        isActive: true,
+      },
+      orderBy: { soldierId: 'asc' },
+    });
+    
+    console.log(`🔍 [WORKER] Found ${soldiers.length} soldiers`);
+    
+    return res.json({ 
+      soldiers,
+      count: soldiers.length,
+    });
+  } catch (error: any) {
+    console.error('❌ [WORKER] Error fetching soldiers:', error.message);
+    return res.status(500).json({ error: 'Failed to fetch soldiers' });
+  }
+});
+
+/**
  * POST /api/worker/iai/heartbeat
  * 💓 STEALTH SOLDIER HEARTBEAT - Called by Python workers every 30 seconds
  * Authenticates via X-Worker-Secret header (not JWT)
