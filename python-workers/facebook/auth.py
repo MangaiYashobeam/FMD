@@ -10,7 +10,7 @@ from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
 from facebook.selectors import FacebookSelectors
 from browser.anti_detect import random_delay, add_human_behavior
-from browser.session import SessionManager, FacebookSessionValidator, ServerSessionSync
+from browser.session import SessionManager, FacebookSessionValidator, SessionSyncService
 from core.config import get_settings
 
 logger = structlog.get_logger()
@@ -309,7 +309,7 @@ class FacebookAuth:
             if settings.api_base_url and settings.worker_secret:
                 logger.info("🔄 Attempting to fetch session from API...", account_id=account_id)
                 try:
-                    server_sync = ServerSessionSync(
+                    server_sync = SessionSyncService(
                         api_url=settings.api_base_url,
                         api_token=settings.worker_secret
                     )
