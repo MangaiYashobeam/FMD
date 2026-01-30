@@ -259,28 +259,52 @@ function showDashboard() {
 // ============================================
 
 async function loadDashboard() {
+  console.log('📍 loadDashboard called');
+  
+  // IMMEDIATELY show dashboard UI, then load data
+  showDashboard();
+  
   try {
-    // Get account info
-    const accountResponse = await sendMessage({ type: 'GET_ACCOUNT_INFO' });
-    const account = accountResponse.data;
+    // Get account info with timeout
+    console.log('📡 Fetching account info...');
+    const accountPromise = sendMessage({ type: 'GET_ACCOUNT_INFO' });
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Account info timeout')), 5000)
+    );
+    
+    let accountResponse;
+    try {
+      accountResponse = await Promise.race([accountPromise, timeoutPromise]);
+    } catch (e) {
+      console.warn('⏰ Account info timed out, using defaults');
+      accountResponse = { data: null };
+    }
+    
+    const account = accountResponse?.data;
+    console.log('📦 Account data:', account ? 'received' : 'null');
     
     if (account) {
       // Update user info
-      elements.userName.textContent = account.name || 'Dealer Account';
-      elements.userEmail.textContent = account.email || '';
-      elements.userAvatar.textContent = (account.name?.[0] || 'D').toUpperCase();
+      if (elements.userName) elements.userName.textContent = account.name || 'Dealer Account';
+      if (elements.userEmail) elements.userEmail.textContent = account.email || '';
+      if (elements.userAvatar) elements.userAvatar.textContent = (account.name?.[0] || 'D').toUpperCase();
       
       // Update stats
-      elements.postsCount.textContent = formatNumber(account.stats?.listings || 0);
-      elements.leadsCount.textContent = formatNumber(account.stats?.leads || 0);
-      elements.responsesCount.textContent = formatNumber(account.stats?.responses || 0);
-      elements.pendingCount.textContent = formatNumber(account.stats?.pendingTasks || 0);
+      if (elements.postsCount) elements.postsCount.textContent = formatNumber(account.stats?.listings || 0);
+      if (elements.leadsCount) elements.leadsCount.textContent = formatNumber(account.stats?.leads || 0);
+      if (elements.responsesCount) elements.responsesCount.textContent = formatNumber(account.stats?.responses || 0);
+      if (elements.pendingCount) elements.pendingCount.textContent = formatNumber(account.stats?.pendingTasks || 0);
       
       // Show unread badge if any
-      if (account.stats?.unreadMessages > 0) {
+      if (account.stats?.unreadMessages > 0 && elements.unreadBadge) {
         elements.unreadBadge.textContent = account.stats.unreadMessages;
         elements.unreadBadge.style.display = 'inline';
       }
+    } else {
+      // Set default values when no account data
+      if (elements.userName) elements.userName.textContent = 'Connected';
+      if (elements.userEmail) elements.userEmail.textContent = 'Dashboard loaded';
+      if (elements.userAvatar) elements.userAvatar.textContent = '✓';
     }
     
     // Load activities from storage
@@ -290,10 +314,11 @@ async function loadDashboard() {
       renderActivities();
     }
     
-    showDashboard();
+    console.log('✅ Dashboard loaded successfully');
   } catch (error) {
-    console.error('Dashboard loading error:', error);
-    addActivity('error', 'Failed to load dashboard data');
+    console.error('❌ Dashboard loading error:', error);
+    // Dashboard is already shown, just log the error
+    addActivity('error', 'Failed to load some dashboard data');
   }
 }
 
