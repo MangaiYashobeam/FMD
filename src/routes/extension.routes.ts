@@ -482,6 +482,62 @@ router.post('/tasks/:taskId/status', authenticate, async (req: AuthRequest, res:
         },
       });
       
+      // Log to IAI Activity for this account's soldier
+      try {
+        const soldier = await prisma.iAISoldier.findFirst({
+          where: { accountId: dbTask.accountId },
+          select: { id: true, soldierId: true, tasksCompleted: true, tasksFailed: true },
+        });
+        
+        if (soldier) {
+          const eventType = status === 'completed' ? 'task_complete' : status === 'failed' ? 'task_fail' : 'status_change';
+          const message = status === 'completed' 
+            ? `✅ Task completed: ${dbTask.type}`
+            : status === 'failed'
+            ? `❌ Task failed: ${dbTask.type} - ${result?.error || 'Unknown error'}`
+            : `📋 Task status: ${status}`;
+          
+          // Create activity log
+          await prisma.iAIActivityLog.create({
+            data: {
+              soldierId: soldier.id,
+              accountId: dbTask.accountId,
+              eventType,
+              message,
+              taskId: taskId,
+              taskType: dbTask.type,
+              taskResult: result || {},
+            },
+          });
+          
+          // Update soldier stats
+          if (status === 'completed') {
+            await prisma.iAISoldier.update({
+              where: { id: soldier.id },
+              data: { 
+                tasksCompleted: { increment: 1 },
+                lastTaskAt: new Date(),
+                currentTaskType: null,
+              },
+            });
+            logger.info(`✅ [IAI] ${soldier.soldierId} task_complete logged, total: ${soldier.tasksCompleted + 1}`);
+          } else if (status === 'failed') {
+            await prisma.iAISoldier.update({
+              where: { id: soldier.id },
+              data: { 
+                tasksFailed: { increment: 1 },
+                lastError: result?.error || 'Task failed',
+                lastErrorAt: new Date(),
+                currentTaskType: null,
+              },
+            });
+            logger.info(`❌ [IAI] ${soldier.soldierId} task_fail logged`);
+          }
+        }
+      } catch (iaiError) {
+        logger.warn('Could not log IAI activity:', iaiError);
+      }
+      
       // If posting completed, track in FacebookPostHistory (doesn't require profileId)
       if (status === 'completed' && dbTask.type === 'post_vehicle' && dbTask.vehicleId) {
         try {

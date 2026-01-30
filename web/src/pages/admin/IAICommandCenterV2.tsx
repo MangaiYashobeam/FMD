@@ -366,7 +366,7 @@ function SoldierCard({
     : false;
 
   // Calculate REAL progress percentage based on actual data - NO RANDOMNESS
-  // Progress: 0% = offline/no activity, 10-90% = working, 100% = completed successfully
+  // Progress: 0% = offline/no activity, working shows incremental progress, 100% = completed successfully
   const calculateProgress = (): { pct: number; status: string; label: string } => {
     // If there's an error, progress is 0
     if (soldier.status === 'ERROR' || soldier.lastError) {
@@ -384,51 +384,40 @@ function SoldierCard({
     const secsSinceHeartbeat = Math.floor((now - lastHB) / 1000);
     const hasRecentHeartbeat = secsSinceHeartbeat < 60;
     
-    // If completed tasks successfully (100%)
-    if (soldier.tasksCompleted > 0 && soldier.tasksFailed === 0 && !soldier.currentTaskType) {
-      return { pct: 100, status: 'complete', label: '✅ COMPLETE' };
-    }
+    // Calculate total tasks for progress
+    const totalTasks = soldier.tasksCompleted + soldier.tasksFailed;
     
-    // If has completed some tasks with mixed results - show success rate
-    if (soldier.tasksCompleted > 0 && soldier.successRate !== null) {
-      const rate = Math.round(soldier.successRate);
-      if (!soldier.currentTaskType) {
-        // Not currently working, show final success rate
-        return { 
-          pct: rate, 
-          status: rate >= 70 ? 'good' : rate >= 40 ? 'warning' : 'error', 
-          label: `${rate}% Success` 
-        };
+    // If has completed tasks, show based on success rate
+    if (totalTasks > 0) {
+      const successRate = soldier.successRate !== null ? Math.round(soldier.successRate) : 
+        (soldier.tasksCompleted / totalTasks) * 100;
+      
+      // If currently working on a task (status is WORKING)
+      if (soldier.status === 'WORKING' && hasRecentHeartbeat) {
+        return { pct: Math.min(90, successRate), status: 'working', label: '💓 WORKING' };
       }
+      
+      // If no active task - show final success rate as completion
+      return { 
+        pct: successRate,
+        status: successRate >= 70 ? 'good' : successRate >= 40 ? 'warning' : 'error',
+        label: soldier.tasksFailed === 0 ? '✅ COMPLETE' : `${Math.round(successRate)}% Success`
+      };
     }
     
-    // If currently working on a task
-    if (soldier.currentTaskType && (soldier.status === 'WORKING' || soldier.status === 'ONLINE')) {
-      if (hasRecentHeartbeat) {
-        // Active working state - progress based on tasks
-        const baseProgress = Math.min(80, 20 + (soldier.tasksCompleted * 15));
-        return { pct: baseProgress, status: 'working', label: '💓 WORKING' };
-      } else if (secsSinceHeartbeat < 120) {
-        return { pct: 40, status: 'working', label: '⏳ PROCESSING' };
-      } else {
-        // Heartbeat stale - might be stuck
-        return { pct: 15, status: 'warning', label: '⚠️ STALE' };
-      }
+    // No tasks completed yet
+    // If WORKING status, show initial progress
+    if (soldier.status === 'WORKING' && hasRecentHeartbeat) {
+      return { pct: 15, status: 'working', label: '💓 WORKING' };
     }
     
-    // If ONLINE with recent heartbeat but no current task
+    // If ONLINE with recent heartbeat but no tasks yet - READY state (0%)
     if ((soldier.status === 'ONLINE' || soldier.status === 'IDLE') && hasRecentHeartbeat) {
-      if (soldier.tasksCompleted > 0) {
-        // Has completed tasks, waiting for more
-        const successPct = soldier.successRate ? Math.round(soldier.successRate) : 100;
-        return { pct: successPct, status: 'idle', label: '💤 IDLE' };
-      }
-      // No tasks yet, just connected
-      return { pct: 5, status: 'ready', label: '🟢 READY' };
+      return { pct: 0, status: 'ready', label: '🟢 READY' };
     }
     
-    // If IDLE with no recent heartbeat
-    if (soldier.status === 'IDLE') {
+    // If has heartbeat but it's stale
+    if (lastHB > 0 && secsSinceHeartbeat < 300) {
       return { pct: 0, status: 'idle', label: '😴 SLEEPING' };
     }
     
