@@ -366,61 +366,74 @@ function SoldierCard({
     : false;
 
   // Calculate REAL progress percentage based on actual data - NO RANDOMNESS
+  // Progress: 0% = offline/no activity, 10-90% = working, 100% = completed successfully
   const calculateProgress = (): { pct: number; status: string; label: string } => {
     // If there's an error, progress is 0
     if (soldier.status === 'ERROR' || soldier.lastError) {
-      return { pct: 0, status: 'error', label: 'ERROR' };
+      return { pct: 0, status: 'error', label: '❌ ERROR' };
     }
     
-    // If currently working - calculate based on heartbeat freshness
-    if (soldier.currentTaskType && soldier.status === 'WORKING') {
-      // Progress based on heartbeat freshness (more recent = higher)
-      const lastHB = soldier.lastHeartbeatAt ? new Date(soldier.lastHeartbeatAt).getTime() : 0;
-      const now = Date.now();
-      const secsSinceHeartbeat = Math.floor((now - lastHB) / 1000);
-      
-      // If heartbeat is fresh (< 30s), show active working state
-      if (secsSinceHeartbeat < 30) {
-        // Use tasks completed as base, cap at 90% while working
-        const taskProgress = Math.min(90, 30 + (soldier.tasksCompleted * 10));
-        return { pct: taskProgress, status: 'working', label: '💓 WORKING' };
-      } else if (secsSinceHeartbeat < 60) {
-        return { pct: 50, status: 'working', label: '⏳ PROCESSING' };
-      } else {
-        // Heartbeat stale - might be stuck
-        return { pct: 25, status: 'warning', label: '⚠️ STALE HB' };
-      }
-    }
-    
-    // If idle/offline
+    // If offline, progress is 0
     if (soldier.status === 'OFFLINE') {
       return { pct: 0, status: 'offline', label: '⬛ OFFLINE' };
     }
-    if (soldier.status === 'IDLE') {
-      // Show actual success rate if available
-      if (soldier.successRate !== null && soldier.tasksCompleted > 0) {
-        return { pct: Math.round(soldier.successRate), status: 'idle', label: '😴 IDLE' };
-      }
-      return { pct: 15, status: 'idle', label: '😴 IDLE' };
-    }
     
-    // If completed tasks successfully
-    if (soldier.tasksCompleted > 0 && soldier.tasksFailed === 0) {
+    // Calculate heartbeat freshness
+    const lastHB = soldier.lastHeartbeatAt ? new Date(soldier.lastHeartbeatAt).getTime() : 0;
+    const now = Date.now();
+    const secsSinceHeartbeat = Math.floor((now - lastHB) / 1000);
+    const hasRecentHeartbeat = secsSinceHeartbeat < 60;
+    
+    // If completed tasks successfully (100%)
+    if (soldier.tasksCompleted > 0 && soldier.tasksFailed === 0 && !soldier.currentTaskType) {
       return { pct: 100, status: 'complete', label: '✅ COMPLETE' };
     }
     
-    // Mixed results - calculate based on ACTUAL success rate
-    if (soldier.successRate !== null) {
+    // If has completed some tasks with mixed results - show success rate
+    if (soldier.tasksCompleted > 0 && soldier.successRate !== null) {
       const rate = Math.round(soldier.successRate);
-      return { 
-        pct: rate, 
-        status: rate >= 70 ? 'good' : rate >= 40 ? 'warning' : 'error', 
-        label: `${rate}%` 
-      };
+      if (!soldier.currentTaskType) {
+        // Not currently working, show final success rate
+        return { 
+          pct: rate, 
+          status: rate >= 70 ? 'good' : rate >= 40 ? 'warning' : 'error', 
+          label: `${rate}% Success` 
+        };
+      }
     }
     
-    // Ready state - no tasks yet
-    return { pct: 20, status: 'ready', label: '🟢 READY' };
+    // If currently working on a task
+    if (soldier.currentTaskType && (soldier.status === 'WORKING' || soldier.status === 'ONLINE')) {
+      if (hasRecentHeartbeat) {
+        // Active working state - progress based on tasks
+        const baseProgress = Math.min(80, 20 + (soldier.tasksCompleted * 15));
+        return { pct: baseProgress, status: 'working', label: '💓 WORKING' };
+      } else if (secsSinceHeartbeat < 120) {
+        return { pct: 40, status: 'working', label: '⏳ PROCESSING' };
+      } else {
+        // Heartbeat stale - might be stuck
+        return { pct: 15, status: 'warning', label: '⚠️ STALE' };
+      }
+    }
+    
+    // If ONLINE with recent heartbeat but no current task
+    if ((soldier.status === 'ONLINE' || soldier.status === 'IDLE') && hasRecentHeartbeat) {
+      if (soldier.tasksCompleted > 0) {
+        // Has completed tasks, waiting for more
+        const successPct = soldier.successRate ? Math.round(soldier.successRate) : 100;
+        return { pct: successPct, status: 'idle', label: '💤 IDLE' };
+      }
+      // No tasks yet, just connected
+      return { pct: 5, status: 'ready', label: '🟢 READY' };
+    }
+    
+    // If IDLE with no recent heartbeat
+    if (soldier.status === 'IDLE') {
+      return { pct: 0, status: 'idle', label: '😴 SLEEPING' };
+    }
+    
+    // Default: just registered, no activity yet
+    return { pct: 0, status: 'new', label: '⚪ NEW' };
   };
 
   const progress = calculateProgress();
@@ -430,45 +443,65 @@ function SoldierCard({
     const pct = progress.pct;
     if (progress.status === 'error') return 'from-red-600 to-red-800';
     if (progress.status === 'working') return 'from-blue-500 via-cyan-400 to-blue-600';
+    if (progress.status === 'complete') return 'from-green-400 to-emerald-500';
+    if (progress.status === 'good') return 'from-green-500 to-lime-400';
+    if (progress.status === 'warning') return 'from-orange-400 to-yellow-500';
+    if (progress.status === 'ready') return 'from-cyan-500 to-blue-400';
+    if (progress.status === 'new' || progress.status === 'offline') return 'from-slate-600 to-slate-700';
     if (pct >= 90) return 'from-green-400 to-emerald-500';
     if (pct >= 70) return 'from-green-500 to-lime-400';
     if (pct >= 50) return 'from-yellow-400 to-green-500';
     if (pct >= 30) return 'from-orange-400 to-yellow-500';
-    if (pct > 0) return 'from-orange-500 to-red-500';
-    return 'from-red-600 to-red-800';
+    if (pct > 0) return 'from-orange-500 to-yellow-400';
+    return 'from-slate-600 to-slate-700';
   };
 
   // Card border glow based on status
   const getCardBorderGlow = () => {
     if (progress.status === 'error') return 'border-red-500/50 shadow-red-500/20';
     if (progress.status === 'working') return 'border-blue-500/50 shadow-blue-500/20 animate-pulse';
+    if (progress.status === 'complete') return 'border-green-500/50 shadow-green-500/20';
+    if (progress.status === 'good') return 'border-green-500/50 shadow-green-500/20';
+    if (progress.status === 'ready') return 'border-cyan-500/50 shadow-cyan-500/20';
     if (progress.pct >= 90) return 'border-green-500/50 shadow-green-500/20';
     if (progress.pct >= 50) return 'border-yellow-500/50 shadow-yellow-500/20';
     if (progress.pct >= 30) return 'border-orange-500/50 shadow-orange-500/20';
     return 'border-slate-700 shadow-none';
   };
 
-  // Fetch activity logs when flipped
+  // Fetch activity logs when flipped AND auto-refresh every 5 seconds
   useEffect(() => {
-    if (isFlipped && activityLogs.length === 0) {
-      setLoadingLogs(true);
+    if (!isFlipped) return;
+    
+    // Fetch immediately
+    const fetchLogs = () => {
+      setLoadingLogs(activityLogs.length === 0); // Only show loading on first fetch
       fetchSoldierActivity(soldier.id)
         .then(data => {
           setActivityLogs(data.logs || []);
         })
         .catch(err => {
           console.error('Failed to fetch logs:', err);
-          setActivityLogs([{
-            id: 'error',
-            soldierId: soldier.id,
-            eventType: 'error',
-            message: 'Failed to load activity logs',
-            metadata: null,
-            createdAt: new Date().toISOString()
-          }]);
+          if (activityLogs.length === 0) {
+            setActivityLogs([{
+              id: 'error',
+              soldierId: soldier.id,
+              eventType: 'error',
+              message: 'Failed to load activity logs',
+              metadata: null,
+              createdAt: new Date().toISOString()
+            }]);
+          }
         })
         .finally(() => setLoadingLogs(false));
-    }
+    };
+    
+    fetchLogs();
+    
+    // Auto-refresh every 5 seconds while flipped
+    const interval = setInterval(fetchLogs, 5000);
+    
+    return () => clearInterval(interval);
   }, [isFlipped, soldier.id]);
 
   // Format console log time
