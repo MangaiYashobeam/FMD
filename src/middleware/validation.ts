@@ -237,8 +237,7 @@ export const vehicleValidators = {
 
   list: [
     query('accountId')
-      .notEmpty()
-      .withMessage('Account ID is required')
+      .optional() // Optional - controller auto-detects from user's account if not provided
       .isUUID()
       .withMessage('Invalid account ID'),
     query('page')
