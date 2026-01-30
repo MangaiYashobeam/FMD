@@ -267,8 +267,29 @@ async function loadDashboard() {
   // Get avatar elements
   const avatarImg = document.getElementById('userAvatarImg');
   const avatarDiv = elements.userAvatar;
+  const dealershipNameEl = document.getElementById('dealershipName');
   
   try {
+    // First try to get stored user data for immediate display
+    const stored = await chrome.storage.local.get(['user', 'authState']);
+    const storedUser = stored.user || stored.authState?.user;
+    
+    // Immediately show stored data if available
+    if (storedUser) {
+      const quickName = storedUser.name || storedUser.firstName || storedUser.email?.split('@')[0] || 'Connected';
+      if (elements.userName) elements.userName.textContent = quickName;
+      
+      // Check for stored avatar
+      const quickAvatar = storedUser.avatar || storedUser.picture || storedUser.profilePicture;
+      if (quickAvatar && avatarImg) {
+        avatarImg.src = quickAvatar;
+        avatarImg.style.display = 'block';
+        if (avatarDiv) avatarDiv.style.display = 'none';
+      } else if (avatarDiv) {
+        avatarDiv.textContent = (quickName?.[0] || 'D').toUpperCase();
+      }
+    }
+    
     // Get account info with timeout
     console.log('📡 Fetching account info...');
     const accountPromise = sendMessage({ type: 'GET_ACCOUNT_INFO' });
@@ -280,18 +301,8 @@ async function loadDashboard() {
     try {
       accountResponse = await Promise.race([accountPromise, timeoutPromise]);
     } catch (e) {
-      console.warn('⏰ Account info timed out, checking storage...');
-      // Try to get user info from storage
-      const stored = await chrome.storage.local.get(['user', 'authState']);
-      if (stored.user) {
-        accountResponse = { data: { 
-          name: stored.user.firstName || stored.user.name || stored.user.email?.split('@')[0],
-          email: stored.user.email,
-          profilePicture: stored.user.profilePicture || stored.user.picture
-        }};
-      } else {
-        accountResponse = { data: null };
-      }
+      console.warn('⏰ Account info timed out, using stored data...');
+      accountResponse = { data: null };
     }
     
     const account = accountResponse?.data;
@@ -302,8 +313,13 @@ async function loadDashboard() {
       const displayName = account.name || account.firstName || account.email?.split('@')[0] || 'Dealer';
       if (elements.userName) elements.userName.textContent = displayName;
       
-      // Handle profile picture
-      const profilePic = account.profilePicture || account.picture || account.avatarUrl;
+      // Update dealership name
+      if (dealershipNameEl) {
+        dealershipNameEl.textContent = account.dealershipName || account.accountName || '';
+      }
+      
+      // Handle profile picture - prioritize API response, then storage
+      const profilePic = account.profilePicture || account.picture || account.avatarUrl || storedUser?.avatar;
       if (profilePic && avatarImg) {
         avatarImg.src = profilePic;
         avatarImg.style.display = 'block';
@@ -329,21 +345,12 @@ async function loadDashboard() {
         elements.unreadBadge.textContent = account.stats.unreadMessages;
         elements.unreadBadge.style.display = 'inline';
       }
-    } else {
-      // Set default values when no account data - try storage
-      const stored = await chrome.storage.local.get(['user']);
-      const userName = stored.user?.firstName || stored.user?.name || stored.user?.email?.split('@')[0] || 'Connected';
-      if (elements.userName) elements.userName.textContent = userName;
-      if (avatarDiv) {
-        avatarDiv.textContent = userName[0]?.toUpperCase() || '✓';
-        avatarDiv.style.display = 'flex';
-      }
     }
     
     // Load activities from storage
-    const stored = await chrome.storage.local.get('activities');
-    if (stored.activities) {
-      activities = stored.activities;
+    const activityStored = await chrome.storage.local.get('activities');
+    if (activityStored.activities) {
+      activities = activityStored.activities;
       renderActivities();
     }
     

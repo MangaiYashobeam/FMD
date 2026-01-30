@@ -111,9 +111,8 @@ router.get('/account', authenticate, async (req: AuthRequest, res: Response) => 
     ]);
     
     // Get display name
-    const displayName = primaryAccountUser.account.name || 
-                       primaryAccountUser.account.dealershipName ||
-                       user.firstName ||
+    const displayName = user.firstName || 
+                       primaryAccountUser.account.name || 
                        user.email?.split('@')[0];
     
     res.json({
@@ -121,10 +120,12 @@ router.get('/account', authenticate, async (req: AuthRequest, res: Response) => 
       data: {
         id: accountId,
         name: displayName,
+        dealershipName: primaryAccountUser.account.dealershipName || primaryAccountUser.account.name || null,
+        accountName: primaryAccountUser.account.name,
         email: user.email,
         firstName: user.firstName,
         role: primaryAccountUser.role,
-        profilePicture: null, // Profile picture will come from Facebook session when available
+        profilePicture: null, // Profile picture comes from Facebook login storage
         subscriptionStatus: primaryAccountUser.account.subscriptionStatus,
         stats: {
           listings: vehicleCount,

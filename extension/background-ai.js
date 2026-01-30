@@ -1056,12 +1056,17 @@ async function exchangeCodeForToken(code) {
     user: data.user,
   };
   
-  // Save to storage - include refresh token
+  // Save to storage - include refresh token and user data with avatar
   await chrome.storage.local.set({
     authState,
     accountId: data.dealerAccount?.id,
     authToken: data.serverToken,
     refreshToken: data.refreshToken, // Store refresh token for token renewal
+    user: {
+      ...data.user,
+      avatar: data.user?.avatar, // Facebook profile picture
+    },
+    dealerAccount: data.dealerAccount,
   });
   
   console.log('✅ OAuth tokens saved successfully');
