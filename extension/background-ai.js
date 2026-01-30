@@ -1738,6 +1738,7 @@ async function reportTaskFailed(taskId, error) {
  * Get account info from server
  */
 async function getAccountInfo() {
+  console.log('📡 [getAccountInfo] Starting...');
   try {
     const { authToken, user, authState } = await chrome.storage.local.get(['authToken', 'user', 'authState']);
     
@@ -1746,11 +1747,14 @@ async function getAccountInfo() {
       return { success: false, error: 'Not authenticated' };
     }
     
-    const response = await fetch(`${CONFIG.API_URL}/extension/account`, {
+    const response = await fetchWithTimeout(`${CONFIG.API_URL}/extension/account`, {
       headers: {
         'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
       },
-    });
+    }, 10000);
+    
+    console.log('📡 [getAccountInfo] Response status:', response.status);
     
     if (!response.ok) {
       console.log('❌ getAccountInfo failed:', response.status);
@@ -1761,7 +1765,7 @@ async function getAccountInfo() {
           data: {
             name: user.firstName || user.name || user.email?.split('@')[0],
             email: user.email,
-            profilePicture: user.profilePicture || user.picture,
+            profilePicture: user.profilePicture || user.picture || user.avatar,
             stats: { listings: 0, leads: 0, pendingTasks: 0, responses: 0 }
           }
         };
@@ -1807,7 +1811,11 @@ async function fetchWithTimeout(url, options, timeoutMs = 10000) {
   try {
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal
+      signal: controller.signal,
+      headers: {
+        ...options?.headers,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 DealersFace-Extension/3.6',
+      },
     });
     clearTimeout(timeoutId);
     return response;
