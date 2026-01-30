@@ -1053,6 +1053,10 @@ app.use('/api/extension/token', require('./routes/extension-token.routes').defau
 app.use('/api/admin/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier tracking (admin)
 app.use('/api/extension/iai', ring5AuthBarrier, require('./routes/iai.routes').default); // IAI soldier registration/heartbeat
 
+// 💓 STEALTH SOLDIER ROUTES - Worker-authenticated (X-Worker-Secret header)
+// These routes bypass ring5AuthBarrier because they authenticate via worker secret
+app.use('/api/worker/iai', express.json(), require('./routes/iai.routes').default); // Python worker heartbeat/activity
+
 // IAI Training System (Super Admin only)
 // PUBLIC Heartbeat endpoints - must be BEFORE ring5AuthBarrier for extension access
 const trainingRoutes = require('./routes/training.routes');

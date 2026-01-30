@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 import structlog
+import httpx
 
 from core.config import get_settings
 from core.redis_client import get_redis_queue
@@ -49,6 +50,8 @@ class PostingWorker:
         self._tasks_failed = 0
         self._tasks_rejected = 0  # Security rejections
         self._started_at: Optional[datetime] = None
+        self._current_soldier_id: Optional[str] = None  # Track assigned soldier ID
+        self._heartbeat_task: Optional[asyncio.Task] = None  # 💓 Periodic heartbeat
     
     async def start(self):
         """Start the worker"""
@@ -92,6 +95,9 @@ class PostingWorker:
         # Start nonce cleanup background task
         asyncio.create_task(start_nonce_cleanup_task())
         
+        # 💓 Start periodic heartbeat task for STEALTH soldiers
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        
         logger.info("Posting worker started",
                    worker_id=self.worker_id,
                    max_browsers=self.settings.max_concurrent_browsers,
@@ -106,6 +112,14 @@ class PostingWorker:
         
         self._running = False
         self._shutdown_event.set()
+        
+        # Cancel heartbeat task
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
         
         # Stop task processor
         if self._task_processor:
@@ -264,6 +278,11 @@ class PostingWorker:
         """Process a single task"""
         task_id = task.get('id', 'unknown')
         
+        # Extract soldier ID from task for heartbeats
+        soldier_id = task.get('soldier_id', task.get('soldierId'))
+        if soldier_id and soldier_id != self._current_soldier_id:
+            self.set_soldier_id(soldier_id)
+        
         try:
             logger.info("Processing task", task_id=task_id)
             
@@ -324,6 +343,75 @@ class PostingWorker:
         }
         
         await self._redis.update_worker_health(self.worker_id, health_data)
+    
+    async def _heartbeat_loop(self):
+        """
+        💓 STEALTH SOLDIER HEARTBEAT LOOP
+        Sends periodic heartbeats to the main API every 30 seconds
+        This keeps the STEALTH soldiers visible in the IAI Command Center
+        """
+        logger.info("💓 Starting heartbeat loop", worker_id=self.worker_id)
+        
+        # HTTP client for API calls
+        async with httpx.AsyncClient(
+            base_url=self.settings.api_base_url,
+            timeout=10.0
+        ) as client:
+            while self._running:
+                try:
+                    # Only send heartbeat if we have an assigned soldier ID
+                    if self._current_soldier_id:
+                        stats = self._browser_pool.get_stats() if self._browser_pool else {}
+                        
+                        # Determine status based on current state
+                        busy_browsers = sum(1 for b in stats.get('browsers', []) if b.get('is_busy', False))
+                        status = 'WORKING' if busy_browsers > 0 else 'ONLINE'
+                        
+                        payload = {
+                            'soldierId': self._current_soldier_id,
+                            'status': status,
+                            'workerId': self.worker_id,
+                            'browserCount': stats.get('total_browsers', 0),
+                            'cpuUsage': None,  # Could add psutil for real values
+                            'memoryUsageMb': None,
+                        }
+                        
+                        response = await client.post(
+                            '/api/worker/iai/worker/heartbeat',
+                            json=payload,
+                            headers={
+                                'X-Worker-Secret': self.settings.worker_secret,
+                                'Content-Type': 'application/json'
+                            }
+                        )
+                        
+                        if response.status_code == 200:
+                            logger.debug("💚 Heartbeat sent", 
+                                       soldier_id=self._current_soldier_id,
+                                       status=status)
+                        else:
+                            logger.warning("⚠️ Heartbeat failed", 
+                                         status_code=response.status_code,
+                                         response=response.text[:100])
+                    else:
+                        logger.debug("💤 No soldier assigned, skipping heartbeat")
+                    
+                    # Wait 30 seconds before next heartbeat
+                    await asyncio.sleep(30)
+                    
+                except asyncio.CancelledError:
+                    logger.info("💓 Heartbeat loop cancelled")
+                    break
+                except Exception as e:
+                    logger.error("❌ Heartbeat error", error=str(e))
+                    await asyncio.sleep(30)  # Still wait on error
+        
+        logger.info("💓 Heartbeat loop stopped")
+    
+    def set_soldier_id(self, soldier_id: str):
+        """Set the current soldier ID for heartbeats"""
+        self._current_soldier_id = soldier_id
+        logger.info("🎖️ Soldier ID assigned", soldier_id=soldier_id)
     
     def get_stats(self) -> dict:
         """Get worker statistics"""

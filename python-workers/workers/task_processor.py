@@ -430,7 +430,7 @@ class TaskProcessor:
     async def _log_iai_activity(self, soldier_id: str, event_type: str, message: str, task_data: Optional[Dict] = None):
         """
         💓 HEARTBEAT: Log activity to IAI Stealth Soldier system
-        Routes task updates to the Chrome Extension heartbeat sync
+        Routes task updates to the new worker-authenticated endpoint
         """
         try:
             logger.info(f"📝 IAI Activity: {soldier_id} | {event_type} | {message}")
@@ -439,11 +439,14 @@ class TaskProcessor:
                 'soldierId': soldier_id,
                 'eventType': event_type,
                 'message': message,
-                'taskData': task_data or {}
+                'taskData': task_data or {},
+                'taskId': task_data.get('taskId') if task_data else None,
+                'taskType': task_data.get('taskType') if task_data else None,
             }
             
+            # Use the worker-authenticated endpoint (not extension endpoint)
             response = await self._http_client.post(
-                '/api/extension/iai/log-activity',
+                '/api/worker/iai/worker/activity',
                 json=payload,
                 headers={
                     'X-Worker-ID': self.worker_id,
@@ -454,7 +457,7 @@ class TaskProcessor:
             if response.status_code == 200:
                 logger.info(f"✅ IAI Activity logged: {event_type}")
             else:
-                logger.warning(f"⚠️ Failed to log IAI activity: {response.status_code}")
+                logger.warning(f"⚠️ Failed to log IAI activity: {response.status_code} - {response.text}")
                 
         except Exception as e:
             logger.error(f"❌ IAI Activity log failed: {str(e)}")

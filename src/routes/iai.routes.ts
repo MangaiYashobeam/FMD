@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient, SoldierGenre, ExecutionSource, SoldierMode, MissionProfile } from '@prisma/client';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { novaChromiumService } from '../services/nova-chromium.service';
@@ -2161,6 +2161,271 @@ router.delete('/test/cleanup', authenticate, async (_req: AuthRequest, res: Resp
   } catch (error: any) {
     console.error('[IAI Test] Error cleaning up test soldiers:', error);
     return res.status(500).json({ error: 'Failed to cleanup', details: error.message });
+  }
+});
+
+// ============================================
+// WORKER-AUTHENTICATED ROUTES (for Python STEALTH workers)
+// These routes authenticate via X-Worker-Secret header instead of JWT
+// ============================================
+
+/**
+ * Middleware: Authenticate Python workers via X-Worker-Secret
+ */
+const authenticateWorker = (req: Request, res: Response, next: NextFunction): void => {
+  const workerSecret = req.headers['x-worker-secret'];
+  const expectedSecret = process.env.WORKER_SECRET;
+  
+  if (!expectedSecret) {
+    console.error('❌ [WORKER AUTH] WORKER_SECRET not configured');
+    res.status(500).json({ error: 'Server configuration error' });
+    return;
+  }
+  
+  if (!workerSecret || workerSecret !== expectedSecret) {
+    console.warn('❌ [WORKER AUTH] Invalid worker secret');
+    res.status(401).json({ error: 'Invalid worker authentication' });
+    return;
+  }
+  
+  console.log('✅ [WORKER AUTH] Worker authenticated');
+  next();
+};
+
+/**
+ * POST /api/worker/iai/heartbeat
+ * 💓 STEALTH SOLDIER HEARTBEAT - Called by Python workers every 30 seconds
+ * Authenticates via X-Worker-Secret header (not JWT)
+ */
+router.post('/worker/heartbeat', authenticateWorker, async (req: Request, res: Response) => {
+  try {
+    const {
+      soldierId,
+      status = 'WORKING',
+      currentTaskId,
+      currentTaskType,
+      workerId,
+      browserCount,
+      cpuUsage,
+      memoryUsageMb,
+    } = req.body;
+
+    console.log(`💓 [STEALTH HEARTBEAT] ${soldierId} | Worker: ${workerId} | Status: ${status}`);
+
+    if (!soldierId) {
+      return res.status(400).json({ error: 'soldierId is required' });
+    }
+
+    // Get real IP
+    const realIpAddress = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() 
+      || req.headers['x-real-ip']?.toString() 
+      || req.socket.remoteAddress 
+      || null;
+
+    // Find soldier by soldierId
+    const soldier = await prisma.iAISoldier.findFirst({
+      where: { soldierId },
+    });
+
+    if (!soldier) {
+      console.log(`⚠️ [STEALTH HEARTBEAT] Soldier ${soldierId} not found`);
+      return res.status(404).json({ error: 'Soldier not found' });
+    }
+
+    // Map status to valid enum
+    const statusMap: Record<string, string> = {
+      'working': 'WORKING',
+      'online': 'ONLINE',
+      'idle': 'IDLE',
+      'offline': 'OFFLINE',
+      'error': 'ERROR',
+      'WORKING': 'WORKING',
+      'ONLINE': 'ONLINE',
+      'IDLE': 'IDLE',
+      'OFFLINE': 'OFFLINE',
+      'ERROR': 'ERROR',
+    };
+    const safeStatus = statusMap[status] || 'WORKING';
+
+    // Update soldier heartbeat
+    const updateData: any = {
+      status: safeStatus,
+      lastHeartbeatAt: new Date(),
+      ipAddress: realIpAddress,
+    };
+
+    if (currentTaskId) {
+      updateData.currentTaskId = currentTaskId;
+      updateData.currentTaskType = currentTaskType;
+      updateData.lastPollAt = new Date();
+    }
+
+    await prisma.iAISoldier.update({
+      where: { id: soldier.id },
+      data: updateData,
+    });
+
+    // Create activity log for heartbeat visibility
+    await prisma.iAIActivityLog.create({
+      data: {
+        soldierId: soldier.id,
+        accountId: soldier.accountId,
+        eventType: 'heartbeat',
+        message: `💓 Heartbeat | Status: ${safeStatus}${currentTaskType ? ` | Task: ${currentTaskType}` : ''}`,
+        eventData: { 
+          status: safeStatus, 
+          workerId,
+          browserCount,
+          cpuUsage,
+          memoryUsageMb,
+        },
+        ipAddress: realIpAddress,
+      },
+    });
+
+    // Create performance snapshot
+    await prisma.iAIPerformanceSnapshot.create({
+      data: {
+        soldierId: soldier.id,
+        status: safeStatus,
+        cpuUsage: typeof cpuUsage === 'number' ? cpuUsage : null,
+        memoryUsageMb: typeof memoryUsageMb === 'number' ? memoryUsageMb : null,
+        tasksInPeriod: 0,
+        successCount: 0,
+        failureCount: 0,
+      },
+    });
+
+    console.log(`💚 [STEALTH HEARTBEAT] Updated ${soldierId} -> ${safeStatus}`);
+
+    return res.json({ 
+      success: true, 
+      heartbeat: 'recorded',
+      soldierId,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('❌ [STEALTH HEARTBEAT] Error:', error.message);
+    return res.status(500).json({ error: 'Failed to record heartbeat' });
+  }
+});
+
+/**
+ * POST /api/worker/iai/activity
+ * Log activity from Python workers (task start, complete, fail)
+ * Authenticates via X-Worker-Secret header
+ */
+router.post('/worker/activity', authenticateWorker, async (req: Request, res: Response) => {
+  try {
+    const {
+      soldierId,
+      eventType,
+      message,
+      taskData,
+      taskId,
+      taskType,
+    } = req.body;
+
+    console.log(`📝 [WORKER ACTIVITY] ${soldierId} | ${eventType} | ${message?.substring(0, 50)}`);
+
+    if (!soldierId || !eventType) {
+      return res.status(400).json({ error: 'soldierId and eventType are required' });
+    }
+
+    // Find soldier
+    const soldier = await prisma.iAISoldier.findFirst({
+      where: { soldierId },
+    });
+
+    if (!soldier) {
+      console.log(`⚠️ [WORKER ACTIVITY] Soldier ${soldierId} not found`);
+      return res.status(404).json({ error: 'Soldier not found' });
+    }
+
+    // Sanitize inputs
+    const allowedEventTypes = ['task_start', 'task_executing', 'task_complete', 'task_fail', 'task_error', 'heartbeat', 'status_change', 'error', 'warning', 'info'];
+    const safeEventType = allowedEventTypes.includes(eventType) ? eventType : 'info';
+    const safeMessage = typeof message === 'string' ? message.substring(0, 1000) : null;
+
+    // Get real IP
+    const realIpAddress = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() 
+      || req.socket.remoteAddress 
+      || null;
+
+    // Create activity log
+    await prisma.iAIActivityLog.create({
+      data: {
+        soldierId: soldier.id,
+        accountId: soldier.accountId,
+        eventType: safeEventType,
+        message: safeMessage,
+        eventData: taskData || null,
+        taskId: taskId?.substring(0, 100),
+        taskType: taskType?.substring(0, 50),
+        ipAddress: realIpAddress,
+      },
+    });
+
+    // Update soldier stats based on event type
+    const updates: any = {
+      lastHeartbeatAt: new Date(), // Always update heartbeat on activity
+    };
+    
+    if (safeEventType === 'task_start') {
+      updates.currentTaskId = taskId;
+      updates.currentTaskType = taskType;
+      updates.currentTaskStartedAt = new Date();
+      updates.status = 'WORKING';
+    } else if (safeEventType === 'task_complete') {
+      updates.tasksCompleted = { increment: 1 };
+      updates.currentTaskId = null;
+      updates.currentTaskType = null;
+      updates.currentTaskStartedAt = null;
+      updates.status = 'ONLINE';
+      updates.lastTaskAt = new Date();
+    } else if (safeEventType === 'task_fail' || safeEventType === 'task_error') {
+      updates.tasksFailed = { increment: 1 };
+      updates.currentTaskId = null;
+      updates.currentTaskType = null;
+      updates.currentTaskStartedAt = null;
+      updates.status = 'ONLINE';
+      updates.lastError = message;
+      updates.lastErrorAt = new Date();
+    }
+
+    await prisma.iAISoldier.update({
+      where: { id: soldier.id },
+      data: updates,
+    });
+
+    // Recalculate success rate
+    const updatedSoldier = await prisma.iAISoldier.findUnique({
+      where: { id: soldier.id },
+      select: { tasksCompleted: true, tasksFailed: true },
+    });
+
+    if (updatedSoldier) {
+      const total = updatedSoldier.tasksCompleted + updatedSoldier.tasksFailed;
+      if (total > 0) {
+        const successRate = (updatedSoldier.tasksCompleted / total) * 100;
+        await prisma.iAISoldier.update({
+          where: { id: soldier.id },
+          data: { successRate },
+        });
+      }
+    }
+
+    console.log(`✅ [WORKER ACTIVITY] Logged ${safeEventType} for ${soldierId}`);
+
+    return res.json({ 
+      success: true, 
+      logged: true,
+      soldierId,
+      eventType: safeEventType,
+    });
+  } catch (error: any) {
+    console.error('❌ [WORKER ACTIVITY] Error:', error.message);
+    return res.status(500).json({ error: 'Failed to log activity' });
   }
 });
 
