@@ -116,25 +116,30 @@
     }
     
     .avatar {
-      width: 56px;
-      height: 56px;
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
       border-radius: 50%;
       background: linear-gradient(135deg, #0066ff, #00ccff);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      font-size: 16px;
       font-weight: bold;
     }
     
+    .avatar.hidden {
+      display: none;
+    }
+    
     .user-info h3 {
-      font-size: 18px;
+      font-size: 14px;
       font-weight: 600;
     }
     
     .user-info p {
       color: #8892b0;
-      font-size: 13px;
+      font-size: 12px;
       margin-top: 2px;
     }
     
@@ -1322,7 +1327,7 @@
   <div class="container">
     <div class="header">
       <div class="logo">DF</div>
-      <h1 class="title">DF-Auto Sim <span style="font-size: 12px; background: linear-gradient(135deg, #10b981, #059669); padding: 2px 8px; border-radius: 8px; margin-left: 6px; color: white;">v3.6.0</span></h1>
+      <h1 class="title">DF-Auto Sim <span style="font-size: 10px; background: linear-gradient(135deg, #0f172a, #1e293b); border: 1px solid rgba(0, 255, 136, 0.3); padding: 3px 10px; border-radius: 20px; margin-left: 8px; color: #00ff88; font-family: 'Courier New', monospace; letter-spacing: 1px; box-shadow: 0 0 10px rgba(0, 255, 136, 0.2), inset 0 0 10px rgba(0, 255, 136, 0.05);">v3.6.0</span></h1>
       <p class="subtitle">AI-Powered Facebook Automation</p>
     </div>
     
@@ -1347,12 +1352,12 @@
     
     <!-- Dashboard -->
     <div class="dashboard" id="dashboard">
-      <div class="user-card">
-        <div class="avatar" id="userAvatar">?</div>
-        <div class="user-info">
-          <h3 id="userName">Loading...</h3>
-          <p id="userEmail">...</p>
-          <span class="status-badge">● Active</span>
+      <div class="user-card" style="padding: 12px; gap: 12px;">
+        <img id="userAvatarImg" src="" alt="Profile" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; display: none; border: 2px solid rgba(0, 255, 136, 0.3);">
+        <div class="avatar" id="userAvatar" style="width: 40px; height: 40px; font-size: 16px; min-width: 40px;">?</div>
+        <div class="user-info" style="flex: 1; min-width: 0;">
+          <h3 id="userName" style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Loading...</h3>
+          <span class="status-badge" style="font-size: 10px; padding: 2px 8px; margin-top: 2px;">● Active</span>
         </div>
       </div>
       

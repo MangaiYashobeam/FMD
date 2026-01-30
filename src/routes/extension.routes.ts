@@ -92,8 +92,8 @@ router.get('/account', authenticate, async (req: AuthRequest, res: Response) => 
     
     const accountId = primaryAccountUser.accountId;
     
-    // Get stats for this account
-    const [vehicleCount, leadCount, pendingTasks, recentPosts] = await Promise.all([
+    // Get stats for this account and Facebook session for profile pic
+    const [vehicleCount, leadCount, pendingTasks, recentPosts, fbSession] = await Promise.all([
       prisma.vehicle.count({ where: { accountId } }),
       prisma.lead.count({ where: { accountId } }),
       prisma.extensionTask.count({ 
@@ -108,22 +108,35 @@ router.get('/account', authenticate, async (req: AuthRequest, res: Response) => 
           createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
         },
       }),
+      prisma.facebookSession.findFirst({
+        where: { accountId, status: 'active' },
+        orderBy: { lastValidatedAt: 'desc' },
+      }),
     ]);
+    
+    // Get display name - prefer Facebook name if available
+    const displayName = fbSession?.fbName || 
+                       primaryAccountUser.account.name || 
+                       primaryAccountUser.account.dealershipName ||
+                       user.firstName ||
+                       user.email?.split('@')[0];
     
     res.json({
       success: true,
       data: {
         id: accountId,
-        name: primaryAccountUser.account.name || primaryAccountUser.account.dealershipName,
+        name: displayName,
         email: user.email,
+        firstName: user.firstName,
         role: primaryAccountUser.role,
+        profilePicture: fbSession?.fbProfilePictureUrl || user.profileImageUrl || null,
         subscriptionStatus: primaryAccountUser.account.subscriptionStatus,
         stats: {
           listings: vehicleCount,
           leads: leadCount,
           pendingTasks,
           responses: recentPosts,
-          unreadMessages: 0, // TODO: Implement unread message count
+          unreadMessages: 0,
         },
       },
     });

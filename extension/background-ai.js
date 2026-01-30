@@ -1727,15 +1727,63 @@ async function reportTaskFailed(taskId, error) {
  * Get account info from server
  */
 async function getAccountInfo() {
-  const { authToken } = await chrome.storage.local.get('authToken');
-  
-  const response = await fetch(`${CONFIG.API_URL}/extension/account`, {
-    headers: {
-      'Authorization': `Bearer ${authToken}`,
-    },
-  });
-  
-  return response.json();
+  try {
+    const { authToken, user, authState } = await chrome.storage.local.get(['authToken', 'user', 'authState']);
+    
+    if (!authToken) {
+      console.log('❌ No auth token for getAccountInfo');
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    const response = await fetch(`${CONFIG.API_URL}/extension/account`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    
+    if (!response.ok) {
+      console.log('❌ getAccountInfo failed:', response.status);
+      // Return cached user data if API fails
+      if (user) {
+        return {
+          success: true,
+          data: {
+            name: user.firstName || user.name || user.email?.split('@')[0],
+            email: user.email,
+            profilePicture: user.profilePicture || user.picture,
+            stats: { listings: 0, leads: 0, pendingTasks: 0, responses: 0 }
+          }
+        };
+      }
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+    
+    const data = await response.json();
+    
+    // Merge with stored user data for profile picture
+    if (data.data && user) {
+      data.data.profilePicture = data.data.profilePicture || user.profilePicture || user.picture;
+      data.data.name = data.data.name || user.firstName || user.name;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('❌ getAccountInfo error:', error);
+    // Return cached data on error
+    const { user } = await chrome.storage.local.get(['user']);
+    if (user) {
+      return {
+        success: true,
+        data: {
+          name: user.firstName || user.name || user.email?.split('@')[0],
+          email: user.email,
+          profilePicture: user.profilePicture || user.picture,
+          stats: { listings: 0, leads: 0, pendingTasks: 0, responses: 0 }
+        }
+      };
+    }
+    return { success: false, error: error.message };
+  }
 }
 
 /**

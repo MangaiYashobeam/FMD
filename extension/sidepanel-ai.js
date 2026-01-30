@@ -264,6 +264,10 @@ async function loadDashboard() {
   // IMMEDIATELY show dashboard UI, then load data
   showDashboard();
   
+  // Get avatar elements
+  const avatarImg = document.getElementById('userAvatarImg');
+  const avatarDiv = elements.userAvatar;
+  
   try {
     // Get account info with timeout
     console.log('📡 Fetching account info...');
@@ -276,18 +280,43 @@ async function loadDashboard() {
     try {
       accountResponse = await Promise.race([accountPromise, timeoutPromise]);
     } catch (e) {
-      console.warn('⏰ Account info timed out, using defaults');
-      accountResponse = { data: null };
+      console.warn('⏰ Account info timed out, checking storage...');
+      // Try to get user info from storage
+      const stored = await chrome.storage.local.get(['user', 'authState']);
+      if (stored.user) {
+        accountResponse = { data: { 
+          name: stored.user.firstName || stored.user.name || stored.user.email?.split('@')[0],
+          email: stored.user.email,
+          profilePicture: stored.user.profilePicture || stored.user.picture
+        }};
+      } else {
+        accountResponse = { data: null };
+      }
     }
     
     const account = accountResponse?.data;
-    console.log('📦 Account data:', account ? 'received' : 'null');
+    console.log('📦 Account data:', account ? 'received' : 'null', account);
     
     if (account) {
-      // Update user info
-      if (elements.userName) elements.userName.textContent = account.name || 'Dealer Account';
-      if (elements.userEmail) elements.userEmail.textContent = account.email || '';
-      if (elements.userAvatar) elements.userAvatar.textContent = (account.name?.[0] || 'D').toUpperCase();
+      // Update user name
+      const displayName = account.name || account.firstName || account.email?.split('@')[0] || 'Dealer';
+      if (elements.userName) elements.userName.textContent = displayName;
+      
+      // Handle profile picture
+      const profilePic = account.profilePicture || account.picture || account.avatarUrl;
+      if (profilePic && avatarImg) {
+        avatarImg.src = profilePic;
+        avatarImg.style.display = 'block';
+        avatarImg.onerror = () => {
+          avatarImg.style.display = 'none';
+          if (avatarDiv) avatarDiv.style.display = 'flex';
+        };
+        if (avatarDiv) avatarDiv.style.display = 'none';
+      } else if (avatarDiv) {
+        avatarDiv.textContent = (displayName?.[0] || 'D').toUpperCase();
+        avatarDiv.style.display = 'flex';
+        if (avatarImg) avatarImg.style.display = 'none';
+      }
       
       // Update stats
       if (elements.postsCount) elements.postsCount.textContent = formatNumber(account.stats?.listings || 0);
@@ -301,10 +330,14 @@ async function loadDashboard() {
         elements.unreadBadge.style.display = 'inline';
       }
     } else {
-      // Set default values when no account data
-      if (elements.userName) elements.userName.textContent = 'Connected';
-      if (elements.userEmail) elements.userEmail.textContent = 'Dashboard loaded';
-      if (elements.userAvatar) elements.userAvatar.textContent = '✓';
+      // Set default values when no account data - try storage
+      const stored = await chrome.storage.local.get(['user']);
+      const userName = stored.user?.firstName || stored.user?.name || stored.user?.email?.split('@')[0] || 'Connected';
+      if (elements.userName) elements.userName.textContent = userName;
+      if (avatarDiv) {
+        avatarDiv.textContent = userName[0]?.toUpperCase() || '✓';
+        avatarDiv.style.display = 'flex';
+      }
     }
     
     // Load activities from storage
