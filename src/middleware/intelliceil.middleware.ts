@@ -328,11 +328,14 @@ export const honeypotTrap = (
   const { isHoneypot, action } = intelliceilService.checkHoneypot(req.path);
 
   if (isHoneypot) {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    logger.warn(`🍯 Honeypot triggered by ${ip} at ${req.path}`);
+    // Get real client IP from proxy headers, not Docker internal IP
+    const realIP = getRealClientIP(req);
+    const rawIP = req.ip || req.socket.remoteAddress || 'unknown';
+    logger.warn(`🍯 Honeypot triggered by ${realIP} (via ${rawIP}) at ${req.path}`);
     
     if (action === 'block_and_flag') {
-      intelliceilService.manualBlock(ip);
+      // Block the real attacker IP, not the proxy IP
+      intelliceilService.manualBlock(realIP);
     }
 
     // Return a fake "interesting" response to waste attacker's time
@@ -353,7 +356,7 @@ export const validateTokenFingerprint = (storedFingerprint: {
 }) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const currentUserAgent = req.headers['user-agent'] || '';
-    const currentIP = req.ip || req.socket.remoteAddress || 'unknown';
+    const currentIP = getRealClientIP(req);
 
     const result = intelliceilService.validateTokenFingerprint(
       { ...storedFingerprint, fingerprint: '', createdAt: new Date() },
