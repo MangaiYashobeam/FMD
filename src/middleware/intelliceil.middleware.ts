@@ -98,6 +98,9 @@ const GREEN_ROUTE_BYPASS = [
   '/iai/pattern', '/iai/metrics', '/iai/register',
   '/iai/heartbeat', '/iai/log-activity', '/iai/',
   
+  // Worker GREEN ROUTE - Python STEALTH soldiers (internal service-to-service)
+  '/api/worker/', '/worker/',
+  
   // Injection GREEN ROUTE
   '/api/injection/', '/injection/',
   

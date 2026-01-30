@@ -608,6 +608,8 @@ app.use('/api', (req, res, next) => {
     '/facebook/session',
     // IAI public endpoints (extension uses own token/no CSRF)
     '/iai/',
+    // Python worker endpoints (authenticated via X-Worker-Secret header)
+    '/worker/',
   ];
   
   if (skipPaths.some(p => req.path.startsWith(p))) {
