@@ -10,7 +10,8 @@ from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
 from facebook.selectors import FacebookSelectors
 from browser.anti_detect import random_delay, add_human_behavior
-from browser.session import SessionManager, FacebookSessionValidator
+from browser.session import SessionManager, FacebookSessionValidator, ServerSessionSync
+from core.config import get_settings
 
 logger = structlog.get_logger()
 
@@ -288,6 +289,11 @@ class FacebookAuth:
         """
         Validate that current session is still valid
         
+        PRIORITY:
+        1. Try to fetch session from Node.js API (synced from extension)
+        2. Fall back to local session file
+        3. Return False if no valid session
+        
         Args:
             account_id: Account identifier
             
@@ -295,16 +301,50 @@ class FacebookAuth:
             True if session is valid and logged in
         """
         try:
-            # Load saved session
-            session_data = await self.session_manager.load_session(account_id)
+            settings = get_settings()
+            session_data = None
+            
+            # 💓 STEALTH SYNC: Try to get session from Node.js API first
+            # This is where extension sessions are synced to!
+            if settings.api_base_url and settings.worker_secret:
+                logger.info("🔄 Attempting to fetch session from API...", account_id=account_id)
+                try:
+                    server_sync = ServerSessionSync(
+                        api_url=settings.api_base_url,
+                        api_token=settings.worker_secret
+                    )
+                    session_data = await server_sync.get_best_session(account_id)
+                    if session_data:
+                        logger.info("✅ Session fetched from API", 
+                                   account_id=account_id,
+                                   cookies=len(session_data.get('cookies', [])))
+                except Exception as api_error:
+                    logger.warning("⚠️ Failed to fetch from API, falling back to local",
+                                  account_id=account_id,
+                                  error=str(api_error))
+            
+            # Fall back to local session
+            if not session_data:
+                logger.info("📂 Loading local session...", account_id=account_id)
+                session_data = await self.session_manager.load_session(account_id)
             
             if not session_data:
-                logger.info("No saved session", account_id=account_id)
+                logger.info("❌ No saved session found", account_id=account_id)
                 return False
             
             # Validate cookies exist
             if not FacebookSessionValidator.validate(session_data):
-                logger.warning("Session cookies invalid", account_id=account_id)
+                logger.warning("❌ Session cookies invalid", account_id=account_id)
+                return False
+            
+            # Apply cookies to browser context
+            logger.info("🍪 Applying session cookies to browser...", account_id=account_id)
+            try:
+                context = self.page.context
+                await context.add_cookies(session_data.get('cookies', []))
+                logger.info("✅ Cookies applied", count=len(session_data.get('cookies', [])))
+            except Exception as cookie_error:
+                logger.error("❌ Failed to apply cookies", error=str(cookie_error))
                 return False
             
             # Navigate to Facebook and check actual login state
@@ -313,14 +353,18 @@ class FacebookAuth:
             
             is_logged = await self.is_logged_in()
             
-            if not is_logged:
-                logger.warning("Session expired", account_id=account_id)
+            if is_logged:
+                logger.info("💚 Session valid - user is logged in", account_id=account_id)
+                # Save locally for future use
+                await self.session_manager.save_session(account_id, session_data)
+            else:
+                logger.warning("❌ Session expired - not logged in", account_id=account_id)
                 await self.session_manager.delete_session(account_id)
             
             return is_logged
             
         except Exception as e:
-            logger.error("Session validation error", 
+            logger.error("❌ Session validation error", 
                         account_id=account_id, 
                         error=str(e))
             return False
