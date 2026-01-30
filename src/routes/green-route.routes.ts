@@ -880,12 +880,16 @@ router.post('/leads', async (req, res) => {
 /**
  * POST /api/green/heartbeat
  * Extension heartbeat (keep session alive)
+ * 
+ * 💓 GREEN ROUTE HEARTBEAT - The extension's pulse!
  */
 router.post('/heartbeat', async (req, res) => {
   try {
     const user = (req as any).user;
     const { browserInfo } = req.body;
-    // extensionVersion and activeTab reserved for future analytics
+    
+    // 💓 HEARTBEAT LOG
+    console.log(`💓 [GREEN HEARTBEAT] User: ${user?.id} | UA: ${browserInfo?.userAgent?.substring(0, 50) || 'unknown'}...`);
 
     // Update user's last active timestamp
     await prisma.user.update({
@@ -896,12 +900,15 @@ router.post('/heartbeat', async (req, res) => {
       }
     });
 
+    console.log(`💚 [GREEN HEARTBEAT] Updated lastActiveAt for user ${user?.id}`);
+
     res.json({
       success: true,
       ack: true,
       serverTime: new Date().toISOString()
     });
   } catch (error: any) {
+    console.error(`❌ [GREEN HEARTBEAT] Error:`, error.message);
     res.status(500).json({ 
       success: false, 
       error: error.message 

@@ -346,13 +346,17 @@ class GreenRouteService {
 
   /**
    * Send heartbeat
+   * 💓 GREEN ROUTE HEARTBEAT - Extension's pulse to server
    */
   async heartbeat(browserInfo = {}) {
-    return this.request('/api/green/heartbeat', {
+    console.log(`💓 [GreenRoute] Sending heartbeat...`);
+    const result = await this.request('/api/green/heartbeat', {
       method: 'POST',
       body: { browserInfo },
       timeout: GREEN_ROUTE_CONFIG.TIMEOUT.QUICK,
     });
+    console.log(`💚 [GreenRoute] Heartbeat response:`, result);
+    return result;
   }
 
   /**
@@ -446,10 +450,12 @@ class GreenRouteService {
 
   /**
    * Send IAI heartbeat
+   * 💓 IAI HEARTBEAT - Soldier's pulse to Command Center
    */
   async iaiHeartbeat(soldierId, status = 'online') {
+    console.log(`💓 [GreenRoute] Sending IAI heartbeat for ${soldierId} | Status: ${status}`);
     const context = await getAccountContext();
-    return this.request('/api/extension/iai/heartbeat', {
+    const result = await this.request('/api/extension/iai/heartbeat', {
       method: 'POST',
       body: {
         soldierId,
@@ -458,6 +464,8 @@ class GreenRouteService {
       },
       timeout: GREEN_ROUTE_CONFIG.TIMEOUT.QUICK,
     });
+    console.log(`💚 [GreenRoute] IAI heartbeat response:`, result);
+    return result;
   }
 
   /**

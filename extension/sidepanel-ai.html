@@ -506,6 +506,47 @@
       color: #0066ff;
     }
     
+    /* Heartbeat Status Indicator */
+    .heartbeat-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 12px;
+      font-size: 11px;
+      color: #10b981;
+      margin-bottom: 8px;
+      cursor: help;
+      transition: all 0.3s ease;
+    }
+    
+    .heartbeat-status.offline {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+    
+    .heartbeat-status.syncing {
+      background: rgba(59, 130, 246, 0.1);
+      border-color: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+    }
+    
+    .heartbeat-icon {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    .heartbeat-status.offline .heartbeat-icon {
+      animation: none;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+    }
+    
     .version {
       color: #555;
       font-size: 11px;
@@ -1493,10 +1534,14 @@
     </div>
     
     <div class="footer">
+      <div class="heartbeat-status" id="heartbeatStatus" title="Heartbeat Sync Status">
+        <span class="heartbeat-icon">💓</span>
+        <span class="heartbeat-text" id="heartbeatText">--</span>
+      </div>
       <a href="https://dealersface.com/help" target="_blank">Help</a>
       <a href="https://dealersface.com/privacy" target="_blank">Privacy</a>
       <a href="#" id="logoutBtn">Logout</a>
-      <p class="version">v3.6.0</p>
+      <p class="version">v3.8.0</p>
     </div>
   </div>
 

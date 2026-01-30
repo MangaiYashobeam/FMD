@@ -845,6 +845,76 @@ setInterval(async () => {
 }, 30000);
 
 // ============================================
+// Heartbeat Status Monitor
+// ============================================
+
+let lastHeartbeat = null;
+let heartbeatCheckInterval = null;
+
+/**
+ * Update the heartbeat status indicator
+ */
+function updateHeartbeatStatus(status, message) {
+  const statusEl = document.getElementById('heartbeatStatus');
+  const textEl = document.getElementById('heartbeatText');
+  
+  if (!statusEl || !textEl) return;
+  
+  // Remove all status classes
+  statusEl.classList.remove('offline', 'syncing');
+  
+  switch (status) {
+    case 'online':
+      lastHeartbeat = Date.now();
+      textEl.textContent = 'Synced';
+      statusEl.title = `Last heartbeat: ${new Date().toLocaleTimeString()}`;
+      break;
+    case 'syncing':
+      statusEl.classList.add('syncing');
+      textEl.textContent = 'Syncing...';
+      statusEl.title = 'Sending heartbeat to server...';
+      break;
+    case 'offline':
+      statusEl.classList.add('offline');
+      textEl.textContent = 'Offline';
+      statusEl.title = message || 'Not connected to server';
+      break;
+    default:
+      textEl.textContent = '--';
+      statusEl.title = 'Heartbeat status unknown';
+  }
+}
+
+/**
+ * Check heartbeat health and update UI
+ */
+function checkHeartbeatHealth() {
+  if (!authState?.isAuthenticated) {
+    updateHeartbeatStatus('offline', 'Not authenticated');
+    return;
+  }
+  
+  // If no heartbeat received in last 60 seconds, show as offline
+  if (lastHeartbeat && (Date.now() - lastHeartbeat) > 60000) {
+    updateHeartbeatStatus('offline', 'No heartbeat received for 60s');
+  }
+}
+
+// Listen for heartbeat updates from background
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'HEARTBEAT_STATUS') {
+    updateHeartbeatStatus(message.status, message.message);
+    sendResponse({ received: true });
+  }
+});
+
+// Start heartbeat health check
+heartbeatCheckInterval = setInterval(checkHeartbeatHealth, 10000);
+
+// Initial heartbeat status
+updateHeartbeatStatus('syncing', 'Connecting...');
+
+// ============================================
 // Vehicle Posting System
 // ============================================
 

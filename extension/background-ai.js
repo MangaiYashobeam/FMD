@@ -198,35 +198,106 @@ async function registerIAISoldier() {
 /**
  * Send IAI heartbeat + regular extension heartbeat via GreenRouteService
  * Both are needed: IAI heartbeat for the IAI Command Center, regular heartbeat for the Extension Status indicator
+ * 
+ * 💓 HEARTBEAT SYNC - May the beat of both (extension + server) meet and connect!
  */
 async function sendIAIHeartbeat() {
+  const heartbeatTime = new Date().toISOString();
+  console.log(`💓 [HEARTBEAT START] ${heartbeatTime}`);
+  
   try {
-    const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+    const { authState: savedAuth, authToken, soldierInfo: storedSoldierInfo } = await chrome.storage.local.get(['authState', 'authToken', 'soldierInfo']);
     const token = authToken || savedAuth?.accessToken;
     const accountId = savedAuth?.dealerAccountId || savedAuth?.accountId;
     
-    if (!token || !accountId) {
+    // Use stored soldier info if we don't have it in memory
+    if (!soldierInfo && storedSoldierInfo) {
+      soldierInfo = storedSoldierInfo;
+      console.log(`💓 [HEARTBEAT] Restored soldierInfo from storage: ${soldierInfo.soldierId}`);
+    }
+    
+    if (!token) {
+      console.log('💓 [HEARTBEAT] ❌ Skipped - no auth token');
+      return;
+    }
+    
+    if (!accountId) {
+      console.log('💓 [HEARTBEAT] ❌ Skipped - no accountId');
       return;
     }
     
     const status = isPolling ? (isAwake ? 'working' : 'online') : 'idle';
     
+    console.log(`💓 [HEARTBEAT] Sending... | Soldier: ${soldierInfo?.soldierId || 'not registered'} | Account: ${accountId} | Status: ${status}`);
+    
     // Use GreenRouteService for heartbeats (bypass mitigation)
     if (typeof greenRoute !== 'undefined') {
+      console.log(`💓 [HEARTBEAT] Using GreenRouteService`);
+      
       // Send IAI heartbeat (for IAI Command Center)
       if (soldierInfo) {
-        await greenRoute.iaiHeartbeat(soldierInfo.soldierId, status);
+        try {
+          const iaiResult = await greenRoute.iaiHeartbeat(soldierInfo.soldierId, status);
+          console.log(`💚 [HEARTBEAT] IAI heartbeat SUCCESS:`, iaiResult);
+        } catch (iaiError) {
+          console.error(`❌ [HEARTBEAT] IAI heartbeat FAILED:`, iaiError.message);
+        }
+      } else {
+        console.log(`💓 [HEARTBEAT] No soldierInfo - registering soldier first...`);
+        // Try to register as soldier if we don't have soldierInfo
+        soldierInfo = await registerIAISoldier();
+        if (soldierInfo) {
+          try {
+            const iaiResult = await greenRoute.iaiHeartbeat(soldierInfo.soldierId, status);
+            console.log(`💚 [HEARTBEAT] IAI heartbeat SUCCESS (after registration):`, iaiResult);
+          } catch (iaiError) {
+            console.error(`❌ [HEARTBEAT] IAI heartbeat FAILED:`, iaiError.message);
+          }
+        }
       }
       
       // Send regular heartbeat via Green Route
-      await greenRoute.heartbeat({ userAgent: navigator.userAgent });
+      try {
+        const greenResult = await greenRoute.heartbeat({ userAgent: navigator.userAgent });
+        console.log(`💚 [HEARTBEAT] Green Route heartbeat SUCCESS:`, greenResult);
+      } catch (greenError) {
+        console.error(`❌ [HEARTBEAT] Green Route heartbeat FAILED:`, greenError.message);
+      }
       
-      console.log(`💓 GreenRoute heartbeat sent for account ${accountId}`);
+      console.log(`💚 [HEARTBEAT COMPLETE] GreenRoute | Account: ${accountId} | Soldier: ${soldierInfo?.soldierId || 'N/A'}`);
     } else {
+      console.log(`💓 [HEARTBEAT] GreenRoute not available, using direct fetch`);
+      
       // Fallback to direct calls
       if (soldierInfo) {
-        await fetch(
-          `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/heartbeat`,
+        try {
+          const iaiResponse = await fetch(
+            `${CONFIG.API_URL.replace('/api', '')}/api/extension/iai/heartbeat`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'X-Green-Route': 'true',
+              },
+              body: JSON.stringify({
+                soldierId: soldierInfo.soldierId,
+                accountId,
+                status,
+              }),
+            }
+          );
+          const iaiData = await iaiResponse.json();
+          console.log(`💚 [HEARTBEAT] Direct IAI heartbeat:`, iaiResponse.status, iaiData);
+        } catch (iaiError) {
+          console.error(`❌ [HEARTBEAT] Direct IAI heartbeat FAILED:`, iaiError.message);
+        }
+      }
+      
+      // Regular extension heartbeat
+      try {
+        const greenResponse = await fetch(
+          `${CONFIG.GREEN_URL}/heartbeat`,
           {
             method: 'POST',
             headers: {
@@ -234,33 +305,58 @@ async function sendIAIHeartbeat() {
               'Content-Type': 'application/json',
               'X-Green-Route': 'true',
             },
-            body: JSON.stringify({
-              soldierId: soldierInfo.soldierId,
-              accountId,
-              status,
-            }),
+            body: JSON.stringify({ browserInfo: { userAgent: navigator.userAgent } }),
           }
         );
+        const greenData = await greenResponse.json();
+        console.log(`💚 [HEARTBEAT] Direct Green Route heartbeat:`, greenResponse.status, greenData);
+      } catch (greenError) {
+        console.error(`❌ [HEARTBEAT] Direct Green Route heartbeat FAILED:`, greenError.message);
       }
       
-      // Regular extension heartbeat
-      await fetch(
-        `${CONFIG.GREEN_URL}/heartbeat`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'X-Green-Route': 'true',
-          },
-          body: JSON.stringify({ browserInfo: { userAgent: navigator.userAgent } }),
-        }
-      );
-      
-      console.log(`💓 Heartbeat sent for account ${accountId}`);
+      console.log(`💚 [HEARTBEAT COMPLETE] Direct fetch | Account: ${accountId}`);
     }
+    
+    // Update extension badge to show heartbeat is active
+    const badge = isPolling ? 'ON' : '💓';
+    chrome.action.setBadgeText({ text: badge });
+    chrome.action.setBadgeBackgroundColor({ color: '#22C55E' });
+    
+    // Notify sidepanel of successful heartbeat
+    notifySidepanelHeartbeat('online');
+    
   } catch (error) {
-    console.error('Heartbeat error:', error);
+    console.error('❌ [HEARTBEAT ERROR]:', error);
+    chrome.action.setBadgeText({ text: '!' });
+    chrome.action.setBadgeBackgroundColor({ color: '#EF4444' });
+    
+    // Notify sidepanel of failed heartbeat
+    notifySidepanelHeartbeat('offline', error.message);
+  }
+}
+
+/**
+ * Notify sidepanel of heartbeat status
+ * 💓 STEALTH SYNC - Extension and sidepanel beat together!
+ */
+async function notifySidepanelHeartbeat(status, message = null) {
+  try {
+    // Try to send to all extension views (sidepanel, popup, etc.)
+    const views = await chrome.runtime.getContexts ? 
+      await chrome.runtime.getContexts({}) : [];
+    
+    // Send message to all extension contexts
+    chrome.runtime.sendMessage({
+      type: 'HEARTBEAT_STATUS',
+      status,
+      message,
+      timestamp: new Date().toISOString(),
+      soldier: soldierInfo?.soldierId || null
+    }).catch(() => {
+      // Silent fail if no listeners (sidepanel not open)
+    });
+  } catch (e) {
+    // Silent fail - sidepanel might not be open
   }
 }
 
@@ -554,12 +650,26 @@ async function executeIAITask(task) {
 /**
  * Check IAI heartbeat - ensure we're still alive
  * Sends heartbeat regardless of polling state so web app knows extension is online
+ * 
+ * 💓 STEALTH SYNC CHECKPOINT - The beat goes on!
  */
 async function checkIAIHeartbeat() {
-  console.log(`💓 Extension heartbeat check - isPolling: ${isPolling}, soldier: ${soldierInfo?.soldierId || 'unknown'}`);
+  const checkTime = new Date().toLocaleTimeString();
+  console.log(`💓 [HEARTBEAT CHECK] ${checkTime} | isPolling: ${isPolling} | isAwake: ${isAwake} | soldier: ${soldierInfo?.soldierId || 'not registered'}`);
   
   // Always send heartbeat to update extension status in web app
   await sendIAIHeartbeat();
+  
+  // If we're polling but soldier isn't registered, try to register
+  if (isPolling && !soldierInfo) {
+    console.log('💓 [HEARTBEAT CHECK] Soldier not registered - attempting registration...');
+    soldierInfo = await registerIAISoldier();
+    if (soldierInfo) {
+      console.log(`✅ [HEARTBEAT CHECK] Soldier registered: ${soldierInfo.soldierId}`);
+    }
+  }
+  
+  console.log(`💓 [HEARTBEAT CHECK COMPLETE] Next check in ${CONFIG.HEARTBEAT_CHECK_INTERVAL / 1000}s`);
 }
 
 // ============================================
