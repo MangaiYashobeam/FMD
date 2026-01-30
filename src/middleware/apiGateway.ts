@@ -502,6 +502,7 @@ export const ring6APIKeyFortress = (req: Request, res: Response, next: NextFunct
       '/training/console/log',       // ROOT Console log entries (extension)
       '/training/upload',            // Training session upload (extension - no auth required)
       '/iai/pattern',                // IAI pattern loading (extension - no auth required)
+      '/worker/iai',                 // Python worker STEALTH heartbeats (X-Worker-Secret auth)
     ];
     const isPublicPath = publicPaths.some(p => req.path.includes(p));
     
