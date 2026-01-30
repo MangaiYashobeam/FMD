@@ -106,7 +106,14 @@ let ultraSpeedEnabled = false; // USM state
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('🚀 Sidepanel DOMContentLoaded');
   showLoading();
+  
+  // Safety fallback: if still loading after 8 seconds, force show login
+  const safetyTimeout = setTimeout(() => {
+    console.warn('⚠️ Safety timeout - forcing auth section');
+    showAuthSection();
+  }, 8000);
   
   try {
     // Load USM state from storage
@@ -115,35 +122,77 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateUSMToggleUI();
     
     // Check authentication state with timeout (prevents infinite "Connecting...")
+    console.log('🔍 Checking auth state...');
     const authPromise = sendMessage({ type: 'GET_AUTH_STATE' });
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+      setTimeout(() => reject(new Error('Auth check timeout')), 3000)
     );
     
     let response;
+    let authFromStorage = false;
+    
     try {
       response = await Promise.race([authPromise, timeoutPromise]);
+      console.log('✅ Auth response received:', response);
     } catch (timeoutError) {
-      console.warn('Auth check timed out, checking storage directly...');
+      console.warn('⏰ Auth check timed out, checking storage directly...');
       // Fallback: check storage directly
-      const stored = await chrome.storage.local.get(['authState', 'authToken']);
-      if (stored.authState?.isAuthenticated || stored.authToken) {
-        response = { success: true, data: stored.authState || { isAuthenticated: true, accessToken: stored.authToken } };
+      const stored = await chrome.storage.local.get(['authState', 'authToken', 'user']);
+      console.log('📦 Storage contents:', JSON.stringify({
+        hasAuthState: !!stored.authState, 
+        hasToken: !!stored.authToken,
+        hasUser: !!stored.user,
+        isAuthenticated: stored.authState?.isAuthenticated 
+      }));
+      
+      // Be very explicit about what counts as "authenticated"
+      const hasValidAuth = (stored.authState && stored.authState.isAuthenticated === true) || 
+                          (stored.authToken && typeof stored.authToken === 'string' && stored.authToken.length > 10);
+      
+      if (hasValidAuth) {
+        authFromStorage = true;
+        response = { 
+          success: true, 
+          data: stored.authState || { 
+            isAuthenticated: true, 
+            accessToken: stored.authToken 
+          } 
+        };
+        console.log('✅ Using stored auth state');
       } else {
+        console.log('❌ No valid auth in storage, showing login');
+        clearTimeout(safetyTimeout);
         showAuthSection();
         return;
       }
     }
     
+    // Handle response - could be wrapped or unwrapped
     authState = response?.data || response;
+    console.log('🔐 Final authState:', JSON.stringify({ 
+      isAuthenticated: authState?.isAuthenticated,
+      hasToken: !!authState?.accessToken,
+      fromStorage: authFromStorage
+    }));
     
     if (authState?.isAuthenticated) {
-      await loadDashboard();
+      console.log('✅ User authenticated, loading dashboard...');
+      clearTimeout(safetyTimeout);
+      try {
+        await loadDashboard();
+      } catch (dashError) {
+        console.error('❌ Dashboard load failed:', dashError);
+        // Still show dashboard even if data load fails
+        showDashboard();
+      }
     } else {
+      console.log('❌ Not authenticated, showing login');
+      clearTimeout(safetyTimeout);
       showAuthSection();
     }
   } catch (error) {
-    console.error('Initialization error:', error);
+    console.error('❌ Initialization error:', error);
+    clearTimeout(safetyTimeout);
     showAuthSection();
   }
 });
@@ -181,21 +230,28 @@ function toggleUSMMode() {
 // ============================================
 
 function showLoading() {
-  elements.loadingState.style.display = 'block';
-  elements.authSection.style.display = 'none';
-  elements.dashboard.classList.remove('active');
+  console.log('📍 showLoading called');
+  if (elements.loadingState) elements.loadingState.style.display = 'block';
+  if (elements.authSection) elements.authSection.style.display = 'none';
+  if (elements.dashboard) elements.dashboard.classList.remove('active');
 }
 
 function showAuthSection() {
-  elements.loadingState.style.display = 'none';
-  elements.authSection.style.display = 'block';
-  elements.dashboard.classList.remove('active');
+  console.log('📍 showAuthSection called - showing login screen');
+  if (elements.loadingState) elements.loadingState.style.display = 'none';
+  if (elements.authSection) {
+    elements.authSection.style.display = 'block';
+    elements.authSection.style.visibility = 'visible';
+    elements.authSection.style.opacity = '1';
+  }
+  if (elements.dashboard) elements.dashboard.classList.remove('active');
 }
 
 function showDashboard() {
-  elements.loadingState.style.display = 'none';
-  elements.authSection.style.display = 'none';
-  elements.dashboard.classList.add('active');
+  console.log('📍 showDashboard called');
+  if (elements.loadingState) elements.loadingState.style.display = 'none';
+  if (elements.authSection) elements.authSection.style.display = 'none';
+  if (elements.dashboard) elements.dashboard.classList.add('active');
 }
 
 // ============================================
