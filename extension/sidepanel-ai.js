@@ -114,9 +114,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     ultraSpeedEnabled = ultraSpeedMode || false;
     updateUSMToggleUI();
     
-    // Check authentication state
-    const response = await sendMessage({ type: 'GET_AUTH_STATE' });
-    authState = response.data;
+    // Check authentication state with timeout (prevents infinite "Connecting...")
+    const authPromise = sendMessage({ type: 'GET_AUTH_STATE' });
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+    );
+    
+    let response;
+    try {
+      response = await Promise.race([authPromise, timeoutPromise]);
+    } catch (timeoutError) {
+      console.warn('Auth check timed out, checking storage directly...');
+      // Fallback: check storage directly
+      const stored = await chrome.storage.local.get(['authState', 'authToken']);
+      if (stored.authState?.isAuthenticated || stored.authToken) {
+        response = { success: true, data: stored.authState || { isAuthenticated: true, accessToken: stored.authToken } };
+      } else {
+        showAuthSection();
+        return;
+      }
+    }
+    
+    authState = response?.data || response;
     
     if (authState?.isAuthenticated) {
       await loadDashboard();

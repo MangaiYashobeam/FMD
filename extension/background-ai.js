@@ -1413,6 +1413,24 @@ async function handleMessage(message, sender) {
       }
       
     case 'GET_AUTH_STATE':
+      // If in-memory authState shows not authenticated, check storage (race condition fix)
+      if (!authState.isAuthenticated) {
+        const { authState: savedAuth, authToken } = await chrome.storage.local.get(['authState', 'authToken']);
+        if (savedAuth && savedAuth.isAuthenticated) {
+          authState = savedAuth;
+          console.log('✅ GET_AUTH_STATE: Loaded auth from storage');
+        } else if (authToken) {
+          // Have token but authState not populated - rebuild
+          console.log('🔧 GET_AUTH_STATE: Rebuilding auth state from token');
+          authState = {
+            isAuthenticated: true,
+            accessToken: authToken,
+            userId: savedAuth?.userId || null,
+            dealerAccountId: savedAuth?.dealerAccountId || savedAuth?.accountId || null,
+            tokenExpiry: savedAuth?.tokenExpiry || null,
+          };
+        }
+      }
       return authState;
     
     case 'GET_FACEBOOK_CONFIG':
