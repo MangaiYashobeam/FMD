@@ -1254,8 +1254,11 @@ async function distributeTask(task) {
 // ============================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('📨 [Background] Received message:', message.type);
+  
   handleMessage(message, sender)
     .then(result => {
+      console.log('✅ [Background] Sending response for:', message.type);
       // If the result already has success/data structure, pass it through directly
       // Otherwise wrap it in the standard format
       if (result && typeof result === 'object' && 'success' in result) {
@@ -1264,7 +1267,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, data: result });
       }
     })
-    .catch(error => sendResponse({ success: false, error: error.message }));
+    .catch(error => {
+      console.error('❌ [Background] Error handling:', message.type, error);
+      sendResponse({ success: false, error: error.message });
+    });
   return true; // Keep channel open for async response
 });
 
@@ -1792,9 +1798,33 @@ async function getAccountInfo() {
 }
 
 /**
+ * Fetch with timeout to prevent hanging
+ */
+async function fetchWithTimeout(url, options, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw error;
+  }
+}
+
+/**
  * Get vehicles from server inventory
  */
 async function getVehicles() {
+  console.log('📦 [getVehicles] Starting...');
   const storage = await chrome.storage.local.get(['authState', 'authToken', 'accountId']);
   const { authState, authToken, accountId: storedAccountId } = storage;
   
@@ -1821,12 +1851,12 @@ async function getVehicles() {
     const url = `${CONFIG.API_URL.replace('/api', '')}/api/vehicles?accountId=${accountId}&limit=100`;
     console.log('📦 Fetching from URL:', url);
     
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-    });
+    }, 15000); // 15 second timeout
     
     console.log('📦 Vehicle API response status:', response.status);
     
@@ -1851,13 +1881,13 @@ async function getVehicles() {
     }
     
     const data = await response.json();
-    console.log('✅ Fetched vehicles:', data.data?.vehicles?.length || data.data?.length || 0, 'from response:', JSON.stringify(data).substring(0, 200));
+    console.log('✅ Fetched vehicles:', data.data?.vehicles?.length || data.data?.length || 0);
     return { 
       success: true, 
       data: data.data?.vehicles || data.data || data.vehicles || [] 
     };
   } catch (error) {
-    console.error('Failed to fetch vehicles:', error);
+    console.error('❌ Failed to fetch vehicles:', error);
     return { success: false, error: error.message };
   }
 }

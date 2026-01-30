@@ -401,13 +401,19 @@ elements.loginBtn.addEventListener('click', async () => {
 // Logout
 elements.logoutBtn.addEventListener('click', async () => {
   if (confirm('Are you sure you want to disconnect?')) {
+    console.log('🚪 Logout clicked...');
     try {
-      await sendMessage({ type: 'LOGOUT' });
+      const response = await sendMessage({ type: 'LOGOUT' }, 5000);
+      console.log('🚪 Logout response:', response);
       addActivity('info', 'Disconnected from Facebook');
       authState = null;
       showAuthSection();
     } catch (error) {
       console.error('Logout error:', error);
+      // Still clear local state and show auth
+      authState = null;
+      await chrome.storage.local.clear();
+      showAuthSection();
     }
   }
 });
@@ -415,24 +421,34 @@ elements.logoutBtn.addEventListener('click', async () => {
 // Disconnect Facebook & Connect Another Account
 elements.disconnectFbBtn?.addEventListener('click', async () => {
   if (confirm('Disconnect current Facebook account and connect a different one?')) {
+    console.log('🔌 Disconnect FB clicked...');
     try {
-      // First disconnect
-      await sendMessage({ type: 'DISCONNECT_FACEBOOK' });
+      // First disconnect - with short timeout, don't wait for server
+      try {
+        await sendMessage({ type: 'DISCONNECT_FACEBOOK' }, 3000);
+      } catch (e) {
+        console.warn('Disconnect message timeout, clearing locally anyway');
+      }
+      
       addActivity('info', 'Facebook account disconnected');
       
       // Clear local state
       authState = null;
-      await chrome.storage.local.remove(['authState', 'accountId', 'authToken']);
+      await chrome.storage.local.clear();
       
-      // Then immediately show login again
+      // Show login screen
       showAuthSection();
       
       // Optionally auto-trigger login
       setTimeout(() => {
-        elements.loginBtn.click();
+        elements.loginBtn?.click();
       }, 500);
     } catch (error) {
       console.error('Disconnect error:', error);
+      // Still clear local state
+      authState = null;
+      await chrome.storage.local.clear();
+      showAuthSection();
       addActivity('error', `Disconnect failed: ${error.message}`);
     }
   }
@@ -736,12 +752,21 @@ function renderActivities() {
 // Utilities
 // ============================================
 
-function sendMessage(message) {
+function sendMessage(message, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      console.warn('⏰ [sendMessage] Timeout for:', message.type);
+      reject(new Error(`Message timeout: ${message.type}`));
+    }, timeoutMs);
+    
+    console.log('📤 [sendMessage] Sending:', message.type);
     chrome.runtime.sendMessage(message, (response) => {
+      clearTimeout(timeoutId);
       if (chrome.runtime.lastError) {
+        console.error('❌ [sendMessage] Error:', chrome.runtime.lastError.message);
         reject(new Error(chrome.runtime.lastError.message));
       } else {
+        console.log('📥 [sendMessage] Received response for:', message.type);
         resolve(response);
       }
     });
@@ -876,12 +901,16 @@ function showModalView(view) {
 async function fetchVehicles() {
   try {
     console.log('🚗 [Sidepanel] Fetching vehicles...');
-    const response = await sendMessage({ type: 'GET_VEHICLES' });
     
-    console.log('🚗 [Sidepanel] Response received:', JSON.stringify(response).substring(0, 300));
-    console.log('🚗 [Sidepanel] response.success:', response?.success);
-    console.log('🚗 [Sidepanel] response.data:', response?.data);
-    console.log('🚗 [Sidepanel] response.data?.length:', response?.data?.length);
+    let response;
+    try {
+      response = await sendMessage({ type: 'GET_VEHICLES' }, 20000);
+    } catch (err) {
+      console.error('🚗 [Sidepanel] sendMessage error:', err);
+      throw err;
+    }
+    
+    console.log('🚗 [Sidepanel] Response received:', response);
     
     elements.vehicleSkeleton.style.display = 'none';
     
@@ -891,15 +920,18 @@ async function fetchVehicles() {
       renderVehicleList(vehicles);
       elements.postingOptions.style.display = 'block';
     } else {
-      console.log('🚗 [Sidepanel] ❌ No vehicles or unsuccessful response');
+      console.log('🚗 [Sidepanel] ❌ No vehicles found. Response:', response);
       elements.emptyState.style.display = 'block';
+      if (response?.error) {
+        elements.emptyState.querySelector('p').textContent = response.error;
+      }
     }
   } catch (error) {
     console.error('🚗 [Sidepanel] Failed to fetch vehicles:', error);
     elements.vehicleSkeleton.style.display = 'none';
     elements.emptyState.style.display = 'block';
     elements.emptyState.querySelector('p').textContent = 
-      'Failed to load vehicles. Please check your connection.';
+      `Failed to load vehicles: ${error.message}`;
   }
 }
 
