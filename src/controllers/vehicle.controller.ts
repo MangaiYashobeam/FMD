@@ -914,36 +914,8 @@ export class VehicleController {
         const redisQueue = getRedisConnection();
         logger.info(`🔴 REDIS CHECK: Connection ${redisQueue ? 'EXISTS' : 'NULL'}`);
         if (redisQueue) {
-          const taskPayload = {
-            taskId: task.id,
-            fbmLogId: fbmLog?.id,  // Include log ID for status updates from worker
-            type: 'POST_TO_MARKETPLACE',
-            accountId: vehicle.accountId,
-            vehicleId: vehicle.id,
-            vehicle: vehicleData,
-            createdAt: new Date().toISOString(),
-            priority: 5,
-            // Session info for workers to fetch from API
-            sessionInfo: {
-              type: activeSession.type,
-              sessionId: activeSession.type === 'session' ? activeSession.id : null,
-              facebookUserId: activeSession.facebookUserId,
-              hasTotp: hasTotp,
-            },
-          };
-          const pushResult = await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify(taskPayload));
-          logger.info(`🟢 REDIS PUSH SUCCESS: Task ${task.id} pushed to fmd:tasks:soldier:pending, queue length now: ${pushResult}`);
-          
-          // Update log to processing status
-          if (fbmLog) {
-            await FBMPostLogService.updateLog(fbmLog.id, {
-              status: 'queued',
-              stage: 'task_created',
-              queuedAt: new Date(),
-            });
-          }
-
-          // Register a "Stealth Soldier" in IAI Command Center for visibility
+          // CRITICAL FIX: Create STEALTH soldier FIRST so we can include its ID in task payload
+          let stealthSoldier: { id: string; soldierId: string } | null = null;
           try {
             // Get next soldier number with STEALTH prefix
             const lastStealthSoldier = await prisma.iAISoldier.findFirst({
@@ -952,7 +924,7 @@ export class VehicleController {
             });
             const nextStealthNumber = (lastStealthSoldier?.soldierNumber || 0) + 1;
 
-            const stealthSoldier = await prisma.iAISoldier.create({
+            stealthSoldier = await prisma.iAISoldier.create({
               data: {
                 soldierId: `STEALTH-${nextStealthNumber}`,
                 soldierNumber: nextStealthNumber,
@@ -993,6 +965,39 @@ export class VehicleController {
             logger.info(`Stealth Soldier ${stealthSoldier.soldierId} registered for task ${task.id}`);
           } catch (soldierErr) {
             logger.warn(`Could not register Stealth Soldier: ${soldierErr}`);
+          }
+
+          // Build task payload WITH soldier ID included
+          const taskPayload = {
+            taskId: task.id,
+            fbmLogId: fbmLog?.id,  // Include log ID for status updates from worker
+            type: 'POST_TO_MARKETPLACE',
+            accountId: vehicle.accountId,
+            vehicleId: vehicle.id,
+            vehicle: vehicleData,
+            createdAt: new Date().toISOString(),
+            priority: 5,
+            // CRITICAL: Include soldier ID for Python workers to use
+            soldierId: stealthSoldier?.soldierId || `STEALTH-TASK-${task.id.slice(0, 8)}`,
+            soldierDbId: stealthSoldier?.id || null, // Database UUID for activity logging
+            // Session info for workers to fetch from API
+            sessionInfo: {
+              type: activeSession.type,
+              sessionId: activeSession.type === 'session' ? activeSession.id : null,
+              facebookUserId: activeSession.facebookUserId,
+              hasTotp: hasTotp,
+            },
+          };
+          const pushResult = await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify(taskPayload));
+          logger.info(`🟢 REDIS PUSH SUCCESS: Task ${task.id} pushed with soldierId=${taskPayload.soldierId}, queue length now: ${pushResult}`);
+          
+          // Update log to processing status
+          if (fbmLog) {
+            await FBMPostLogService.updateLog(fbmLog.id, {
+              status: 'queued',
+              stage: 'task_created',
+              queuedAt: new Date(),
+            });
           }
         } else {
           logger.warn('Redis not available - Soldier Worker task created but not queued');
