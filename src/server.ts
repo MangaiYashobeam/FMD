@@ -1015,7 +1015,7 @@ app.use('/api/session-analytics', require('./routes/session-analytics.routes').d
 app.use('/api/iipc', ring5AuthBarrier, iipcRoutes);                            // Requires admin (IIPC dashboard)
 app.use('/api/reports', ring5AuthBarrier, require('./routes/reports.routes').default); // Reports & notifications
 app.use('/api/posting', ring5AuthBarrier, postingRoutes);                      // Auto-posting settings & triggers
-app.use('/api/workers', ring5AuthBarrier, require('./routes/worker.routes').default); // Python worker management
+app.use('/api/workers', require('./routes/worker.routes').default); // Python workers (uses X-Worker-Secret auth)
 
 // ============================================
 // Invitation & Security Routes

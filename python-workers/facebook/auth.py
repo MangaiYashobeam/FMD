@@ -341,8 +341,39 @@ class FacebookAuth:
             logger.info("🍪 Applying session cookies to browser...", account_id=account_id)
             try:
                 context = self.page.context
-                await context.add_cookies(session_data.get('cookies', []))
-                logger.info("✅ Cookies applied", count=len(session_data.get('cookies', [])))
+                
+                # Sanitize cookies for Playwright compatibility
+                raw_cookies = session_data.get('cookies', [])
+                sanitized_cookies = []
+                
+                for cookie in raw_cookies:
+                    sanitized = cookie.copy()
+                    
+                    # Playwright requires sameSite to be capitalized: Strict, Lax, None
+                    if 'sameSite' in sanitized:
+                        same_site = sanitized['sameSite']
+                        if same_site:
+                            # Normalize to proper case
+                            if same_site.lower() == 'strict':
+                                sanitized['sameSite'] = 'Strict'
+                            elif same_site.lower() == 'lax':
+                                sanitized['sameSite'] = 'Lax'
+                            elif same_site.lower() == 'none':
+                                sanitized['sameSite'] = 'None'
+                            else:
+                                # Remove invalid sameSite value
+                                del sanitized['sameSite']
+                        else:
+                            # Remove empty sameSite
+                            del sanitized['sameSite']
+                    
+                    # Ensure required fields
+                    if 'name' in sanitized and 'value' in sanitized and 'domain' in sanitized:
+                        sanitized_cookies.append(sanitized)
+                
+                logger.info("🍪 Sanitized cookies", count=len(sanitized_cookies), original=len(raw_cookies))
+                await context.add_cookies(sanitized_cookies)
+                logger.info("✅ Cookies applied", count=len(sanitized_cookies))
             except Exception as cookie_error:
                 logger.error("❌ Failed to apply cookies", error=str(cookie_error))
                 return False
