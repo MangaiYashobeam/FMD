@@ -192,6 +192,13 @@ export class FacebookController {
       // Store pages/profiles in database
       const profiles = [];
       
+      // Delete existing profiles for this account (one Facebook per account policy)
+      // This ensures clean reconnection when user switches Facebook accounts
+      await prisma.facebookProfile.deleteMany({
+        where: { accountId }
+      });
+      logger.info(`Cleared existing Facebook profiles for account ${accountId} before reconnection`);
+      
       // If no pages, create a personal profile for Marketplace posting
       if (!pagesResponse.data.data || pagesResponse.data.data.length === 0) {
         const profile = await prisma.facebookProfile.upsert({

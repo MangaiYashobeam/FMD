@@ -16,6 +16,8 @@ const elements = {
   loginBtn: document.getElementById('loginBtn'),
   logoutBtn: document.getElementById('logoutBtn'),
   disconnectFbBtn: document.getElementById('disconnectFbBtn'),
+  syncFbSessionBtn: document.getElementById('syncFbSessionBtn'),
+  syncFbSessionText: document.getElementById('syncFbSessionText'),
   
   // User info
   userAvatar: document.getElementById('userAvatar'),
@@ -451,6 +453,45 @@ elements.disconnectFbBtn?.addEventListener('click', async () => {
       showAuthSection();
       addActivity('error', `Disconnect failed: ${error.message}`);
     }
+  }
+});
+
+// Sync Facebook Session for STEALTH workers
+elements.syncFbSessionBtn?.addEventListener('click', async () => {
+  console.log('🔄 Sync FB Session clicked...');
+  const textEl = elements.syncFbSessionText;
+  const originalText = textEl?.textContent;
+  
+  try {
+    if (textEl) textEl.textContent = 'Syncing...';
+    elements.syncFbSessionBtn.disabled = true;
+    
+    addActivity('info', 'Syncing Facebook session for STEALTH workers...');
+    
+    const result = await sendMessage({ type: 'CAPTURE_SESSION' });
+    
+    if (result.success) {
+      addActivity('success', `Facebook session synced! Session ID: ${result.sessionId?.slice(0, 8)}...`);
+      if (textEl) textEl.textContent = '✅ Session Synced!';
+      
+      // Reset text after 3 seconds
+      setTimeout(() => {
+        if (textEl) textEl.textContent = originalText;
+      }, 3000);
+    } else {
+      addActivity('error', `Session sync failed: ${result.error}`);
+      if (textEl) textEl.textContent = '❌ Sync Failed';
+      
+      setTimeout(() => {
+        if (textEl) textEl.textContent = originalText;
+      }, 3000);
+    }
+  } catch (error) {
+    console.error('Session sync error:', error);
+    addActivity('error', `Session sync error: ${error.message}`);
+    if (textEl) textEl.textContent = originalText;
+  } finally {
+    elements.syncFbSessionBtn.disabled = false;
   }
 });
 

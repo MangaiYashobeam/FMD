@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { facebookApi } from '../lib/api';
@@ -116,30 +116,37 @@ export default function FacebookPage() {
   const [newGroupUrl, setNewGroupUrl] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
 
-  // Handle session callback success/error messages
+  // Handle session callback success/error messages - only once
+  const hasHandledCallback = useRef(false);
+  
   useEffect(() => {
+    // Prevent multiple executions
+    if (hasHandledCallback.current) return;
+    
     const success = searchParams.get('success');
     const error = searchParams.get('error');
     const connected = searchParams.get('connected');
 
     if (success === 'true') {
+      hasHandledCallback.current = true;
       const profileCount = connected ? parseInt(connected, 10) : 1;
       toast.success(
         profileCount > 1
           ? `Successfully connected ${profileCount} Facebook profiles!`
           : 'Successfully connected to Facebook!'
       );
-      // Clear the URL params
-      setSearchParams({}, { replace: true });
+      // Clear the URL params immediately
+      window.history.replaceState({}, '', window.location.pathname);
       // Refetch connections
       queryClient.invalidateQueries({ queryKey: ['facebook-connections'] });
       queryClient.invalidateQueries({ queryKey: ['facebook-groups'] });
     } else if (error) {
+      hasHandledCallback.current = true;
       toast.error(`Facebook connection failed: ${decodeURIComponent(error)}`);
-      // Clear the URL params
-      setSearchParams({}, { replace: true });
+      // Clear the URL params immediately
+      window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [searchParams, setSearchParams, toast, queryClient]);
+  }, [searchParams, toast, queryClient]);
 
   // Handle Facebook Connect button - Now uses extension session capture
   const handleConnectFacebook = async () => {
