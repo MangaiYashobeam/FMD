@@ -912,8 +912,9 @@ export class VehicleController {
 
         // Push to Redis queue for Soldier Workers to pick up
         const redisQueue = getRedisConnection();
+        logger.info(`🔴 REDIS CHECK: Connection ${redisQueue ? 'EXISTS' : 'NULL'}`);
         if (redisQueue) {
-          await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify({
+          const taskPayload = {
             taskId: task.id,
             fbmLogId: fbmLog?.id,  // Include log ID for status updates from worker
             type: 'POST_TO_MARKETPLACE',
@@ -929,7 +930,9 @@ export class VehicleController {
               facebookUserId: activeSession.facebookUserId,
               hasTotp: hasTotp,
             },
-          }));
+          };
+          const pushResult = await redisQueue.lpush('fmd:tasks:soldier:pending', JSON.stringify(taskPayload));
+          logger.info(`🟢 REDIS PUSH SUCCESS: Task ${task.id} pushed to fmd:tasks:soldier:pending, queue length now: ${pushResult}`);
           
           // Update log to processing status
           if (fbmLog) {
