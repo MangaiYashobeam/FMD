@@ -251,10 +251,16 @@ router.get('/tasks/:accountId', authenticate, async (req: AuthRequest, res: Resp
     }
     
     // Get pending tasks from DATABASE (AutoPost service creates these)
+    // IMPORTANT: Filter OUT SOLDIER tasks - those are handled by Python workers via Redis queue
+    // The browser extension should ONLY process regular POST_TO_MARKETPLACE tasks
     const dbTasks = await prisma.extensionTask.findMany({
       where: {
         accountId,
         status: { in: ['pending', 'processing'] },
+        // Exclude SOLDIER and PUPPETEER tasks - those go to Python workers
+        type: {
+          notIn: ['SOLDIER_POST_TO_MARKETPLACE', 'PUPPETEER_POST_TO_MARKETPLACE'],
+        },
         OR: [
           { scheduledFor: null },
           { scheduledFor: { lte: new Date() } },
@@ -323,6 +329,10 @@ router.get('/tasks/:accountId/pending', authenticate, async (req: AuthRequest, r
       where: {
         accountId,
         status: 'pending',
+        // Exclude SOLDIER and PUPPETEER tasks - those go to Python workers
+        type: {
+          notIn: ['SOLDIER_POST_TO_MARKETPLACE', 'PUPPETEER_POST_TO_MARKETPLACE'],
+        },
       },
       orderBy: [
         { priority: 'desc' },
