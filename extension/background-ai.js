@@ -573,14 +573,16 @@ async function pollForIAITasks() {
       chrome.action.setBadgeText({ text: String(tasks.length) });
       chrome.action.setBadgeBackgroundColor({ color: '#EF4444' });
       
-      // Show notification
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon128.svg',
-        title: 'IAI Soldier - Tasks Available',
-        message: `${tasks.length} posting tasks ready to execute`,
-        priority: 2
-      });
+      // Show notification (with safety check)
+      if (chrome.notifications && chrome.notifications.create) {
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icons/icon128.png',
+          title: 'IAI Soldier - Tasks Available',
+          message: `${tasks.length} posting tasks ready to execute`,
+          priority: 2
+        });
+      }
       
       // Auto-execute first task
       const pendingTask = tasks.find(t => t.status === 'pending');

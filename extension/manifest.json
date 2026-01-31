@@ -12,7 +12,8 @@
     "scripting",
     "alarms",
     "cookies",
-    "identity"
+    "identity",
+    "notifications"
   ],
   "host_permissions": [
     "https://*.facebook.com/*",
