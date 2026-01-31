@@ -818,9 +818,9 @@ router.delete('/totp/:accountId', authenticate, async (req: AuthRequest, res: Re
  */
 router.get('/internal/export/:accountId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // Verify worker auth token
+    // Verify worker auth token - use WORKER_SECRET (same as Python workers)
     const authHeader = req.headers.authorization;
-    const workerToken = process.env.WORKER_API_TOKEN;
+    const workerToken = process.env.WORKER_SECRET || process.env.WORKER_API_TOKEN;
     
     if (!authHeader || !workerToken || authHeader !== `Bearer ${workerToken}`) {
       res.status(401).json({ success: false, error: 'Invalid worker authentication' });

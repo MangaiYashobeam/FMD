@@ -500,7 +500,8 @@ class SessionSyncService:
         import aiohttp
         
         try:
-            url = f"{self.api_url}/fb-session/internal/export/{account_id}"
+            # Use /api prefix for Node.js API routes
+            url = f"{self.api_url}/api/fb-session/internal/export/{account_id}"
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -597,7 +598,8 @@ class SessionSyncService:
         import aiohttp
         
         try:
-            url = f"{self.api_url}/fb-session/totp/generate/{account_id}"
+            # Use /api prefix for Node.js API routes
+            url = f"{self.api_url}/api/fb-session/totp/generate/{account_id}"
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(
