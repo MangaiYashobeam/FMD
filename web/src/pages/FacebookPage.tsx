@@ -110,7 +110,7 @@ function GroupCard({
 
 export default function FacebookPage() {
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const toast = useToast();
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
   const [newGroupUrl, setNewGroupUrl] = useState('');
