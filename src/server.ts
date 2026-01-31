@@ -606,6 +606,8 @@ app.use('/api', (req, res, next) => {
     '/ai/',
     // Facebook session management (admin-authenticated)
     '/facebook/session',
+    // FB Session capture/sync from extension (uses JWT auth, not CSRF)
+    '/fb-session/',
     // IAI public endpoints (extension uses own token/no CSRF)
     '/iai/',
     // Python worker endpoints (authenticated via X-Worker-Secret header)
