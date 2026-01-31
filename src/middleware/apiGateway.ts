@@ -331,8 +331,15 @@ const DANGEROUS_PATTERNS = [
 
 /**
  * Deep validation of request data
+ * NOTE: Bypasses fb-session routes since cookie values contain special characters
  */
 export const ring4RequestValidator = (req: Request, res: Response, next: NextFunction): void => {
+  // BYPASS: fb-session routes send raw cookies which contain special characters
+  if (req.path.includes('/fb-session/')) {
+    next();
+    return;
+  }
+  
   const context = (req as any).securityContext as SecurityContext;
 
   const validateValue = (value: any, path: string): { valid: boolean; threat?: string } => {

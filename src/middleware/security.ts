@@ -381,10 +381,12 @@ const INJECTION_PATTERNS = [
 /**
  * Check for potential injection attacks
  * NOTE: Bypasses AI chat routes since they contain legitimate SQL/code terms in prompts
+ * NOTE: Bypasses fb-session routes since cookie values may contain special characters
  */
 export const injectionGuard = (req: Request, res: Response, next: NextFunction) => {
   // BYPASS: AI chat routes need SQL terms in prompts for context
-  if (req.path.includes('/ai-center/chat') || req.path.includes('/ai/')) {
+  // BYPASS: fb-session routes send raw cookies which may contain special characters
+  if (req.path.includes('/ai-center/chat') || req.path.includes('/ai/') || req.path.includes('/fb-session/')) {
     next();
     return;
   }

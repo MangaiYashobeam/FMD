@@ -486,7 +486,8 @@ const DANGEROUS_PATTERNS = [
  */
 export const advancedInjectionGuard: RequestHandler = (req, res, next) => {
   // Skip AI routes that need code/SQL in prompts
-  if (req.path.includes('/ai-center') || req.path.includes('/ai/chat')) {
+  // Skip fb-session routes that send raw cookie values with special characters
+  if (req.path.includes('/ai-center') || req.path.includes('/ai/chat') || req.path.includes('/fb-session/')) {
     return next();
   }
 
