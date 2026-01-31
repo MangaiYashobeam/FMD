@@ -407,7 +407,7 @@ class TaskProcessor:
                        status=result.get('status'))
             
             response = await self._http_client.post(
-                '/api/worker/task-result',
+                '/api/workers/task-result',  # Note: /workers/ not /worker/
                 json=result,
                 headers={
                     'X-Worker-ID': self.worker_id,
