@@ -8,8 +8,112 @@ import { Router, Request, Response } from 'express';
 import { workerQueueService, TaskPriority } from '@/services/worker-queue.service';
 import { requireSuperAdmin } from '@/middleware/rbac';
 import { logger } from '@/utils/logger';
+import prisma from '@/config/database';
+import { sessionSecurityService } from '@/services/session-security.service';
+import crypto from 'crypto';
 
 const router = Router();
+
+// ============================================
+// WORKER AUTH HELPER
+// ============================================
+const validateWorkerSecret = (req: Request): boolean => {
+  const workerSecret = req.headers['x-worker-secret'] as string | 
+                       req.headers.authorization?.replace('Bearer ', '');
+  const expectedSecret = process.env.WORKER_SECRET;
+  
+  if (!expectedSecret || !workerSecret) return false;
+  if (workerSecret.length !== expectedSecret.length) return false;
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(workerSecret),
+    Buffer.from(expectedSecret)
+  );
+};
+
+// ============================================
+// WORKER-ONLY SESSION EXPORT (No ring5 protection)
+// ============================================
+
+/**
+ * GET /api/workers/session-export/:accountId
+ * Export session for use by Python browser workers
+ * Requires WORKER_SECRET auth (X-Worker-Secret header or Bearer token)
+ */
+router.get('/session-export/:accountId', async (req: Request, res: Response) => {
+  try {
+    // Validate worker secret
+    if (!validateWorkerSecret(req)) {
+      logger.warn('Worker session-export: Invalid auth', {
+        ip: req.ip,
+        hasSecret: !!req.headers['x-worker-secret'],
+        hasBearer: !!req.headers.authorization,
+      });
+      return res.status(401).json({ success: false, error: 'Invalid worker authentication' });
+    }
+
+    const accountId = req.params.accountId as string;
+    logger.info('Worker session export requested', { accountId });
+
+    // Get active session
+    const session = await prisma.fbSession.findFirst({
+      where: {
+        accountId,
+        sessionStatus: 'ACTIVE'
+      },
+      orderBy: { lastSyncedAt: 'desc' }
+    });
+
+    if (!session) {
+      logger.warn('Worker session export: No active session', { accountId });
+      return res.status(404).json({ success: false, error: 'No active session found' });
+    }
+
+    // Decrypt session data
+    const cookies = await sessionSecurityService.decrypt({
+      encrypted: session.encryptedCookies,
+      salt: session.encryptionSalt,
+      iv: session.encryptionIv,
+      authTag: ''  // authTag is embedded in encrypted data
+    });
+
+    let origins;
+    if (session.encryptedLocalStorage) {
+      origins = await sessionSecurityService.decrypt({
+        encrypted: session.encryptedLocalStorage,
+        salt: session.encryptionSalt,
+        iv: session.encryptionIv,
+        authTag: ''  // authTag is embedded in encrypted data
+      });
+    }
+
+    // Update last used
+    await prisma.fbSession.update({
+      where: { id: session.id },
+      data: { lastUsedAt: new Date() }
+    });
+
+    logger.info('Worker session export success', { 
+      accountId, 
+      sessionId: session.id,
+      cookieCount: JSON.parse(cookies).length 
+    });
+
+    return res.json({
+      success: true,
+      storageState: {
+        cookies: JSON.parse(cookies),
+        origins: origins ? JSON.parse(origins) : undefined,
+        timestamp: session.lastSyncedAt?.getTime() || session.capturedAt.getTime()
+      },
+      sessionId: session.id,
+      has2FA: session.has2FA
+    });
+  } catch (error) {
+    logger.error('Worker session export error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to export session' });
+  }
+});
 
 /**
  * Get worker queue status and statistics

@@ -500,13 +500,16 @@ class SessionSyncService:
         import aiohttp
         
         try:
-            # Use /api prefix for Node.js API routes
-            url = f"{self.api_url}/api/fb-session/internal/export/{account_id}"
+            # Use the worker-specific endpoint (bypasses ring5 auth)
+            url = f"{self.api_url}/api/workers/session-export/{account_id}"
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     url,
-                    headers={'Authorization': f'Bearer {self.api_token}'}
+                    headers={
+                        'Authorization': f'Bearer {self.api_token}',
+                        'X-Worker-Secret': self.api_token  # Also send as X-Worker-Secret
+                    }
                 ) as response:
                     if response.status == 404:
                         logger.info("No session found in API", account_id=account_id)
