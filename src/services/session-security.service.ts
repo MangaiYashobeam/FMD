@@ -137,6 +137,7 @@ class SessionSecurityService {
 
   /**
    * Encrypt data using AES-256-GCM
+   * AuthTag is appended to the encrypted data (standard pattern for storage without separate authTag column)
    */
   async encrypt(plaintext: string): Promise<EncryptedData> {
     const salt = crypto.randomBytes(SALT_LENGTH);
@@ -147,28 +148,46 @@ class SessionSecurityService {
     let encrypted = cipher.update(plaintext, 'utf8', 'base64');
     encrypted += cipher.final('base64');
     const authTag = cipher.getAuthTag();
+    
+    // Append authTag to encrypted data (format: encrypted:authTag)
+    const encryptedWithTag = encrypted + ':' + authTag.toString('base64');
 
     return {
-      encrypted,
+      encrypted: encryptedWithTag,
       salt: salt.toString('base64'),
       iv: iv.toString('base64'),
-      authTag: authTag.toString('base64')
+      authTag: authTag.toString('base64')  // Also return separately for compatibility
     };
   }
 
   /**
    * Decrypt data using AES-256-GCM
+   * Handles both old format (authTag passed separately) and new format (authTag appended to encrypted)
    */
   async decrypt(data: EncryptedData): Promise<string> {
     const salt = Buffer.from(data.salt, 'base64');
     const iv = Buffer.from(data.iv, 'base64');
-    const authTag = Buffer.from(data.authTag, 'base64');
     const key = await this.deriveKey(salt);
+    
+    let encrypted = data.encrypted;
+    let authTag: Buffer;
+    
+    // Check if authTag is embedded in encrypted data (new format: encrypted:authTag)
+    if (data.encrypted.includes(':')) {
+      const parts = data.encrypted.split(':');
+      encrypted = parts[0];
+      authTag = Buffer.from(parts[1], 'base64');
+    } else if (data.authTag && data.authTag.length > 0) {
+      // Old format: authTag passed separately
+      authTag = Buffer.from(data.authTag, 'base64');
+    } else {
+      throw new Error('No authentication tag found - cannot decrypt');
+    }
 
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(authTag);
 
-    let decrypted = decipher.update(data.encrypted, 'base64', 'utf8');
+    let decrypted = decipher.update(encrypted, 'base64', 'utf8');
     decrypted += decipher.final('utf8');
 
     return decrypted;
