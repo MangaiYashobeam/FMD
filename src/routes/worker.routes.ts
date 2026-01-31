@@ -18,8 +18,8 @@ const router = Router();
 // WORKER AUTH HELPER
 // ============================================
 const validateWorkerSecret = (req: Request): boolean => {
-  const workerSecret = req.headers['x-worker-secret'] as string | 
-                       req.headers.authorization?.replace('Bearer ', '');
+  const workerSecret = (req.headers['x-worker-secret'] as string) || 
+                       (req.headers.authorization?.replace('Bearer ', ''));
   const expectedSecret = process.env.WORKER_SECRET;
   
   if (!expectedSecret || !workerSecret) return false;
