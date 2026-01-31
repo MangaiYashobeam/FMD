@@ -152,6 +152,7 @@ async def apply_stealth(context: BrowserContext):
     """
     
     # Add script to run on every new page
+    # NOTE: add_init_script runs BEFORE page content loads, so it's not blocked by CSP
     await context.add_init_script(stealth_js)
     
     logger.debug("Stealth measures applied")
@@ -160,64 +161,30 @@ async def apply_stealth(context: BrowserContext):
 async def add_human_behavior(page: Page):
     """
     Add human-like behavior to page interactions
-    """
     
-    # Inject helper functions for human-like interactions
-    await page.add_script_tag(content="""
-        window.__humanType = async (selector, text, options = {}) => {
-            const element = document.querySelector(selector);
-            if (!element) throw new Error('Element not found: ' + selector);
-            
-            element.focus();
-            
-            const minDelay = options.minDelay || 50;
-            const maxDelay = options.maxDelay || 150;
-            
-            for (const char of text) {
-                const delay = Math.random() * (maxDelay - minDelay) + minDelay;
-                await new Promise(r => setTimeout(r, delay));
-                
-                // Sometimes make typos and correct them (5% chance)
-                if (Math.random() < 0.05 && text.length > 10) {
-                    const typo = String.fromCharCode(char.charCodeAt(0) + (Math.random() > 0.5 ? 1 : -1));
-                    element.value += typo;
-                    element.dispatchEvent(new Event('input', { bubbles: true }));
-                    await new Promise(r => setTimeout(r, 100 + Math.random() * 200));
-                    element.value = element.value.slice(0, -1);
-                    element.dispatchEvent(new Event('input', { bubbles: true }));
-                    await new Promise(r => setTimeout(r, 50));
-                }
-                
-                element.value += char;
-                element.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        };
-        
-        window.__humanScroll = async (options = {}) => {
-            const scrollAmount = options.amount || window.innerHeight * 0.7;
-            const steps = options.steps || 10;
-            const stepDelay = options.stepDelay || 20;
-            
-            for (let i = 0; i < steps; i++) {
-                window.scrollBy(0, scrollAmount / steps);
-                await new Promise(r => setTimeout(r, stepDelay + Math.random() * 10));
-            }
-        };
-        
-        window.__randomMouseMove = async () => {
-            // Simulate mouse movement (tracked via mousemove events)
-            const moves = Math.floor(Math.random() * 5) + 3;
-            for (let i = 0; i < moves; i++) {
-                const event = new MouseEvent('mousemove', {
-                    clientX: Math.random() * window.innerWidth,
-                    clientY: Math.random() * window.innerHeight,
-                    bubbles: true
-                });
-                document.dispatchEvent(event);
-                await new Promise(r => setTimeout(r, Math.random() * 100 + 50));
-            }
-        };
-    """)
+    NOTE: We avoid injecting inline scripts via add_script_tag() because
+    Facebook's Content Security Policy (CSP) blocks inline scripts.
+    Instead, we use Playwright's built-in methods for interactions.
+    """
+    # Human behavior is now handled via Playwright's built-in methods
+    # in the marketplace.py and other files using:
+    # - page.type() with delays
+    # - random_delay() between actions  
+    # - page.mouse.move() for mouse movements
+    # - page.evaluate() for scroll actions (which doesn't inject inline scripts)
+    
+    # Add random mouse movements using Playwright's native methods
+    import random
+    try:
+        for _ in range(random.randint(2, 4)):
+            x = random.randint(100, 800)
+            y = random.randint(100, 600)
+            await page.mouse.move(x, y)
+            await random_delay(50, 150)
+    except Exception:
+        pass  # Mouse move is optional, don't fail on it
+    
+    logger.debug("Human behavior simulation initialized")
 
 
 async def random_delay(min_ms: int = 500, max_ms: int = 2000):
