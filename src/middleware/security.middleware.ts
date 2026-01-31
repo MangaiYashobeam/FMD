@@ -91,7 +91,15 @@ export const csrfProtection: RequestHandler = (req, res, next) => {
   }
   
   // Skip for webhook endpoints that use signature verification
-  const webhookPaths = ['/api/subscriptions/webhook', '/api/facebook/deauthorize', '/api/email/track'];
+  // Also skip for Python worker endpoints (use X-Worker-Secret auth)
+  const webhookPaths = [
+    '/api/subscriptions/webhook', 
+    '/api/facebook/deauthorize', 
+    '/api/email/track',
+    '/api/workers/task-result',      // Python workers use X-Worker-Secret
+    '/api/workers/session-export',   // Python workers use X-Worker-Secret  
+    '/api/worker/iai',               // Python worker IAI endpoints
+  ];
   if (webhookPaths.some(path => req.path.includes(path))) {
     next();
     return;
